@@ -73,21 +73,18 @@ export default function RoomPage() {
 
   function keyToJoystickBit(key) {
     switch (key) {
-      case 'ArrowUp':
+      case 'i':
+      case 'I':
         return 1;
-      case 'ArrowDown':
+      case 'k':
+      case 'K':
         return 2;
-      case 'ArrowLeft':
+      case 'j':
+      case 'J':
         return 4;
-      case 'ArrowRight':
+      case 'l':
+      case 'L':
         return 8;
-      case 'Control':
-      case 'ControlLeft':
-      case 'ControlRight':
-      case ' ':
-      case 'Space':
-      case 'f':
-      case 'F':
       case 'x':
       case 'X':
         return 16;
@@ -143,16 +140,18 @@ export default function RoomPage() {
 
   function hostKeyToCpcKeyboardKey(key) {
     switch (key) {
-      case 'ArrowUp':
+      case 'q':
+      case 'Q':
         return 'q';
-      case 'ArrowDown':
+      case 'a':
+      case 'A':
         return 'a';
-      case 'ArrowLeft':
+      case 'o':
+      case 'O':
         return 'o';
-      case 'ArrowRight':
+      case 'p':
+      case 'P':
         return 'p';
-      case ' ':
-      case 'Space':
       case 'f':
       case 'F':
         return 'f';
@@ -171,7 +170,7 @@ export default function RoomPage() {
       case 'Escape':
         return 'Escape';
       default:
-        return key.length === 1 ? key : null;
+        return null;
     }
   }
 
