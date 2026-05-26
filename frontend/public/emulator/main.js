@@ -459,12 +459,27 @@ async function main() {
     }
   });
 
-  const frame_time = 16;
+  const frame_time = 20;
+  const maxFrameCatchup = frame_time * 5;
+  let lastFrameAt = 0;
+  let frameAccumulator = 0;
   window.stopped = false;
 
-  function mainLoop() {
-    frameCounter += 1;
-    tick(emulator, frame_time);
+  function mainLoop(now) {
+    if (!lastFrameAt) {
+      lastFrameAt = now;
+    }
+
+    const elapsed = Math.min(now - lastFrameAt, maxFrameCatchup);
+    lastFrameAt = now;
+    frameAccumulator += elapsed;
+
+    while (frameAccumulator >= frame_time) {
+      frameCounter += 1;
+      tick(emulator, frame_time);
+      frameAccumulator -= frame_time;
+    }
+
     if (!window.stopped) {
       window.requestAnimationFrame(mainLoop);
     }
