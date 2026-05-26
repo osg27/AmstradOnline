@@ -126,6 +126,16 @@ export default function RoomPage() {
     return mode === 'joystick2' ? 2 : 1;
   }
 
+  function joystickMaskToPlayerTwoKeys(mask) {
+    return [
+      ['ArrowUp', Boolean(mask & 1)],
+      ['ArrowDown', Boolean(mask & 2)],
+      ['ArrowLeft', Boolean(mask & 4)],
+      ['ArrowRight', Boolean(mask & 8)],
+      ['f', Boolean(mask & 16)],
+    ];
+  }
+
   function hostKeyToCpcKeyboardKey(key) {
     switch (key) {
       case 'ArrowUp':
@@ -187,6 +197,35 @@ export default function RoomPage() {
   }, [controlMode]);
 
   const sendLocalJoystickMask = useCallback((mask) => {
+    if (controlMode === 'joystick2') {
+      const entries = joystickMaskToPlayerTwoKeys(mask);
+      entries.forEach(([key, active]) => {
+        const payload = {
+          type: 'key',
+          player: 2,
+          key,
+          action: active ? 'down' : 'up',
+        };
+
+        if (isHost) {
+          forwardInputToEmulator({
+            type: 'amstrad_remote_input',
+            key: payload.key,
+            action: payload.action,
+            player: payload.player,
+          });
+          return;
+        }
+
+        const channel = dataChannelRef.current;
+        if (channel?.readyState === 'open') {
+          channel.send(JSON.stringify(payload));
+        }
+      });
+
+      return;
+    }
+
     const payload = {
       type: 'joystick',
       player: getJoystickPlayer(controlMode),
@@ -244,7 +283,9 @@ export default function RoomPage() {
       if (pad) {
         const mask = gamepadToJoystickMask(pad);
 
-        if (mask !== lastMask) {
+        if (controlMode === 'joystick2' && mask !== 0) {
+          sendLocalJoystickMask(mask);
+        } else if (mask !== lastMask) {
           lastMask = mask;
           sendLocalJoystickMask(mask);
         }
@@ -474,18 +515,14 @@ export default function RoomPage() {
       if (!inputCaptured) return;
 
       if (isJoystickMode(controlMode)) {
-        if (event.repeat) return;
+        if (event.repeat && controlMode !== 'joystick2') return;
 
         const joyBit = keyToJoystickBit(event.key);
 
         if (joyBit) {
           hostJoystickMask |= joyBit;
 
-          forwardInputToEmulator({
-            type: 'amstrad_remote_joystick',
-            player: getJoystickPlayer(controlMode),
-            mask: hostJoystickMask,
-          });
+          sendLocalJoystickMask(hostJoystickMask);
 
           event.preventDefault();
           return;
@@ -516,11 +553,7 @@ export default function RoomPage() {
         if (joyBit) {
           hostJoystickMask &= ~joyBit;
 
-          forwardInputToEmulator({
-            type: 'amstrad_remote_joystick',
-            player: getJoystickPlayer(controlMode),
-            mask: hostJoystickMask,
-          });
+          sendLocalJoystickMask(hostJoystickMask);
 
           event.preventDefault();
           return;
@@ -548,7 +581,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown);
       window.removeEventListener('keyup', handleHostKeyUp);
     };
-  }, [isHost, controlMode, forwardInputToEmulator, inputCaptured]);
+  }, [isHost, controlMode, forwardInputToEmulator, inputCaptured, sendLocalJoystickMask]);
 
   useEffect(() => {
     if (isHost !== false) return undefined;
@@ -585,18 +618,14 @@ export default function RoomPage() {
       }
 
       if (isJoystickMode(controlMode)) {
-        if (event.repeat) return;
+        if (event.repeat && controlMode !== 'joystick2') return;
 
         const joyBit = keyToJoystickBit(event.key);
 
         if (joyBit) {
           guestJoystickMask |= joyBit;
 
-          sendToHost({
-            type: 'joystick',
-            player: getJoystickPlayer(controlMode),
-            mask: guestJoystickMask,
-          });
+          sendLocalJoystickMask(guestJoystickMask);
 
           event.preventDefault();
           return;
@@ -642,11 +671,7 @@ export default function RoomPage() {
       if (joyBit) {
         guestJoystickMask &= ~joyBit;
 
-        sendToHost({
-          type: 'joystick',
-          player: getJoystickPlayer(controlMode),
-          mask: guestJoystickMask,
-        });
+        sendLocalJoystickMask(guestJoystickMask);
 
         event.preventDefault();
         return;
@@ -671,7 +696,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleGuestKeyDown);
       window.removeEventListener('keyup', handleGuestKeyUp);
     };
-  }, [isHost, controlMode, inputCaptured]);
+  }, [isHost, controlMode, inputCaptured, sendLocalJoystickMask]);
 
   function startMirrorLoop(sourceCanvas) {
     const mirrorCanvas = mirrorCanvasRef.current;
