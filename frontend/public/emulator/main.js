@@ -235,7 +235,7 @@ async function main() {
 
   const emulator = new_emulator();
 
-  disable_joystick(emulator);
+  enable_digital_joystick(emulator);
   set_joystick_mask(emulator, 0);
 
   let selectedGamepadIndex = null;
@@ -334,29 +334,22 @@ async function main() {
   function applyInput(key, action) {
     if (typeof key !== "string") return false;
 
-    if (action === "down") {
-      if (key.length === 1) {
-        input_char(key.charCodeAt(0));
-        return true;
-      }
+    const keyCode = keyNameToCode(key) ?? (
+      key.length === 1 ? key.toUpperCase().charCodeAt(0) : null
+    );
 
-      const code = keyNameToCode(key);
-      if (code !== null) {
-        keydown(code);
-        return true;
-      }
+    if (keyCode === null) {
+      return false;
+    }
+
+    if (action === "down") {
+      keydown(keyCode);
+      return true;
     }
 
     if (action === "up") {
-      if (key.length === 1) {
-        return true;
-      }
-
-      const code = keyNameToCode(key);
-      if (code !== null) {
-        keyup(code);
-        return true;
-      }
+      keyup(keyCode);
+      return true;
     }
 
     return false;
@@ -454,7 +447,7 @@ async function main() {
     if (data.type === "amstrad_remote_joystick") {
       const player = data.player === 2 ? 2 : 1;
       remoteJoystickMasks[player] = data.mask | 0;
-      set_joystick_mask(emulator, remoteJoystickMasks[player]);
+      set_joystick_mask(emulator, remoteJoystickMasks[1] | remoteJoystickMasks[2]);
       return;
     }
   });
