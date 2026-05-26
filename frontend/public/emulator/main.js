@@ -334,30 +334,35 @@ async function main() {
   function applyInput(key, action) {
     if (typeof key !== "string") return false;
 
-    const keyCode = keyNameToCode(key) ?? (
-      key.length === 1 ? key.toUpperCase().charCodeAt(0) : null
-    );
-
-    if (keyCode === null) {
-      return false;
-    }
-
     if (action === "down") {
-      keydown(keyCode);
-      return true;
+      if (key.length === 1) {
+        input_char(key.charCodeAt(0));
+        return true;
+      }
+
+      const code = keyNameToCode(key);
+      if (code !== null) {
+        keydown(code);
+        return true;
+      }
     }
 
     if (action === "up") {
-      keyup(keyCode);
-      return true;
+      if (key.length === 1) {
+        return true;
+      }
+
+      const code = keyNameToCode(key);
+      if (code !== null) {
+        keyup(code);
+        return true;
+      }
     }
 
     return false;
   }
 
   document.addEventListener("keydown", (event) => {
-    if (event.repeat) return;
-
     const handled = applyInput(event.key, "down");
     if (!handled) return;
 

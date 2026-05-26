@@ -379,9 +379,10 @@ export default function RoomPage() {
     function handleHostKeyDown(event) {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
-      if (event.repeat) return;
 
       if (isJoystickMode(controlMode)) {
+        if (event.repeat) return;
+
         const joyBit = keyToJoystickBit(event.key);
 
         if (joyBit) {
@@ -475,7 +476,6 @@ export default function RoomPage() {
     function handleGuestKeyDown(event) {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
-      if (event.repeat) return;
 
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
@@ -492,6 +492,8 @@ export default function RoomPage() {
       }
 
       if (isJoystickMode(controlMode)) {
+        if (event.repeat) return;
+
         const joyBit = keyToJoystickBit(event.key);
 
         if (joyBit) {
