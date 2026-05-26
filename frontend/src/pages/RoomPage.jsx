@@ -17,6 +17,7 @@ export default function RoomPage() {
   const [hostStarted, setHostStarted] = useState(false);
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
+  const [inputCaptured, setInputCaptured] = useState(false);
   const [controlMode, setControlMode] = useState(() => {
     return localStorage.getItem('amstrad_control_mode') || 'keyboard';
   });
@@ -53,7 +54,7 @@ export default function RoomPage() {
   }[controlMode];
   const roleLabel = !room
     ? 'Loading...'
-    : `${isHost ? 'Host' : 'Guest'} / ${controlLabel}`;
+    : isHost ? 'Host' : 'Guest';
 
   const addLog = useCallback((message) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${message}`, ...prev].slice(0, 80));
@@ -67,6 +68,8 @@ export default function RoomPage() {
     return (
       tag !== 'input'
       && tag !== 'textarea'
+      && tag !== 'button'
+      && tag !== 'a'
       && !event.metaKey
       && !event.altKey
     );
@@ -159,9 +162,37 @@ export default function RoomPage() {
     localStorage.setItem('amstrad_control_mode', controlMode);
   }, [controlMode]);
 
-  const handleGuestPayloadOnHost = useCallback((rawMessage) => {
-    addLog(`Guest input: ${rawMessage}`);
+  const sendLocalJoystickMask = useCallback((mask) => {
+    const payload = {
+      type: 'joystick',
+      player: getJoystickPlayer(controlMode),
+      mask,
+    };
 
+    if (isHost) {
+      forwardInputToEmulator({
+        type: 'amstrad_remote_joystick',
+        player: payload.player,
+        mask: payload.mask,
+      });
+      return;
+    }
+
+    const channel = dataChannelRef.current;
+    if (channel?.readyState === 'open') {
+      channel.send(JSON.stringify(payload));
+    }
+  }, [controlMode, forwardInputToEmulator, isHost]);
+
+  const releaseInputCapture = useCallback(() => {
+    if (isJoystickMode(controlMode)) {
+      sendLocalJoystickMask(0);
+    }
+
+    setInputCaptured(false);
+  }, [controlMode, sendLocalJoystickMask]);
+
+  const handleGuestPayloadOnHost = useCallback((rawMessage) => {
     try {
       const parsed = JSON.parse(rawMessage);
 
@@ -347,6 +378,7 @@ export default function RoomPage() {
 
     function handleHostKeyDown(event) {
       if (!shouldHandleKey(event)) return;
+      if (!inputCaptured) return;
       if (event.repeat) return;
 
       if (isJoystickMode(controlMode)) {
@@ -382,6 +414,7 @@ export default function RoomPage() {
 
     function handleHostKeyUp(event) {
       if (!shouldHandleKey(event)) return;
+      if (!inputCaptured) return;
 
       if (isJoystickMode(controlMode)) {
         const joyBit = keyToJoystickBit(event.key);
@@ -421,7 +454,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown);
       window.removeEventListener('keyup', handleHostKeyUp);
     };
-  }, [isHost, controlMode, forwardInputToEmulator]);
+  }, [isHost, controlMode, forwardInputToEmulator, inputCaptured]);
 
   useEffect(() => {
     if (isHost !== false) return undefined;
@@ -441,6 +474,7 @@ export default function RoomPage() {
 
     function handleGuestKeyDown(event) {
       if (!shouldHandleKey(event)) return;
+      if (!inputCaptured) return;
       if (event.repeat) return;
 
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
@@ -488,6 +522,7 @@ export default function RoomPage() {
 
     function handleGuestKeyUp(event) {
       if (!shouldHandleKey(event)) return;
+      if (!inputCaptured) return;
 
       if (controlMode === 'keyboard') {
         const mappedKey = hostKeyToCpcKeyboardKey(event.key);
@@ -541,7 +576,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleGuestKeyDown);
       window.removeEventListener('keyup', handleGuestKeyUp);
     };
-  }, [isHost, controlMode]);
+  }, [isHost, controlMode, inputCaptured]);
 
   function startMirrorLoop(sourceCanvas) {
     const mirrorCanvas = mirrorCanvasRef.current;
@@ -732,66 +767,78 @@ export default function RoomPage() {
   return (
     <div className="page room-page">
       <div className="card room-card">
-        <div className="row spread center-gap wrap">
-          <div>
+        <div className="room-topbar">
+          <div className="room-title">
             <h1>Room {roomCode}</h1>
-            <p>
-              User: <strong>{username}</strong>
-            </p>
-            <p>
-              Role: <strong>{roleLabel}</strong>
-            </p>
+            <div className="room-meta">
+              <span>{username}</span>
+              <span>{roleLabel}</span>
+              <span>{controlLabel}</span>
+            </div>
           </div>
 
-          <div className="row center-gap wrap">
+          <div className="room-actions">
             <Link className="button-like secondary" to="/lobby">
-              Back to lobby
+              Lobby
             </Link>
             <button className="secondary" onClick={() => navigate('/lobby')}>
-              Leave room
+              Leave
             </button>
           </div>
         </div>
 
-        <p className="status">{status}</p>
-        <p className="muted">Signaling: {signalingOpen ? 'connected' : 'connecting'}</p>
-
-        <div className="control-picker" aria-label="Control mode">
-          <button
-            type="button"
-            className={controlMode === 'keyboard' ? 'active' : 'secondary'}
-            onClick={() => setControlMode('keyboard')}
-          >
-            Keyboard
-          </button>
-          <button
-            type="button"
-            className={controlMode === 'joystick1' ? 'active' : 'secondary'}
-            onClick={() => setControlMode('joystick1')}
-          >
-            Joystick 1
-          </button>
-          <button
-            type="button"
-            className={controlMode === 'joystick2' ? 'active' : 'secondary'}
-            onClick={() => setControlMode('joystick2')}
-          >
-            Joystick 2
-          </button>
+        <div className="session-strip">
+          <span>{status}</span>
+          <span>{signalingOpen ? 'Signaling connected' : 'Connecting signaling'}</span>
+          <span>{remoteConnected ? 'Peer connected' : 'Waiting for peer'}</span>
+          {loadedDiskName ? <span>{loadedDiskName}</span> : null}
         </div>
 
-        {remoteConnected ? (
-          <p className="success">Peer connected</p>
-        ) : (
-          <p className="muted">Peer not connected yet</p>
-        )}
-
-        {loadedDiskName ? <p className="muted">Loaded disk: {loadedDiskName}</p> : null}
         {error ? <p className="error">{error}</p> : null}
 
         <div className="room-layout">
           <div className="panel video-panel">
-            <h2>{isHost ? 'Host emulator surface' : 'Remote stream'}</h2>
+            <div className="play-header">
+              <h2>{isHost ? 'Host screen' : 'Remote screen'}</h2>
+
+              <div className="input-toolbar">
+                <div className="segmented-control" aria-label="Control mode">
+                  <button
+                    type="button"
+                    className={controlMode === 'keyboard' ? 'active' : ''}
+                    onClick={() => setControlMode('keyboard')}
+                  >
+                    Keys
+                  </button>
+                  <button
+                    type="button"
+                    className={controlMode === 'joystick1' ? 'active' : ''}
+                    onClick={() => setControlMode('joystick1')}
+                  >
+                    Joy 1
+                  </button>
+                  <button
+                    type="button"
+                    className={controlMode === 'joystick2' ? 'active' : ''}
+                    onClick={() => setControlMode('joystick2')}
+                  >
+                    Joy 2
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  className={inputCaptured ? 'danger' : 'secondary'}
+                  onClick={inputCaptured ? releaseInputCapture : () => setInputCaptured(true)}
+                >
+                  {inputCaptured ? 'Release' : 'Capture'}
+                </button>
+              </div>
+            </div>
+
+            <div className={`capture-state ${inputCaptured ? 'captured' : ''}`}>
+              {inputCaptured ? `${controlLabel} active` : 'Click the screen or press Capture to play'}
+            </div>
 
             {isHost ? (
               <>
@@ -814,6 +861,7 @@ export default function RoomPage() {
                 <canvas
                   ref={mirrorCanvasRef}
                   className="video"
+                  onClick={() => setInputCaptured(true)}
                   style={{
                     width: '100%',
                     aspectRatio: '4 / 3',
@@ -836,7 +884,6 @@ export default function RoomPage() {
                 <div style={{
                   display: 'flex',
                   gap: '10px',
-                  marginTop: '10px',
                   flexWrap: 'wrap',
                 }}
                 >
@@ -857,35 +904,13 @@ export default function RoomPage() {
                   playsInline
                   muted
                   className="video"
+                  onClick={() => setInputCaptured(true)}
                 />
 
                 <button onClick={connectGuest} disabled={guestPrepared}>
                   {guestPrepared ? 'Guest connection ready' : 'Prepare guest connection'}
                 </button>
               </>
-            )}
-          </div>
-
-          <div className="panel notes-panel">
-            <h2>Controls</h2>
-
-            {controlMode === 'keyboard' ? (
-              <ul>
-                <li>Keyboard mode sends CPC keyboard input.</li>
-                <li>Arrow Up sends CPC Q.</li>
-                <li>Arrow Down sends CPC A.</li>
-                <li>Arrow Left sends CPC O.</li>
-                <li>Arrow Right sends CPC P.</li>
-                <li>Space sends CPC Space.</li>
-                <li>Tab, Caps Lock, Shift and Enter go to the game menu.</li>
-              </ul>
-            ) : (
-              <ul>
-                <li>{controlLabel} mode sends joystick input.</li>
-                <li>Arrow keys control joystick direction.</li>
-                <li>Control or Space is joystick fire.</li>
-                <li>Tab, Caps Lock, Shift and Enter go to the host/game menu.</li>
-              </ul>
             )}
           </div>
         </div>
