@@ -240,6 +240,10 @@ async function main() {
 
   let selectedGamepadIndex = null;
   let lastJoystickMask = -1;
+  const remoteJoystickMasks = {
+    1: 0,
+    2: 0,
+  };
 
   window.addEventListener("gamepadconnected", (event) => {
     console.log(
@@ -448,7 +452,9 @@ async function main() {
     }
 
     if (data.type === "amstrad_remote_joystick") {
-      set_joystick_mask(emulator, data.mask | 0);
+      const player = data.player === 2 ? 2 : 1;
+      remoteJoystickMasks[player] = data.mask | 0;
+      set_joystick_mask(emulator, remoteJoystickMasks[player]);
       return;
     }
   });

@@ -35,6 +35,10 @@ button.secondary,
   background: #334155;
 }
 
+button.active {
+  background: #16a34a;
+}
+
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -112,6 +116,13 @@ input {
 .center-gap {
   gap: 0.75rem;
   align-items: center;
+}
+
+.control-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.75rem 0;
 }
 
 .status,
