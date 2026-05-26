@@ -157,6 +157,15 @@ input {
   gap: 0.55rem;
 }
 
+.assigned-control {
+  border: 1px solid #3a3d3f;
+  border-radius: 7px;
+  color: #d8d8d4;
+  background: #1d2021;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+}
+
 .session-strip {
   gap: 0.45rem;
   margin-top: 1rem;

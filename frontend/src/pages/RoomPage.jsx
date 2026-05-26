@@ -18,9 +18,6 @@ export default function RoomPage() {
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
-  const [controlMode, setControlMode] = useState(() => {
-    return localStorage.getItem('amstrad_control_mode') || 'keyboard';
-  });
 
   const remoteVideoRef = useRef(null);
   const emulatorFrameRef = useRef(null);
@@ -48,11 +45,9 @@ export default function RoomPage() {
   }, []);
 
   const isHost = room ? room.owner_user_id === userId : null;
-  const controlLabel = {
-    keyboard: 'Keyboard',
-    joystick1: 'Joystick 1',
-    joystick2: 'Joystick 2',
-  }[controlMode];
+  const controlLabel = !room
+    ? 'Loading controls'
+    : isHost ? 'Keys + Joystick 1' : 'Joystick 2';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -93,6 +88,8 @@ export default function RoomPage() {
       case 'Space':
       case 'f':
       case 'F':
+      case 'x':
+      case 'X':
         return 16;
       default:
         return 0;
@@ -118,21 +115,29 @@ export default function RoomPage() {
     return mask;
   }
 
-  function isJoystickMode(mode) {
-    return mode === 'joystick1' || mode === 'joystick2';
-  }
+  function joystickMaskToKeys(mask, player) {
+    const keys = player === 1
+      ? {
+        up: 'q',
+        down: 'a',
+        left: 'o',
+        right: 'p',
+        fire: 'f',
+      }
+      : {
+        up: 'i',
+        down: 'k',
+        left: 'j',
+        right: 'l',
+        fire: 'x',
+      };
 
-  function getJoystickPlayer(mode) {
-    return mode === 'joystick2' ? 2 : 1;
-  }
-
-  function joystickMaskToPlayerTwoKeys(mask) {
     return [
-      ['ArrowUp', Boolean(mask & 1)],
-      ['ArrowDown', Boolean(mask & 2)],
-      ['ArrowLeft', Boolean(mask & 4)],
-      ['ArrowRight', Boolean(mask & 8)],
-      ['f', Boolean(mask & 16)],
+      [keys.up, Boolean(mask & 1)],
+      [keys.down, Boolean(mask & 2)],
+      [keys.left, Boolean(mask & 4)],
+      [keys.right, Boolean(mask & 8)],
+      [keys.fire, Boolean(mask & 16)],
     ];
   }
 
@@ -150,7 +155,7 @@ export default function RoomPage() {
       case 'Space':
       case 'f':
       case 'F':
-        return ' ';
+        return 'f';
       case 'Enter':
         return 'Enter';
       case 'Tab':
@@ -192,71 +197,42 @@ export default function RoomPage() {
     targetWindow.postMessage(payload, window.location.origin);
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('amstrad_control_mode', controlMode);
-  }, [controlMode]);
-
   const sendLocalJoystickMask = useCallback((mask) => {
-    if (controlMode === 'joystick2') {
-      const entries = joystickMaskToPlayerTwoKeys(mask);
-      entries.forEach(([key, active]) => {
-        const payload = {
-          type: 'key',
-          player: 2,
-          key,
-          action: active ? 'down' : 'up',
-        };
+    const player = isHost ? 1 : 2;
+    const entries = joystickMaskToKeys(mask, player);
 
-        if (isHost) {
-          forwardInputToEmulator({
-            type: 'amstrad_remote_input',
-            key: payload.key,
-            action: payload.action,
-            player: payload.player,
-          });
-          return;
-        }
+    entries.forEach(([key, active]) => {
+      const payload = {
+        type: 'key',
+        player,
+        key,
+        action: active ? 'down' : 'up',
+      };
 
-        const channel = dataChannelRef.current;
-        if (channel?.readyState === 'open') {
-          channel.send(JSON.stringify(payload));
-        }
-      });
+      if (isHost) {
+        forwardInputToEmulator({
+          type: 'amstrad_remote_input',
+          key: payload.key,
+          action: payload.action,
+          player: payload.player,
+        });
+        return;
+      }
 
-      return;
-    }
-
-    const payload = {
-      type: 'joystick',
-      player: getJoystickPlayer(controlMode),
-      mask,
-    };
-
-    if (isHost) {
-      forwardInputToEmulator({
-        type: 'amstrad_remote_joystick',
-        player: payload.player,
-        mask: payload.mask,
-      });
-      return;
-    }
-
-    const channel = dataChannelRef.current;
-    if (channel?.readyState === 'open') {
-      channel.send(JSON.stringify(payload));
-    }
-  }, [controlMode, forwardInputToEmulator, isHost]);
+      const channel = dataChannelRef.current;
+      if (channel?.readyState === 'open') {
+        channel.send(JSON.stringify(payload));
+      }
+    });
+  }, [forwardInputToEmulator, isHost]);
 
   const releaseInputCapture = useCallback(() => {
-    if (isJoystickMode(controlMode)) {
-      sendLocalJoystickMask(0);
-    }
-
+    sendLocalJoystickMask(0);
     setInputCaptured(false);
-  }, [controlMode, sendLocalJoystickMask]);
+  }, [sendLocalJoystickMask]);
 
   useEffect(() => {
-    if (!inputCaptured || !isJoystickMode(controlMode)) {
+    if (!inputCaptured) {
       return undefined;
     }
 
@@ -283,7 +259,7 @@ export default function RoomPage() {
       if (pad) {
         const mask = gamepadToJoystickMask(pad);
 
-        if (controlMode === 'joystick2' && mask !== 0) {
+        if (mask !== 0) {
           sendLocalJoystickMask(mask);
         } else if (mask !== lastMask) {
           lastMask = mask;
@@ -300,7 +276,7 @@ export default function RoomPage() {
       cancelAnimationFrame(animationFrame);
       sendLocalJoystickMask(0);
     };
-  }, [controlMode, inputCaptured, sendLocalJoystickMask]);
+  }, [inputCaptured, sendLocalJoystickMask]);
 
   useEffect(() => {
     function handleGamepadConnected(event) {
@@ -508,30 +484,13 @@ export default function RoomPage() {
   useEffect(() => {
     if (isHost !== true) return undefined;
 
-    let hostJoystickMask = 0;
-
     function handleHostKeyDown(event) {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
-      if (isJoystickMode(controlMode)) {
-        if (event.repeat && controlMode !== 'joystick2') return;
-
-        const joyBit = keyToJoystickBit(event.key);
-
-        if (joyBit) {
-          hostJoystickMask |= joyBit;
-
-          sendLocalJoystickMask(hostJoystickMask);
-
-          event.preventDefault();
-          return;
-        }
-      }
-
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
-      if (controlMode === 'keyboard' && (mappedKey || isMenuKey(event.key))) {
+      if (mappedKey || isMenuKey(event.key)) {
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
           player: 1,
@@ -547,22 +506,9 @@ export default function RoomPage() {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
-      if (isJoystickMode(controlMode)) {
-        const joyBit = keyToJoystickBit(event.key);
-
-        if (joyBit) {
-          hostJoystickMask &= ~joyBit;
-
-          sendLocalJoystickMask(hostJoystickMask);
-
-          event.preventDefault();
-          return;
-        }
-      }
-
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
-      if (controlMode === 'keyboard' && (mappedKey || isMenuKey(event.key))) {
+      if (mappedKey || isMenuKey(event.key)) {
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
           player: 1,
@@ -581,7 +527,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown);
       window.removeEventListener('keyup', handleHostKeyUp);
     };
-  }, [isHost, controlMode, forwardInputToEmulator, inputCaptured, sendLocalJoystickMask]);
+  }, [isHost, forwardInputToEmulator, inputCaptured]);
 
   useEffect(() => {
     if (isHost !== false) return undefined;
@@ -603,33 +549,15 @@ export default function RoomPage() {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
-      const mappedKey = hostKeyToCpcKeyboardKey(event.key);
+      const joyBit = keyToJoystickBit(event.key);
 
-      if (controlMode === 'keyboard' && mappedKey) {
-        sendToHost({
-          type: 'key',
-          player: 1,
-          key: mappedKey,
-          action: 'down',
-        });
+      if (joyBit) {
+        guestJoystickMask |= joyBit;
+
+        sendLocalJoystickMask(guestJoystickMask);
 
         event.preventDefault();
         return;
-      }
-
-      if (isJoystickMode(controlMode)) {
-        if (event.repeat && controlMode !== 'joystick2') return;
-
-        const joyBit = keyToJoystickBit(event.key);
-
-        if (joyBit) {
-          guestJoystickMask |= joyBit;
-
-          sendLocalJoystickMask(guestJoystickMask);
-
-          event.preventDefault();
-          return;
-        }
       }
 
       if (isMenuKey(event.key) || event.key === '@' || event.key === 'à') {
@@ -647,24 +575,6 @@ export default function RoomPage() {
     function handleGuestKeyUp(event) {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
-
-      if (controlMode === 'keyboard') {
-        const mappedKey = hostKeyToCpcKeyboardKey(event.key);
-
-        if (mappedKey || isMenuKey(event.key)) {
-          sendToHost({
-            type: 'key',
-            player: 1,
-            key: mappedKey || event.key,
-            action: 'up',
-          });
-
-          event.preventDefault();
-          return;
-        }
-      }
-
-      if (!isJoystickMode(controlMode)) return;
 
       const joyBit = keyToJoystickBit(event.key);
 
@@ -696,7 +606,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleGuestKeyDown);
       window.removeEventListener('keyup', handleGuestKeyUp);
     };
-  }, [isHost, controlMode, inputCaptured, sendLocalJoystickMask]);
+  }, [isHost, inputCaptured, sendLocalJoystickMask]);
 
   function startMirrorLoop(sourceCanvas) {
     const mirrorCanvas = mirrorCanvasRef.current;
@@ -922,28 +832,8 @@ export default function RoomPage() {
               <h2>{isHost ? 'Host screen' : 'Remote screen'}</h2>
 
               <div className="input-toolbar">
-                <div className="segmented-control" aria-label="Control mode">
-                  <button
-                    type="button"
-                    className={controlMode === 'keyboard' ? 'active' : ''}
-                    onClick={() => setControlMode('keyboard')}
-                  >
-                    Keys
-                  </button>
-                  <button
-                    type="button"
-                    className={controlMode === 'joystick1' ? 'active' : ''}
-                    onClick={() => setControlMode('joystick1')}
-                  >
-                    Joy 1
-                  </button>
-                  <button
-                    type="button"
-                    className={controlMode === 'joystick2' ? 'active' : ''}
-                    onClick={() => setControlMode('joystick2')}
-                  >
-                    Joy 2
-                  </button>
+                <div className="assigned-control" aria-label="Assigned control">
+                  {isHost ? 'Player 1: Q A O P / F' : 'Player 2: I K J L / X'}
                 </div>
 
                 <button
