@@ -170,7 +170,7 @@ export default function RoomPage() {
       case 'Escape':
         return 'Escape';
       default:
-        return null;
+        return key.length === 1 ? key : null;
     }
   }
 
@@ -202,7 +202,7 @@ export default function RoomPage() {
 
     entries.forEach(([key, active]) => {
       const payload = {
-        type: 'key',
+        type: 'control',
         player,
         key,
         action: active ? 'down' : 'up',
@@ -210,7 +210,7 @@ export default function RoomPage() {
 
       if (isHost) {
         forwardInputToEmulator({
-          type: 'amstrad_remote_input',
+          type: 'amstrad_remote_control',
           key: payload.key,
           action: payload.action,
           player: payload.player,
@@ -308,6 +308,15 @@ export default function RoomPage() {
       if (parsed.type === 'key') {
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
+          key: parsed.key,
+          action: parsed.action,
+          player: parsed.player,
+        });
+      }
+
+      if (parsed.type === 'control') {
+        forwardInputToEmulator({
+          type: 'amstrad_remote_control',
           key: parsed.key,
           action: parsed.action,
           player: parsed.player,

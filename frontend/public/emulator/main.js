@@ -362,6 +362,30 @@ async function main() {
     return false;
   }
 
+  function applyControlInput(key, action) {
+    if (typeof key !== "string") return false;
+
+    const code = keyNameToCode(key) ?? (
+      key.length === 1 ? key.toUpperCase().charCodeAt(0) : null
+    );
+
+    if (code === null) {
+      return false;
+    }
+
+    if (action === "down") {
+      keydown(code);
+      return true;
+    }
+
+    if (action === "up") {
+      keyup(code);
+      return true;
+    }
+
+    return false;
+  }
+
   document.addEventListener("keydown", (event) => {
     const handled = applyInput(event.key, "down");
     if (!handled) return;
@@ -443,6 +467,16 @@ async function main() {
       suppressPostedInput = true;
       try {
         applyInput(data.key, data.action);
+      } finally {
+        suppressPostedInput = false;
+      }
+      return;
+    }
+
+    if (data.type === "amstrad_remote_control") {
+      suppressPostedInput = true;
+      try {
+        applyControlInput(data.key, data.action);
       } finally {
         suppressPostedInput = false;
       }
