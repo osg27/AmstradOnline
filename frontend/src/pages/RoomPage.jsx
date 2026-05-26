@@ -33,6 +33,7 @@ export default function RoomPage() {
   const hostStartingRef = useRef(false);
   const hostStartedRef = useRef(false);
   const guestPreparedRef = useRef(false);
+  const gamepadIndexRef = useRef(null);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -90,10 +91,31 @@ export default function RoomPage() {
       case 'ControlRight':
       case ' ':
       case 'Space':
+      case 'f':
+      case 'F':
         return 16;
       default:
         return 0;
     }
+  }
+
+  function gamepadToJoystickMask(pad) {
+    let mask = 0;
+    const deadzone = 0.45;
+
+    const left = pad.buttons[14]?.pressed || (pad.axes[0] ?? 0) < -deadzone;
+    const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone;
+    const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
+    const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
+    const fire = [0, 1, 2, 3, 5, 7].some((index) => pad.buttons[index]?.pressed);
+
+    if (up) mask |= 1;
+    if (down) mask |= 2;
+    if (left) mask |= 4;
+    if (right) mask |= 8;
+    if (fire) mask |= 16;
+
+    return mask;
   }
 
   function isJoystickMode(mode) {
@@ -116,6 +138,8 @@ export default function RoomPage() {
         return 'p';
       case ' ':
       case 'Space':
+      case 'f':
+      case 'F':
         return ' ';
       case 'Enter':
         return 'Enter';
@@ -191,6 +215,75 @@ export default function RoomPage() {
 
     setInputCaptured(false);
   }, [controlMode, sendLocalJoystickMask]);
+
+  useEffect(() => {
+    if (!inputCaptured || !isJoystickMode(controlMode)) {
+      return undefined;
+    }
+
+    let animationFrame = 0;
+    let lastMask = -1;
+
+    function findGamepad(pads) {
+      if (gamepadIndexRef.current !== null && pads[gamepadIndexRef.current]) {
+        return pads[gamepadIndexRef.current];
+      }
+
+      const pad = pads.find(Boolean);
+      if (pad) {
+        gamepadIndexRef.current = pad.index;
+      }
+
+      return pad;
+    }
+
+    function pollGamepad() {
+      const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
+      const pad = findGamepad(pads);
+
+      if (pad) {
+        const mask = gamepadToJoystickMask(pad);
+
+        if (mask !== lastMask) {
+          lastMask = mask;
+          sendLocalJoystickMask(mask);
+        }
+      }
+
+      animationFrame = requestAnimationFrame(pollGamepad);
+    }
+
+    pollGamepad();
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      sendLocalJoystickMask(0);
+    };
+  }, [controlMode, inputCaptured, sendLocalJoystickMask]);
+
+  useEffect(() => {
+    function handleGamepadConnected(event) {
+      gamepadIndexRef.current = event.gamepad.index;
+      addLog(`Gamepad connected: ${event.gamepad.id}`);
+    }
+
+    function handleGamepadDisconnected(event) {
+      if (gamepadIndexRef.current === event.gamepad.index) {
+        gamepadIndexRef.current = null;
+        sendLocalJoystickMask(0);
+      }
+
+      addLog('Gamepad disconnected');
+    }
+
+    window.addEventListener('gamepadconnected', handleGamepadConnected);
+    window.addEventListener('gamepaddisconnected', handleGamepadDisconnected);
+
+    return () => {
+      window.removeEventListener('gamepadconnected', handleGamepadConnected);
+      window.removeEventListener('gamepaddisconnected', handleGamepadDisconnected);
+    };
+  }, [addLog, sendLocalJoystickMask]);
 
   const handleGuestPayloadOnHost = useCallback((rawMessage) => {
     try {
