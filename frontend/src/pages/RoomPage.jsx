@@ -259,14 +259,20 @@ export default function RoomPage() {
           key,
           action: active ? 'down' : 'up',
         };
+        const textPayload = {
+          type: 'key',
+          player,
+          key,
+          action: active ? 'down' : 'up',
+        };
 
+        addInputDebug(`send to host ${formatInputPayload(textPayload)}`);
+        channel.send(JSON.stringify(textPayload));
         addInputDebug(`send to host ${formatInputPayload(keyPayload)}`);
         channel.send(JSON.stringify(keyPayload));
       });
 
       localJoystickMaskRef.current = mask;
-      addInputDebug(`send to host ${formatInputPayload(payload)}`);
-      channel.send(JSON.stringify(payload));
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
