@@ -155,13 +155,17 @@ export default function RoomPage() {
     return `${payload.type || 'unknown'} input`;
   }
 
-  function joystickMaskToKeys(mask) {
+  function joystickMaskToKeys(mask, player) {
+    const keys = player === 1
+      ? { up: 'q', down: 'a', left: 'o', right: 'p', fire: 'f' }
+      : { up: 'i', down: 'k', left: 'j', right: 'l', fire: 'x' };
+
     return [
-      ['i', 1, Boolean(mask & 1)],
-      ['k', 2, Boolean(mask & 2)],
-      ['j', 4, Boolean(mask & 4)],
-      ['l', 8, Boolean(mask & 8)],
-      ['x', 16, Boolean(mask & 16)],
+      [keys.up, 1, Boolean(mask & 1)],
+      [keys.down, 2, Boolean(mask & 2)],
+      [keys.left, 4, Boolean(mask & 4)],
+      [keys.right, 8, Boolean(mask & 8)],
+      [keys.fire, 16, Boolean(mask & 16)],
     ];
   }
 
@@ -234,13 +238,31 @@ export default function RoomPage() {
     addInputDebug(`local P${player} joystick mask ${mask}`, mask, isHost ? 'host local' : 'guest local');
 
     if (isHost) {
-      localJoystickMaskRef.current = mask;
-      addInputDebug(`forward joystick mask ${mask}`, mask, 'host local');
-      forwardInputToEmulator({
-        type: 'amstrad_remote_joystick',
-        mask,
-        player,
+      const previousMask = localJoystickMaskRef.current;
+
+      joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
+        const wasActive = Boolean(previousMask & bit);
+
+        if (active === wasActive) return;
+
+        const action = active ? 'down' : 'up';
+
+        addInputDebug(`forward to emulator P${player} key ${key} ${action}`);
+        forwardInputToEmulator({
+          type: 'amstrad_remote_input',
+          player,
+          key,
+          action,
+        });
+        forwardInputToEmulator({
+          type: 'amstrad_remote_control',
+          player,
+          key,
+          action,
+        });
       });
+
+      localJoystickMaskRef.current = mask;
       return;
     }
 
@@ -248,7 +270,7 @@ export default function RoomPage() {
     if (channel?.readyState === 'open') {
       const previousMask = localJoystickMaskRef.current;
 
-      joystickMaskToKeys(mask).forEach(([key, bit, active]) => {
+      joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
         const wasActive = Boolean(previousMask & bit);
 
         if (active === wasActive) return;
