@@ -36,6 +36,7 @@ export default function RoomPage() {
   const hostStartedRef = useRef(false);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
+  const touchJoystickMaskRef = useRef(0);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -157,32 +158,6 @@ export default function RoomPage() {
     return `${payload.type || 'unknown'} input`;
   }
 
-  function joystickMaskToKeys(mask, player) {
-    const keys = player === 1
-      ? {
-        up: 'q',
-        down: 'a',
-        left: 'o',
-        right: 'p',
-        fire: 'f',
-      }
-      : {
-        up: 'i',
-        down: 'k',
-        left: 'j',
-        right: 'l',
-        fire: 'x',
-      };
-
-    return [
-      [keys.up, Boolean(mask & 1)],
-      [keys.down, Boolean(mask & 2)],
-      [keys.left, Boolean(mask & 4)],
-      [keys.right, Boolean(mask & 8)],
-      [keys.fire, Boolean(mask & 16)],
-    ];
-  }
-
   function hostKeyToCpcKeyboardKey(key) {
     switch (key) {
       case 'q':
@@ -243,40 +218,35 @@ export default function RoomPage() {
 
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : 2;
-    const entries = joystickMaskToKeys(mask, player);
+    const payload = {
+      type: 'joystick',
+      player,
+      mask,
+    };
 
     addInputDebug(`local P${player} joystick mask ${mask}`, mask, isHost ? 'host local' : 'guest local');
 
-    entries.forEach(([key, active]) => {
-      const payload = {
-        type: 'control',
+    if (isHost) {
+      addInputDebug(`forward joystick mask ${mask}`, mask, 'host local');
+      forwardInputToEmulator({
+        type: 'amstrad_remote_joystick',
+        mask,
         player,
-        key,
-        action: active ? 'down' : 'up',
-      };
+      });
+      return;
+    }
 
-      if (isHost) {
-        addInputDebug(`forward to emulator ${formatInputPayload(payload)}`);
-        forwardInputToEmulator({
-          type: 'amstrad_remote_control',
-          key: payload.key,
-          action: payload.action,
-          player: payload.player,
-        });
-        return;
-      }
-
-      const channel = dataChannelRef.current;
-      if (channel?.readyState === 'open') {
-        addInputDebug(`send to host ${formatInputPayload(payload)}`);
-        channel.send(JSON.stringify(payload));
-      } else {
-        addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
-      }
-    });
+    const channel = dataChannelRef.current;
+    if (channel?.readyState === 'open') {
+      addInputDebug(`send to host ${formatInputPayload(payload)}`);
+      channel.send(JSON.stringify(payload));
+    } else {
+      addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
+    }
   }, [addInputDebug, forwardInputToEmulator, isHost]);
 
   const releaseInputCapture = useCallback(() => {
+    touchJoystickMaskRef.current = 0;
     sendLocalJoystickMask(0);
     setInputCaptured(false);
   }, [sendLocalJoystickMask]);
@@ -838,6 +808,33 @@ export default function RoomPage() {
     fileInputRef.current?.click();
   }
 
+  const touchControls = [
+    { label: 'Up', bit: 1, className: 'touch-up' },
+    { label: 'Left', bit: 4, className: 'touch-left' },
+    { label: 'Right', bit: 8, className: 'touch-right' },
+    { label: 'Down', bit: 2, className: 'touch-down' },
+    { label: 'Fire', bit: 16, className: 'touch-fire' },
+  ];
+
+  function updateTouchJoystick(bit, active) {
+    setInputCaptured(true);
+
+    const currentMask = touchJoystickMaskRef.current;
+    const nextMask = active ? currentMask | bit : currentMask & ~bit;
+
+    if (nextMask === currentMask) return;
+
+    touchJoystickMaskRef.current = nextMask;
+    sendLocalJoystickMask(nextMask);
+  }
+
+  function releaseTouchJoystick() {
+    if (touchJoystickMaskRef.current === 0) return;
+
+    touchJoystickMaskRef.current = 0;
+    sendLocalJoystickMask(0);
+  }
+
   async function handleDiskSelected(event) {
     try {
       const file = event.target.files?.[0];
@@ -1000,6 +997,54 @@ export default function RoomPage() {
                 </button>
               </>
             )}
+
+            <div
+              className="touch-controls"
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              <div className="touch-dpad" aria-label={`${controlLabel} direction controls`}>
+                {touchControls.slice(0, 4).map((control) => (
+                  <button
+                    key={control.label}
+                    type="button"
+                    className={`touch-button ${control.className}`}
+                    aria-label={control.label}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.currentTarget.setPointerCapture?.(event.pointerId);
+                      updateTouchJoystick(control.bit, true);
+                    }}
+                    onPointerUp={(event) => {
+                      event.preventDefault();
+                      updateTouchJoystick(control.bit, false);
+                    }}
+                    onPointerCancel={releaseTouchJoystick}
+                    onPointerLeave={() => updateTouchJoystick(control.bit, false)}
+                  >
+                    {control.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="touch-button touch-fire"
+                aria-label="Fire"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.currentTarget.setPointerCapture?.(event.pointerId);
+                  updateTouchJoystick(16, true);
+                }}
+                onPointerUp={(event) => {
+                  event.preventDefault();
+                  updateTouchJoystick(16, false);
+                }}
+                onPointerCancel={releaseTouchJoystick}
+                onPointerLeave={() => updateTouchJoystick(16, false)}
+              >
+                Fire
+              </button>
+            </div>
           </div>
         </div>
 

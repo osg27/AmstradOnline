@@ -311,6 +311,67 @@ input {
   cursor: crosshair;
 }
 
+.touch-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(88px, 140px);
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  touch-action: none;
+  user-select: none;
+}
+
+.touch-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(54px, 1fr));
+  grid-template-rows: repeat(3, 54px);
+  gap: 0.45rem;
+}
+
+.touch-button {
+  min-width: 0;
+  min-height: 54px;
+  border: 1px solid #4a4d50;
+  background: #202426;
+  color: #f2f2f0;
+  font-weight: 700;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-button:active {
+  background: #d1a33a;
+  color: #151515;
+  transform: translateY(1px);
+}
+
+.touch-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.touch-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.touch-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.touch-down {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.touch-fire {
+  width: 100%;
+  min-height: 116px;
+  border-radius: 999px;
+  background: #7b342f;
+}
+
 .log-list {
   display: flex;
   flex-direction: column;
@@ -363,6 +424,25 @@ ul {
 
   .video {
     min-height: 260px;
+  }
+
+  .touch-controls {
+    grid-template-columns: 1fr 0.58fr;
+    gap: 0.75rem;
+  }
+
+  .touch-dpad {
+    grid-template-rows: repeat(3, 48px);
+  }
+
+  .touch-button {
+    min-height: 48px;
+    padding: 0.45rem 0.35rem;
+    font-size: 0.85rem;
+  }
+
+  .touch-fire {
+    min-height: 104px;
   }
 }
 
