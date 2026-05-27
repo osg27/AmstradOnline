@@ -54,7 +54,7 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const controlLabel = !room
     ? 'Loading controls'
-    : isHost ? 'Cursor keys + Space' : 'Q A O P / F';
+    : isHost ? 'Cursor keys + X' : 'Q A O P / F';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -157,7 +157,7 @@ export default function RoomPage() {
 
   function joystickMaskToKeys(mask, player) {
     const keys = player === 1
-      ? { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: ' ' }
+      ? { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: 'x' }
       : { up: 'q', down: 'a', left: 'o', right: 'p', fire: 'f' };
 
     return [
@@ -969,7 +969,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isHost ? 'Player 1: cursors / Space' : 'Player 2: Q A O P / F'}
+                  {isHost ? 'Player 1: cursors / X' : 'Player 2: Q A O P / F'}
                 </div>
 
                 <button
