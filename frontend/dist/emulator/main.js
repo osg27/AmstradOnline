@@ -139,6 +139,7 @@ async function main() {
   let str = "";
   let frameCounter = 0;
   let suppressPostedInput = false;
+  const localInputEnabled = window.parent === window;
 
   const env = {
     memory,
@@ -235,11 +236,15 @@ async function main() {
 
   const emulator = new_emulator();
 
-  disable_joystick(emulator);
+  enable_digital_joystick(emulator);
   set_joystick_mask(emulator, 0);
 
   let selectedGamepadIndex = null;
   let lastJoystickMask = -1;
+  const remoteJoystickMasks = {
+    1: 0,
+    2: 0,
+  };
 
   window.addEventListener("gamepadconnected", (event) => {
     console.log(
@@ -257,7 +262,9 @@ async function main() {
     console.log("GAMEPAD DISCONNECTED", event.gamepad.index, event.gamepad.id);
     if (selectedGamepadIndex === event.gamepad.index) {
       selectedGamepadIndex = null;
-      set_joystick_mask(emulator, 0);
+      if (localInputEnabled) {
+        set_joystick_mask(emulator, 0);
+      }
     }
   });
 
@@ -293,7 +300,7 @@ async function main() {
     if (pad) {
       const mask = gamepadToJoystickMask(pad);
 
-      if (mask !== lastJoystickMask) {
+      if (localInputEnabled && mask !== lastJoystickMask) {
         lastJoystickMask = mask;
         set_joystick_mask(emulator, mask);
         console.log("JOY MASK", mask, pad.id);
@@ -358,8 +365,32 @@ async function main() {
     return false;
   }
 
+  function applyControlInput(key, action) {
+    if (typeof key !== "string") return false;
+
+    const code = keyNameToCode(key) ?? (
+      key.length === 1 ? key.toUpperCase().charCodeAt(0) : null
+    );
+
+    if (code === null) {
+      return false;
+    }
+
+    if (action === "down") {
+      keydown(code);
+      return true;
+    }
+
+    if (action === "up") {
+      keyup(code);
+      return true;
+    }
+
+    return false;
+  }
+
   document.addEventListener("keydown", (event) => {
-    if (event.repeat) return;
+    if (!localInputEnabled) return;
 
     const handled = applyInput(event.key, "down");
     if (!handled) return;
@@ -372,6 +403,8 @@ async function main() {
   });
 
   document.addEventListener("keyup", (event) => {
+    if (!localInputEnabled) return;
+
     const handled = applyInput(event.key, "up");
     if (!handled) return;
 
@@ -447,18 +480,45 @@ async function main() {
       return;
     }
 
+    if (data.type === "amstrad_remote_control") {
+      suppressPostedInput = true;
+      try {
+        applyControlInput(data.key, data.action);
+      } finally {
+        suppressPostedInput = false;
+      }
+      return;
+    }
+
     if (data.type === "amstrad_remote_joystick") {
-      set_joystick_mask(emulator, data.mask | 0);
+      const player = data.player === 2 ? 2 : 1;
+      remoteJoystickMasks[player] = data.mask | 0;
+      set_joystick_mask(emulator, remoteJoystickMasks[1] | remoteJoystickMasks[2]);
       return;
     }
   });
 
-  const frame_time = 16;
+  const frame_time = 20;
+  const maxFrameCatchup = frame_time * 5;
+  let lastFrameAt = 0;
+  let frameAccumulator = 0;
   window.stopped = false;
 
-  function mainLoop() {
-    frameCounter += 1;
-    tick(emulator, frame_time);
+  function mainLoop(now) {
+    if (!lastFrameAt) {
+      lastFrameAt = now;
+    }
+
+    const elapsed = Math.min(now - lastFrameAt, maxFrameCatchup);
+    lastFrameAt = now;
+    frameAccumulator += elapsed;
+
+    while (frameAccumulator >= frame_time) {
+      frameCounter += 1;
+      tick(emulator, frame_time);
+      frameAccumulator -= frame_time;
+    }
+
     if (!window.stopped) {
       window.requestAnimationFrame(mainLoop);
     }

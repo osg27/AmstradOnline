@@ -218,6 +218,54 @@ input {
   border-color: #78d19f;
 }
 
+.input-debug-panel {
+  margin-top: 1rem;
+}
+
+.input-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(70px, 1fr));
+  gap: 0.5rem;
+}
+
+.input-bit {
+  min-height: 42px;
+  border: 1px solid #343739;
+  border-radius: 6px;
+  background: #17191a;
+  color: #9fa29d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 0.9rem;
+}
+
+.input-bit.active {
+  background: #d1a33a;
+  border-color: #d1a33a;
+  color: #151515;
+  font-weight: 700;
+}
+
+.input-debug-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.input-debug-meta span {
+  border: 1px solid #343739;
+  border-radius: 999px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.85rem;
+  color: #c8c8c2;
+}
+
+.input-debug-list {
+  max-height: 180px;
+}
+
 .row {
   display: flex;
 }
