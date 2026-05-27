@@ -36,6 +36,7 @@ export default function RoomPage() {
   const hostStartedRef = useRef(false);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
+  const localJoystickMaskRef = useRef(0);
   const touchJoystickMaskRef = useRef(0);
 
   const userId = useMemo(() => {
@@ -87,19 +88,15 @@ export default function RoomPage() {
 
   function keyToJoystickBit(key) {
     switch (key) {
-      case 'ArrowUp':
       case 'i':
       case 'I':
         return 1;
-      case 'ArrowDown':
       case 'k':
       case 'K':
         return 2;
-      case 'ArrowLeft':
       case 'j':
       case 'J':
         return 4;
-      case 'ArrowRight':
       case 'l':
       case 'L':
         return 8;
@@ -156,6 +153,16 @@ export default function RoomPage() {
     }
 
     return `${payload.type || 'unknown'} input`;
+  }
+
+  function joystickMaskToKeys(mask) {
+    return [
+      ['i', 1, Boolean(mask & 1)],
+      ['k', 2, Boolean(mask & 2)],
+      ['j', 4, Boolean(mask & 4)],
+      ['l', 8, Boolean(mask & 8)],
+      ['x', 16, Boolean(mask & 16)],
+    ];
   }
 
   function hostKeyToCpcKeyboardKey(key) {
@@ -227,6 +234,7 @@ export default function RoomPage() {
     addInputDebug(`local P${player} joystick mask ${mask}`, mask, isHost ? 'host local' : 'guest local');
 
     if (isHost) {
+      localJoystickMaskRef.current = mask;
       addInputDebug(`forward joystick mask ${mask}`, mask, 'host local');
       forwardInputToEmulator({
         type: 'amstrad_remote_joystick',
@@ -238,6 +246,25 @@ export default function RoomPage() {
 
     const channel = dataChannelRef.current;
     if (channel?.readyState === 'open') {
+      const previousMask = localJoystickMaskRef.current;
+
+      joystickMaskToKeys(mask).forEach(([key, bit, active]) => {
+        const wasActive = Boolean(previousMask & bit);
+
+        if (active === wasActive) return;
+
+        const keyPayload = {
+          type: 'control',
+          player,
+          key,
+          action: active ? 'down' : 'up',
+        };
+
+        addInputDebug(`send to host ${formatInputPayload(keyPayload)}`);
+        channel.send(JSON.stringify(keyPayload));
+      });
+
+      localJoystickMaskRef.current = mask;
       addInputDebug(`send to host ${formatInputPayload(payload)}`);
       channel.send(JSON.stringify(payload));
     } else {
