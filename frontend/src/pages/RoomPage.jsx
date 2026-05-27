@@ -37,6 +37,7 @@ export default function RoomPage() {
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
   const localJoystickMaskRef = useRef(0);
+  const remoteJoystickMaskRef = useRef(0);
   const touchJoystickMaskRef = useRef(0);
 
   const userId = useMemo(() => {
@@ -54,7 +55,7 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const controlLabel = !room
     ? 'Loading controls'
-    : isHost ? 'Cursor keys + X' : 'Joystick';
+    : isHost ? 'Cursor keys + X' : 'Q A O P / F';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -282,6 +283,24 @@ export default function RoomPage() {
     }
   }, [addInputDebug, forwardInputToEmulator, isHost]);
 
+  const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
+    joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
+      const wasActive = Boolean(previousMask & bit);
+
+      if (active === wasActive) return;
+
+      const action = active ? 'down' : 'up';
+
+      addInputDebug(`forward held P${player} key ${key} ${action}`, mask, 'guest remote');
+      forwardInputToEmulator({
+        type: 'amstrad_remote_control',
+        player,
+        key,
+        action,
+      });
+    });
+  }, [addInputDebug, forwardInputToEmulator]);
+
   const releaseInputCapture = useCallback(() => {
     touchJoystickMaskRef.current = 0;
     sendLocalJoystickMask(0);
@@ -357,6 +376,29 @@ export default function RoomPage() {
     };
   }, [addLog, sendLocalJoystickMask]);
 
+  useEffect(() => {
+    if (isHost !== false || !inputCaptured) {
+      return undefined;
+    }
+
+    const resendHeldMask = window.setInterval(() => {
+      const mask = localJoystickMaskRef.current;
+      const channel = dataChannelRef.current;
+
+      if (!mask || channel?.readyState !== 'open') return;
+
+      channel.send(JSON.stringify({
+        type: 'joystick',
+        player: 2,
+        mask,
+      }));
+    }, 50);
+
+    return () => {
+      window.clearInterval(resendHeldMask);
+    };
+  }, [inputCaptured, isHost]);
+
   const handleGuestPayloadOnHost = useCallback((rawMessage) => {
     try {
       const parsed = JSON.parse(rawMessage);
@@ -383,18 +425,19 @@ export default function RoomPage() {
       }
 
       if (parsed.type === 'joystick') {
-        addInputDebug(`forward joystick mask ${parsed.mask}`, parsed.mask, 'guest remote');
-        forwardInputToEmulator({
-          type: 'amstrad_remote_joystick',
-          mask: parsed.mask,
-          player: parsed.player,
-        });
+        const player = parsed.player === 2 ? 2 : 1;
+        const mask = parsed.mask | 0;
+        const previousMask = remoteJoystickMaskRef.current;
+
+        addInputDebug(`host received P${player} held mask ${mask}`, mask, 'guest remote');
+        forwardJoystickMaskAsKeys(mask, player, previousMask);
+        remoteJoystickMaskRef.current = mask;
       }
     } catch (err) {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
-  }, [addInputDebug, addLog, forwardInputToEmulator]);
+  }, [addInputDebug, addLog, forwardInputToEmulator, forwardJoystickMaskAsKeys]);
 
   const onSignalMessage = useCallback(async (message) => {
     if (message.type === 'system') {
@@ -945,7 +988,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isHost ? 'Player 1: cursors / X' : 'Player 2: joystick'}
+                  {isHost ? 'Player 1: cursors / X' : 'Player 2: Q A O P / F'}
                 </div>
 
                 <button
