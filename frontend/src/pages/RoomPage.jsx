@@ -381,34 +381,6 @@ export default function RoomPage() {
     };
   }, [addLog, sendLocalJoystickMask]);
 
-  useEffect(() => {
-    if (isHost !== false || !inputCaptured) {
-      return undefined;
-    }
-
-    const repeatHeldGuestControls = window.setInterval(() => {
-      const mask = localJoystickMaskRef.current;
-      const channel = dataChannelRef.current;
-
-      if (!mask || channel?.readyState !== 'open') return;
-
-      joystickMaskToKeys(mask, 2).forEach(([key, , active]) => {
-        if (!active) return;
-
-        channel.send(JSON.stringify({
-          type: 'control',
-          player: 2,
-          key,
-          action: 'down',
-        }));
-      });
-    }, 80);
-
-    return () => {
-      window.clearInterval(repeatHeldGuestControls);
-    };
-  }, [inputCaptured, isHost]);
-
   const handleGuestPayloadOnHost = useCallback((rawMessage) => {
     try {
       const parsed = JSON.parse(rawMessage);
@@ -1107,8 +1079,7 @@ export default function RoomPage() {
                       event.preventDefault();
                       updateTouchJoystick(control.bit, false);
                     }}
-                    onPointerCancel={releaseTouchJoystick}
-                    onPointerLeave={() => updateTouchJoystick(control.bit, false)}
+                    onPointerCancel={() => updateTouchJoystick(control.bit, false)}
                   >
                     {control.label}
                   </button>
@@ -1128,8 +1099,7 @@ export default function RoomPage() {
                   event.preventDefault();
                   updateTouchJoystick(16, false);
                 }}
-                onPointerCancel={releaseTouchJoystick}
-                onPointerLeave={() => updateTouchJoystick(16, false)}
+                onPointerCancel={() => updateTouchJoystick(16, false)}
               >
                 Fire
               </button>
