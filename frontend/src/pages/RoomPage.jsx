@@ -54,7 +54,7 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const controlLabel = !room
     ? 'Loading controls'
-    : isHost ? 'Cursor keys + X' : 'Q A O P / F';
+    : isHost ? 'Cursor keys + X' : 'Joystick';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -274,33 +274,9 @@ export default function RoomPage() {
 
     const channel = dataChannelRef.current;
     if (channel?.readyState === 'open') {
-      const previousMask = localJoystickMaskRef.current;
-
-      joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
-        const wasActive = Boolean(previousMask & bit);
-
-        if (active === wasActive) return;
-
-        const keyPayload = {
-          type: 'control',
-          player,
-          key,
-          action: active ? 'down' : 'up',
-        };
-        const textPayload = {
-          type: 'key',
-          player,
-          key,
-          action: active ? 'down' : 'up',
-        };
-
-        addInputDebug(`send to host ${formatInputPayload(textPayload)}`);
-        channel.send(JSON.stringify(textPayload));
-        addInputDebug(`send to host ${formatInputPayload(keyPayload)}`);
-        channel.send(JSON.stringify(keyPayload));
-      });
-
       localJoystickMaskRef.current = mask;
+      addInputDebug(`send to host ${formatInputPayload(payload)}`);
+      channel.send(JSON.stringify(payload));
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
@@ -969,7 +945,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isHost ? 'Player 1: cursors / X' : 'Player 2: Q A O P / F'}
+                  {isHost ? 'Player 1: cursors / X' : 'Player 2: joystick'}
                 </div>
 
                 <button
