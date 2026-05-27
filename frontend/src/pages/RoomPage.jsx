@@ -54,7 +54,7 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const controlLabel = !room
     ? 'Loading controls'
-    : isHost ? 'Keys + Joystick 1' : 'Joystick 2';
+    : isHost ? 'Cursor keys + Space' : 'Q A O P / F';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -88,20 +88,20 @@ export default function RoomPage() {
 
   function keyToJoystickBit(key) {
     switch (key) {
-      case 'i':
-      case 'I':
+      case 'q':
+      case 'Q':
         return 1;
-      case 'k':
-      case 'K':
+      case 'a':
+      case 'A':
         return 2;
-      case 'j':
-      case 'J':
+      case 'o':
+      case 'O':
         return 4;
-      case 'l':
-      case 'L':
+      case 'p':
+      case 'P':
         return 8;
-      case 'x':
-      case 'X':
+      case 'f':
+      case 'F':
         return 16;
       default:
         return 0;
@@ -157,8 +157,8 @@ export default function RoomPage() {
 
   function joystickMaskToKeys(mask, player) {
     const keys = player === 1
-      ? { up: 'q', down: 'a', left: 'o', right: 'p', fire: 'f' }
-      : { up: 'i', down: 'k', left: 'j', right: 'l', fire: 'x' };
+      ? { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: ' ' }
+      : { up: 'q', down: 'a', left: 'o', right: 'p', fire: 'f' };
 
     return [
       [keys.up, 1, Boolean(mask & 1)],
@@ -171,6 +171,12 @@ export default function RoomPage() {
 
   function hostKeyToCpcKeyboardKey(key) {
     switch (key) {
+      case 'ArrowUp':
+      case 'ArrowDown':
+      case 'ArrowLeft':
+      case 'ArrowRight':
+      case ' ':
+        return key;
       case 'q':
       case 'Q':
         return 'q';
@@ -963,7 +969,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isHost ? 'Player 1: Q A O P / F' : 'Player 2: I K J L / X'}
+                  {isHost ? 'Player 1: cursors / Space' : 'Player 2: Q A O P / F'}
                 </div>
 
                 <button
