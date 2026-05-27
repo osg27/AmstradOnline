@@ -369,7 +369,7 @@ async function main() {
     if (typeof key !== "string") return false;
 
     const code = keyNameToCode(key) ?? (
-      key.length === 1 ? key.toUpperCase().charCodeAt(0) : null
+      key.length === 1 ? key.charCodeAt(0) : null
     );
 
     if (code === null) {

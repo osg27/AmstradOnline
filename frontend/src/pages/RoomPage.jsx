@@ -381,6 +381,34 @@ export default function RoomPage() {
     };
   }, [addLog, sendLocalJoystickMask]);
 
+  useEffect(() => {
+    if (isHost !== false || !inputCaptured) {
+      return undefined;
+    }
+
+    const repeatHeldGuestControls = window.setInterval(() => {
+      const mask = localJoystickMaskRef.current;
+      const channel = dataChannelRef.current;
+
+      if (!mask || channel?.readyState !== 'open') return;
+
+      joystickMaskToKeys(mask, 2).forEach(([key, , active]) => {
+        if (!active) return;
+
+        channel.send(JSON.stringify({
+          type: 'control',
+          player: 2,
+          key,
+          action: 'down',
+        }));
+      });
+    }, 80);
+
+    return () => {
+      window.clearInterval(repeatHeldGuestControls);
+    };
+  }, [inputCaptured, isHost]);
+
   const handleGuestPayloadOnHost = useCallback((rawMessage) => {
     try {
       const parsed = JSON.parse(rawMessage);
