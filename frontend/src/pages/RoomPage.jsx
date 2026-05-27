@@ -18,6 +18,11 @@ export default function RoomPage() {
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
+  const [inputDebug, setInputDebug] = useState({
+    mask: 0,
+    source: 'none',
+    events: [],
+  });
 
   const remoteVideoRef = useRef(null);
   const emulatorFrameRef = useRef(null);
@@ -58,6 +63,14 @@ export default function RoomPage() {
 
   const sendSignalRef = useRef(() => false);
 
+  const addInputDebug = useCallback((message, mask = null, source = null) => {
+    setInputDebug((prev) => ({
+      mask: mask ?? prev.mask,
+      source: source ?? prev.source,
+      events: [`${new Date().toLocaleTimeString()} - ${message}`, ...prev.events].slice(0, 14),
+    }));
+  }, []);
+
   function shouldHandleKey(event) {
     const tag = event.target?.tagName?.toLowerCase();
 
@@ -73,15 +86,19 @@ export default function RoomPage() {
 
   function keyToJoystickBit(key) {
     switch (key) {
+      case 'ArrowUp':
       case 'i':
       case 'I':
         return 1;
+      case 'ArrowDown':
       case 'k':
       case 'K':
         return 2;
+      case 'ArrowLeft':
       case 'j':
       case 'J':
         return 4;
+      case 'ArrowRight':
       case 'l':
       case 'L':
         return 8;
@@ -110,6 +127,34 @@ export default function RoomPage() {
     if (fire) mask |= 16;
 
     return mask;
+  }
+
+  function joystickMaskToLabels(mask) {
+    return [
+      ['Up', Boolean(mask & 1)],
+      ['Down', Boolean(mask & 2)],
+      ['Left', Boolean(mask & 4)],
+      ['Right', Boolean(mask & 8)],
+      ['Fire', Boolean(mask & 16)],
+    ];
+  }
+
+  function formatInputPayload(payload) {
+    if (!payload) return 'empty payload';
+
+    if (payload.type === 'control') {
+      return `P${payload.player} ${payload.key} ${payload.action}`;
+    }
+
+    if (payload.type === 'key') {
+      return `P${payload.player} key ${payload.key} ${payload.action}`;
+    }
+
+    if (payload.type === 'joystick') {
+      return `P${payload.player} mask ${payload.mask}`;
+    }
+
+    return `${payload.type || 'unknown'} input`;
   }
 
   function joystickMaskToKeys(mask, player) {
@@ -200,6 +245,8 @@ export default function RoomPage() {
     const player = isHost ? 1 : 2;
     const entries = joystickMaskToKeys(mask, player);
 
+    addInputDebug(`local P${player} joystick mask ${mask}`, mask, isHost ? 'host local' : 'guest local');
+
     entries.forEach(([key, active]) => {
       const payload = {
         type: 'control',
@@ -209,6 +256,7 @@ export default function RoomPage() {
       };
 
       if (isHost) {
+        addInputDebug(`forward to emulator ${formatInputPayload(payload)}`);
         forwardInputToEmulator({
           type: 'amstrad_remote_control',
           key: payload.key,
@@ -220,10 +268,13 @@ export default function RoomPage() {
 
       const channel = dataChannelRef.current;
       if (channel?.readyState === 'open') {
+        addInputDebug(`send to host ${formatInputPayload(payload)}`);
         channel.send(JSON.stringify(payload));
+      } else {
+        addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
       }
     });
-  }, [forwardInputToEmulator, isHost]);
+  }, [addInputDebug, forwardInputToEmulator, isHost]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -258,9 +309,7 @@ export default function RoomPage() {
       if (pad) {
         const mask = gamepadToJoystickMask(pad);
 
-        if (mask !== 0) {
-          sendLocalJoystickMask(mask);
-        } else if (mask !== lastMask) {
+        if (mask !== lastMask) {
           lastMask = mask;
           sendLocalJoystickMask(mask);
         }
@@ -304,8 +353,10 @@ export default function RoomPage() {
   const handleGuestPayloadOnHost = useCallback((rawMessage) => {
     try {
       const parsed = JSON.parse(rawMessage);
+      addInputDebug(`host received ${formatInputPayload(parsed)}`, parsed.mask ?? null, 'guest remote');
 
       if (parsed.type === 'key') {
+        addInputDebug(`forward to emulator ${formatInputPayload(parsed)}`);
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
           key: parsed.key,
@@ -315,6 +366,7 @@ export default function RoomPage() {
       }
 
       if (parsed.type === 'control') {
+        addInputDebug(`forward to emulator ${formatInputPayload(parsed)}`);
         forwardInputToEmulator({
           type: 'amstrad_remote_control',
           key: parsed.key,
@@ -324,6 +376,7 @@ export default function RoomPage() {
       }
 
       if (parsed.type === 'joystick') {
+        addInputDebug(`forward joystick mask ${parsed.mask}`, parsed.mask, 'guest remote');
         forwardInputToEmulator({
           type: 'amstrad_remote_joystick',
           mask: parsed.mask,
@@ -332,8 +385,9 @@ export default function RoomPage() {
       }
     } catch (err) {
       addLog(`Input parse error: ${err.message}`);
+      addInputDebug(`parse error ${err.message}`);
     }
-  }, [addLog, forwardInputToEmulator]);
+  }, [addInputDebug, addLog, forwardInputToEmulator]);
 
   const onSignalMessage = useCallback(async (message) => {
     if (message.type === 'system') {
@@ -499,6 +553,7 @@ export default function RoomPage() {
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
       if (mappedKey || isMenuKey(event.key)) {
+        addInputDebug(`host key ${event.key} down -> ${mappedKey || event.key}`, null, 'host keyboard');
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
           player: 1,
@@ -517,6 +572,7 @@ export default function RoomPage() {
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
       if (mappedKey || isMenuKey(event.key)) {
+        addInputDebug(`host key ${event.key} up -> ${mappedKey || event.key}`, null, 'host keyboard');
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
           player: 1,
@@ -535,7 +591,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown);
       window.removeEventListener('keyup', handleHostKeyUp);
     };
-  }, [isHost, forwardInputToEmulator, inputCaptured]);
+  }, [addInputDebug, isHost, forwardInputToEmulator, inputCaptured]);
 
   useEffect(() => {
     if (isHost !== false) return undefined;
@@ -560,7 +616,14 @@ export default function RoomPage() {
       const joyBit = keyToJoystickBit(event.key);
 
       if (joyBit) {
+        if (event.repeat) {
+          addInputDebug(`ignored repeat ${event.key}`, guestJoystickMask, 'guest keyboard');
+          event.preventDefault();
+          return;
+        }
+
         guestJoystickMask |= joyBit;
+        addInputDebug(`guest key ${event.key} down`, guestJoystickMask, 'guest keyboard');
 
         sendLocalJoystickMask(guestJoystickMask);
 
@@ -569,12 +632,15 @@ export default function RoomPage() {
       }
 
       if (isMenuKey(event.key) || event.key === '@' || event.key === 'à') {
-        sendToHost({
+        const payload = {
           type: 'key',
           player: 1,
           key: event.key,
           action: 'down',
-        });
+        };
+
+        addInputDebug(`guest send ${formatInputPayload(payload)}`);
+        sendToHost(payload);
 
         event.preventDefault();
       }
@@ -588,6 +654,7 @@ export default function RoomPage() {
 
       if (joyBit) {
         guestJoystickMask &= ~joyBit;
+        addInputDebug(`guest key ${event.key} up`, guestJoystickMask, 'guest keyboard');
 
         sendLocalJoystickMask(guestJoystickMask);
 
@@ -596,12 +663,15 @@ export default function RoomPage() {
       }
 
       if (isMenuKey(event.key)) {
-        sendToHost({
+        const payload = {
           type: 'key',
           player: 1,
           key: event.key,
           action: 'up',
-        });
+        };
+
+        addInputDebug(`guest send ${formatInputPayload(payload)}`);
+        sendToHost(payload);
 
         event.preventDefault();
       }
@@ -614,7 +684,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleGuestKeyDown);
       window.removeEventListener('keyup', handleGuestKeyUp);
     };
-  }, [isHost, inputCaptured, sendLocalJoystickMask]);
+  }, [addInputDebug, isHost, inputCaptured, sendLocalJoystickMask]);
 
   function startMirrorLoop(sourceCanvas) {
     const mirrorCanvas = mirrorCanvasRef.current;
@@ -930,6 +1000,42 @@ export default function RoomPage() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+
+        <div className="panel input-debug-panel">
+          <div className="play-header">
+            <h2>Input monitor</h2>
+            <div className="assigned-control">
+              {inputDebug.source}
+            </div>
+          </div>
+
+          <div className="input-debug-grid">
+            {joystickMaskToLabels(inputDebug.mask).map(([label, active]) => (
+              <div
+                key={label}
+                className={`input-bit ${active ? 'active' : ''}`}
+              >
+                {label}
+              </div>
+            ))}
+          </div>
+
+          <div className="input-debug-meta">
+            <span>Mask {inputDebug.mask}</span>
+            <span>{dataChannelRef.current?.readyState || 'no channel'}</span>
+            <span>{inputCaptured ? 'captured' : 'released'}</span>
+          </div>
+
+          <div className="log-list input-debug-list">
+            {inputDebug.events.length === 0 ? (
+              <div className="log-entry">No inputs seen yet.</div>
+            ) : inputDebug.events.map((event, index) => (
+              <div key={`${event}-${index}`} className="log-entry">
+                {event}
+              </div>
+            ))}
           </div>
         </div>
 

@@ -139,6 +139,7 @@ async function main() {
   let str = "";
   let frameCounter = 0;
   let suppressPostedInput = false;
+  const localInputEnabled = window.parent === window;
 
   const env = {
     memory,
@@ -261,7 +262,9 @@ async function main() {
     console.log("GAMEPAD DISCONNECTED", event.gamepad.index, event.gamepad.id);
     if (selectedGamepadIndex === event.gamepad.index) {
       selectedGamepadIndex = null;
-      set_joystick_mask(emulator, 0);
+      if (localInputEnabled) {
+        set_joystick_mask(emulator, 0);
+      }
     }
   });
 
@@ -297,7 +300,7 @@ async function main() {
     if (pad) {
       const mask = gamepadToJoystickMask(pad);
 
-      if (mask !== lastJoystickMask) {
+      if (localInputEnabled && mask !== lastJoystickMask) {
         lastJoystickMask = mask;
         set_joystick_mask(emulator, mask);
         console.log("JOY MASK", mask, pad.id);
@@ -387,6 +390,8 @@ async function main() {
   }
 
   document.addEventListener("keydown", (event) => {
+    if (!localInputEnabled) return;
+
     const handled = applyInput(event.key, "down");
     if (!handled) return;
 
@@ -398,6 +403,8 @@ async function main() {
   });
 
   document.addEventListener("keyup", (event) => {
+    if (!localInputEnabled) return;
+
     const handled = applyInput(event.key, "up");
     if (!handled) return;
 
