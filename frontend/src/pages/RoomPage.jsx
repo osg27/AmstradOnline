@@ -311,6 +311,15 @@ export default function RoomPage() {
       const action = active ? 'down' : 'up';
 
       addInputDebug(`forward held P${player} key ${key} ${action}`, mask, 'guest remote');
+      if (active && key.length === 1) {
+        forwardInputToEmulator({
+          type: 'amstrad_remote_input',
+          player,
+          key,
+          action,
+        });
+      }
+
       forwardInputToEmulator({
         type: 'amstrad_remote_control',
         player,
