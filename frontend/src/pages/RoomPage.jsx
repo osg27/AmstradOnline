@@ -5,6 +5,83 @@ import BrandMark from '../components/BrandMark';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 
+const CONTROL_ACTIONS = [
+  { id: 'up', label: 'Up', bit: 1 },
+  { id: 'down', label: 'Down', bit: 2 },
+  { id: 'left', label: 'Left', bit: 4 },
+  { id: 'right', label: 'Right', bit: 8 },
+  { id: 'fire', label: 'Fire', bit: 16 },
+];
+
+const DEFAULT_CONTROL_MAPPINGS = {
+  player1: {
+    up: 'ArrowUp',
+    down: 'ArrowDown',
+    left: 'ArrowLeft',
+    right: 'ArrowRight',
+    fire: 'x',
+  },
+  player2: {
+    up: 'q',
+    down: 'a',
+    left: 'o',
+    right: 'p',
+    fire: 'f',
+  },
+};
+
+function normaliseMapping(mapping, fallback) {
+  return CONTROL_ACTIONS.reduce((next, action) => ({
+    ...next,
+    [action.id]: String(mapping?.[action.id] || fallback[action.id]),
+  }), {});
+}
+
+function loadStoredControlMappings() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('amstradControlMappings') || '{}');
+
+    return {
+      player1: normaliseMapping(stored.player1, DEFAULT_CONTROL_MAPPINGS.player1),
+      player2: normaliseMapping(stored.player2, DEFAULT_CONTROL_MAPPINGS.player2),
+    };
+  } catch {
+    return DEFAULT_CONTROL_MAPPINGS;
+  }
+}
+
+function saveStoredControlMappings(mappings) {
+  localStorage.setItem('amstradControlMappings', JSON.stringify(mappings));
+}
+
+function normaliseCapturedKey(event) {
+  if (event.key === ' ') return ' ';
+  if (event.key.length === 1) return event.key.toLowerCase();
+  return event.key;
+}
+
+function keyMatches(inputKey, mappedKey) {
+  const input = inputKey === ' ' ? ' ' : String(inputKey).toLowerCase();
+  const mapped = mappedKey === ' ' ? ' ' : String(mappedKey).toLowerCase();
+
+  return input === mapped;
+}
+
+function formatKeyLabel(key) {
+  if (!key) return '-';
+  if (key === ' ') return 'Space';
+  if (key === 'ArrowUp') return 'Cursor Up';
+  if (key === 'ArrowDown') return 'Cursor Down';
+  if (key === 'ArrowLeft') return 'Cursor Left';
+  if (key === 'ArrowRight') return 'Cursor Right';
+  if (key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+function formatMappingLabel(mapping) {
+  return CONTROL_ACTIONS.map((action) => formatKeyLabel(mapping?.[action.id])).join(' / ');
+}
+
 export default function RoomPage() {
   const navigate = useNavigate();
   const { roomCode } = useParams();
@@ -20,6 +97,9 @@ export default function RoomPage() {
   const [loadedDiskName, setLoadedDiskName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showControlConfig, setShowControlConfig] = useState(false);
+  const [pendingControlAction, setPendingControlAction] = useState(null);
+  const [controlMappings, setControlMappings] = useState(loadStoredControlMappings);
   const [inputDebug, setInputDebug] = useState({
     mask: 0,
     source: 'none',
@@ -60,9 +140,11 @@ export default function RoomPage() {
   }, []);
 
   const isHost = room ? room.owner_user_id === userId : null;
+  const activePlayer = isHost ? 1 : 2;
+  const activeMapping = controlMappings[activePlayer === 1 ? 'player1' : 'player2'];
   const controlLabel = !room
     ? 'Loading controls'
-    : isHost ? 'Cursor keys + X' : 'Q A O P / F';
+    : formatMappingLabel(activeMapping);
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -94,26 +176,10 @@ export default function RoomPage() {
     );
   }
 
-  function keyToJoystickBit(key) {
-    switch (key) {
-      case 'q':
-      case 'Q':
-        return 1;
-      case 'a':
-      case 'A':
-        return 2;
-      case 'o':
-      case 'O':
-        return 4;
-      case 'p':
-      case 'P':
-        return 8;
-      case 'f':
-      case 'F':
-        return 16;
-      default:
-        return 0;
-    }
+  function keyToJoystickBit(key, mapping) {
+    const matchedAction = CONTROL_ACTIONS.find((action) => keyMatches(key, mapping[action.id]));
+
+    return matchedAction?.bit || 0;
   }
 
   function gamepadToJoystickMask(pad) {
@@ -164,22 +230,22 @@ export default function RoomPage() {
       return `P${payload.player} state ${payload.mask} #${payload.seq}`;
     }
 
+    if (payload.type === 'input_config') {
+      return `P${payload.player} controls ${formatMappingLabel(payload.mapping)}`;
+    }
+
     return `${payload.type || 'unknown'} input`;
   }
 
-  function joystickMaskToKeys(mask, player) {
-    const keys = player === 1
-      ? { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: 'x' }
-      : { up: 'q', down: 'a', left: 'o', right: 'p', fire: 'f' };
+  const joystickMaskToKeys = useCallback((mask, player) => {
+    const mapping = controlMappings[player === 1 ? 'player1' : 'player2'];
 
-    return [
-      [keys.up, 1, Boolean(mask & 1)],
-      [keys.down, 2, Boolean(mask & 2)],
-      [keys.left, 4, Boolean(mask & 4)],
-      [keys.right, 8, Boolean(mask & 8)],
-      [keys.fire, 16, Boolean(mask & 16)],
-    ];
-  }
+    return CONTROL_ACTIONS.map((action) => [
+      mapping[action.id],
+      action.bit,
+      Boolean(mask & action.bit),
+    ]);
+  }, [controlMappings]);
 
   function hostKeyToCpcKeyboardKey(key) {
     switch (key) {
@@ -302,7 +368,22 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [addInputDebug, forwardInputToEmulator, isHost]);
+  }, [addInputDebug, forwardInputToEmulator, isHost, joystickMaskToKeys]);
+
+  const sendControlConfigToHost = useCallback((mapping = controlMappings.player2) => {
+    if (isHost !== false) return false;
+
+    const channel = dataChannelRef.current;
+    if (channel?.readyState !== 'open') return false;
+
+    channel.send(JSON.stringify({
+      type: 'input_config',
+      player: 2,
+      mapping,
+    }));
+    addInputDebug(`send to host P2 controls ${formatMappingLabel(mapping)}`, null, 'guest local');
+    return true;
+  }, [addInputDebug, controlMappings.player2, isHost]);
 
   const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
     joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
@@ -329,7 +410,7 @@ export default function RoomPage() {
         action,
       });
     });
-  }, [addInputDebug, forwardInputToEmulator]);
+  }, [addInputDebug, forwardInputToEmulator, joystickMaskToKeys]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -501,7 +582,13 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
     };
-  }, [forwardInputToEmulator, isHost]);
+  }, [forwardInputToEmulator, isHost, joystickMaskToKeys]);
+
+  useEffect(() => {
+    if (isHost !== false) return;
+
+    sendControlConfigToHost(controlMappings.player2);
+  }, [controlMappings.player2, isHost, sendControlConfigToHost]);
 
   useEffect(() => {
     if (isHost !== false) {
@@ -585,6 +672,24 @@ export default function RoomPage() {
         }
         forwardJoystickMaskAsKeys(mask, player, previousMask);
         remoteJoystickMaskRef.current = mask;
+      }
+
+      if (parsed.type === 'input_config') {
+        const player = parsed.player === 2 ? 2 : 1;
+        const playerKey = player === 1 ? 'player1' : 'player2';
+        const fallback = DEFAULT_CONTROL_MAPPINGS[playerKey];
+        const mapping = normaliseMapping(parsed.mapping, fallback);
+
+        setControlMappings((prev) => {
+          const next = {
+            ...prev,
+            [playerKey]: mapping,
+          };
+
+          saveStoredControlMappings(next);
+          return next;
+        });
+        addInputDebug(`host received P${player} controls ${formatMappingLabel(mapping)}`, null, 'guest remote');
       }
 
       if (parsed.type === 'joystick') {
@@ -761,6 +866,7 @@ export default function RoomPage() {
         lastRemoteInputAtRef.current = 0;
         remoteJoystickMaskRef.current = 0;
         addLog('Input data channel open');
+        sendControlConfigToHost();
       };
       channel.onmessage = (msg) => handleGuestPayloadOnHost(msg.data);
     };
@@ -773,7 +879,7 @@ export default function RoomPage() {
       dataChannelRef.current?.close();
       pc.close();
     };
-  }, [addLog, handleGuestPayloadOnHost]);
+  }, [addLog, handleGuestPayloadOnHost, sendControlConfigToHost]);
 
   useEffect(() => {
     if (isHost !== true) return undefined;
@@ -845,7 +951,7 @@ export default function RoomPage() {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
-      const joyBit = keyToJoystickBit(event.key);
+      const joyBit = keyToJoystickBit(event.key, controlMappings.player2);
 
       if (joyBit) {
         if (event.repeat) {
@@ -882,7 +988,7 @@ export default function RoomPage() {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
-      const joyBit = keyToJoystickBit(event.key);
+      const joyBit = keyToJoystickBit(event.key, controlMappings.player2);
 
       if (joyBit) {
         guestJoystickMask &= ~joyBit;
@@ -916,7 +1022,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleGuestKeyDown);
       window.removeEventListener('keyup', handleGuestKeyUp);
     };
-  }, [addInputDebug, isHost, inputCaptured, sendLocalJoystickMask]);
+  }, [addInputDebug, controlMappings.player2, isHost, inputCaptured, sendLocalJoystickMask]);
 
   function startMirrorLoop(sourceCanvas) {
     const mirrorCanvas = mirrorCanvasRef.current;
@@ -1078,10 +1184,63 @@ export default function RoomPage() {
     }
   }, [isHost, room]);
 
+  useEffect(() => {
+    if (!pendingControlAction || !room) {
+      return undefined;
+    }
+
+    function captureControlKey(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const key = normaliseCapturedKey(event);
+      const playerKey = activePlayer === 1 ? 'player1' : 'player2';
+
+      sendLocalJoystickMask(0);
+      setControlMappings((prev) => {
+        const next = {
+          ...prev,
+          [playerKey]: {
+            ...prev[playerKey],
+            [pendingControlAction]: key,
+          },
+        };
+
+        saveStoredControlMappings(next);
+        return next;
+      });
+      addInputDebug(`mapped P${activePlayer} ${pendingControlAction} to ${formatKeyLabel(key)}`, 0, 'controls');
+      setPendingControlAction(null);
+    }
+
+    window.addEventListener('keydown', captureControlKey, true);
+
+    return () => {
+      window.removeEventListener('keydown', captureControlKey, true);
+    };
+  }, [activePlayer, addInputDebug, pendingControlAction, room, sendLocalJoystickMask]);
+
   function openDiskPicker() {
     if (!isHost) return;
 
     fileInputRef.current?.click();
+  }
+
+  function resetActiveControlMapping() {
+    const playerKey = activePlayer === 1 ? 'player1' : 'player2';
+
+    sendLocalJoystickMask(0);
+    setPendingControlAction(null);
+    setControlMappings((prev) => {
+      const next = {
+        ...prev,
+        [playerKey]: DEFAULT_CONTROL_MAPPINGS[playerKey],
+      };
+
+      saveStoredControlMappings(next);
+      return next;
+    });
+    addInputDebug(`reset P${activePlayer} controls`, 0, 'controls');
   }
 
   async function handleDiskSelected(event) {
@@ -1142,6 +1301,16 @@ export default function RoomPage() {
             <button
               type="button"
               className="secondary"
+              onClick={() => {
+                setShowControlConfig((value) => !value);
+                setPendingControlAction(null);
+              }}
+            >
+              {showControlConfig ? 'Hide controls' : 'Controls'}
+            </button>
+            <button
+              type="button"
+              className="secondary"
               onClick={() => setShowDiagnostics((value) => !value)}
             >
               {showDiagnostics ? 'Hide diagnostics' : 'Diagnostics'}
@@ -1158,6 +1327,41 @@ export default function RoomPage() {
 
         {error ? <p className="error">{error}</p> : null}
 
+        {showControlConfig ? (
+          <div className="panel control-config-panel">
+            <div className="play-header">
+              <div>
+                <h2>Controller setup</h2>
+                <p className="muted">Player {activePlayer}: {formatMappingLabel(activeMapping)}</p>
+              </div>
+              <button type="button" className="secondary" onClick={resetActiveControlMapping}>
+                Reset defaults
+              </button>
+            </div>
+
+            <div className="control-map-grid">
+              {CONTROL_ACTIONS.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className={`control-map-button ${pendingControlAction === action.id ? 'active' : ''}`}
+                  onClick={() => {
+                    sendLocalJoystickMask(0);
+                    setPendingControlAction(action.id);
+                  }}
+                >
+                  <span>{action.label}</span>
+                  <strong>
+                    {pendingControlAction === action.id
+                      ? 'Press a key'
+                      : formatKeyLabel(activeMapping[action.id])}
+                  </strong>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="room-layout">
           <div className="panel video-panel">
             <div className="play-header">
@@ -1165,7 +1369,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isHost ? 'Player 1: cursors / X' : 'Player 2: Q A O P / F'}
+                  Player {activePlayer}: {controlLabel}
                 </div>
 
                 <button
