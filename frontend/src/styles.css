@@ -356,49 +356,6 @@ input:focus {
   margin-top: 1rem;
 }
 
-.control-config-panel {
-  margin-top: 1rem;
-}
-
-.control-config-panel .muted {
-  margin-bottom: 0;
-}
-
-.control-map-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(110px, 1fr));
-  gap: 0.65rem;
-}
-
-.control-map-button {
-  min-height: 82px;
-  flex-direction: column;
-  gap: 0.35rem;
-  background: #1b1f20;
-  border-color: var(--line-strong);
-  color: var(--text);
-}
-
-.control-map-button span {
-  color: var(--muted);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-}
-
-.control-map-button strong {
-  font-size: 1rem;
-}
-
-.control-map-button.active {
-  background: var(--amber);
-  border-color: var(--amber);
-  color: #151515;
-}
-
-.control-map-button.active span {
-  color: #3f300d;
-}
-
 .input-debug-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(70px, 1fr));
@@ -543,10 +500,6 @@ ul {
 
   .video {
     min-height: 260px;
-  }
-
-  .control-map-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
