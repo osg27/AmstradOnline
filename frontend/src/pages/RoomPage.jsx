@@ -470,13 +470,19 @@ export default function RoomPage() {
         if (!active) return;
 
         forwardInputToEmulator({
+          type: 'amstrad_remote_input',
+          player: 2,
+          key,
+          action: 'down',
+        });
+        forwardInputToEmulator({
           type: 'amstrad_remote_control',
           player: 2,
           key,
           action: 'down',
         });
       });
-    }, 20);
+    }, 50);
 
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
