@@ -39,6 +39,12 @@ export async function apiFetch(path, options = {}) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/auth/')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      window.location.assign('/login');
+    }
+
     throw new Error(data?.detail || 'Request failed');
   }
 
