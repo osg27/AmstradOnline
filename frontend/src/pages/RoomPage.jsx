@@ -457,6 +457,33 @@ export default function RoomPage() {
   }, [addInputDebug, forwardJoystickMaskAsKeys, isHost]);
 
   useEffect(() => {
+    if (isHost !== true) {
+      return undefined;
+    }
+
+    const pumpRemoteHeldKeys = window.setInterval(() => {
+      const mask = remoteJoystickMaskRef.current;
+
+      if (!mask) return;
+
+      joystickMaskToKeys(mask, 2).forEach(([key, , active]) => {
+        if (!active) return;
+
+        forwardInputToEmulator({
+          type: 'amstrad_remote_control',
+          player: 2,
+          key,
+          action: 'down',
+        });
+      });
+    }, 20);
+
+    return () => {
+      window.clearInterval(pumpRemoteHeldKeys);
+    };
+  }, [forwardInputToEmulator, isHost]);
+
+  useEffect(() => {
     if (isHost !== false) {
       return undefined;
     }
