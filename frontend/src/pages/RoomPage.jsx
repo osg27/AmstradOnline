@@ -36,8 +36,10 @@ export default function RoomPage() {
   const hostStartedRef = useRef(false);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
+  const inputSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const inputSequenceRef = useRef(0);
   const localJoystickMaskRef = useRef(0);
+  const lastRemoteInputSessionRef = useRef('');
   const lastRemoteInputSeqRef = useRef(0);
   const lastRemoteInputAtRef = useRef(0);
   const remoteJoystickMaskRef = useRef(0);
@@ -286,6 +288,7 @@ export default function RoomPage() {
       const statePayload = {
         type: 'input_state',
         player,
+        sessionId: inputSessionIdRef.current,
         seq: inputSequenceRef.current + 1,
         mask,
         ts: performance.now(),
@@ -407,6 +410,7 @@ export default function RoomPage() {
       channel.send(JSON.stringify({
         type: 'input_state',
         player: 2,
+        sessionId: inputSessionIdRef.current,
         seq: inputSequenceRef.current,
         mask,
         ts: performance.now(),
@@ -497,6 +501,20 @@ export default function RoomPage() {
         const player = parsed.player === 2 ? 2 : 1;
         const mask = parsed.mask | 0;
         const seq = Number(parsed.seq) || 0;
+        const sessionId = String(parsed.sessionId || 'legacy');
+
+        if (sessionId !== lastRemoteInputSessionRef.current) {
+          const previousMask = remoteJoystickMaskRef.current;
+
+          if (previousMask) {
+            forwardJoystickMaskAsKeys(0, player, previousMask);
+          }
+
+          lastRemoteInputSessionRef.current = sessionId;
+          lastRemoteInputSeqRef.current = 0;
+          remoteJoystickMaskRef.current = 0;
+          addInputDebug(`guest input session ${sessionId}`, 0, 'guest remote');
+        }
 
         if (seq && seq <= lastRemoteInputSeqRef.current) {
           addInputDebug(`ignored old P${player} state #${seq}`, remoteJoystickMaskRef.current, 'guest remote');
@@ -670,7 +688,13 @@ export default function RoomPage() {
       const channel = event.channel;
       dataChannelRef.current = channel;
 
-      channel.onopen = () => addLog('Input data channel open');
+      channel.onopen = () => {
+        lastRemoteInputSessionRef.current = '';
+        lastRemoteInputSeqRef.current = 0;
+        lastRemoteInputAtRef.current = 0;
+        remoteJoystickMaskRef.current = 0;
+        addLog('Input data channel open');
+      };
       channel.onmessage = (msg) => handleGuestPayloadOnHost(msg.data);
     };
 
@@ -912,7 +936,13 @@ export default function RoomPage() {
       const channel = pc.createDataChannel('inputs');
       dataChannelRef.current = channel;
 
-      channel.onopen = () => addLog('Host input data channel open');
+      channel.onopen = () => {
+        lastRemoteInputSessionRef.current = '';
+        lastRemoteInputSeqRef.current = 0;
+        lastRemoteInputAtRef.current = 0;
+        remoteJoystickMaskRef.current = 0;
+        addLog('Host input data channel open');
+      };
       channel.onmessage = (msg) => handleGuestPayloadOnHost(msg.data);
 
       const offer = await pc.createOffer();
