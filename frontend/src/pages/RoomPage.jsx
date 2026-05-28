@@ -36,7 +36,10 @@ export default function RoomPage() {
   const hostStartedRef = useRef(false);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
+  const inputSequenceRef = useRef(0);
   const localJoystickMaskRef = useRef(0);
+  const lastRemoteInputSeqRef = useRef(0);
+  const lastRemoteInputAtRef = useRef(0);
   const remoteJoystickMaskRef = useRef(0);
   const touchJoystickMaskRef = useRef(0);
 
@@ -151,6 +154,10 @@ export default function RoomPage() {
 
     if (payload.type === 'joystick') {
       return `P${payload.player} mask ${payload.mask}`;
+    }
+
+    if (payload.type === 'input_state') {
+      return `P${payload.player} state ${payload.mask} #${payload.seq}`;
     }
 
     return `${payload.type || 'unknown'} input`;
@@ -276,8 +283,17 @@ export default function RoomPage() {
     const channel = dataChannelRef.current;
     if (channel?.readyState === 'open') {
       localJoystickMaskRef.current = mask;
-      addInputDebug(`send to host ${formatInputPayload(payload)}`);
-      channel.send(JSON.stringify(payload));
+      const statePayload = {
+        type: 'input_state',
+        player,
+        seq: inputSequenceRef.current + 1,
+        mask,
+        ts: performance.now(),
+      };
+
+      inputSequenceRef.current = statePayload.seq;
+      addInputDebug(`send to host ${formatInputPayload(statePayload)}`);
+      channel.send(JSON.stringify(statePayload));
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
@@ -381,23 +397,76 @@ export default function RoomPage() {
       return undefined;
     }
 
-    const resendHeldMask = window.setInterval(() => {
+    const sendSnapshot = () => {
       const mask = localJoystickMaskRef.current;
       const channel = dataChannelRef.current;
 
-      if (!mask || channel?.readyState !== 'open') return;
+      if (channel?.readyState !== 'open') return;
 
+      inputSequenceRef.current += 1;
       channel.send(JSON.stringify({
-        type: 'joystick',
+        type: 'input_state',
         player: 2,
+        seq: inputSequenceRef.current,
         mask,
+        ts: performance.now(),
       }));
-    }, 50);
+    };
+
+    const snapshotTimer = window.setInterval(sendSnapshot, 33);
+    sendSnapshot();
 
     return () => {
-      window.clearInterval(resendHeldMask);
+      window.clearInterval(snapshotTimer);
     };
   }, [inputCaptured, isHost]);
+
+  useEffect(() => {
+    if (isHost !== true) {
+      return undefined;
+    }
+
+    const staleRemoteInputTimer = window.setInterval(() => {
+      if (remoteJoystickMaskRef.current === 0) return;
+      if (!lastRemoteInputAtRef.current) return;
+      if (performance.now() - lastRemoteInputAtRef.current < 180) return;
+
+      const previousMask = remoteJoystickMaskRef.current;
+
+      addInputDebug('guest input timed out, releasing held keys', 0, 'guest remote');
+      forwardJoystickMaskAsKeys(0, 2, previousMask);
+      remoteJoystickMaskRef.current = 0;
+    }, 90);
+
+    return () => {
+      window.clearInterval(staleRemoteInputTimer);
+    };
+  }, [addInputDebug, forwardJoystickMaskAsKeys, isHost]);
+
+  useEffect(() => {
+    if (isHost !== false) {
+      return undefined;
+    }
+
+    function releaseGuestInput() {
+      touchJoystickMaskRef.current = 0;
+      sendLocalJoystickMask(0);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        releaseGuestInput();
+      }
+    }
+
+    window.addEventListener('blur', releaseGuestInput);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('blur', releaseGuestInput);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isHost, sendLocalJoystickMask]);
 
   const handleGuestPayloadOnHost = useCallback((rawMessage) => {
     try {
@@ -424,11 +493,33 @@ export default function RoomPage() {
         });
       }
 
+      if (parsed.type === 'input_state') {
+        const player = parsed.player === 2 ? 2 : 1;
+        const mask = parsed.mask | 0;
+        const seq = Number(parsed.seq) || 0;
+
+        if (seq && seq <= lastRemoteInputSeqRef.current) {
+          addInputDebug(`ignored old P${player} state #${seq}`, remoteJoystickMaskRef.current, 'guest remote');
+          return;
+        }
+
+        const previousMask = remoteJoystickMaskRef.current;
+
+        lastRemoteInputSeqRef.current = seq || lastRemoteInputSeqRef.current;
+        lastRemoteInputAtRef.current = performance.now();
+        if (mask !== previousMask) {
+          addInputDebug(`host received P${player} state ${mask} #${seq}`, mask, 'guest remote');
+        }
+        forwardJoystickMaskAsKeys(mask, player, previousMask);
+        remoteJoystickMaskRef.current = mask;
+      }
+
       if (parsed.type === 'joystick') {
         const player = parsed.player === 2 ? 2 : 1;
         const mask = parsed.mask | 0;
         const previousMask = remoteJoystickMaskRef.current;
 
+        lastRemoteInputAtRef.current = performance.now();
         addInputDebug(`host received P${player} held mask ${mask}`, mask, 'guest remote');
         forwardJoystickMaskAsKeys(mask, player, previousMask);
         remoteJoystickMaskRef.current = mask;
