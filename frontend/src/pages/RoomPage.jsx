@@ -233,6 +233,7 @@ export default function RoomPage() {
       'ShiftRight',
       'Backspace',
       'Escape',
+      ' ',
     ].includes(key);
   }
 
