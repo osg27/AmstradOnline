@@ -781,7 +781,6 @@ export default function RoomPage() {
 
     function handleHostKeyDown(event) {
       if (!shouldHandleKey(event)) return;
-      if (!inputCaptured) return;
 
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
@@ -800,7 +799,6 @@ export default function RoomPage() {
 
     function handleHostKeyUp(event) {
       if (!shouldHandleKey(event)) return;
-      if (!inputCaptured) return;
 
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
@@ -824,7 +822,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown);
       window.removeEventListener('keyup', handleHostKeyUp);
     };
-  }, [addInputDebug, isHost, forwardInputToEmulator, inputCaptured]);
+  }, [addInputDebug, isHost, forwardInputToEmulator]);
 
   useEffect(() => {
     if (isHost !== false) return undefined;
