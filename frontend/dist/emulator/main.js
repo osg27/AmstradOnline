@@ -340,6 +340,7 @@ async function main() {
     if (action === "down") {
       if (key.length === 1) {
         input_char(key.charCodeAt(0));
+        keydown(key.toUpperCase().charCodeAt(0));
         return true;
       }
 
@@ -352,6 +353,7 @@ async function main() {
 
     if (action === "up") {
       if (key.length === 1) {
+        keyup(key.toUpperCase().charCodeAt(0));
         return true;
       }
 
