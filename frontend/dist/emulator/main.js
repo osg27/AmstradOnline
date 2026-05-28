@@ -1,5 +1,44 @@
 const textDecoder = new TextDecoder();
 
+let audioContext = null;
+let audioScheduledAt = 0;
+
+function ensureAudioContext() {
+  if (!audioContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    audioContext = new AudioContextClass({ sampleRate: 44100 });
+    audioScheduledAt = audioContext.currentTime + 0.05;
+  }
+
+  if (audioContext.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+
+  return audioContext;
+}
+
+function playAudioSamples(sampleArray, ptr, numSamples) {
+  const ctx = ensureAudioContext();
+  if (!ctx || numSamples <= 0) return;
+
+  const samples = sampleArray.subarray(ptr >> 2, (ptr >> 2) + numSamples);
+  const buffer = ctx.createBuffer(1, numSamples, 44100);
+  buffer.copyToChannel(samples, 0);
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+
+  const startAt = Math.max(audioScheduledAt, ctx.currentTime + 0.005);
+  source.start(startAt);
+  audioScheduledAt = startAt + (numSamples / 44100);
+
+  if (audioScheduledAt - ctx.currentTime > 0.25) {
+    audioScheduledAt = ctx.currentTime + 0.05;
+  }
+}
+
 function toStr(charArray, ptr, limit = 255) {
   let end = ptr;
   while (charArray[end++] && end - ptr < limit);
@@ -143,6 +182,9 @@ async function main() {
 
   const env = {
     memory,
+    audio: (sampleBuffer, numSamples) => {
+      playAudioSamples(new Float32Array(memory.buffer), sampleBuffer, numSamples);
+    },
     display: (pixelBuffer) => {
       const pixelArray = new Uint32Array(memory.buffer, pixelBuffer);
       const { data, width, height } = imageData;
@@ -469,6 +511,11 @@ async function main() {
     if (data.type === "amstrad_autoload") {
       if (!data.fileName || !data.bytes) return;
       loadDiskBytes(data.fileName, new Uint8Array(data.bytes));
+      return;
+    }
+
+    if (data.type === "amstrad_audio_unlock") {
+      ensureAudioContext();
       return;
     }
 

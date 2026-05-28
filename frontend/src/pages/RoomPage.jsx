@@ -335,6 +335,13 @@ export default function RoomPage() {
     setInputCaptured(false);
   }, [sendLocalJoystickMask]);
 
+  const captureInput = useCallback(() => {
+    setInputCaptured(true);
+    forwardInputToEmulator({
+      type: 'amstrad_audio_unlock',
+    });
+  }, [forwardInputToEmulator]);
+
   useEffect(() => {
     if (!inputCaptured) {
       return undefined;
@@ -1060,7 +1067,7 @@ export default function RoomPage() {
   ];
 
   function updateTouchJoystick(bit, active) {
-    setInputCaptured(true);
+    captureInput();
 
     const currentMask = touchJoystickMaskRef.current;
     const nextMask = active ? currentMask | bit : currentMask & ~bit;
@@ -1157,7 +1164,7 @@ export default function RoomPage() {
                 <button
                   type="button"
                   className={inputCaptured ? 'danger' : 'secondary'}
-                  onClick={inputCaptured ? releaseInputCapture : () => setInputCaptured(true)}
+                  onClick={inputCaptured ? releaseInputCapture : captureInput}
                 >
                   {inputCaptured ? 'Release' : 'Capture'}
                 </button>
@@ -1189,7 +1196,7 @@ export default function RoomPage() {
                 <canvas
                   ref={mirrorCanvasRef}
                   className="video"
-                  onClick={() => setInputCaptured(true)}
+                  onClick={captureInput}
                   style={{
                     width: '100%',
                     aspectRatio: '4 / 3',
@@ -1232,7 +1239,7 @@ export default function RoomPage() {
                   playsInline
                   muted
                   className="video"
-                  onClick={() => setInputCaptured(true)}
+                  onClick={captureInput}
                 />
 
                 <button onClick={connectGuest} disabled={guestPrepared}>
