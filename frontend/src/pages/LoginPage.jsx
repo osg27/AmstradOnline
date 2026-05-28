@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import BrandMark from '../components/BrandMark';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -32,7 +33,11 @@ export default function LoginPage() {
   return (
     <div className="page auth-page">
       <div className="card auth-card">
-        <h1>Login</h1>
+        <BrandMark />
+        <div className="auth-heading">
+          <h1>Welcome back</h1>
+          <p>Sign in to host or join a CPC session.</p>
+        </div>
         <form onSubmit={handleSubmit}>
           <input
             placeholder="Username"
@@ -46,9 +51,9 @@ export default function LoginPage() {
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
           {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={loading}>{loading ? 'Logging in...' : 'Login'}</button>
+          <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
         </form>
-        <p>Need an account? <Link to="/register">Register</Link></p>
+        <p className="auth-switch">Need an account? <Link to="/register">Create one</Link></p>
       </div>
     </div>
   );

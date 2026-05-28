@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import BrandMark from '../components/BrandMark';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 
@@ -18,6 +19,7 @@ export default function RoomPage() {
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [inputDebug, setInputDebug] = useState({
     mask: 0,
     source: 'none',
@@ -44,7 +46,6 @@ export default function RoomPage() {
   const lastRemoteInputSeqRef = useRef(0);
   const lastRemoteInputAtRef = useRef(0);
   const remoteJoystickMaskRef = useRef(0);
-  const touchJoystickMaskRef = useRef(0);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -331,7 +332,6 @@ export default function RoomPage() {
   }, [addInputDebug, forwardInputToEmulator]);
 
   const releaseInputCapture = useCallback(() => {
-    touchJoystickMaskRef.current = 0;
     sendLocalJoystickMask(0);
     setInputCaptured(false);
   }, [sendLocalJoystickMask]);
@@ -509,7 +509,6 @@ export default function RoomPage() {
     }
 
     function releaseGuestInput() {
-      touchJoystickMaskRef.current = 0;
       sendLocalJoystickMask(0);
     }
 
@@ -1085,33 +1084,6 @@ export default function RoomPage() {
     fileInputRef.current?.click();
   }
 
-  const touchControls = [
-    { label: 'Up', bit: 1, className: 'touch-up' },
-    { label: 'Left', bit: 4, className: 'touch-left' },
-    { label: 'Right', bit: 8, className: 'touch-right' },
-    { label: 'Down', bit: 2, className: 'touch-down' },
-    { label: 'Fire', bit: 16, className: 'touch-fire' },
-  ];
-
-  function updateTouchJoystick(bit, active) {
-    captureInput();
-
-    const currentMask = touchJoystickMaskRef.current;
-    const nextMask = active ? currentMask | bit : currentMask & ~bit;
-
-    if (nextMask === currentMask) return;
-
-    touchJoystickMaskRef.current = nextMask;
-    sendLocalJoystickMask(nextMask);
-  }
-
-  function releaseTouchJoystick() {
-    if (touchJoystickMaskRef.current === 0) return;
-
-    touchJoystickMaskRef.current = 0;
-    sendLocalJoystickMask(0);
-  }
-
   async function handleDiskSelected(event) {
     try {
       const file = event.target.files?.[0];
@@ -1151,6 +1123,7 @@ export default function RoomPage() {
       <div className="card room-card">
         <div className="room-topbar">
           <div className="room-title">
+            <BrandMark compact />
             <h1>Room {roomCode}</h1>
             <div className="room-meta">
               <span>{username}</span>
@@ -1165,6 +1138,13 @@ export default function RoomPage() {
             </Link>
             <button className="secondary" onClick={() => navigate('/lobby')}>
               Leave
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setShowDiagnostics((value) => !value)}
+            >
+              {showDiagnostics ? 'Hide diagnostics' : 'Diagnostics'}
             </button>
           </div>
         </div>
@@ -1275,103 +1255,62 @@ export default function RoomPage() {
               </>
             )}
 
-            <div
-              className="touch-controls"
-              onContextMenu={(event) => event.preventDefault()}
-            >
-              <div className="touch-dpad" aria-label={`${controlLabel} direction controls`}>
-                {touchControls.slice(0, 4).map((control) => (
-                  <button
-                    key={control.label}
-                    type="button"
-                    className={`touch-button ${control.className}`}
-                    aria-label={control.label}
-                    onPointerDown={(event) => {
-                      event.preventDefault();
-                      event.currentTarget.setPointerCapture?.(event.pointerId);
-                      updateTouchJoystick(control.bit, true);
-                    }}
-                    onPointerUp={(event) => {
-                      event.preventDefault();
-                      updateTouchJoystick(control.bit, false);
-                    }}
-                    onPointerCancel={() => updateTouchJoystick(control.bit, false)}
+          </div>
+        </div>
+
+        {showDiagnostics ? (
+          <>
+            <div className="panel input-debug-panel">
+              <div className="play-header">
+                <h2>Input monitor</h2>
+                <div className="assigned-control">
+                  {inputDebug.source}
+                </div>
+              </div>
+
+              <div className="input-debug-grid">
+                {joystickMaskToLabels(inputDebug.mask).map(([label, active]) => (
+                  <div
+                    key={label}
+                    className={`input-bit ${active ? 'active' : ''}`}
                   >
-                    {control.label}
-                  </button>
+                    {label}
+                  </div>
                 ))}
               </div>
 
-              <button
-                type="button"
-                className="touch-button touch-fire"
-                aria-label="Fire"
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.currentTarget.setPointerCapture?.(event.pointerId);
-                  updateTouchJoystick(16, true);
-                }}
-                onPointerUp={(event) => {
-                  event.preventDefault();
-                  updateTouchJoystick(16, false);
-                }}
-                onPointerCancel={() => updateTouchJoystick(16, false)}
-              >
-                Fire
-              </button>
+              <div className="input-debug-meta">
+                <span>Mask {inputDebug.mask}</span>
+                <span>{dataChannelRef.current?.readyState || 'no channel'}</span>
+                <span>{inputCaptured ? 'captured' : 'released'}</span>
+              </div>
+
+              <div className="log-list input-debug-list">
+                {inputDebug.events.length === 0 ? (
+                  <div className="log-entry">No inputs seen yet.</div>
+                ) : inputDebug.events.map((event, index) => (
+                  <div key={`${event}-${index}`} className="log-entry">
+                    {event}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div className="panel input-debug-panel">
-          <div className="play-header">
-            <h2>Input monitor</h2>
-            <div className="assigned-control">
-              {inputDebug.source}
+            <div className="panel log-panel">
+              <h2>Session log</h2>
+
+              {logs.length === 0 ? <p className="muted">No events yet.</p> : null}
+
+              <div className="log-list">
+                {logs.map((log, index) => (
+                  <div key={`${log}-${index}`} className="log-entry">
+                    {log}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div className="input-debug-grid">
-            {joystickMaskToLabels(inputDebug.mask).map(([label, active]) => (
-              <div
-                key={label}
-                className={`input-bit ${active ? 'active' : ''}`}
-              >
-                {label}
-              </div>
-            ))}
-          </div>
-
-          <div className="input-debug-meta">
-            <span>Mask {inputDebug.mask}</span>
-            <span>{dataChannelRef.current?.readyState || 'no channel'}</span>
-            <span>{inputCaptured ? 'captured' : 'released'}</span>
-          </div>
-
-          <div className="log-list input-debug-list">
-            {inputDebug.events.length === 0 ? (
-              <div className="log-entry">No inputs seen yet.</div>
-            ) : inputDebug.events.map((event, index) => (
-              <div key={`${event}-${index}`} className="log-entry">
-                {event}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="panel log-panel">
-          <h2>Session log</h2>
-
-          {logs.length === 0 ? <p className="muted">No events yet.</p> : null}
-
-          <div className="log-list">
-            {logs.map((log, index) => (
-              <div key={`${log}-${index}`} className="log-entry">
-                {log}
-              </div>
-            ))}
-          </div>
-        </div>
+          </>
+        ) : null}
       </div>
     </div>
   );

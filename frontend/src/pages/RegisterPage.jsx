@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import BrandMark from '../components/BrandMark';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -32,7 +33,11 @@ export default function RegisterPage() {
   return (
     <div className="page auth-page">
       <div className="card auth-card">
-        <h1>Register</h1>
+        <BrandMark />
+        <div className="auth-heading">
+          <h1>Create account</h1>
+          <p>Set up your player name and jump into a room.</p>
+        </div>
         <form onSubmit={handleSubmit}>
           <input
             placeholder="Username"
@@ -53,7 +58,7 @@ export default function RegisterPage() {
           {error ? <p className="error">{error}</p> : null}
           <button type="submit" disabled={loading}>{loading ? 'Creating account...' : 'Register'}</button>
         </form>
-        <p>Already have an account? <Link to="/login">Login</Link></p>
+        <p className="auth-switch">Already have an account? <Link to="/login">Sign in</Link></p>
       </div>
     </div>
   );

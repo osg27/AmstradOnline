@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import BrandMark from '../components/BrandMark';
 
 export default function LobbyPage() {
   const navigate = useNavigate();
@@ -48,26 +49,33 @@ export default function LobbyPage() {
   return (
     <div className="page lobby-page">
       <div className="card lobby-card">
-        <div className="row spread center-gap">
-          <div>
-            <h1>Amstrad Multiplayer</h1>
-            <p>Logged in as <strong>{username}</strong></p>
+        <div className="lobby-header">
+          <BrandMark />
+          <div className="account-strip">
+            <span>{username}</span>
+            <button className="secondary" onClick={logout}>Logout</button>
           </div>
-          <button className="secondary" onClick={logout}>Logout</button>
+        </div>
+
+        <div className="lobby-intro">
+          <h1>Play CPC games together</h1>
+          <p>Create a room, share the code, and stream the session straight from the browser.</p>
         </div>
 
         <div className="lobby-actions">
-          <div className="panel">
-            <h2>Create Room</h2>
-            <p>Start a new host-controlled session.</p>
+          <div className="panel action-panel">
+            <span className="panel-kicker">Host</span>
+            <h2>Create room</h2>
+            <p>Start a fresh multiplayer session.</p>
             <button onClick={handleCreate} disabled={loadingCreate}>
               {loadingCreate ? 'Creating...' : 'Create room'}
             </button>
           </div>
 
-          <div className="panel">
-            <h2>Join Room</h2>
-            <p>Enter a room code to join an existing session.</p>
+          <div className="panel action-panel">
+            <span className="panel-kicker">Guest</span>
+            <h2>Join room</h2>
+            <p>Enter the six-character room code.</p>
             <input
               placeholder="Room code"
               value={joinCode}
