@@ -24,6 +24,7 @@ export default function RoomPage() {
     events: [],
   });
 
+  const remoteMediaStreamRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const emulatorFrameRef = useRef(null);
   const mirrorCanvasRef = useRef(null);
@@ -733,10 +734,22 @@ export default function RoomPage() {
     };
 
     pc.ontrack = (event) => {
-      if (remoteVideoRef.current && event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
-        addLog('Remote stream attached');
+      if (!remoteMediaStreamRef.current) {
+        remoteMediaStreamRef.current = new MediaStream();
       }
+
+      const remoteStream = remoteMediaStreamRef.current;
+      const hasTrack = remoteStream.getTracks().some((track) => track.id === event.track.id);
+
+      if (!hasTrack) {
+        remoteStream.addTrack(event.track);
+      }
+
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+
+      addLog(`Remote ${event.track.kind} track attached`);
     };
 
     pc.ondatachannel = (event) => {
