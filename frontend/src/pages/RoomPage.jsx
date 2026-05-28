@@ -340,6 +340,12 @@ export default function RoomPage() {
     forwardInputToEmulator({
       type: 'amstrad_audio_unlock',
     });
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = false;
+      remoteVideoRef.current.volume = 1;
+      remoteVideoRef.current.play().catch(() => {});
+    }
   }, [forwardInputToEmulator]);
 
   useEffect(() => {
@@ -980,7 +986,12 @@ export default function RoomPage() {
       const stream = mirrorCanvas.captureStream(60);
       stream.getVideoTracks().forEach((track) => pc.addTrack(track, stream));
 
-      addLog(`Added ${stream.getTracks().length} mirror track(s)`);
+      const audioStream = iframe.contentWindow?.getAmstradAudioStream?.();
+      if (audioStream) {
+        audioStream.getAudioTracks().forEach((track) => pc.addTrack(track, audioStream));
+      }
+
+      addLog(`Added ${stream.getVideoTracks().length} video track(s) and ${audioStream?.getAudioTracks().length || 0} audio track(s)`);
 
       const channel = pc.createDataChannel('inputs');
       dataChannelRef.current = channel;
@@ -1026,6 +1037,9 @@ export default function RoomPage() {
 
       if (!pc.remoteDescription && pc.getTransceivers().length === 0) {
         pc.addTransceiver('video', {
+          direction: 'recvonly',
+        });
+        pc.addTransceiver('audio', {
           direction: 'recvonly',
         });
       }
@@ -1237,7 +1251,7 @@ export default function RoomPage() {
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
-                  muted
+                  muted={false}
                   className="video"
                   onClick={captureInput}
                 />

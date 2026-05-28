@@ -1,6 +1,7 @@
 const textDecoder = new TextDecoder();
 
 let audioContext = null;
+let audioStreamDestination = null;
 let audioScheduledAt = 0;
 
 function ensureAudioContext() {
@@ -8,6 +9,7 @@ function ensureAudioContext() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return null;
     audioContext = new AudioContextClass({ sampleRate: 44100 });
+    audioStreamDestination = audioContext.createMediaStreamDestination();
     audioScheduledAt = audioContext.currentTime + 0.05;
   }
 
@@ -29,6 +31,9 @@ function playAudioSamples(sampleArray, ptr, numSamples) {
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   source.connect(ctx.destination);
+  if (audioStreamDestination) {
+    source.connect(audioStreamDestination);
+  }
 
   const startAt = Math.max(audioScheduledAt, ctx.currentTime + 0.005);
   source.start(startAt);
@@ -38,6 +43,11 @@ function playAudioSamples(sampleArray, ptr, numSamples) {
     audioScheduledAt = ctx.currentTime + 0.05;
   }
 }
+
+window.getAmstradAudioStream = () => {
+  ensureAudioContext();
+  return audioStreamDestination?.stream ?? null;
+};
 
 function toStr(charArray, ptr, limit = 255) {
   let end = ptr;
