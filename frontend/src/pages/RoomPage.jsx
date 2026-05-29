@@ -107,6 +107,14 @@ export default function RoomPage() {
     );
   }
 
+  function getKeyboardKey(event) {
+    if (event.code === 'Space' || event.key === 'Spacebar' || event.keyCode === 32) {
+      return ' ';
+    }
+
+    return event.key;
+  }
+
   function keyToJoystickBit(key) {
     switch (key) {
       case 'q':
@@ -795,14 +803,15 @@ export default function RoomPage() {
     function handleHostKeyDown(event) {
       if (!shouldHandleHostKey(event)) return;
 
-      const mappedKey = hostKeyToCpcKeyboardKey(event.key);
+      const key = getKeyboardKey(event);
+      const mappedKey = hostKeyToCpcKeyboardKey(key);
 
-      if (mappedKey || isMenuKey(event.key)) {
-        addInputDebug(`host key ${event.key} down -> ${mappedKey || event.key}`, null, 'host keyboard');
+      if (mappedKey || isMenuKey(key)) {
+        addInputDebug(`host key ${key} down -> ${mappedKey || key}`, null, 'host keyboard');
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
           player: 1,
-          key: mappedKey || event.key,
+          key: mappedKey || key,
           action: 'down',
         });
 
@@ -813,14 +822,15 @@ export default function RoomPage() {
     function handleHostKeyUp(event) {
       if (!shouldHandleHostKey(event)) return;
 
-      const mappedKey = hostKeyToCpcKeyboardKey(event.key);
+      const key = getKeyboardKey(event);
+      const mappedKey = hostKeyToCpcKeyboardKey(key);
 
-      if (mappedKey || isMenuKey(event.key)) {
-        addInputDebug(`host key ${event.key} up -> ${mappedKey || event.key}`, null, 'host keyboard');
+      if (mappedKey || isMenuKey(key)) {
+        addInputDebug(`host key ${key} up -> ${mappedKey || key}`, null, 'host keyboard');
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
           player: 1,
-          key: mappedKey || event.key,
+          key: mappedKey || key,
           action: 'up',
         });
 
@@ -857,17 +867,18 @@ export default function RoomPage() {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
-      const joyBit = keyToJoystickBit(event.key);
+      const key = getKeyboardKey(event);
+      const joyBit = keyToJoystickBit(key);
 
       if (joyBit) {
         if (event.repeat) {
-          addInputDebug(`ignored repeat ${event.key}`, guestJoystickMask, 'guest keyboard');
+          addInputDebug(`ignored repeat ${key}`, guestJoystickMask, 'guest keyboard');
           event.preventDefault();
           return;
         }
 
         guestJoystickMask |= joyBit;
-        addInputDebug(`guest key ${event.key} down`, guestJoystickMask, 'guest keyboard');
+        addInputDebug(`guest key ${key} down`, guestJoystickMask, 'guest keyboard');
 
         sendLocalJoystickMask(guestJoystickMask);
 
@@ -875,11 +886,11 @@ export default function RoomPage() {
         return;
       }
 
-      if (isMenuKey(event.key) || event.key === '@' || event.key === 'à') {
+      if (isMenuKey(key) || key === '@' || key === 'à') {
         const payload = {
           type: 'key',
           player: 1,
-          key: event.key,
+          key,
           action: 'down',
         };
 
@@ -894,11 +905,12 @@ export default function RoomPage() {
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
-      const joyBit = keyToJoystickBit(event.key);
+      const key = getKeyboardKey(event);
+      const joyBit = keyToJoystickBit(key);
 
       if (joyBit) {
         guestJoystickMask &= ~joyBit;
-        addInputDebug(`guest key ${event.key} up`, guestJoystickMask, 'guest keyboard');
+        addInputDebug(`guest key ${key} up`, guestJoystickMask, 'guest keyboard');
 
         sendLocalJoystickMask(guestJoystickMask);
 
@@ -906,11 +918,11 @@ export default function RoomPage() {
         return;
       }
 
-      if (isMenuKey(event.key)) {
+      if (isMenuKey(key)) {
         const payload = {
           type: 'key',
           player: 1,
-          key: event.key,
+          key,
           action: 'up',
         };
 

@@ -166,6 +166,11 @@ function keyNameToCode(key) {
   return map[key] ?? null;
 }
 
+function normaliseInputKey(key) {
+  if (key === "Space" || key === "Spacebar") return " ";
+  return key;
+}
+
 async function main() {
   const memory = new WebAssembly.Memory({ initial: 1000 });
   const canvas = document.getElementsByTagName("canvas")[0];
@@ -391,6 +396,8 @@ async function main() {
 
   function applyInput(key, action) {
     if (typeof key !== "string") return false;
+
+    key = normaliseInputKey(key);
 
     if (action === "down") {
       if (key.length === 1) {
