@@ -149,7 +149,7 @@ export default function RoomPage() {
     const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
     const fire = [0, 1, 2, 3, 5, 7].some((index) => pad.buttons[index]?.pressed);
-    const extra = pad.buttons[4]?.pressed;
+    const extra = [4, 6, 8, 9, 10, 11].some((index) => pad.buttons[index]?.pressed);
 
     if (up) mask |= 1;
     if (down) mask |= 2;
@@ -1262,7 +1262,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isHost ? 'Player 1: cursors / X' : 'Player 2: Q A O P / F'}
+                  {isHost ? 'Player 1: cursors / X / Z' : 'Player 2: Q A O P / F / G'}
                 </div>
 
                 <button
