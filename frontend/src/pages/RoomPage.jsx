@@ -148,8 +148,8 @@ export default function RoomPage() {
     const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone;
     const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
-    const fire = [0, 1, 2, 3, 5, 7].some((index) => pad.buttons[index]?.pressed);
-    const extra = [4, 6, 8, 9, 10, 11].some((index) => pad.buttons[index]?.pressed);
+    const fire = [0, 1].some((index) => pad.buttons[index]?.pressed);
+    const extra = [2, 3].some((index) => pad.buttons[index]?.pressed);
 
     if (up) mask |= 1;
     if (down) mask |= 2;
@@ -317,6 +317,10 @@ export default function RoomPage() {
       'F12',
       ' ',
     ].includes(key);
+  }
+
+  function isGuestKeyboardKey(key) {
+    return isMenuKey(key) || key.length === 1;
   }
 
   const forwardInputToEmulator = useCallback((payload) => {
@@ -959,10 +963,10 @@ export default function RoomPage() {
         return;
       }
 
-      if (isMenuKey(key) || key === '@' || key === 'à') {
+      if (isGuestKeyboardKey(key)) {
         const payload = {
           type: 'key',
-          player: 1,
+          player: 2,
           key,
           action: 'down',
         };
@@ -991,10 +995,10 @@ export default function RoomPage() {
         return;
       }
 
-      if (isMenuKey(key)) {
+      if (isGuestKeyboardKey(key)) {
         const payload = {
           type: 'key',
-          player: 1,
+          player: 2,
           key,
           action: 'up',
         };
