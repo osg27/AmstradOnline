@@ -65,7 +65,7 @@ export default function RoomPage() {
   const systemLabel = isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
-  const acceptedMedia = isSpectrum ? '.tap,.tzx,.z80,.sna' : '.dsk';
+  const acceptedMedia = isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
   const mediaLabel = isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
@@ -1199,10 +1199,10 @@ export default function RoomPage() {
       if (!file) return;
 
       const lowerName = file.name.toLowerCase();
-      const allowedExtensions = isSpectrum ? ['.tap', '.tzx', '.z80', '.sna'] : ['.dsk'];
+      const allowedExtensions = isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
 
       if (!allowedExtensions.some((extension) => lowerName.endsWith(extension))) {
-        setError(isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, and .sna files' : 'Only .dsk files are supported right now');
+        setError(isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${file.name}`);
         event.target.value = '';
         return;

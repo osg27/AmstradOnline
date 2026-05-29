@@ -7,7 +7,7 @@ export default function BrandMark({ compact = false }) {
       <img src={logoUrl} alt="Old Style Gaming" />
       <div className="brand-copy">
         <span>Old Style Gaming</span>
-        {!compact ? <strong>Amstrad Multiplayer</strong> : null}
+        {!compact ? <strong>Old Style Gaming</strong> : null}
       </div>
     </div>
   );

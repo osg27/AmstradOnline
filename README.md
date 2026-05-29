@@ -1,6 +1,6 @@
-# Amstrad Multiplayer Starter
+# Old Style Gaming
 
-This is a clean restart project for a **single-host Amstrad multiplayer architecture**:
+This is a clean restart project for a **single-host retro multiplayer architecture**:
 
 - FastAPI backend
 - React + Vite frontend
@@ -12,7 +12,7 @@ This is a clean restart project for a **single-host Amstrad multiplayer architec
 
 ## Important
 
-This project is a **working foundation**, not a finished Amstrad emulator product yet.
+This project is a **working foundation**, not a finished emulator product yet.
 
 What is included:
 - register/login

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ZX Spectrum</title>
+    <title>Old Style Gaming - ZX Spectrum</title>
     <style>
       html,
       body {
@@ -16,15 +16,30 @@
 
       canvas {
         display: block;
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100%;
         image-rendering: pixelated;
         background: #000;
+      }
+
+      #speccy {
+        width: 100vw;
+        height: 100vh;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      #speccy > * {
+        flex: 0 0 auto;
       }
     </style>
   </head>
   <body>
-    <canvas width="768" height="544"></canvas>
+    <div id="speccy"></div>
+    <script src="./jsspeccy.js"></script>
     <script src="./main.js"></script>
   </body>
 </html>

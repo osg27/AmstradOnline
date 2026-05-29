@@ -12,7 +12,7 @@ from app.websockets.signaling import router as signaling_router
 Base.metadata.create_all(bind=engine)
 ensure_runtime_columns(engine)
 
-app = FastAPI(title="Amstrad Multiplayer API")
+app = FastAPI(title="Old Style Gaming API")
 
 app.add_middleware(
     CORSMiddleware,

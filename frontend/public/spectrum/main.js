@@ -1,38 +1,66 @@
-const canvas = document.querySelector("canvas");
-const ctx = canvas.getContext("2d");
+const root = document.getElementById("speccy");
+let speccy = null;
+let ready = false;
+let pendingFile = null;
 
-let loadedFileName = "";
-let lastKey = "";
-
-function draw() {
-  ctx.fillStyle = "#050505";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = "#d7d7d7";
-  ctx.fillRect(86, 54, 596, 436);
-
-  ctx.fillStyle = "#111";
-  ctx.fillRect(102, 70, 564, 404);
-
-  ctx.fillStyle = "#f7f7f7";
-  ctx.font = "28px monospace";
-  ctx.fillText("ZX SPECTRUM", 264, 156);
-
-  ctx.font = "18px monospace";
-  ctx.fillStyle = "#75d982";
-  ctx.fillText("Multiplayer room wiring is ready", 204, 214);
-
-  ctx.fillStyle = "#f3c66b";
-  ctx.fillText("Next step: plug in the Spectrum emulator core", 154, 254);
-
-  ctx.fillStyle = "#b9b2a4";
-  ctx.fillText(loadedFileName ? `Loaded: ${loadedFileName}` : "Load .tap, .tzx, .z80, or .sna", 170, 314);
-  ctx.fillText(lastKey ? `Last key: ${lastKey}` : "Waiting for input", 278, 352);
+function getKeyName(key) {
+  if (key === " ") return "Space";
+  if (key === "ArrowUp") return "ArrowUp";
+  if (key === "ArrowDown") return "ArrowDown";
+  if (key === "ArrowLeft") return "ArrowLeft";
+  if (key === "ArrowRight") return "ArrowRight";
+  if (key === "Enter") return "Enter";
+  if (key === "Shift") return "Shift";
+  if (key === "Control") return "Control";
+  return typeof key === "string" && key.length === 1 ? key.toLowerCase() : key;
 }
 
-function normaliseKey(key) {
-  if (key === " ") return "Space";
-  return key;
+async function loadSpectrumFile(fileName, bytes) {
+  if (!speccy || !ready) {
+    pendingFile = { fileName, bytes };
+    return;
+  }
+
+  const file = new File([bytes], fileName || "game.tap");
+  await speccy.openFile(file);
+  speccy.focus();
+}
+
+function applyInput(key, action) {
+  if (!speccy || !ready) return;
+
+  const keyName = getKeyName(key);
+  if (!keyName) return;
+
+  if (action === "down") {
+    speccy.pressKey(keyName);
+  } else if (action === "up") {
+    speccy.releaseKey(keyName);
+  }
+}
+
+function boot() {
+  speccy = window.JSSpeccy(root, {
+    autoStart: true,
+    autoLoadTapes: true,
+    tapeTrapsEnabled: true,
+    machine: 128,
+    sandbox: true,
+    uiEnabled: false,
+    keyboardEnabled: true,
+    zoom: 2,
+  });
+
+  speccy.onReady(() => {
+    ready = true;
+    speccy.focus();
+
+    if (pendingFile) {
+      const file = pendingFile;
+      pendingFile = null;
+      loadSpectrumFile(file.fileName, file.bytes);
+    }
+  });
 }
 
 window.addEventListener("message", (event) => {
@@ -40,15 +68,15 @@ window.addEventListener("message", (event) => {
   if (!data || typeof data !== "object") return;
 
   if (data.type === "spectrum_autoload") {
-    loadedFileName = data.fileName || "Spectrum file";
-    draw();
+    loadSpectrumFile(data.fileName, data.bytes).catch((error) => {
+      console.error("Spectrum load failed", error);
+    });
     return;
   }
 
   if (data.type === "amstrad_remote_input" || data.type === "amstrad_remote_control") {
-    lastKey = `${normaliseKey(data.key)} ${data.action}`;
-    draw();
+    applyInput(data.key, data.action);
   }
 });
 
-draw();
+boot();

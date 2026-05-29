@@ -37,7 +37,7 @@ export default function LoginPage() {
         <BrandMark />
         <div className="auth-heading">
           <h1>Welcome back</h1>
-          <p>Sign in to host or join a CPC session.</p>
+          <p>Sign in to host or join a retro session.</p>
         </div>
         <form onSubmit={handleSubmit}>
           <input
