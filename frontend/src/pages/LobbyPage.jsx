@@ -11,6 +11,7 @@ export default function LobbyPage() {
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
+  const [selectedSystem, setSelectedSystem] = useState('cpc');
 
   useEffect(() => {
     async function loadSession() {
@@ -33,7 +34,10 @@ export default function LobbyPage() {
     setError('');
     setLoadingCreate(true);
     try {
-      const room = await apiFetch('/rooms/create', { method: 'POST' });
+      const room = await apiFetch('/rooms/create', {
+        method: 'POST',
+        body: JSON.stringify({ system: selectedSystem }),
+      });
       navigate(`/room/${room.room_code}`);
     } catch (err) {
       setError(err.message);
@@ -80,8 +84,8 @@ export default function LobbyPage() {
         </div>
 
         <div className="lobby-intro">
-          <h1>Play CPC games together</h1>
-          <p>Create a room, share the code, and stream the session straight from the browser.</p>
+          <h1>Play retro games together</h1>
+          <p>Create a room, pick a system, and stream the session straight from the browser.</p>
         </div>
 
         <div className="lobby-actions">
@@ -89,6 +93,22 @@ export default function LobbyPage() {
             <span className="panel-kicker">Host</span>
             <h2>Create room</h2>
             <p>Start a fresh multiplayer session.</p>
+            <div className="system-picker" aria-label="System">
+              <button
+                type="button"
+                className={selectedSystem === 'cpc' ? 'active' : 'secondary'}
+                onClick={() => setSelectedSystem('cpc')}
+              >
+                Amstrad CPC
+              </button>
+              <button
+                type="button"
+                className={selectedSystem === 'spectrum' ? 'active' : 'secondary'}
+                onClick={() => setSelectedSystem('spectrum')}
+              >
+                ZX Spectrum
+              </button>
+            </div>
             <button onClick={handleCreate} disabled={loadingCreate}>
               {loadingCreate ? 'Creating...' : 'Create room'}
             </button>

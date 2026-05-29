@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.room import Room
-from app.schemas.room import RoomCreateResponse, RoomJoinRequest, RoomResponse
+from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomJoinRequest, RoomResponse
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -32,6 +32,7 @@ def generate_room_code(length: int = 6) -> str:
 
 @router.post("/create", response_model=RoomCreateResponse)
 def create_room(
+    payload: RoomCreateRequest | None = None,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
@@ -43,12 +44,13 @@ def create_room(
         room_code=room_code,
         owner_user_id=user_id,
         status="waiting",
+        system=payload.system if payload else "cpc",
     )
     db.add(room)
     db.commit()
     db.refresh(room)
 
-    return RoomCreateResponse(room_code=room.room_code, status=room.status)
+    return RoomCreateResponse(room_code=room.room_code, status=room.status, system=room.system)
 
 
 @router.post("/join", response_model=RoomResponse)
@@ -65,6 +67,7 @@ def join_room(
         room_code=room.room_code,
         status=room.status,
         owner_user_id=room.owner_user_id,
+        system=room.system or "cpc",
     )
 
 
@@ -82,4 +85,5 @@ def get_room(
         room_code=room.room_code,
         status=room.status,
         owner_user_id=room.owner_user_id,
+        system=room.system or "cpc",
     )

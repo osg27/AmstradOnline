@@ -60,6 +60,13 @@ export default function RoomPage() {
   }, []);
 
   const isHost = room ? room.owner_user_id === userId : null;
+  const roomSystem = room?.system || 'cpc';
+  const isSpectrum = roomSystem === 'spectrum';
+  const systemLabel = isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const emulatorSrc = isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+  const emulatorTitle = `${systemLabel} Emulator`;
+  const acceptedMedia = isSpectrum ? '.tap,.tzx,.z80,.sna' : '.dsk';
+  const mediaLabel = isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
     : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
@@ -1099,7 +1106,7 @@ export default function RoomPage() {
       const stream = mirrorCanvas.captureStream(60);
       stream.getVideoTracks().forEach((track) => pc.addTrack(track, stream));
 
-      const audioStream = iframe.contentWindow?.getAmstradAudioStream?.();
+      const audioStream = isSpectrum ? null : iframe.contentWindow?.getAmstradAudioStream?.();
       if (audioStream) {
         audioStream.getAudioTracks().forEach((track) => pc.addTrack(track, audioStream));
       }
@@ -1192,9 +1199,10 @@ export default function RoomPage() {
       if (!file) return;
 
       const lowerName = file.name.toLowerCase();
+      const allowedExtensions = isSpectrum ? ['.tap', '.tzx', '.z80', '.sna'] : ['.dsk'];
 
-      if (!lowerName.endsWith('.dsk')) {
-        setError('Only .dsk files are supported right now');
+      if (!allowedExtensions.some((extension) => lowerName.endsWith(extension))) {
+        setError(isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, and .sna files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${file.name}`);
         event.target.value = '';
         return;
@@ -1204,7 +1212,7 @@ export default function RoomPage() {
       const bytes = new Uint8Array(arrayBuffer);
 
       forwardInputToEmulator({
-        type: 'amstrad_autoload',
+        type: isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: file.name,
         bytes,
       });
@@ -1229,6 +1237,7 @@ export default function RoomPage() {
             <div className="room-meta">
               <span>{username}</span>
               <span>{roleLabel}</span>
+              <span>{systemLabel}</span>
               <span>{controlLabel}</span>
             </div>
           </div>
@@ -1287,8 +1296,8 @@ export default function RoomPage() {
               <>
                 <iframe
                   ref={emulatorFrameRef}
-                  title="Amstrad Emulator"
-                  src="/emulator/index.html"
+                  title={emulatorTitle}
+                  src={emulatorSrc}
                   style={{
                     position: 'absolute',
                     left: '-99999px',
@@ -1319,7 +1328,7 @@ export default function RoomPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".dsk"
+                  accept={acceptedMedia}
                   onChange={handleDiskSelected}
                   style={{ display: 'none' }}
                 />
@@ -1335,7 +1344,7 @@ export default function RoomPage() {
                   </button>
 
                   <button onClick={openDiskPicker} disabled={!hostStarted}>
-                    Load .dsk
+                    {mediaLabel}
                   </button>
                 </div>
               </>
