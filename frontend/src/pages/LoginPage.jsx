@@ -22,6 +22,7 @@ export default function LoginPage() {
 
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('username', data.username);
+      localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
       navigate('/lobby');
     } catch (err) {
       setError(err.message);

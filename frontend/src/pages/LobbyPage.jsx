@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
@@ -10,6 +10,24 @@ export default function LobbyPage() {
   const [error, setError] = useState('');
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [loadingJoin, setLoadingJoin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
+
+  useEffect(() => {
+    async function loadSession() {
+      try {
+        const session = await apiFetch('/auth/me');
+        const nextIsAdmin = Boolean(session.is_admin);
+
+        setIsAdmin(nextIsAdmin);
+        localStorage.setItem('isAdmin', nextIsAdmin ? 'true' : 'false');
+      } catch {
+        setIsAdmin(false);
+        localStorage.removeItem('isAdmin');
+      }
+    }
+
+    loadSession();
+  }, []);
 
   async function handleCreate() {
     setError('');
@@ -43,6 +61,7 @@ export default function LobbyPage() {
   function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
+    localStorage.removeItem('isAdmin');
     navigate('/login');
   }
 
@@ -53,7 +72,9 @@ export default function LobbyPage() {
           <BrandMark />
           <div className="account-strip">
             <span>{username}</span>
-            <button className="secondary" onClick={() => navigate('/admin')}>Admin</button>
+            {isAdmin ? (
+              <button className="secondary" onClick={() => navigate('/admin')}>Admin</button>
+            ) : null}
             <button className="secondary" onClick={logout}>Logout</button>
           </div>
         </div>
