@@ -2,17 +2,27 @@ const root = document.getElementById("speccy");
 let speccy = null;
 let ready = false;
 let pendingFile = null;
-let previousJoystickMask = 0;
+const previousJoystickMasks = new Map();
 const heldKeyCounts = new Map();
 
-const JOYSTICK_KEYS = [
-  { bit: 1, keys: ["q", "9"] },
-  { bit: 2, keys: ["a", "8"] },
-  { bit: 4, keys: ["o", "6"] },
-  { bit: 8, keys: ["p", "7"] },
-  { bit: 16, keys: ["m", "0", "Space", " "] },
-  { bit: 32, keys: ["n"] },
-];
+const SINCLAIR_KEYS = {
+  1: {
+    up: "9",
+    down: "8",
+    left: "6",
+    right: "7",
+    fire: "0",
+    extra: "n",
+  },
+  2: {
+    up: "4",
+    down: "3",
+    left: "1",
+    right: "2",
+    fire: "5",
+    extra: "n",
+  },
+};
 
 function getKeyName(key) {
   if (key === " ") return "Space";
@@ -30,29 +40,36 @@ function uniqueKeys(keys) {
   return [...new Set(keys.filter(Boolean))];
 }
 
-function getInputKeys(key) {
+function getJoystickKeys(player) {
+  return SINCLAIR_KEYS[player === 2 ? 2 : 1];
+}
+
+function getInputKeys(key, player) {
   const keyName = getKeyName(key);
   if (!keyName) return [];
+
+  const joystickKeys = getJoystickKeys(player);
+  const qaopKeys = player === 2 ? [] : ["q", "a", "o", "p", "m"];
 
   switch (keyName) {
     case "ArrowUp":
     case "q":
-      return ["q", "9"];
+      return [qaopKeys[0], joystickKeys.up];
     case "ArrowDown":
     case "a":
-      return ["a", "8"];
+      return [qaopKeys[1], joystickKeys.down];
     case "ArrowLeft":
     case "o":
-      return ["o", "6"];
+      return [qaopKeys[2], joystickKeys.left];
     case "ArrowRight":
     case "p":
-      return ["p", "7"];
+      return [qaopKeys[3], joystickKeys.right];
     case "x":
     case "f":
-      return ["m", "0", "Space", " "];
+      return [qaopKeys[4], joystickKeys.fire, player === 2 ? null : "Space", player === 2 ? null : " "];
     case "z":
     case "g":
-      return ["n"];
+      return [joystickKeys.extra];
     default:
       return [keyName];
   }
@@ -88,28 +105,46 @@ async function loadSpectrumFile(fileName, bytes) {
   speccy.focus();
 }
 
-function applyInput(key, action) {
+function applyInput(key, action, player) {
   if (!speccy || !ready) return;
 
   if (action !== "down" && action !== "up") return;
 
-  applyKeys(getInputKeys(key), action);
+  applyKeys(getInputKeys(key, player), action);
 }
 
-function applyJoystickMask(mask) {
+function getJoystickMaskKeys(player) {
+  const joystickKeys = getJoystickKeys(player);
+  const qaopKeys = player === 2
+    ? { up: null, down: null, left: null, right: null, fire: null, extra: null }
+    : { up: "q", down: "a", left: "o", right: "p", fire: "m", extra: null };
+
+  return [
+    { bit: 1, keys: [qaopKeys.up, joystickKeys.up] },
+    { bit: 2, keys: [qaopKeys.down, joystickKeys.down] },
+    { bit: 4, keys: [qaopKeys.left, joystickKeys.left] },
+    { bit: 8, keys: [qaopKeys.right, joystickKeys.right] },
+    { bit: 16, keys: [qaopKeys.fire, joystickKeys.fire, player === 2 ? null : "Space", player === 2 ? null : " "] },
+    { bit: 32, keys: [qaopKeys.extra, joystickKeys.extra] },
+  ];
+}
+
+function applyJoystickMask(mask, player) {
   if (!speccy || !ready) return;
 
   const nextMask = Number(mask) || 0;
+  const joystickPlayer = player === 2 ? 2 : 1;
+  const previousMask = previousJoystickMasks.get(joystickPlayer) || 0;
 
-  JOYSTICK_KEYS.forEach(({ bit, keys }) => {
+  getJoystickMaskKeys(joystickPlayer).forEach(({ bit, keys }) => {
     const active = Boolean(nextMask & bit);
-    const wasActive = Boolean(previousJoystickMask & bit);
+    const wasActive = Boolean(previousMask & bit);
 
     if (active === wasActive) return;
     applyKeys(keys, active ? "down" : "up");
   });
 
-  previousJoystickMask = nextMask;
+  previousJoystickMasks.set(joystickPlayer, nextMask);
 }
 
 function boot() {
@@ -148,11 +183,11 @@ window.addEventListener("message", (event) => {
   }
 
   if (data.type === "amstrad_remote_input" || data.type === "amstrad_remote_control") {
-    applyInput(data.key, data.action);
+    applyInput(data.key, data.action, data.player);
   }
 
   if (data.type === "amstrad_remote_joystick") {
-    applyJoystickMask(data.mask);
+    applyJoystickMask(data.mask, data.player);
   }
 });
 

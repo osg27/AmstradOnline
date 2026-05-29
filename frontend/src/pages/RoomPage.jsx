@@ -69,7 +69,7 @@ export default function RoomPage() {
   const mediaLabel = isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
-    : isSpectrum ? 'QAOP/M + Sinclair 1' : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+    : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
