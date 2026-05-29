@@ -84,7 +84,7 @@ export default function LobbyPage() {
         </div>
 
         <div className="lobby-intro">
-          <h1>Because Retro Games Are Better With Mates</h1>
+          <h1>Retro Games Are Better With Mates</h1>
           <p>Create a room, pick a system, and stream the session straight from the browser.</p>
         </div>
 
