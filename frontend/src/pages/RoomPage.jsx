@@ -90,7 +90,7 @@ export default function RoomPage() {
       && tag !== 'button'
       && tag !== 'a'
       && !event.metaKey
-      && !event.altKey
+      && (!event.altKey || event.key === 'Alt')
     );
   }
 
@@ -231,14 +231,45 @@ export default function RoomPage() {
         return 'Tab';
       case 'CapsLock':
         return 'CapsLock';
+      case 'Control':
+      case 'ControlLeft':
+      case 'ControlRight':
+        return 'Control';
+      case 'Alt':
+      case 'AltLeft':
+      case 'AltRight':
+        return 'Alt';
       case 'Shift':
       case 'ShiftLeft':
       case 'ShiftRight':
         return 'Shift';
       case 'Backspace':
         return 'Backspace';
+      case 'Delete':
+        return 'Delete';
       case 'Escape':
         return 'Escape';
+      case 'Home':
+        return 'Home';
+      case 'End':
+        return 'End';
+      case 'PageUp':
+        return 'PageUp';
+      case 'PageDown':
+        return 'PageDown';
+      case 'F1':
+      case 'F2':
+      case 'F3':
+      case 'F4':
+      case 'F5':
+      case 'F6':
+      case 'F7':
+      case 'F8':
+      case 'F9':
+      case 'F10':
+      case 'F11':
+      case 'F12':
+        return key;
       default:
         return key.length === 1 ? key : null;
     }
@@ -252,8 +283,31 @@ export default function RoomPage() {
       'Shift',
       'ShiftLeft',
       'ShiftRight',
+      'Control',
+      'ControlLeft',
+      'ControlRight',
+      'Alt',
+      'AltLeft',
+      'AltRight',
       'Backspace',
+      'Delete',
       'Escape',
+      'Home',
+      'End',
+      'PageUp',
+      'PageDown',
+      'F1',
+      'F2',
+      'F3',
+      'F4',
+      'F5',
+      'F6',
+      'F7',
+      'F8',
+      'F9',
+      'F10',
+      'F11',
+      'F12',
       ' ',
     ].includes(key);
   }

@@ -146,6 +146,7 @@ function keyNameToCode(key) {
   const map = {
     Enter: 13,
     Backspace: 8,
+    Delete: 8,
     Tab: 9,
     Escape: 27,
     Shift: 16,
@@ -161,6 +162,22 @@ function keyNameToCode(key) {
     ArrowUp: 38,
     ArrowRight: 39,
     ArrowDown: 40,
+    PageUp: 33,
+    PageDown: 34,
+    End: 35,
+    Home: 36,
+    F1: 112,
+    F2: 113,
+    F3: 114,
+    F4: 115,
+    F5: 116,
+    F6: 117,
+    F7: 118,
+    F8: 119,
+    F9: 120,
+    F10: 121,
+    F11: 122,
+    F12: 123,
   };
 
   return map[key] ?? null;
@@ -400,6 +417,11 @@ async function main() {
     key = normaliseInputKey(key);
 
     if (action === "down") {
+      if (key === " ") {
+        keydown(32);
+        return true;
+      }
+
       if (key.length === 1) {
         input_char(key.charCodeAt(0));
         keydown(key.toUpperCase().charCodeAt(0));
@@ -414,6 +436,11 @@ async function main() {
     }
 
     if (action === "up") {
+      if (key === " ") {
+        keyup(32);
+        return true;
+      }
+
       if (key.length === 1) {
         keyup(key.toUpperCase().charCodeAt(0));
         return true;
