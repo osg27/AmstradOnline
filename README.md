@@ -46,7 +46,8 @@ Do **not** run two emulator instances and try to sync them.
 
 1. Copy `.env.example` to `.env`
 2. Change passwords and secrets
-3. Run:
+3. Set `ADMIN_USERNAME` to the username that should be allowed to view `/admin`
+4. Run:
 
 ```bash
 docker compose up --build
@@ -89,4 +90,3 @@ After you confirm this runs cleanly, the next step is:
 - embed the Amstrad emulator into the host page
 - capture the emulator canvas/video
 - map data-channel keyboard events into the emulator input layer
-

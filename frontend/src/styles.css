@@ -214,6 +214,60 @@ input:focus {
   gap: 1rem;
 }
 
+.admin-card {
+  max-width: 1180px;
+}
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.admin-stat {
+  min-height: 110px;
+  justify-content: space-between;
+}
+
+.admin-stat span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.admin-stat strong {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.admin-users-panel h2 {
+  margin-bottom: 0;
+  font-size: 1.15rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 780px;
+}
+
+.admin-table th,
+.admin-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.75rem 0.65rem;
+  text-align: left;
+}
+
+.admin-table th {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+}
+
 .room-layout {
   display: block;
   margin-top: 1rem;

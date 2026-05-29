@@ -53,6 +53,7 @@ export default function LobbyPage() {
           <BrandMark />
           <div className="account-strip">
             <span>{username}</span>
+            <button className="secondary" onClick={() => navigate('/admin')}>Admin</button>
             <button className="secondary" onClick={logout}>Logout</button>
           </div>
         </div>

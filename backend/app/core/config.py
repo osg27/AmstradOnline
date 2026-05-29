@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: list[str] | str = ["http://localhost:5173"]
+    ADMIN_USERNAME: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -24,6 +26,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         username=payload.username,
         email=payload.email,
         password_hash=hash_password(payload.password),
+        last_login_at=datetime.now(timezone.utc),
+        login_count=1,
     )
     db.add(user)
     db.commit()
@@ -38,6 +42,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    user.last_login_at = datetime.now(timezone.utc)
+    user.login_count = (user.login_count or 0) + 1
+    db.commit()
+    db.refresh(user)
 
     token = create_access_token(str(user.id))
     return AuthResponse(access_token=token, username=user.username)
