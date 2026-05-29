@@ -10,7 +10,7 @@ from app.core.security import decode_access_token
 from app.models.room import Room
 from app.models.user import User
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/auth/admin", tags=["admin"])
 
 
 def get_current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:

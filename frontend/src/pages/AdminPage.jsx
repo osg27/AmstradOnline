@@ -17,7 +17,10 @@ export default function AdminPage() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const data = await apiFetch('/admin/stats');
+        const data = await apiFetch('/auth/admin/stats');
+        if (!data?.totals) {
+          throw new Error('Admin stats endpoint did not return stats');
+        }
         setStats(data);
       } catch (err) {
         setError(err.message);
