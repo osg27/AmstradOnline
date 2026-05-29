@@ -62,7 +62,7 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const controlLabel = !room
     ? 'Loading controls'
-    : isHost ? 'Cursor keys + X' : 'Q A O P / F';
+    : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -132,6 +132,9 @@ export default function RoomPage() {
       case 'f':
       case 'F':
         return 16;
+      case 'g':
+      case 'G':
+        return 32;
       default:
         return 0;
     }
@@ -146,12 +149,14 @@ export default function RoomPage() {
     const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
     const fire = [0, 1, 2, 3, 5, 7].some((index) => pad.buttons[index]?.pressed);
+    const extra = pad.buttons[4]?.pressed;
 
     if (up) mask |= 1;
     if (down) mask |= 2;
     if (left) mask |= 4;
     if (right) mask |= 8;
     if (fire) mask |= 16;
+    if (extra) mask |= 32;
 
     return mask;
   }
@@ -163,6 +168,7 @@ export default function RoomPage() {
       ['Left', Boolean(mask & 4)],
       ['Right', Boolean(mask & 8)],
       ['Fire', Boolean(mask & 16)],
+      ['Extra', Boolean(mask & 32)],
     ];
   }
 
@@ -190,8 +196,8 @@ export default function RoomPage() {
 
   function joystickMaskToKeys(mask, player) {
     const keys = player === 1
-      ? { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: 'x' }
-      : { up: 'q', down: 'a', left: 'o', right: 'p', fire: 'f' };
+      ? { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: 'x', extra: 'z' }
+      : { up: 'q', down: 'a', left: 'o', right: 'p', fire: 'f', extra: 'g' };
 
     return [
       [keys.up, 1, Boolean(mask & 1)],
@@ -199,6 +205,7 @@ export default function RoomPage() {
       [keys.left, 4, Boolean(mask & 4)],
       [keys.right, 8, Boolean(mask & 8)],
       [keys.fire, 16, Boolean(mask & 16)],
+      [keys.extra, 32, Boolean(mask & 32)],
     ];
   }
 
@@ -321,8 +328,38 @@ export default function RoomPage() {
     targetWindow.postMessage(payload, window.location.origin);
   }, []);
 
+  const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
+    const extraBit = 32;
+    const active = Boolean(mask & extraBit);
+    const wasActive = Boolean(previousMask & extraBit);
+
+    if (active === wasActive) return;
+
+    const key = player === 1 ? 'z' : 'g';
+    const action = active ? 'down' : 'up';
+
+    addInputDebug(`forward P${player} extra key ${key} ${action}`, mask, player === 1 ? 'host local' : 'guest remote');
+    if (active) {
+      forwardInputToEmulator({
+        type: 'amstrad_remote_input',
+        player,
+        key,
+        action,
+      });
+    }
+
+    forwardInputToEmulator({
+      type: 'amstrad_remote_control',
+      player,
+      key,
+      action,
+    });
+  }, [addInputDebug, forwardInputToEmulator]);
+
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : 2;
+    const joystickMask = mask & 31;
+    const previousMask = localJoystickMaskRef.current;
     const payload = {
       type: 'joystick',
       player,
@@ -335,8 +372,9 @@ export default function RoomPage() {
       forwardInputToEmulator({
         type: 'amstrad_remote_joystick',
         player,
-        mask,
+        mask: joystickMask,
       });
+      forwardExtraButtonAsKey(mask, player, previousMask);
       localJoystickMaskRef.current = mask;
       return;
     }
@@ -359,7 +397,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [addInputDebug, forwardInputToEmulator, isHost]);
+  }, [addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isHost]);
 
   const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
     joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
