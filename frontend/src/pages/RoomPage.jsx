@@ -94,6 +94,19 @@ export default function RoomPage() {
     );
   }
 
+  function shouldHandleHostKey(event) {
+    const tag = event.target?.tagName?.toLowerCase();
+
+    return (
+      tag !== 'input'
+      && tag !== 'textarea'
+      && tag !== 'select'
+      && !event.target?.isContentEditable
+      && !event.metaKey
+      && !event.altKey
+    );
+  }
+
   function keyToJoystickBit(key) {
     switch (key) {
       case 'q':
@@ -780,7 +793,7 @@ export default function RoomPage() {
     if (isHost !== true) return undefined;
 
     function handleHostKeyDown(event) {
-      if (!shouldHandleKey(event)) return;
+      if (!shouldHandleHostKey(event)) return;
 
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
@@ -798,7 +811,7 @@ export default function RoomPage() {
     }
 
     function handleHostKeyUp(event) {
-      if (!shouldHandleKey(event)) return;
+      if (!shouldHandleHostKey(event)) return;
 
       const mappedKey = hostKeyToCpcKeyboardKey(event.key);
 
@@ -815,12 +828,12 @@ export default function RoomPage() {
       }
     }
 
-    window.addEventListener('keydown', handleHostKeyDown);
-    window.addEventListener('keyup', handleHostKeyUp);
+    window.addEventListener('keydown', handleHostKeyDown, true);
+    window.addEventListener('keyup', handleHostKeyUp, true);
 
     return () => {
-      window.removeEventListener('keydown', handleHostKeyDown);
-      window.removeEventListener('keyup', handleHostKeyUp);
+      window.removeEventListener('keydown', handleHostKeyDown, true);
+      window.removeEventListener('keyup', handleHostKeyUp, true);
     };
   }, [addInputDebug, isHost, forwardInputToEmulator]);
 
