@@ -153,13 +153,6 @@ input:focus {
   min-width: 0;
 }
 
-.brand-copy span {
-  color: var(--green-bright);
-  font-weight: 800;
-  font-size: 0.82rem;
-  text-transform: uppercase;
-}
-
 .brand-copy strong {
   color: var(--text);
   font-size: clamp(1.25rem, 3vw, 1.85rem);

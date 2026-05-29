@@ -5,10 +5,11 @@ export default function BrandMark({ compact = false }) {
   return (
     <div className={`brand-mark ${compact ? 'compact' : ''}`}>
       <img src={logoUrl} alt="Old Style Gaming" />
-      <div className="brand-copy">
-        <span>Old Style Gaming</span>
-        {!compact ? <strong>Old Style Gaming</strong> : null}
-      </div>
+      {!compact ? (
+        <div className="brand-copy">
+          <strong>Old Style Gaming</strong>
+        </div>
+      ) : null}
     </div>
   );
 }
