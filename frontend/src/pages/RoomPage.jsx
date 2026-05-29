@@ -332,30 +332,11 @@ export default function RoomPage() {
     addInputDebug(`local P${player} joystick mask ${mask}`, mask, isHost ? 'host local' : 'guest local');
 
     if (isHost) {
-      const previousMask = localJoystickMaskRef.current;
-
-      joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
-        const wasActive = Boolean(previousMask & bit);
-
-        if (active === wasActive) return;
-
-        const action = active ? 'down' : 'up';
-
-        addInputDebug(`forward to emulator P${player} key ${key} ${action}`);
-        forwardInputToEmulator({
-          type: 'amstrad_remote_input',
-          player,
-          key,
-          action,
-        });
-        forwardInputToEmulator({
-          type: 'amstrad_remote_control',
-          player,
-          key,
-          action,
-        });
+      forwardInputToEmulator({
+        type: 'amstrad_remote_joystick',
+        player,
+        mask,
       });
-
       localJoystickMaskRef.current = mask;
       return;
     }
