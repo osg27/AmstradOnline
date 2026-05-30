@@ -11,7 +11,31 @@ export default function LobbyPage() {
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
+  const [selectedEra, setSelectedEra] = useState('8bit');
   const [selectedSystem, setSelectedSystem] = useState('cpc');
+
+  const systemGroups = [
+    {
+      id: '8bit',
+      label: '8-bit',
+      systems: [
+        { id: 'cpc', label: 'Amstrad CPC' },
+        { id: 'spectrum', label: 'ZX Spectrum' },
+      ],
+    },
+    {
+      id: '16bit',
+      label: '16-bit',
+      adminOnly: true,
+      systems: [
+        { id: 'amiga', label: 'Amiga', disabled: true, note: 'Coming soon' },
+      ],
+    },
+  ];
+
+  const visibleGroups = systemGroups.filter((group) => !group.adminOnly || isAdmin);
+  const selectedGroup = visibleGroups.find((group) => group.id === selectedEra) || visibleGroups[0];
+  const selectedMachine = selectedGroup?.systems.find((system) => system.id === selectedSystem);
 
   useEffect(() => {
     async function loadSession() {
@@ -21,9 +45,15 @@ export default function LobbyPage() {
 
         setIsAdmin(nextIsAdmin);
         localStorage.setItem('isAdmin', nextIsAdmin ? 'true' : 'false');
+        if (!nextIsAdmin) {
+          setSelectedEra('8bit');
+          setSelectedSystem('cpc');
+        }
       } catch {
         setIsAdmin(false);
         localStorage.removeItem('isAdmin');
+        setSelectedEra('8bit');
+        setSelectedSystem('cpc');
       }
     }
 
@@ -34,6 +64,10 @@ export default function LobbyPage() {
     setError('');
     setLoadingCreate(true);
     try {
+      if (!selectedMachine || selectedMachine.disabled) {
+        throw new Error('That system is not ready yet.');
+      }
+
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
         body: JSON.stringify({ system: selectedSystem }),
@@ -93,23 +127,36 @@ export default function LobbyPage() {
             <span className="panel-kicker">Host</span>
             <h2>Create room</h2>
             <p>Start a fresh multiplayer session.</p>
-            <div className="system-picker" aria-label="System">
-              <button
-                type="button"
-                className={selectedSystem === 'cpc' ? 'active' : 'secondary'}
-                onClick={() => setSelectedSystem('cpc')}
-              >
-                Amstrad CPC
-              </button>
-              <button
-                type="button"
-                className={selectedSystem === 'spectrum' ? 'active' : 'secondary'}
-                onClick={() => setSelectedSystem('spectrum')}
-              >
-                ZX Spectrum
-              </button>
+            <div className="era-tabs" aria-label="System category">
+              {visibleGroups.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className={selectedGroup.id === group.id ? 'active' : 'secondary'}
+                  onClick={() => {
+                    setSelectedEra(group.id);
+                    setSelectedSystem(group.systems[0]?.id || 'cpc');
+                  }}
+                >
+                  {group.label}
+                </button>
+              ))}
             </div>
-            <button onClick={handleCreate} disabled={loadingCreate}>
+            <div className="system-picker" aria-label="System">
+              {selectedGroup.systems.map((system) => (
+                <button
+                  key={system.id}
+                  type="button"
+                  className={selectedSystem === system.id ? 'active' : 'secondary'}
+                  disabled={system.disabled}
+                  onClick={() => setSelectedSystem(system.id)}
+                >
+                  <span>{system.label}</span>
+                  {system.note ? <small>{system.note}</small> : null}
+                </button>
+              ))}
+            </div>
+            <button onClick={handleCreate} disabled={loadingCreate || !selectedMachine || selectedMachine.disabled}>
               {loadingCreate ? 'Creating...' : 'Create room'}
             </button>
           </div>
