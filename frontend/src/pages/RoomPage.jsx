@@ -1060,9 +1060,6 @@ export default function RoomPage() {
   function findCanvasInDocument(doc, depth = 0) {
     if (!doc || depth > 3) return null;
 
-    const canvas = doc.querySelector('canvas');
-    if (canvas) return canvas;
-
     const frames = Array.from(doc.querySelectorAll('iframe'));
     for (const frame of frames) {
       try {
@@ -1073,6 +1070,16 @@ export default function RoomPage() {
         // Cross-origin frames cannot be captured into our mirror canvas.
       }
     }
+
+    const canvases = Array.from(doc.querySelectorAll('canvas'));
+    const canvas = canvases.find((candidate) => (
+      candidate.id !== 'placeholder-canvas'
+      && candidate.dataset.ignoreCapture !== 'true'
+      && candidate.width > 0
+      && candidate.height > 0
+    ));
+
+    if (canvas) return canvas;
 
     return null;
   }
