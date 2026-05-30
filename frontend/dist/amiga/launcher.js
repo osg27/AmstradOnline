@@ -1,12 +1,13 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-05-30-5";
+const runtimeVersion = "2026-05-30-6";
 let runtimeReady = false;
 let emulatorStarted = false;
 let pendingFile = null;
 let pendingFileLoadId = 0;
 let sentFileLoadId = 0;
+let customKickstartRom = null;
 let audioContext = null;
 let audioDestination = null;
 let amigaAudioSource = null;
@@ -157,6 +158,18 @@ function sendPendingFileToEmulator() {
   insertPendingFileIntoDf0(loadId);
 }
 
+function sendKickstartToEmulator() {
+  if (!customKickstartRom || !runtimeReady || !emulatorStarted) return;
+
+  postToEmulator({
+    cmd: "load",
+    kickstart_rom: customKickstartRom,
+  });
+
+  sentFileLoadId = 0;
+  window.setTimeout(sendPendingFileToEmulator, 600);
+}
+
 function startEmulator() {
   if (!runtimeReady || emulatorStarted) return;
 
@@ -182,6 +195,7 @@ function startEmulator() {
   );
 
   window.setTimeout(sendPendingFileToEmulator, 800);
+  window.setTimeout(sendKickstartToEmulator, 900);
   window.setInterval(connectNestedAmigaAudio, 1000);
 }
 
@@ -200,6 +214,18 @@ function loadAmigaFile(fileName, bytes) {
   }
 
   sendPendingFileToEmulator();
+}
+
+function loadKickstartRom(bytes) {
+  customKickstartRom = bytes;
+
+  if (!runtimeReady) return;
+  if (!emulatorStarted) {
+    startEmulator();
+    return;
+  }
+
+  sendKickstartToEmulator();
 }
 
 function runScript(script) {
@@ -313,6 +339,11 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amiga_autoload") {
     loadAmigaFile(data.fileName, data.bytes);
+    return;
+  }
+
+  if (data.type === "amiga_kickstart") {
+    loadKickstartRom(data.bytes);
     return;
   }
 

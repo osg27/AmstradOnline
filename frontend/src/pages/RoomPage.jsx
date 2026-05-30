@@ -18,6 +18,7 @@ export default function RoomPage() {
   const [hostStarted, setHostStarted] = useState(false);
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
+  const [kickstartRomName, setKickstartRomName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [inputDebug, setInputDebug] = useState({
@@ -32,6 +33,7 @@ export default function RoomPage() {
   const mirrorCanvasRef = useRef(null);
   const mirrorLoopRef = useRef(null);
   const fileInputRef = useRef(null);
+  const kickstartInputRef = useRef(null);
   const pcRef = useRef(null);
   const dataChannelRef = useRef(null);
   const localOfferRef = useRef(null);
@@ -64,7 +66,7 @@ export default function RoomPage() {
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const systemLabel = isAmiga ? 'Amiga' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-5' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-6' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
   const mediaLabel = isAmiga ? 'Load Amiga file' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
@@ -1289,6 +1291,12 @@ export default function RoomPage() {
     fileInputRef.current?.click();
   }
 
+  function openKickstartPicker() {
+    if (!isHost || !isAmiga) return;
+
+    kickstartInputRef.current?.click();
+  }
+
   async function handleDiskSelected(event) {
     try {
       const file = event.target.files?.[0];
@@ -1323,6 +1331,41 @@ export default function RoomPage() {
     } catch (err) {
       setError(err.message);
       addLog(`File load error: ${err.message}`);
+    }
+  }
+
+  async function handleKickstartSelected(event) {
+    try {
+      const file = event.target.files?.[0];
+
+      if (!file) return;
+
+      const lowerName = file.name.toLowerCase();
+      const allowedExtensions = ['.rom', '.bin', '.kick', '.kickstart'];
+
+      if (!allowedExtensions.some((extension) => lowerName.endsWith(extension))) {
+        setError('Kickstart must be a .rom or .bin file');
+        addLog(`Rejected Kickstart ROM: ${file.name}`);
+        event.target.value = '';
+        return;
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+
+      forwardInputToEmulator({
+        type: 'amiga_kickstart',
+        fileName: file.name,
+        bytes,
+      });
+
+      setKickstartRomName(file.name);
+      addLog(`Loaded Kickstart ROM for this session: ${file.name}`);
+      setStatus(`Kickstart loaded: ${file.name}`);
+      event.target.value = '';
+    } catch (err) {
+      setError(err.message);
+      addLog(`Kickstart load error: ${err.message}`);
     }
   }
 
@@ -1363,6 +1406,7 @@ export default function RoomPage() {
           <span>{signalingOpen ? 'Signaling connected' : 'Connecting signaling'}</span>
           <span>{remoteConnected ? 'Peer connected' : 'Waiting for peer'}</span>
           {loadedDiskName ? <span>{loadedDiskName}</span> : null}
+          {isAmiga ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : 'ROM: AROS'}</span> : null}
         </div>
 
         {error ? <p className="error">{error}</p> : null}
@@ -1432,6 +1476,16 @@ export default function RoomPage() {
                   style={{ display: 'none' }}
                 />
 
+                {isAmiga ? (
+                  <input
+                    ref={kickstartInputRef}
+                    type="file"
+                    accept=".rom,.bin,.kick,.kickstart"
+                    onChange={handleKickstartSelected}
+                    style={{ display: 'none' }}
+                  />
+                ) : null}
+
                 <div style={{
                   display: 'flex',
                   gap: '10px',
@@ -1445,6 +1499,12 @@ export default function RoomPage() {
                   <button onClick={openDiskPicker} disabled={!hostStarted}>
                     {mediaLabel}
                   </button>
+
+                  {isAmiga ? (
+                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={!hostStarted}>
+                      {kickstartRomName ? 'Change Kickstart ROM' : 'Load Kickstart ROM'}
+                    </button>
+                  ) : null}
                 </div>
               </>
             ) : (
