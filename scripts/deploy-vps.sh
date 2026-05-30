@@ -34,7 +34,13 @@ if [ -d "$FRONTEND_DIR" ]; then
 fi
 
 if [ -f "$BACKEND_DIR/requirements.txt" ]; then
-  if [ -d "$BACKEND_DIR/venv" ]; then
+  if [ -d "$BACKEND_DIR/.venv" ]; then
+    log "Updating backend Python dependencies"
+    cd "$BACKEND_DIR"
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+    pip install -r requirements.txt
+  elif [ -d "$BACKEND_DIR/venv" ]; then
     log "Updating backend Python dependencies"
     cd "$BACKEND_DIR"
     # shellcheck disable=SC1091
