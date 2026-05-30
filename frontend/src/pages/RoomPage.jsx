@@ -64,13 +64,13 @@ export default function RoomPage() {
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const systemLabel = isAmiga ? 'Amiga' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-2' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-3' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
   const mediaLabel = isAmiga ? 'Load Amiga file' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
-    : isAmiga ? 'P1 port 2 / P2 port 1' : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+    : isAmiga ? 'P1 port 2 / P2 port 1 + keyboard/mouse' : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -923,6 +923,25 @@ export default function RoomPage() {
       if (!shouldHandleHostKey(event)) return;
 
       const key = getKeyboardKey(event);
+      if (isAmiga) {
+        if (event.repeat) {
+          event.preventDefault();
+          return;
+        }
+
+        addInputDebug(`host Amiga key ${event.code} down`, null, 'host keyboard');
+        forwardInputToEmulator({
+          type: 'amiga_keyboard',
+          player: 1,
+          code: event.code,
+          key: event.key,
+          action: 'down',
+        });
+
+        event.preventDefault();
+        return;
+      }
+
       const mappedKey = hostKeyToCpcKeyboardKey(key);
 
       if (mappedKey || isMenuKey(key)) {
@@ -942,6 +961,20 @@ export default function RoomPage() {
       if (!shouldHandleHostKey(event)) return;
 
       const key = getKeyboardKey(event);
+      if (isAmiga) {
+        addInputDebug(`host Amiga key ${event.code} up`, null, 'host keyboard');
+        forwardInputToEmulator({
+          type: 'amiga_keyboard',
+          player: 1,
+          code: event.code,
+          key: event.key,
+          action: 'up',
+        });
+
+        event.preventDefault();
+        return;
+      }
+
       const mappedKey = hostKeyToCpcKeyboardKey(key);
 
       if (mappedKey || isMenuKey(key)) {
@@ -964,7 +997,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown, true);
       window.removeEventListener('keyup', handleHostKeyUp, true);
     };
-  }, [addInputDebug, isHost, forwardInputToEmulator]);
+  }, [addInputDebug, forwardInputToEmulator, isAmiga, isHost]);
 
   useEffect(() => {
     if (isHost !== false) return undefined;

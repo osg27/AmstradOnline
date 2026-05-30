@@ -1,7 +1,7 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-05-30-2";
+const runtimeVersion = "2026-05-30-3";
 let runtimeReady = false;
 let emulatorStarted = false;
 let pendingFile = null;
@@ -129,6 +129,7 @@ function startEmulator() {
     navbar: false,
     wide: true,
     border: 0.3,
+    mouse: true,
   };
 
   window.vAmigaWeb_player.load(
@@ -239,6 +240,23 @@ function applyKeyInput(key, action, player) {
   applyJoystickMask(nextMask, joystickPlayer);
 }
 
+function applyAmigaKeyboardInput(code, key, action) {
+  if (!runtimeReady || !emulatorStarted || !code) return;
+
+  const isDown = action === "down";
+  runScript(`
+    (function () {
+      if (typeof translateKey2 !== 'function' || typeof wasm_schedule_key !== 'function') return;
+      var keyCode = translateKey2(${JSON.stringify(code)}, ${JSON.stringify(key || "")});
+      if (keyCode === undefined || keyCode.raw_key === undefined || keyCode.raw_key[0] === undefined) return;
+      wasm_schedule_key(keyCode.raw_key[0], keyCode.raw_key[1], ${isDown ? 1 : 0}, ${isDown ? 0 : 1});
+      if (keyCode.modifier != null) {
+        wasm_schedule_key(keyCode.modifier[0], keyCode.modifier[1], ${isDown ? 1 : 0}, ${isDown ? 0 : 1});
+      }
+    })();
+  `);
+}
+
 window.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
@@ -255,6 +273,11 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amstrad_remote_joystick") {
     applyJoystickMask(data.mask, data.player);
+    return;
+  }
+
+  if (data.type === "amiga_keyboard") {
+    applyAmigaKeyboardInput(data.code, data.key, data.action);
     return;
   }
 
