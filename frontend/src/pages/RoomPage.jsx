@@ -64,7 +64,7 @@ export default function RoomPage() {
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const systemLabel = isAmiga ? 'Amiga' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-4' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-5' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
   const mediaLabel = isAmiga ? 'Load Amiga file' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';

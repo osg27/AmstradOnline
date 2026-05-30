@@ -1,12 +1,15 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-05-30-4";
+const runtimeVersion = "2026-05-30-5";
 let runtimeReady = false;
 let emulatorStarted = false;
 let pendingFile = null;
 let pendingFileLoadId = 0;
 let sentFileLoadId = 0;
+let audioContext = null;
+let audioDestination = null;
+let amigaAudioSource = null;
 const previousJoystickMasks = new Map();
 
 function drawStatus(title, detail) {
@@ -84,8 +87,42 @@ function postToEmulator(message) {
   frame?.contentWindow?.postMessage(message, "*");
 }
 
+function ensureAudioDestination() {
+  if (!audioContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    audioContext = new AudioContextClass();
+    audioDestination = audioContext.createMediaStreamDestination();
+
+    const silence = audioContext.createConstantSource();
+    const silenceGain = audioContext.createGain();
+    silenceGain.gain.value = 0;
+    silence.connect(silenceGain);
+    silenceGain.connect(audioDestination);
+    silence.start();
+  }
+
+  if (audioContext.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+
+  return audioDestination;
+}
+
+function connectNestedAmigaAudio() {
+  const destination = ensureAudioDestination();
+  const nestedStream = getVAmigaFrame()?.contentWindow?.getVAmigaAudioStream?.();
+  const nestedAudioTrack = nestedStream?.getAudioTracks?.()[0];
+
+  if (!nestedAudioTrack || amigaAudioSource) return;
+
+  amigaAudioSource = audioContext.createMediaStreamSource(nestedStream);
+  amigaAudioSource.connect(destination);
+}
+
 function getAmigaAudioStream() {
-  return getVAmigaFrame()?.contentWindow?.getVAmigaAudioStream?.() || null;
+  const destination = ensureAudioDestination();
+  connectNestedAmigaAudio();
+  return destination.stream;
 }
 
 window.getAmigaAudioStream = getAmigaAudioStream;
@@ -145,6 +182,7 @@ function startEmulator() {
   );
 
   window.setTimeout(sendPendingFileToEmulator, 800);
+  window.setInterval(connectNestedAmigaAudio, 1000);
 }
 
 function loadAmigaFile(fileName, bytes) {
@@ -269,6 +307,7 @@ window.addEventListener("message", (event) => {
 
   if (data.msg === "render_run_state") {
     sendPendingFileToEmulator();
+    connectNestedAmigaAudio();
     return;
   }
 
@@ -284,6 +323,13 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amiga_keyboard") {
     applyAmigaKeyboardInput(data.code, data.key, data.action);
+    connectNestedAmigaAudio();
+    return;
+  }
+
+  if (data.type === "amstrad_audio_unlock") {
+    ensureAudioDestination();
+    connectNestedAmigaAudio();
     return;
   }
 
