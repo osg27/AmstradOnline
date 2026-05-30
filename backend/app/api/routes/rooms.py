@@ -4,9 +4,11 @@ import string
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.routes.auth import is_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.room import Room
+from app.models.user import User
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomJoinRequest, RoomResponse
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
@@ -36,6 +38,12 @@ def create_room(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
+    system = payload.system if payload else "cpc"
+    if system == "amiga":
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not is_admin_user(user):
+            raise HTTPException(status_code=403, detail="Amiga rooms are admin only for now")
+
     room_code = generate_room_code()
     while db.query(Room).filter(Room.room_code == room_code).first():
         room_code = generate_room_code()
@@ -44,7 +52,7 @@ def create_room(
         room_code=room_code,
         owner_user_id=user_id,
         status="waiting",
-        system=payload.system if payload else "cpc",
+        system=system,
     )
     db.add(room)
     db.commit()

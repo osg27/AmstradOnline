@@ -62,14 +62,15 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const roomSystem = room?.system || 'cpc';
   const isSpectrum = roomSystem === 'spectrum';
-  const systemLabel = isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-  const emulatorSrc = isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+  const isAmiga = roomSystem === 'amiga';
+  const systemLabel = isAmiga ? 'Amiga' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const emulatorSrc = isAmiga ? '/amiga/launcher.html' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
-  const acceptedMedia = isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
-  const mediaLabel = isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
+  const acceptedMedia = isAmiga ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
+  const mediaLabel = isAmiga ? 'Load Amiga file' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
-    : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+    : isAmiga ? 'P1 port 2 / P2 port 1' : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -1056,12 +1057,32 @@ export default function RoomPage() {
     addLog('Mirror canvas loop started');
   }
 
+  function findCanvasInDocument(doc, depth = 0) {
+    if (!doc || depth > 3) return null;
+
+    const canvas = doc.querySelector('canvas');
+    if (canvas) return canvas;
+
+    const frames = Array.from(doc.querySelectorAll('iframe'));
+    for (const frame of frames) {
+      try {
+        const nestedDoc = frame.contentDocument || frame.contentWindow?.document;
+        const nestedCanvas = findCanvasInDocument(nestedDoc, depth + 1);
+        if (nestedCanvas) return nestedCanvas;
+      } catch {
+        // Cross-origin frames cannot be captured into our mirror canvas.
+      }
+    }
+
+    return null;
+  }
+
   async function waitForEmulatorCanvas(iframe) {
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < 8000) {
       const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
-      const emulatorCanvas = iframeDocument?.querySelector('canvas');
+      const emulatorCanvas = findCanvasInDocument(iframeDocument);
 
       if (emulatorCanvas) {
         return emulatorCanvas;
@@ -1106,7 +1127,7 @@ export default function RoomPage() {
       const stream = mirrorCanvas.captureStream(60);
       stream.getVideoTracks().forEach((track) => pc.addTrack(track, stream));
 
-      const audioStream = isSpectrum ? null : iframe.contentWindow?.getAmstradAudioStream?.();
+      const audioStream = (isSpectrum || isAmiga) ? null : iframe.contentWindow?.getAmstradAudioStream?.();
       if (audioStream) {
         audioStream.getAudioTracks().forEach((track) => pc.addTrack(track, audioStream));
       }
@@ -1199,10 +1220,12 @@ export default function RoomPage() {
       if (!file) return;
 
       const lowerName = file.name.toLowerCase();
-      const allowedExtensions = isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
+      const allowedExtensions = isAmiga
+        ? ['.adf', '.adz', '.dms', '.hdf', '.hdz', '.lha', '.zip']
+        : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
 
       if (!allowedExtensions.some((extension) => lowerName.endsWith(extension))) {
-        setError(isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
+        setError(isAmiga ? 'Amiga rooms support .adf, .adz, .dms, .hdf, .hdz, .lha, and .zip files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${file.name}`);
         event.target.value = '';
         return;
@@ -1212,18 +1235,18 @@ export default function RoomPage() {
       const bytes = new Uint8Array(arrayBuffer);
 
       forwardInputToEmulator({
-        type: isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
+        type: isAmiga ? 'amiga_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: file.name,
         bytes,
       });
 
       setLoadedDiskName(file.name);
-      addLog(`Loaded disk: ${file.name}`);
-      setStatus(`Disk loaded: ${file.name}`);
+      addLog(`Loaded file: ${file.name}`);
+      setStatus(`File loaded: ${file.name}`);
       event.target.value = '';
     } catch (err) {
       setError(err.message);
-      addLog(`Disk load error: ${err.message}`);
+      addLog(`File load error: ${err.message}`);
     }
   }
 

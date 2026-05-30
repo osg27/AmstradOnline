@@ -28,7 +28,7 @@ export default function LobbyPage() {
       label: '16-bit',
       adminOnly: true,
       systems: [
-        { id: 'amiga', label: 'Amiga', disabled: true, note: 'Coming soon' },
+        { id: 'amiga', label: 'Amiga', note: 'Admin preview' },
       ],
     },
   ];
