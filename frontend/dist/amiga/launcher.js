@@ -1,6 +1,7 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
+const runtimeVersion = "2026-05-30-1";
 let runtimeReady = false;
 let emulatorStarted = false;
 let pendingFile = null;
@@ -32,25 +33,44 @@ function showStatus(title, detail) {
   `;
 }
 
+function runtimeUrl(path) {
+  return `${path}?v=${encodeURIComponent(runtimeVersion)}`;
+}
+
 async function fileExists(path) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 5000);
+
   try {
-    const response = await fetch(path, { cache: "no-store" });
-    return response.ok;
-  } catch {
-    return false;
+    const response = await fetch(runtimeUrl(path), {
+      cache: "no-store",
+      method: "HEAD",
+      signal: controller.signal,
+    });
+    return { ok: response.ok, status: response.status };
+  } catch (error) {
+    return { ok: false, error: error.name || "fetch failed" };
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
 async function checkRuntime() {
-  const hasScript = await fileExists("vAmiga.js");
-  const hasWasm = await fileExists("vAmiga.wasm");
-  runtimeReady = hasScript && hasWasm;
+  const requiredFiles = ["index.html", "vAmiga.js", "vAmiga.wasm"];
 
-  if (!runtimeReady) {
-    showStatus("Amiga runtime missing", "Build vAmigaWeb and copy index.html, vAmiga.js, and vAmiga.wasm into public/amiga.");
+  for (const fileName of requiredFiles) {
+    showStatus("Starting Amiga", `Checking ${fileName}...`);
+    const result = await fileExists(fileName);
+
+    if (!result.ok) {
+      const reason = result.status ? `HTTP ${result.status}` : result.error;
+      showStatus("Amiga runtime blocked", `${fileName} could not be loaded (${reason}). Redeploy or hard refresh.`);
+      return false;
+    }
   }
 
-  return runtimeReady;
+  runtimeReady = true;
+  return true;
 }
 
 function getVAmigaFrame() {
@@ -83,6 +103,7 @@ function startEmulator() {
 
   window.vAmigaWeb_player.load(
     document.getElementById("amiga-preview"),
+    `?v=${encodeURIComponent(runtimeVersion)}`,
     encodeURIComponent(JSON.stringify(config)),
   );
 }
