@@ -1,7 +1,7 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-05-30-1";
+const runtimeVersion = "2026-05-30-2";
 let runtimeReady = false;
 let emulatorStarted = false;
 let pendingFile = null;
@@ -129,8 +129,6 @@ function startEmulator() {
     navbar: false,
     wide: true,
     border: 0.3,
-    port1: true,
-    port2: true,
   };
 
   window.vAmigaWeb_player.load(

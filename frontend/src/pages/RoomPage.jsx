@@ -64,7 +64,7 @@ export default function RoomPage() {
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const systemLabel = isAmiga ? 'Amiga' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-  const emulatorSrc = isAmiga ? '/amiga/launcher.html' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-2' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
   const mediaLabel = isAmiga ? 'Load Amiga file' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
@@ -370,7 +370,7 @@ export default function RoomPage() {
 
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : 2;
-    const joystickMask = mask & 31;
+    const joystickMask = isAmiga ? mask : mask & 31;
     const previousMask = localJoystickMaskRef.current;
     const payload = {
       type: 'joystick',
@@ -386,7 +386,9 @@ export default function RoomPage() {
         player,
         mask: joystickMask,
       });
-      forwardExtraButtonAsKey(mask, player, previousMask);
+      if (!isAmiga) {
+        forwardExtraButtonAsKey(mask, player, previousMask);
+      }
       localJoystickMaskRef.current = mask;
       return;
     }
@@ -409,7 +411,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isHost]);
+  }, [addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmiga, isHost]);
 
   const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
     joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
@@ -567,18 +569,26 @@ export default function RoomPage() {
 
       const previousMask = remoteJoystickMaskRef.current;
 
-      addInputDebug('guest input timed out, releasing held keys', 0, 'guest remote');
-      forwardJoystickMaskAsKeys(0, 2, previousMask);
+      addInputDebug('guest input timed out, releasing held input', 0, 'guest remote');
+      if (isAmiga) {
+        forwardInputToEmulator({
+          type: 'amstrad_remote_joystick',
+          player: 2,
+          mask: 0,
+        });
+      } else {
+        forwardJoystickMaskAsKeys(0, 2, previousMask);
+      }
       remoteJoystickMaskRef.current = 0;
     }, 90);
 
     return () => {
       window.clearInterval(staleRemoteInputTimer);
     };
-  }, [addInputDebug, forwardJoystickMaskAsKeys, isHost]);
+  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isHost]);
 
   useEffect(() => {
-    if (isHost !== true) {
+    if (isHost !== true || isAmiga) {
       return undefined;
     }
 
@@ -608,7 +618,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
     };
-  }, [forwardInputToEmulator, isHost]);
+  }, [forwardInputToEmulator, isAmiga, isHost]);
 
   useEffect(() => {
     if (isHost !== false) {
@@ -669,7 +679,15 @@ export default function RoomPage() {
           const previousMask = remoteJoystickMaskRef.current;
 
           if (previousMask) {
-            forwardJoystickMaskAsKeys(0, player, previousMask);
+            if (isAmiga) {
+              forwardInputToEmulator({
+                type: 'amstrad_remote_joystick',
+                player,
+                mask: 0,
+              });
+            } else {
+              forwardJoystickMaskAsKeys(0, player, previousMask);
+            }
           }
 
           lastRemoteInputSessionRef.current = sessionId;
@@ -690,7 +708,15 @@ export default function RoomPage() {
         if (mask !== previousMask) {
           addInputDebug(`host received P${player} state ${mask} #${seq}`, mask, 'guest remote');
         }
-        forwardJoystickMaskAsKeys(mask, player, previousMask);
+        if (isAmiga) {
+          forwardInputToEmulator({
+            type: 'amstrad_remote_joystick',
+            player,
+            mask,
+          });
+        } else {
+          forwardJoystickMaskAsKeys(mask, player, previousMask);
+        }
         remoteJoystickMaskRef.current = mask;
       }
 
@@ -701,14 +727,22 @@ export default function RoomPage() {
 
         lastRemoteInputAtRef.current = performance.now();
         addInputDebug(`host received P${player} held mask ${mask}`, mask, 'guest remote');
-        forwardJoystickMaskAsKeys(mask, player, previousMask);
+        if (isAmiga) {
+          forwardInputToEmulator({
+            type: 'amstrad_remote_joystick',
+            player,
+            mask,
+          });
+        } else {
+          forwardJoystickMaskAsKeys(mask, player, previousMask);
+        }
         remoteJoystickMaskRef.current = mask;
       }
     } catch (err) {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
-  }, [addInputDebug, addLog, forwardInputToEmulator, forwardJoystickMaskAsKeys]);
+  }, [addInputDebug, addLog, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga]);
 
   const onSignalMessage = useCallback(async (message) => {
     if (message.type === 'system') {
