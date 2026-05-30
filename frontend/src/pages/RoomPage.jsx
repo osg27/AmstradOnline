@@ -66,7 +66,7 @@ export default function RoomPage() {
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const systemLabel = isAmiga ? 'Amiga' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-6' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-7' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
   const mediaLabel = isAmiga ? 'Load Amiga file' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
@@ -1190,6 +1190,10 @@ export default function RoomPage() {
       setHostStarted(true);
       addLog('Waiting for emulator iframe');
 
+      if (isAmiga) {
+        iframe.contentWindow?.postMessage({ type: 'amiga_start' }, window.location.origin);
+      }
+
       const emulatorCanvas = await waitForEmulatorCanvas(iframe);
 
       startMirrorLoop(emulatorCanvas);
@@ -1274,10 +1278,10 @@ export default function RoomPage() {
   }
 
   useEffect(() => {
-    if (isHost && signalingOpen) {
+    if (isHost && signalingOpen && !isAmiga) {
       startHostSession();
     }
-  }, [isHost, signalingOpen]);
+  }, [isAmiga, isHost, signalingOpen]);
 
   useEffect(() => {
     if (room && !isHost) {
@@ -1501,7 +1505,7 @@ export default function RoomPage() {
                   </button>
 
                   {isAmiga ? (
-                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={!hostStarted}>
+                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted}>
                       {kickstartRomName ? 'Change Kickstart ROM' : 'Load Kickstart ROM'}
                     </button>
                   ) : null}

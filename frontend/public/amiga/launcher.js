@@ -1,13 +1,15 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-05-30-6";
+const runtimeVersion = "2026-05-30-7";
 let runtimeReady = false;
 let emulatorStarted = false;
+let startRequested = false;
 let pendingFile = null;
 let pendingFileLoadId = 0;
 let sentFileLoadId = 0;
 let customKickstartRom = null;
+let sentKickstartRom = null;
 let audioContext = null;
 let audioDestination = null;
 let amigaAudioSource = null;
@@ -145,6 +147,7 @@ function insertPendingFileIntoDf0(loadId) {
 
 function sendPendingFileToEmulator() {
   if (!pendingFile || !runtimeReady || !emulatorStarted) return;
+  if (customKickstartRom && sentKickstartRom !== customKickstartRom) return;
   if (sentFileLoadId === pendingFileLoadId) return;
 
   const loadId = pendingFileLoadId;
@@ -160,6 +163,9 @@ function sendPendingFileToEmulator() {
 
 function sendKickstartToEmulator() {
   if (!customKickstartRom || !runtimeReady || !emulatorStarted) return;
+  if (sentKickstartRom === customKickstartRom) return;
+
+  sentKickstartRom = customKickstartRom;
 
   postToEmulator({
     cmd: "load",
@@ -171,6 +177,7 @@ function sendKickstartToEmulator() {
 }
 
 function startEmulator() {
+  startRequested = true;
   if (!runtimeReady || emulatorStarted) return;
 
   emulatorStarted = true;
@@ -181,7 +188,7 @@ function startEmulator() {
   window.vAmigaWeb_player.samesite_file = null;
 
   const config = {
-    AROS: true,
+    AROS: !customKickstartRom,
     navbar: false,
     wide: true,
     border: 0.3,
@@ -194,8 +201,8 @@ function startEmulator() {
     encodeURIComponent(JSON.stringify(config)),
   );
 
-  window.setTimeout(sendPendingFileToEmulator, 800);
-  window.setTimeout(sendKickstartToEmulator, 900);
+  window.setTimeout(sendKickstartToEmulator, 800);
+  window.setTimeout(sendPendingFileToEmulator, 1000);
   window.setInterval(connectNestedAmigaAudio, 1000);
 }
 
@@ -218,12 +225,11 @@ function loadAmigaFile(fileName, bytes) {
 
 function loadKickstartRom(bytes) {
   customKickstartRom = bytes;
+  sentKickstartRom = null;
+  sentFileLoadId = 0;
 
   if (!runtimeReady) return;
-  if (!emulatorStarted) {
-    startEmulator();
-    return;
-  }
+  if (!emulatorStarted) return;
 
   sendKickstartToEmulator();
 }
@@ -332,8 +338,17 @@ window.addEventListener("message", (event) => {
   if (!data || typeof data !== "object") return;
 
   if (data.msg === "render_run_state") {
-    sendPendingFileToEmulator();
+    if (customKickstartRom) {
+      sendKickstartToEmulator();
+    } else {
+      sendPendingFileToEmulator();
+    }
     connectNestedAmigaAudio();
+    return;
+  }
+
+  if (data.type === "amiga_start") {
+    startEmulator();
     return;
   }
 
@@ -371,5 +386,10 @@ window.addEventListener("message", (event) => {
 
 drawStatus("Starting Amiga", "Checking vAmigaWeb runtime...");
 checkRuntime().then((ready) => {
-  if (ready) startEmulator();
+  if (!ready) return;
+  if (startRequested) {
+    startEmulator();
+  } else {
+    showStatus("Amiga ready", "Load Kickstart first or start with AROS.");
+  }
 });
