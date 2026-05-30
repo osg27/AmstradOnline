@@ -2064,6 +2064,36 @@ function InitWrappers() {
     set_volume(loaded_vol);
     $("#volume-slider").val(loaded_vol);
 
+    let osgAudioStreamDestination = null;
+    function connect_osg_audio_stream_destination()
+    {
+        if(audioContext == null)
+            return null;
+
+        if(osgAudioStreamDestination == null)
+            osgAudioStreamDestination = audioContext.createMediaStreamDestination();
+
+        if(typeof gainNode !== "undefined" && gainNode != null && gainNode.osg_stream_connected !== true)
+        {
+            gainNode.connect(osgAudioStreamDestination);
+            gainNode.osg_stream_connected = true;
+        }
+
+        return osgAudioStreamDestination.stream;
+    }
+
+    window.getVAmigaAudioStream = function()
+    {
+        const stream = connect_osg_audio_stream_destination();
+
+        if(audioContext != null && audioContext.state === 'suspended')
+        {
+            audioContext.resume().catch((error) => console.error(error));
+        }
+
+        return stream;
+    };
+
 
     resume_audio=async ()=>{
         try {
@@ -2109,6 +2139,7 @@ function InitWrappers() {
         gainNode.gain.value = current_sound_volume;
         worklet_node.connect(gainNode);
         gainNode.connect(audioContext.destination);
+        connect_osg_audio_stream_destination();
       
         init_sound_buffer=function(){
             console.log("get wasm sound buffer adresses");
@@ -2182,9 +2213,10 @@ function InitWrappers() {
         gainNode = audioContext.createGain();
         gainNode.gain.value = current_sound_volume;
         gainNode.connect(audioContext.destination);
+        connect_osg_audio_stream_destination();
         wasm_set_sample_rate(audioContext.sampleRate);
         await audioContext.audioWorklet.addModule('js/vAmiga_audioprocessor_sharedarraybuffer.js');
-        const audioNode = new AudioWorkletNode(audioContext, 'vAmiga_audioprocessor_sharedarraybuffer', {
+        worklet_node = new AudioWorkletNode(audioContext, 'vAmiga_audioprocessor_sharedarraybuffer', {
             outputChannelCount: [2],
             processorOptions: {
                 pointers: [Module._wasm_leftChannelBuffer(), Module._wasm_rightChannelBuffer()],
@@ -2192,10 +2224,10 @@ function InitWrappers() {
                 length: 2048
             }
         });
-        audioNode.port.onmessage = (e) => {
+        worklet_node.port.onmessage = (e) => {
             Module._wasm_update_audio(e.data);
         };
-        audioNode.connect(audioContext.destination);
+        worklet_node.connect(gainNode);
         if (audioContext.state === 'suspended') {
             await audioContext.resume();
         }

@@ -64,7 +64,7 @@ export default function RoomPage() {
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const systemLabel = isAmiga ? 'Amiga' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-3' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+  const emulatorSrc = isAmiga ? '/amiga/launcher.html?v=2026-05-30-4' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
   const mediaLabel = isAmiga ? 'Load Amiga file' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
@@ -1201,7 +1201,9 @@ export default function RoomPage() {
       const stream = mirrorCanvas.captureStream(60);
       stream.getVideoTracks().forEach((track) => pc.addTrack(track, stream));
 
-      const audioStream = (isSpectrum || isAmiga) ? null : iframe.contentWindow?.getAmstradAudioStream?.();
+      const audioStream = isAmiga
+        ? iframe.contentWindow?.getAmigaAudioStream?.()
+        : isSpectrum ? null : iframe.contentWindow?.getAmstradAudioStream?.();
       if (audioStream) {
         audioStream.getAudioTracks().forEach((track) => pc.addTrack(track, audioStream));
       }

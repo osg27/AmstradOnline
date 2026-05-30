@@ -1,7 +1,7 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-05-30-3";
+const runtimeVersion = "2026-05-30-4";
 let runtimeReady = false;
 let emulatorStarted = false;
 let pendingFile = null;
@@ -83,6 +83,12 @@ function postToEmulator(message) {
   const frame = getVAmigaFrame();
   frame?.contentWindow?.postMessage(message, "*");
 }
+
+function getAmigaAudioStream() {
+  return getVAmigaFrame()?.contentWindow?.getVAmigaAudioStream?.() || null;
+}
+
+window.getAmigaAudioStream = getAmigaAudioStream;
 
 function insertPendingFileIntoDf0(loadId) {
   window.setTimeout(() => {
