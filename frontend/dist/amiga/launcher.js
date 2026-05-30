@@ -5,6 +5,8 @@ const runtimeVersion = "2026-05-30-1";
 let runtimeReady = false;
 let emulatorStarted = false;
 let pendingFile = null;
+let pendingFileLoadId = 0;
+let sentFileLoadId = 0;
 const previousJoystickMasks = new Map();
 
 function drawStatus(title, detail) {
@@ -82,6 +84,36 @@ function postToEmulator(message) {
   frame?.contentWindow?.postMessage(message, "*");
 }
 
+function insertPendingFileIntoDf0(loadId) {
+  window.setTimeout(() => {
+    if (loadId !== pendingFileLoadId) return;
+
+    runScript(`
+      if (typeof show_drive_select === 'function') {
+        show_drive_select(false);
+      }
+      if (typeof insert_file === 'function') {
+        insert_file(0);
+      }
+    `);
+  }, 300);
+}
+
+function sendPendingFileToEmulator() {
+  if (!pendingFile || !runtimeReady || !emulatorStarted) return;
+  if (sentFileLoadId === pendingFileLoadId) return;
+
+  const loadId = pendingFileLoadId;
+  sentFileLoadId = loadId;
+
+  postToEmulator({
+    cmd: "load",
+    file_name: pendingFile.name,
+    file: pendingFile.bin,
+  });
+  insertPendingFileIntoDf0(loadId);
+}
+
 function startEmulator() {
   if (!runtimeReady || emulatorStarted) return;
 
@@ -90,7 +122,7 @@ function startEmulator() {
   playerRoot.innerHTML = '<div id="amiga-preview"></div>';
 
   window.vAmigaWeb_player.vAmigaWeb_url = "./";
-  window.vAmigaWeb_player.samesite_file = pendingFile;
+  window.vAmigaWeb_player.samesite_file = null;
 
   const config = {
     AROS: true,
@@ -106,6 +138,8 @@ function startEmulator() {
     `?v=${encodeURIComponent(runtimeVersion)}`,
     encodeURIComponent(JSON.stringify(config)),
   );
+
+  window.setTimeout(sendPendingFileToEmulator, 800);
 }
 
 function loadAmigaFile(fileName, bytes) {
@@ -113,6 +147,8 @@ function loadAmigaFile(fileName, bytes) {
     name: fileName || "game.adf",
     bin: bytes,
   };
+  pendingFileLoadId += 1;
+  sentFileLoadId = 0;
 
   if (!runtimeReady) return;
   if (!emulatorStarted) {
@@ -120,11 +156,7 @@ function loadAmigaFile(fileName, bytes) {
     return;
   }
 
-  postToEmulator({
-    cmd: "load",
-    file_name: pendingFile.name,
-    file: pendingFile.bin,
-  });
+  sendPendingFileToEmulator();
 }
 
 function runScript(script) {
@@ -212,6 +244,11 @@ function applyKeyInput(key, action, player) {
 window.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
+
+  if (data.msg === "render_run_state") {
+    sendPendingFileToEmulator();
+    return;
+  }
 
   if (data.type === "amiga_autoload") {
     loadAmigaFile(data.fileName, data.bytes);
