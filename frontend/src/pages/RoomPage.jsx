@@ -79,7 +79,7 @@ export default function RoomPage() {
     ? 'Loading controls'
     : isAmiga
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
-      : isMegaDrive ? 'P1 d-pad / A B C / Start' : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+      : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -1442,7 +1442,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isMegaDrive ? 'Player 1: d-pad / A B C / Start' : isHost ? 'Player 1: cursors / X / Z' : 'Player 2: Q A O P / F / G'}
+                  {isMegaDrive ? (isHost ? 'Player 1: controller 1' : 'Player 2: controller 2') : isHost ? 'Player 1: cursors / X / Z' : 'Player 2: Q A O P / F / G'}
                 </div>
 
                 <button
