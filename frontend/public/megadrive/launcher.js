@@ -3,7 +3,8 @@
   const CANVAS_HEIGHT = 480;
   const SOUND_FREQUENCY = 44100;
   const SAMPLING_PER_FPS = 736;
-  const GAMEPAD_API_INDEX = 32;
+  const GAMEPAD_API_INDEX = 64;
+  const GAMEPAD_API_STRIDE = 32;
   const FPS = 60;
   const INTERVAL = 1000 / FPS;
   const SOUND_DELAY_FRAME = 8;
@@ -33,6 +34,7 @@
   let localMask = 0;
   let remoteMask = 0;
   const pressedKeys = new Set();
+  const remotePressedKeys = new Set();
 
   const soundDelayTime = (SAMPLING_PER_FPS * SOUND_DELAY_FRAME) / SOUND_FREQUENCY;
 
@@ -96,30 +98,36 @@
     return 0;
   }
 
-  function keyMask() {
+  function keyMask(keys) {
     let mask = 0;
-    if (pressedKeys.has('ArrowUp')) mask |= 1;
-    if (pressedKeys.has('ArrowDown')) mask |= 2;
-    if (pressedKeys.has('ArrowLeft')) mask |= 4;
-    if (pressedKeys.has('ArrowRight')) mask |= 8;
-    if (pressedKeys.has('z') || pressedKeys.has('Z')) mask |= 16;
-    if (pressedKeys.has('x') || pressedKeys.has('X')) mask |= 32;
-    if (pressedKeys.has('Enter')) mask |= 64;
-    if (pressedKeys.has('c') || pressedKeys.has('C')) mask |= 128;
+    if (keys.has('ArrowUp')) mask |= 1;
+    if (keys.has('ArrowDown')) mask |= 2;
+    if (keys.has('ArrowLeft')) mask |= 4;
+    if (keys.has('ArrowRight')) mask |= 8;
+    if (keys.has('z') || keys.has('Z')) mask |= 16;
+    if (keys.has('x') || keys.has('X')) mask |= 32;
+    if (keys.has('Enter')) mask |= 64;
+    if (keys.has('c') || keys.has('C')) mask |= 128;
     return mask;
+  }
+
+  function writePadInput(offset, mask) {
+    input[offset + 6] = getAxis(mask, 4, 8);
+    input[offset + 7] = getAxis(mask, 1, 2);
+    input[offset + 8 + 2] = mask & 16 ? 1 : 0; // A
+    input[offset + 8 + 3] = mask & 32 ? 1 : 0; // B
+    input[offset + 8 + 1] = mask & 128 ? 1 : 0; // C
+    input[offset + 8 + 7] = mask & 64 ? 1 : 0; // Start
   }
 
   function updateInput() {
     if (!input) return;
 
-    const mask = keyMask() | localMask | remoteMask;
+    const playerOneMask = keyMask(pressedKeys) | localMask;
+    const playerTwoMask = keyMask(remotePressedKeys) | remoteMask;
     input.fill(0);
-    input[6] = getAxis(mask, 4, 8);
-    input[7] = getAxis(mask, 1, 2);
-    input[8 + 2] = mask & 16 ? 1 : 0; // A
-    input[8 + 3] = mask & 32 ? 1 : 0; // B
-    input[8 + 1] = mask & 128 ? 1 : 0; // C
-    input[8 + 7] = mask & 64 ? 1 : 0; // Start
+    writePadInput(0, playerOneMask);
+    writePadInput(GAMEPAD_API_STRIDE, playerTwoMask);
   }
 
   function bindViews() {
@@ -247,10 +255,12 @@
     const key = payload.key || payload.code;
     if (!key) return;
 
+    const keys = payload.player === 2 ? remotePressedKeys : pressedKeys;
+
     if (payload.action === 'down') {
-      pressedKeys.add(key);
+      keys.add(key);
     } else if (payload.action === 'up') {
-      pressedKeys.delete(key);
+      keys.delete(key);
     }
   }
 
