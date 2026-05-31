@@ -26,6 +26,8 @@
   let audioR = null;
   let audioContext = null;
   let audioDestination = null;
+  let audioKeepAlive = null;
+  let audioKeepAliveGain = null;
   let soundShedTime = 0;
   let then = Date.now();
   let fps = FPS;
@@ -66,6 +68,13 @@
 
     audioContext = new AudioCtor({ sampleRate: SOUND_FREQUENCY });
     audioDestination = audioContext.createMediaStreamDestination();
+    audioKeepAlive = audioContext.createOscillator();
+    audioKeepAliveGain = audioContext.createGain();
+    audioKeepAlive.frequency.value = 20;
+    audioKeepAliveGain.gain.value = 0.00001;
+    audioKeepAlive.connect(audioKeepAliveGain);
+    audioKeepAliveGain.connect(audioDestination);
+    audioKeepAlive.start();
 
     const silence = audioContext.createBuffer(2, SAMPLING_PER_FPS, SOUND_FREQUENCY);
     playAudioBuffer(silence);
