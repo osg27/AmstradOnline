@@ -48,6 +48,7 @@ export default function RoomPage() {
   const lastRemoteInputSeqRef = useRef(0);
   const lastRemoteInputAtRef = useRef(0);
   const remoteJoystickMaskRef = useRef(0);
+  const pendingIceCandidatesRef = useRef([]);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -788,6 +789,23 @@ export default function RoomPage() {
       return;
     }
 
+    async function flushPendingIceCandidates() {
+      if (!pc.remoteDescription) return;
+      if (pendingIceCandidatesRef.current.length === 0) return;
+
+      const candidates = pendingIceCandidatesRef.current;
+      pendingIceCandidatesRef.current = [];
+
+      for (const candidate of candidates) {
+        try {
+          await pc.addIceCandidate(candidate);
+          addLog('Added queued ICE candidate');
+        } catch (err) {
+          addLog(`ICE error: ${err.message}`);
+        }
+      }
+    }
+
     if (message.type === 'peer-ready') {
       if (isHost && localOfferRef.current) {
         const sent = sendSignalRef.current({
@@ -805,6 +823,7 @@ export default function RoomPage() {
       addLog('Received offer');
 
       await pc.setRemoteDescription(message.offer);
+      await flushPendingIceCandidates();
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -824,11 +843,18 @@ export default function RoomPage() {
       addLog('Received answer');
 
       await pc.setRemoteDescription(message.answer);
+      await flushPendingIceCandidates();
       setStatus('Peer connected');
       return;
     }
 
     if (message.type === 'ice-candidate' && message.candidate) {
+      if (!pc.remoteDescription) {
+        pendingIceCandidatesRef.current.push(message.candidate);
+        addLog('Queued ICE candidate until remote description');
+        return;
+      }
+
       try {
         await pc.addIceCandidate(message.candidate);
         addLog('Added ICE candidate');
