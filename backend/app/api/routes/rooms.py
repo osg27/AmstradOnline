@@ -39,10 +39,10 @@ def create_room(
     user_id: int = Depends(get_current_user_id),
 ):
     system = payload.system if payload else "cpc"
-    if system == "amiga":
+    if system in {"amiga", "megadrive"}:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not is_admin_user(user):
-            raise HTTPException(status_code=403, detail="Amiga rooms are admin only for now")
+            raise HTTPException(status_code=403, detail="16-bit preview rooms are admin only for now")
 
     room_code = generate_room_code()
     while db.query(Room).filter(Room.room_code == room_code).first():

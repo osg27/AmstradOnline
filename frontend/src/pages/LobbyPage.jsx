@@ -29,6 +29,7 @@ export default function LobbyPage() {
       adminOnly: true,
       systems: [
         { id: 'amiga', label: 'Amiga', note: 'Admin preview' },
+        { id: 'megadrive', label: 'Mega Drive', note: 'Admin preview' },
       ],
     },
   ];
