@@ -193,6 +193,9 @@
     then = now - (delta % INTERVAL);
 
     imageData.data.set(vram);
+    for (let index = 3; index < imageData.data.length; index += 4) {
+      imageData.data[index] = 255;
+    }
     ctx.putImageData(imageData, 0, 0);
 
     frame += 1;
