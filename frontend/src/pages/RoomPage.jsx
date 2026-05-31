@@ -1227,6 +1227,33 @@ export default function RoomPage() {
     throw new Error('Could not find emulator canvas in iframe');
   }
 
+  function getHostAudioStream(iframe) {
+    if (isSpectrum) return null;
+    if (isAmiga) return iframe.contentWindow?.getAmigaAudioStream?.() || null;
+    if (isMegaDrive) return iframe.contentWindow?.getMegaDriveAudioStream?.() || null;
+    return iframe.contentWindow?.getAmstradAudioStream?.() || null;
+  }
+
+  async function waitForHostAudioStream(iframe) {
+    if (isSpectrum) return null;
+
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < 3000) {
+      const audioStream = getHostAudioStream(iframe);
+
+      if (audioStream?.getAudioTracks?.().length > 0) {
+        return audioStream;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+    }
+
+    return getHostAudioStream(iframe);
+  }
+
   async function startHostSession() {
     if (hostStartingRef.current || hostStartedRef.current) {
       return;
@@ -1265,9 +1292,7 @@ export default function RoomPage() {
       const stream = mirrorCanvas.captureStream(60);
       stream.getVideoTracks().forEach((track) => pc.addTrack(track, stream));
 
-      const audioStream = isAmiga
-        ? iframe.contentWindow?.getAmigaAudioStream?.()
-        : isMegaDrive ? iframe.contentWindow?.getMegaDriveAudioStream?.() : isSpectrum ? null : iframe.contentWindow?.getAmstradAudioStream?.();
+      const audioStream = await waitForHostAudioStream(iframe);
       if (audioStream) {
         audioStream.getAudioTracks().forEach((track) => pc.addTrack(track, audioStream));
       }
