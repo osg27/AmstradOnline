@@ -196,6 +196,7 @@
     for (let index = 3; index < imageData.data.length; index += 4) {
       imageData.data[index] = 255;
     }
+    removeScanlines(imageData.data);
     ctx.putImageData(imageData, 0, 0);
 
     frame += 1;
@@ -217,6 +218,29 @@
     audioBuffer.getChannelData(0).set(audioL.slice(0, audioBuffer.length));
     audioBuffer.getChannelData(1).set(audioR.slice(0, audioBuffer.length));
     playAudioBuffer(audioBuffer);
+  }
+
+  function removeScanlines(pixels) {
+    const stride = CANVAS_WIDTH * 4;
+
+    for (let y = 0; y < CANVAS_HEIGHT - 1; y += 2) {
+      const top = y * stride;
+      const bottom = top + stride;
+      let topLight = 0;
+      let bottomLight = 0;
+
+      for (let x = 0; x < stride; x += 16) {
+        topLight += pixels[top + x] + pixels[top + x + 1] + pixels[top + x + 2];
+        bottomLight += pixels[bottom + x] + pixels[bottom + x + 1] + pixels[bottom + x + 2];
+      }
+
+      const source = topLight >= bottomLight ? top : bottom;
+      const target = source === top ? bottom : top;
+
+      if (Math.max(topLight, bottomLight) > Math.min(topLight, bottomLight) * 1.2) {
+        pixels.copyWithin(target, source, source + stride);
+      }
+    }
   }
 
   function setKey(payload) {
