@@ -177,10 +177,7 @@
     romBuffer.set(romBytes);
     romReady = true;
     drawStatus('Mega Drive ready', romName);
-
-    if (started || pendingStart) {
-      startEmulator();
-    }
+    startEmulator();
   }
 
   function loop() {
