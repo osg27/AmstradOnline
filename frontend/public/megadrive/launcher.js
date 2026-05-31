@@ -28,9 +28,6 @@
   let audioDestination = null;
   let audioKeepAlive = null;
   let audioKeepAliveGain = null;
-  let generatedAudioStream = null;
-  let generatedAudioWriter = null;
-  let generatedAudioTimestamp = 0;
   let soundShedTime = 0;
   let then = Date.now();
   let fps = FPS;
@@ -101,50 +98,6 @@
     } else {
       source.start(currentSoundTime);
       soundShedTime = currentSoundTime + audioBuffer.duration + soundDelayTime;
-    }
-  }
-
-  function ensureGeneratedAudioStream() {
-    if (generatedAudioStream) return generatedAudioStream;
-    if (!window.MediaStreamTrackGenerator || !window.AudioData) return null;
-
-    try {
-      const generator = new MediaStreamTrackGenerator({ kind: 'audio' });
-      generatedAudioWriter = generator.writable.getWriter();
-      generatedAudioStream = new MediaStream([generator]);
-      return generatedAudioStream;
-    } catch (error) {
-      console.warn('Mega Drive generated audio unavailable', error);
-      generatedAudioWriter = null;
-      generatedAudioStream = null;
-      return null;
-    }
-  }
-
-  function writeGeneratedAudio(sampleCount) {
-    if (!generatedAudioWriter || !audioL || !audioR || sampleCount <= 0) return;
-    if (generatedAudioWriter.desiredSize !== null && generatedAudioWriter.desiredSize <= 0) return;
-
-    const frames = Math.min(sampleCount, SAMPLING_PER_FPS);
-    const planar = new Float32Array(frames * 2);
-    planar.set(audioL.slice(0, frames), 0);
-    planar.set(audioR.slice(0, frames), frames);
-
-    try {
-      const audioData = new AudioData({
-        format: 'f32-planar',
-        sampleRate: SOUND_FREQUENCY,
-        numberOfFrames: frames,
-        numberOfChannels: 2,
-        timestamp: generatedAudioTimestamp,
-        data: planar,
-      });
-
-      generatedAudioTimestamp += Math.round((frames / SOUND_FREQUENCY) * 1000000);
-      generatedAudioWriter.write(audioData).catch(() => {});
-    } catch (error) {
-      console.warn('Mega Drive generated audio write failed', error);
-      generatedAudioWriter = null;
     }
   }
 
@@ -271,7 +224,6 @@
     }
 
     const sampleCount = gens._sound();
-    writeGeneratedAudio(sampleCount);
     if (!audioContext || sampleCount <= 0) return;
 
     if (fps < FPS) {
@@ -322,9 +274,6 @@
   }
 
   window.getMegaDriveAudioStream = function () {
-    const generatedStream = ensureGeneratedAudioStream();
-    if (generatedStream) return generatedStream;
-
     ensureAudio();
     return audioDestination?.stream || null;
   };

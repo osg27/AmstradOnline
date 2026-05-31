@@ -69,7 +69,7 @@ export default function RoomPage() {
   const systemLabel = isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmiga
     ? '/amiga/launcher.html?v=2026-05-30-7'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-05-31-9' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-05-31-11' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga
     ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
