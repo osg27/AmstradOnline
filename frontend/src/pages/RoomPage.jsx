@@ -69,7 +69,7 @@ export default function RoomPage() {
   const systemLabel = isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmiga
     ? '/amiga/launcher.html?v=2026-05-30-7'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-05-31-6' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-05-31-7' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga
     ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
@@ -470,12 +470,17 @@ export default function RoomPage() {
       type: 'amstrad_audio_unlock',
     });
 
+    const channel = dataChannelRef.current;
+    if (!isHost && channel?.readyState === 'open') {
+      channel.send(JSON.stringify({ type: 'audio_unlock' }));
+    }
+
     if (remoteVideoRef.current) {
       remoteVideoRef.current.muted = false;
       remoteVideoRef.current.volume = 1;
       remoteVideoRef.current.play().catch(() => {});
     }
-  }, [forwardInputToEmulator]);
+  }, [forwardInputToEmulator, isHost]);
 
   useEffect(() => {
     if (!inputCaptured) {
@@ -685,6 +690,13 @@ export default function RoomPage() {
           key: parsed.key,
           action: parsed.action,
           player: parsed.player,
+        });
+      }
+
+      if (parsed.type === 'audio_unlock') {
+        addInputDebug('guest requested host audio unlock', null, 'guest remote');
+        forwardInputToEmulator({
+          type: 'amstrad_audio_unlock',
         });
       }
 
