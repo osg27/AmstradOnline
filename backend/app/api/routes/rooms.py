@@ -39,7 +39,7 @@ def create_room(
     user_id: int = Depends(get_current_user_id),
 ):
     system = payload.system if payload else "cpc"
-    if system in {"amiga", "megadrive"}:
+    if system in {"amiga", "megadrive", "snes"}:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not can_use_preview_systems(user):
             raise HTTPException(status_code=403, detail="16-bit preview rooms are limited to testers for now")

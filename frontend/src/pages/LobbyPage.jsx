@@ -32,6 +32,7 @@ export default function LobbyPage() {
       systems: [
         { id: 'amiga', label: 'Amiga', note: 'Preview' },
         { id: 'megadrive', label: 'Mega Drive', note: 'Preview' },
+        { id: 'snes', label: 'SNES', note: 'Preview' },
       ],
     },
   ];
