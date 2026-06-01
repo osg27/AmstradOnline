@@ -18,3 +18,6 @@ def ensure_runtime_columns(engine):
 
         if "system" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN system VARCHAR(32) NOT NULL DEFAULT 'cpc'"))
+
+        if "party_max_players" not in room_columns:
+            connection.execute(text("ALTER TABLE rooms ADD COLUMN party_max_players INTEGER NOT NULL DEFAULT 2"))

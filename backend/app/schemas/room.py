@@ -1,11 +1,12 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
-VALID_SYSTEMS = {"cpc", "spectrum", "amiga", "megadrive", "snes"}
+VALID_SYSTEMS = {"cpc", "cpc_party", "spectrum", "amiga", "megadrive", "snes"}
 
 
 class RoomCreateRequest(BaseModel):
     system: str = "cpc"
+    party_max_players: int = Field(default=2, ge=2, le=8)
 
     @field_validator("system")
     @classmethod
@@ -20,6 +21,7 @@ class RoomCreateResponse(BaseModel):
     room_code: str
     status: str
     system: str
+    party_max_players: int
 
 
 class RoomJoinRequest(BaseModel):
@@ -31,3 +33,4 @@ class RoomResponse(BaseModel):
     status: str
     owner_user_id: int
     system: str
+    party_max_players: int

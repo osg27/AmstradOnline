@@ -14,6 +14,7 @@ export default function LobbyPage() {
   const [isTester, setIsTester] = useState(localStorage.getItem('isTester') === 'true');
   const [selectedEra, setSelectedEra] = useState('8bit');
   const [selectedSystem, setSelectedSystem] = useState('cpc');
+  const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const canUsePreviewSystems = isAdmin || isTester;
 
   const systemGroups = [
@@ -23,6 +24,14 @@ export default function LobbyPage() {
       systems: [
         { id: 'cpc', label: 'Amstrad CPC' },
         { id: 'spectrum', label: 'ZX Spectrum' },
+      ],
+    },
+    {
+      id: 'party',
+      label: 'Party Games',
+      adminOnly: true,
+      systems: [
+        { id: 'cpc_party', label: 'Amstrad CPC Party', note: 'Preview' },
       ],
     },
     {
@@ -79,7 +88,10 @@ export default function LobbyPage() {
 
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
-        body: JSON.stringify({ system: selectedSystem }),
+        body: JSON.stringify({
+          system: selectedSystem,
+          party_max_players: selectedSystem === 'cpc_party' ? partyMaxPlayers : 2,
+        }),
       });
       navigate(`/room/${room.room_code}`);
     } catch (err) {
@@ -166,6 +178,19 @@ export default function LobbyPage() {
                 </button>
               ))}
             </div>
+            {selectedSystem === 'cpc_party' ? (
+              <label className="party-player-select">
+                <span>Players</span>
+                <select
+                  value={partyMaxPlayers}
+                  onChange={(event) => setPartyMaxPlayers(Number(event.target.value))}
+                >
+                  {[2, 3, 4, 5, 6, 7, 8].map((count) => (
+                    <option key={count} value={count}>{count}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <button onClick={handleCreate} disabled={loadingCreate || !selectedMachine || selectedMachine.disabled}>
               {loadingCreate ? 'Creating...' : 'Create room'}
             </button>

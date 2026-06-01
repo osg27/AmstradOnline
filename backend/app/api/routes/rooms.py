@@ -39,10 +39,10 @@ def create_room(
     user_id: int = Depends(get_current_user_id),
 ):
     system = payload.system if payload else "cpc"
-    if system in {"amiga", "megadrive", "snes"}:
+    if system in {"cpc_party", "amiga", "megadrive", "snes"}:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not can_use_preview_systems(user):
-            raise HTTPException(status_code=403, detail="16-bit preview rooms are limited to testers for now")
+            raise HTTPException(status_code=403, detail="Preview rooms are limited to testers for now")
 
     room_code = generate_room_code()
     while db.query(Room).filter(Room.room_code == room_code).first():
@@ -53,12 +53,18 @@ def create_room(
         owner_user_id=user_id,
         status="waiting",
         system=system,
+        party_max_players=payload.party_max_players if system == "cpc_party" and payload else 2,
     )
     db.add(room)
     db.commit()
     db.refresh(room)
 
-    return RoomCreateResponse(room_code=room.room_code, status=room.status, system=room.system)
+    return RoomCreateResponse(
+        room_code=room.room_code,
+        status=room.status,
+        system=room.system,
+        party_max_players=room.party_max_players or 2,
+    )
 
 
 @router.post("/join", response_model=RoomResponse)
@@ -76,6 +82,7 @@ def join_room(
         status=room.status,
         owner_user_id=room.owner_user_id,
         system=room.system or "cpc",
+        party_max_players=room.party_max_players or 2,
     )
 
 
@@ -94,4 +101,5 @@ def get_room(
         status=room.status,
         owner_user_id=room.owner_user_id,
         system=room.system or "cpc",
+        party_max_players=room.party_max_players or 2,
     )
