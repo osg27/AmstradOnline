@@ -100,8 +100,27 @@ async function loadSpectrumFile(fileName, bytes) {
     return;
   }
 
+  previousJoystickMasks.clear();
+  heldKeyCounts.forEach((_count, keyName) => {
+    speccy.releaseKey(keyName);
+  });
+  heldKeyCounts.clear();
+  speccy.reset();
+
   const file = new File([bytes], fileName || "game.tap");
   await speccy.openFile(file);
+  speccy.focus();
+}
+
+function resetSpectrum() {
+  if (!speccy || !ready) return;
+
+  previousJoystickMasks.clear();
+  heldKeyCounts.forEach((_count, keyName) => {
+    speccy.releaseKey(keyName);
+  });
+  heldKeyCounts.clear();
+  speccy.reset();
   speccy.focus();
 }
 
@@ -179,6 +198,11 @@ window.addEventListener("message", (event) => {
     loadSpectrumFile(data.fileName, data.bytes).catch((error) => {
       console.error("Spectrum load failed", error);
     });
+    return;
+  }
+
+  if (data.type === "spectrum_reset") {
+    resetSpectrum();
     return;
   }
 

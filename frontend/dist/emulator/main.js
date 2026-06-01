@@ -311,7 +311,7 @@ async function main() {
     get_joystick_mask: typeof get_joystick_mask,
   });
 
-  const emulator = new_emulator();
+  let emulator = new_emulator();
 
   enable_digital_joystick(emulator);
   set_joystick_mask(emulator, 0);
@@ -322,6 +322,15 @@ async function main() {
     1: 0,
     2: 0,
   };
+
+  function resetEmulator() {
+    emulator = new_emulator();
+    enable_digital_joystick(emulator);
+    remoteJoystickMasks[1] = 0;
+    remoteJoystickMasks[2] = 0;
+    lastJoystickMask = -1;
+    set_joystick_mask(emulator, 0);
+  }
 
   window.addEventListener("gamepadconnected", (event) => {
     console.log(
@@ -537,6 +546,8 @@ async function main() {
       return;
     }
 
+    resetEmulator();
+
     const content = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     const charArray = new Uint8Array(memory.buffer);
     const ptr = env.malloc(content.byteLength);
@@ -558,6 +569,11 @@ async function main() {
     if (data.type === "amstrad_autoload") {
       if (!data.fileName || !data.bytes) return;
       loadDiskBytes(data.fileName, new Uint8Array(data.bytes));
+      return;
+    }
+
+    if (data.type === "amstrad_reset") {
+      resetEmulator();
       return;
     }
 

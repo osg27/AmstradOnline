@@ -69,8 +69,8 @@ export default function RoomPage() {
   const isMegaDrive = roomSystem === 'megadrive';
   const systemLabel = isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmiga
-    ? '/amiga/launcher.html?v=2026-05-30-7'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-05-31-11' : isSpectrum ? '/spectrum/index.html' : '/emulator/index.html';
+    ? '/amiga/launcher.html?v=2026-06-01-1'
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga
     ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
@@ -1384,6 +1384,18 @@ export default function RoomPage() {
     kickstartInputRef.current?.click();
   }
 
+  function resetHostEmulator() {
+    if (!isHost || !hostStarted) return;
+
+    const type = isAmiga
+      ? 'amiga_reset'
+      : isMegaDrive ? 'megadrive_reset' : isSpectrum ? 'spectrum_reset' : 'amstrad_reset';
+
+    forwardInputToEmulator({ type });
+    addLog('Reset emulator');
+    setStatus('Emulator reset');
+  }
+
   async function handleDiskSelected(event) {
     try {
       const file = event.target.files?.[0];
@@ -1585,6 +1597,10 @@ export default function RoomPage() {
 
                   <button onClick={openDiskPicker} disabled={!hostStarted}>
                     {mediaLabel}
+                  </button>
+
+                  <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>
+                    Reset emulator
                   </button>
 
                   {isAmiga ? (

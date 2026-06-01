@@ -176,6 +176,29 @@
     }
   }
 
+  function resetEmulator() {
+    localMask = 0;
+    remoteMask = 0;
+    pressedKeys.clear();
+    remotePressedKeys.clear();
+
+    if (!wasmReady || !romReady) {
+      drawStatus('Mega Drive ready', romName || 'Load a ROM file');
+      return;
+    }
+
+    gens._start();
+    bindViews();
+    started = true;
+    pendingStart = false;
+    then = Date.now();
+
+    if (!looping) {
+      looping = true;
+      requestAnimationFrame(loop);
+    }
+  }
+
   function loadRom(fileName, bytes) {
     romName = fileName || 'game.bin';
 
@@ -288,6 +311,10 @@
 
     if (payload.type === 'megadrive_autoload') {
       loadRom(payload.fileName, payload.bytes);
+    }
+
+    if (payload.type === 'megadrive_reset') {
+      resetEmulator();
     }
 
     if (payload.type === 'amstrad_audio_unlock') {

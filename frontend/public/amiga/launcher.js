@@ -220,7 +220,16 @@ function loadAmigaFile(fileName, bytes) {
     return;
   }
 
-  sendPendingFileToEmulator();
+  resetAmiga();
+  window.setTimeout(sendPendingFileToEmulator, 600);
+}
+
+function resetAmiga() {
+  if (!runtimeReady || !emulatorStarted) return;
+
+  if (window.vAmigaWeb_player && typeof window.vAmigaWeb_player.reset === "function") {
+    window.vAmigaWeb_player.reset();
+  }
 }
 
 function loadKickstartRom(bytes) {
@@ -354,6 +363,11 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amiga_autoload") {
     loadAmigaFile(data.fileName, data.bytes);
+    return;
+  }
+
+  if (data.type === "amiga_reset") {
+    resetAmiga();
     return;
   }
 
