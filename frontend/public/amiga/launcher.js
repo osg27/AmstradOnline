@@ -362,19 +362,38 @@ function applyAmigaMouseButton(button, action) {
   if (!runtimeReady || !emulatorStarted) return;
 
   const amigaButton = button === 3 ? 3 : 1;
-  const pressed = action === "down" ? 1 : 0;
-  const joystickCommand = action === "down" ? "PRESS_FIRE" : "RELEASE_FIRE";
+  if (action !== "down") return;
+
   runScript(`
-    for (var port = 1; port <= 2; port += 1) {
-      if (typeof Module !== 'undefined' && typeof Module._wasm_mouse_button === 'function') {
-        Module._wasm_mouse_button(port, ${amigaButton}, ${pressed});
-      } else if (typeof wasm_mouse_button === 'function') {
-        wasm_mouse_button(port, ${amigaButton}, ${pressed});
+    (function () {
+      function mouseButton(port, button, state) {
+        if (typeof Module !== 'undefined' && typeof Module._wasm_mouse_button === 'function') {
+          Module._wasm_mouse_button(port, button, state);
+        } else if (typeof wasm_mouse_button === 'function') {
+          wasm_mouse_button(port, button, state);
+        }
       }
-    }
-    if (${amigaButton} === 1 && typeof emit_joystick_cmd === 'function') {
-      emit_joystick_cmd('2${joystickCommand}');
-    }
+
+      for (var port = 1; port <= 2; port += 1) {
+        mouseButton(port, ${amigaButton}, 1);
+      }
+
+      if (${amigaButton} === 1 && typeof emit_joystick_cmd === 'function') {
+        emit_joystick_cmd('1PRESS_FIRE');
+        emit_joystick_cmd('2PRESS_FIRE');
+      }
+
+      setTimeout(function () {
+        for (var port = 1; port <= 2; port += 1) {
+          mouseButton(port, ${amigaButton}, 0);
+        }
+
+        if (${amigaButton} === 1 && typeof emit_joystick_cmd === 'function') {
+          emit_joystick_cmd('1RELEASE_FIRE');
+          emit_joystick_cmd('2RELEASE_FIRE');
+        }
+      }, 140);
+    })();
   `);
 }
 
