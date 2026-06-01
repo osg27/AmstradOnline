@@ -4,7 +4,7 @@ import string
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import is_admin_user
+from app.api.routes.auth import can_use_preview_systems
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.room import Room
@@ -41,8 +41,8 @@ def create_room(
     system = payload.system if payload else "cpc"
     if system in {"amiga", "megadrive"}:
         user = db.query(User).filter(User.id == user_id).first()
-        if not user or not is_admin_user(user):
-            raise HTTPException(status_code=403, detail="16-bit preview rooms are admin only for now")
+        if not user or not can_use_preview_systems(user):
+            raise HTTPException(status_code=403, detail="16-bit preview rooms are limited to testers for now")
 
     room_code = generate_room_code()
     while db.query(Room).filter(Room.room_code == room_code).first():

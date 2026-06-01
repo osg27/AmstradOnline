@@ -17,6 +17,15 @@ def is_admin_user(user: User) -> bool:
     return bool(settings.ADMIN_USERNAME and user.username.lower() == settings.ADMIN_USERNAME.lower())
 
 
+def is_tester_user(user: User) -> bool:
+    tester_names = {username.lower() for username in settings.TESTER_USERNAMES}
+    return user.username.lower() in tester_names
+
+
+def can_use_preview_systems(user: User) -> bool:
+    return is_admin_user(user) or is_tester_user(user)
+
+
 def get_current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid token")
@@ -55,7 +64,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.refresh(user)
 
     token = create_access_token(str(user.id))
-    return AuthResponse(access_token=token, username=user.username, is_admin=is_admin_user(user))
+    return AuthResponse(
+        access_token=token,
+        username=user.username,
+        is_admin=is_admin_user(user),
+        is_tester=is_tester_user(user),
+    )
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -70,7 +84,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     db.refresh(user)
 
     token = create_access_token(str(user.id))
-    return AuthResponse(access_token=token, username=user.username, is_admin=is_admin_user(user))
+    return AuthResponse(
+        access_token=token,
+        username=user.username,
+        is_admin=is_admin_user(user),
+        is_tester=is_tester_user(user),
+    )
 
 
 @router.get("/me")
@@ -79,4 +98,5 @@ def get_me(user: User = Depends(get_current_user)):
         "id": user.id,
         "username": user.username,
         "is_admin": is_admin_user(user),
+        "is_tester": is_tester_user(user),
     }

@@ -23,6 +23,7 @@ export default function RegisterPage() {
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('username', data.username);
       localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
+      localStorage.setItem('isTester', data.is_tester ? 'true' : 'false');
       navigate('/lobby');
     } catch (err) {
       setError(err.message);

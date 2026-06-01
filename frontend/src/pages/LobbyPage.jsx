@@ -11,8 +11,10 @@ export default function LobbyPage() {
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
+  const [isTester, setIsTester] = useState(localStorage.getItem('isTester') === 'true');
   const [selectedEra, setSelectedEra] = useState('8bit');
   const [selectedSystem, setSelectedSystem] = useState('cpc');
+  const canUsePreviewSystems = isAdmin || isTester;
 
   const systemGroups = [
     {
@@ -28,13 +30,13 @@ export default function LobbyPage() {
       label: '16-bit',
       adminOnly: true,
       systems: [
-        { id: 'amiga', label: 'Amiga', note: 'Admin preview' },
-        { id: 'megadrive', label: 'Mega Drive', note: 'Admin preview' },
+        { id: 'amiga', label: 'Amiga', note: 'Preview' },
+        { id: 'megadrive', label: 'Mega Drive', note: 'Preview' },
       ],
     },
   ];
 
-  const visibleGroups = systemGroups.filter((group) => !group.adminOnly || isAdmin);
+  const visibleGroups = systemGroups.filter((group) => !group.adminOnly || canUsePreviewSystems);
   const selectedGroup = visibleGroups.find((group) => group.id === selectedEra) || visibleGroups[0];
   const selectedMachine = selectedGroup?.systems.find((system) => system.id === selectedSystem);
 
@@ -43,16 +45,21 @@ export default function LobbyPage() {
       try {
         const session = await apiFetch('/auth/me');
         const nextIsAdmin = Boolean(session.is_admin);
+        const nextIsTester = Boolean(session.is_tester);
 
         setIsAdmin(nextIsAdmin);
+        setIsTester(nextIsTester);
         localStorage.setItem('isAdmin', nextIsAdmin ? 'true' : 'false');
-        if (!nextIsAdmin) {
+        localStorage.setItem('isTester', nextIsTester ? 'true' : 'false');
+        if (!nextIsAdmin && !nextIsTester) {
           setSelectedEra('8bit');
           setSelectedSystem('cpc');
         }
       } catch {
         setIsAdmin(false);
+        setIsTester(false);
         localStorage.removeItem('isAdmin');
+        localStorage.removeItem('isTester');
         setSelectedEra('8bit');
         setSelectedSystem('cpc');
       }
@@ -101,6 +108,7 @@ export default function LobbyPage() {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     localStorage.removeItem('isAdmin');
+    localStorage.removeItem('isTester');
     navigate('/login');
   }
 
