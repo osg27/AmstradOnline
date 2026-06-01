@@ -100,13 +100,6 @@ async function loadSpectrumFile(fileName, bytes) {
     return;
   }
 
-  previousJoystickMasks.clear();
-  heldKeyCounts.forEach((_count, keyName) => {
-    speccy.releaseKey(keyName);
-  });
-  heldKeyCounts.clear();
-  speccy.reset();
-
   const file = new File([bytes], fileName || "game.tap");
   await speccy.openFile(file);
   speccy.focus();
