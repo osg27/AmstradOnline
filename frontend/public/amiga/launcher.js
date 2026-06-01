@@ -161,6 +161,15 @@ function sendPendingFileToEmulator() {
   insertPendingFileIntoDf0(loadId);
 }
 
+function setPendingFile(fileName, bytes) {
+  pendingFile = {
+    name: fileName || "game.adf",
+    bin: bytes,
+  };
+  pendingFileLoadId += 1;
+  sentFileLoadId = 0;
+}
+
 function sendKickstartToEmulator() {
   if (!customKickstartRom || !runtimeReady || !emulatorStarted) return;
   if (sentKickstartRom === customKickstartRom) return;
@@ -207,12 +216,7 @@ function startEmulator() {
 }
 
 function loadAmigaFile(fileName, bytes) {
-  pendingFile = {
-    name: fileName || "game.adf",
-    bin: bytes,
-  };
-  pendingFileLoadId += 1;
-  sentFileLoadId = 0;
+  setPendingFile(fileName, bytes);
 
   if (!runtimeReady) return;
   if (!emulatorStarted) {
@@ -222,6 +226,18 @@ function loadAmigaFile(fileName, bytes) {
 
   resetAmiga();
   window.setTimeout(sendPendingFileToEmulator, 600);
+}
+
+function swapAmigaDisk(fileName, bytes) {
+  setPendingFile(fileName, bytes);
+
+  if (!runtimeReady) return;
+  if (!emulatorStarted) {
+    startEmulator();
+    return;
+  }
+
+  sendPendingFileToEmulator();
 }
 
 function resetAmiga() {
@@ -347,11 +363,17 @@ function applyAmigaMouseButton(button, action) {
 
   const amigaButton = button === 3 ? 3 : 1;
   const pressed = action === "down" ? 1 : 0;
+  const joystickCommand = action === "down" ? "PRESS_FIRE" : "RELEASE_FIRE";
   runScript(`
-    if (typeof Module !== 'undefined' && typeof Module._wasm_mouse_button === 'function') {
-      Module._wasm_mouse_button(1, ${amigaButton}, ${pressed});
-    } else if (typeof wasm_mouse_button === 'function') {
-      wasm_mouse_button(1, ${amigaButton}, ${pressed});
+    for (var port = 1; port <= 2; port += 1) {
+      if (typeof Module !== 'undefined' && typeof Module._wasm_mouse_button === 'function') {
+        Module._wasm_mouse_button(port, ${amigaButton}, ${pressed});
+      } else if (typeof wasm_mouse_button === 'function') {
+        wasm_mouse_button(port, ${amigaButton}, ${pressed});
+      }
+    }
+    if (${amigaButton} === 1 && typeof emit_joystick_cmd === 'function') {
+      emit_joystick_cmd('2${joystickCommand}');
     }
   `);
 }
@@ -393,6 +415,11 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amiga_autoload") {
     loadAmigaFile(data.fileName, data.bytes);
+    return;
+  }
+
+  if (data.type === "amiga_swap_disk") {
+    swapAmigaDisk(data.fileName, data.bytes);
     return;
   }
 

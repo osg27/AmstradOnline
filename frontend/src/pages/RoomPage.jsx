@@ -33,6 +33,7 @@ export default function RoomPage() {
   const mirrorCanvasRef = useRef(null);
   const mirrorLoopRef = useRef(null);
   const fileInputRef = useRef(null);
+  const swapDiskInputRef = useRef(null);
   const kickstartInputRef = useRef(null);
   const pcRef = useRef(null);
   const dataChannelRef = useRef(null);
@@ -1457,6 +1458,12 @@ export default function RoomPage() {
     kickstartInputRef.current?.click();
   }
 
+  function openSwapDiskPicker() {
+    if (!isHost || !isAmiga || !hostStarted) return;
+
+    swapDiskInputRef.current?.click();
+  }
+
   function resetHostEmulator() {
     if (!isHost || !hostStarted) return;
 
@@ -1475,6 +1482,7 @@ export default function RoomPage() {
 
       if (!file) return;
 
+      const isSwapDisk = isAmiga && event.target.dataset.mode === 'swap';
       const lowerName = file.name.toLowerCase();
       const allowedExtensions = isAmiga
         ? ['.adf', '.adz', '.dms', '.hdf', '.hdz', '.lha', '.zip']
@@ -1491,14 +1499,14 @@ export default function RoomPage() {
       const bytes = new Uint8Array(arrayBuffer);
 
       forwardInputToEmulator({
-        type: isAmiga ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
+        type: isSwapDisk ? 'amiga_swap_disk' : isAmiga ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: file.name,
         bytes,
       });
 
       setLoadedDiskName(file.name);
-      addLog(`Loaded file: ${file.name}`);
-      setStatus(`File loaded: ${file.name}`);
+      addLog(`${isSwapDisk ? 'Swapped disk' : 'Loaded file'}: ${file.name}`);
+      setStatus(`${isSwapDisk ? 'Disk swapped' : 'File loaded'}: ${file.name}`);
       event.target.value = '';
     } catch (err) {
       setError(err.message);
@@ -1650,9 +1658,21 @@ export default function RoomPage() {
                   ref={fileInputRef}
                   type="file"
                   accept={acceptedMedia}
+                  data-mode="load"
                   onChange={handleDiskSelected}
                   style={{ display: 'none' }}
                 />
+
+                {isAmiga ? (
+                  <input
+                    ref={swapDiskInputRef}
+                    type="file"
+                    accept={acceptedMedia}
+                    data-mode="swap"
+                    onChange={handleDiskSelected}
+                    style={{ display: 'none' }}
+                  />
+                ) : null}
 
                 {isAmiga ? (
                   <input
@@ -1677,6 +1697,12 @@ export default function RoomPage() {
                   <button onClick={openDiskPicker} disabled={!hostStarted}>
                     {mediaLabel}
                   </button>
+
+                  {isAmiga ? (
+                    <button type="button" className="secondary" onClick={openSwapDiskPicker} disabled={!hostStarted}>
+                      Swap disk
+                    </button>
+                  ) : null}
 
                   <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>
                     Reset emulator
