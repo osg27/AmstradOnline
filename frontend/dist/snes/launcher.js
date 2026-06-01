@@ -5,6 +5,7 @@
 
   let currentRom = null;
   let loaderScript = null;
+  let gameUrl = null;
   let sharedAudioContext = null;
   let audioDestination = null;
   let keepAlive = null;
@@ -221,24 +222,30 @@
     } catch {}
 
     gameContainer.innerHTML = '';
+    window.EJS_emulator = null;
     lastSimulatedMasks = [0, 0];
     if (loaderScript) {
       loaderScript.remove();
       loaderScript = null;
     }
+    if (gameUrl) {
+      URL.revokeObjectURL(gameUrl);
+      gameUrl = null;
+    }
   }
 
-  function configureEmulator(fileName, gameFile) {
+  function configureEmulator(fileName, romUrl) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
     window.EJS_core = 'snes';
     window.EJS_gameName = fileName;
-    window.EJS_gameUrl = gameFile;
+    window.EJS_gameUrl = romUrl;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
+    window.EJS_disableLocalStorage = true;
     window.EJS_volume = 1;
     window.EJS_backgroundColor = '#000';
     window.EJS_color = '#2f8f76';
@@ -283,6 +290,17 @@
       screenshot: false,
       cacheManager: false,
     };
+
+    window.EJS_ready = () => {
+      console.log('Old Style Gaming SNES: EmulatorJS ready');
+    };
+    window.EJS_onGameStart = () => {
+      console.log('Old Style Gaming SNES: game started');
+      statusText = '';
+    };
+    window.EJS_onExit = () => {
+      drawStatus('SNES stopped', fileName);
+    };
   }
 
   function loadCurrentRom() {
@@ -293,8 +311,9 @@
 
     ensureAudio()?.resume?.().catch(() => {});
     clearGameContainer();
-    const gameFile = new File([currentRom.bytes], currentRom.fileName, { type: 'application/octet-stream' });
-    configureEmulator(currentRom.fileName, gameFile);
+    const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
+    gameUrl = URL.createObjectURL(gameBlob);
+    configureEmulator(currentRom.fileName, gameUrl);
     drawStatus('Loading SNES', currentRom.fileName);
 
     loaderScript = document.createElement('script');
@@ -303,6 +322,16 @@
     loaderScript.onerror = () => drawStatus('SNES failed to load', 'Could not load EmulatorJS');
     document.body.appendChild(loaderScript);
   }
+
+  window.addEventListener('error', (event) => {
+    console.error('Old Style Gaming SNES error:', event.error || event.message);
+    drawStatus('SNES error', event.message || 'Check browser console');
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('Old Style Gaming SNES promise error:', event.reason);
+    drawStatus('SNES error', event.reason?.message || 'Check browser console');
+  });
 
   function mirrorEmulatorCanvas() {
     const gameCanvas = gameContainer.querySelector('canvas');

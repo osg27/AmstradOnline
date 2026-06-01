@@ -17,21 +17,33 @@
       }
 
       #snes-screen {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
         display: block;
         width: 100vw;
         height: 100vh;
         background: #000;
         image-rendering: pixelated;
+        pointer-events: none;
       }
 
       #game {
         position: absolute;
-        left: -10000px;
-        top: -10000px;
-        width: 640px;
-        height: 480px;
+        inset: 0;
+        z-index: 1;
+        width: 100vw;
+        height: 100vh;
         overflow: hidden;
-        pointer-events: none;
+        background: #000;
+      }
+
+      #game canvas,
+      #game .ejs_game,
+      #game .ejs_canvas,
+      #game .ejs_container {
+        max-width: 100% !important;
+        max-height: 100% !important;
       }
     </style>
   </head>
