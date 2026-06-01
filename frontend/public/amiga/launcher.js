@@ -1,7 +1,7 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-05-30-7";
+const runtimeVersion = "2026-06-01-2";
 let runtimeReady = false;
 let emulatorStarted = false;
 let startRequested = false;
@@ -363,6 +363,20 @@ function applyAmigaMouseButton(button, action) {
 
   const amigaButton = button === 3 ? 3 : 1;
   if (action !== "down") return;
+
+  postToEmulator({
+    cmd: "osg_mouse_button",
+    button: amigaButton,
+    state: 1,
+  });
+
+  window.setTimeout(() => {
+    postToEmulator({
+      cmd: "osg_mouse_button",
+      button: amigaButton,
+      state: 0,
+    });
+  }, 140);
 
   runScript(`
     (function () {

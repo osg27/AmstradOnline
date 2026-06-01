@@ -2386,6 +2386,13 @@ function InitWrappers() {
             let js_script_function=new AsyncFunction(event.data.script);
             js_script_function();
         }
+        else if(event.data.cmd == "osg_mouse_button")
+        {
+            if(typeof window.osg_vamiga_mouse_button === 'function')
+            {
+                window.osg_vamiga_mouse_button(event.data.button, event.data.state, event.data.port);
+            }
+        }
         else if(event.data.cmd == "load")
         {
             async function copy_to_local_storage(romtype, byteArray)
@@ -2576,6 +2583,24 @@ function InitWrappers() {
     function mouseUp(e) {
         Module._wasm_mouse_button(mouse_port,e.which, 0/* up */);
     }
+    window.osg_vamiga_mouse_button = function(button, state, preferred_port) {
+        let amiga_button = button == 3 ? 3 : 1;
+        let ports = [];
+        if(preferred_port == 1 || preferred_port == 2)
+        {
+            ports.push(preferred_port);
+        }
+        if(mouse_port == 1 || mouse_port == 2)
+        {
+            ports.push(mouse_port);
+        }
+        ports.push(1);
+        ports.push(2);
+        ports = [...new Set(ports)];
+        ports.forEach((port) => {
+            Module._wasm_mouse_button(port, amiga_button, state ? 1 : 0);
+        });
+    };
 
     // === Pencil/Pen input handler ===
     let pencil_pointer_id = null;
