@@ -4,7 +4,6 @@
   const context = screen.getContext('2d', { alpha: false });
 
   let currentRom = null;
-  let currentRomUrl = '';
   let loaderScript = null;
   let sharedAudioContext = null;
   let audioDestination = null;
@@ -229,12 +228,12 @@
     }
   }
 
-  function configureEmulator(fileName, gameUrl) {
+  function configureEmulator(fileName, gameFile) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
     window.EJS_core = 'snes';
     window.EJS_gameName = fileName;
-    window.EJS_gameUrl = gameUrl;
+    window.EJS_gameUrl = gameFile;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
@@ -294,9 +293,8 @@
 
     ensureAudio()?.resume?.().catch(() => {});
     clearGameContainer();
-    if (currentRomUrl) URL.revokeObjectURL(currentRomUrl);
-    currentRomUrl = URL.createObjectURL(new Blob([currentRom.bytes], { type: 'application/octet-stream' }));
-    configureEmulator(currentRom.fileName, currentRomUrl);
+    const gameFile = new File([currentRom.bytes], currentRom.fileName, { type: 'application/octet-stream' });
+    configureEmulator(currentRom.fileName, gameFile);
     drawStatus('Loading SNES', currentRom.fileName);
 
     loaderScript = document.createElement('script');
