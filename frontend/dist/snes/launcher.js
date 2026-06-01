@@ -320,13 +320,21 @@
     };
   }
 
-  function loadCurrentRom() {
+  async function loadCurrentRom() {
     if (!currentRom) {
       drawStatus('SNES ready', 'Load a SNES ROM from the room');
       return;
     }
 
     ensureAudio()?.resume?.().catch(() => {});
+    drawStatus('Checking SNES runtime', currentRom.fileName);
+    try {
+      await preflightEmulatorJs();
+    } catch (error) {
+      drawStatus('SNES runtime missing', error.message);
+      return;
+    }
+
     clearGameContainer();
     const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
     gameUrl = URL.createObjectURL(gameBlob);
@@ -340,9 +348,30 @@
     document.body.appendChild(loaderScript);
   }
 
+  async function preflightEmulatorJs() {
+    const required = [
+      '/emulatorjs/data/loader.js',
+      '/emulatorjs/data/src/emulator.js',
+      '/emulatorjs/data/src/compression.js',
+      '/emulatorjs/data/compression/extractzip.js',
+      '/emulatorjs/data/cores/snes9x-wasm.data',
+    ];
+
+    for (const path of required) {
+      const response = await fetch(`${path}?v=${Date.now()}`, { cache: 'no-store' });
+      const contentType = response.headers.get('content-type') || '';
+
+      if (!response.ok || contentType.includes('text/html')) {
+        throw new Error(`${path} returned ${response.status || 'HTML'}`);
+      }
+    }
+  }
+
   window.addEventListener('error', (event) => {
-    console.error('Old Style Gaming SNES error:', event.error || event.message);
-    drawStatus('SNES error', event.message || 'Check browser console');
+    const where = event.filename ? `${event.filename.split('/').slice(-3).join('/')} ${event.lineno || ''}`.trim() : '';
+    const message = [event.message || 'Check browser console', where].filter(Boolean).join(' - ');
+    console.error('Old Style Gaming SNES error:', event.error || event.message, event.filename);
+    drawStatus('SNES error', message);
   });
 
   window.addEventListener('unhandledrejection', (event) => {
