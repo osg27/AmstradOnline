@@ -70,7 +70,7 @@ export default function RoomPage() {
   const systemLabel = isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga
     ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
@@ -1228,15 +1228,13 @@ export default function RoomPage() {
   }
 
   function getHostAudioStream(iframe) {
-    if (isSpectrum) return null;
     if (isAmiga) return iframe.contentWindow?.getAmigaAudioStream?.() || null;
     if (isMegaDrive) return iframe.contentWindow?.getMegaDriveAudioStream?.() || null;
+    if (isSpectrum) return iframe.contentWindow?.getSpectrumAudioStream?.() || null;
     return iframe.contentWindow?.getAmstradAudioStream?.() || null;
   }
 
   async function waitForHostAudioStream(iframe) {
-    if (isSpectrum) return null;
-
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < 3000) {

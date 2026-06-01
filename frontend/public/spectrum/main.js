@@ -4,6 +4,66 @@ let ready = false;
 let pendingFile = null;
 const previousJoystickMasks = new Map();
 const heldKeyCounts = new Map();
+let audioContext = null;
+let audioDestination = null;
+let audioKeepAlive = null;
+
+function ensureAudioBridgeForContext(context) {
+  if (!context || audioDestination) return audioDestination;
+
+  audioContext = context;
+  audioDestination = context.createMediaStreamDestination();
+
+  try {
+    audioKeepAlive = context.createOscillator();
+    const gain = context.createGain();
+    audioKeepAlive.frequency.value = 20;
+    gain.gain.value = 0.00001;
+    audioKeepAlive.connect(gain);
+    gain.connect(audioDestination);
+    audioKeepAlive.start();
+  } catch {
+    // Keep the bridge optional if a browser blocks oscillator startup.
+  }
+
+  return audioDestination;
+}
+
+function installAudioBridge() {
+  const audioNodePrototype = window.AudioNode?.prototype;
+  const audioDestinationPrototype = window.AudioDestinationNode?.prototype;
+
+  if (!audioNodePrototype || !audioDestinationPrototype || audioNodePrototype.__osgSpectrumBridge) return;
+
+  const originalConnect = audioNodePrototype.connect;
+  audioNodePrototype.connect = function connectWithSpectrumBridge(destination, ...args) {
+    const result = originalConnect.call(this, destination, ...args);
+
+    if (audioDestinationPrototype.isPrototypeOf(destination)) {
+      const bridge = ensureAudioBridgeForContext(this.context);
+      if (bridge) {
+        try {
+          originalConnect.call(this, bridge);
+        } catch {
+          // Some nodes cannot be connected twice; normal audio should still work.
+        }
+      }
+    }
+
+    return result;
+  };
+
+  audioNodePrototype.__osgSpectrumBridge = true;
+}
+
+function resumeSpectrumAudio() {
+  audioContext?.resume?.().catch(() => {});
+}
+
+window.getSpectrumAudioStream = function getSpectrumAudioStream() {
+  resumeSpectrumAudio();
+  return audioDestination?.stream || null;
+};
 
 const SINCLAIR_KEYS = {
   1: {
@@ -160,6 +220,8 @@ function applyJoystickMask(mask, player) {
 }
 
 function boot() {
+  installAudioBridge();
+
   speccy = window.JSSpeccy(root, {
     autoStart: true,
     autoLoadTapes: true,
@@ -196,6 +258,11 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "spectrum_reset") {
     resetSpectrum();
+    return;
+  }
+
+  if (data.type === "amstrad_audio_unlock") {
+    resumeSpectrumAudio();
     return;
   }
 
