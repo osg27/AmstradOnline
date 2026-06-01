@@ -241,6 +241,23 @@
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_pathtodata = '/emulatorjs/data/';
+    window.EJS_paths = {
+      'emulator.js': '/emulatorjs/data/src/emulator.js',
+      'emulator.css': '/emulatorjs/data/emulator.css',
+      'cache.js': '/emulatorjs/data/src/cache.js',
+      'compression.js': '/emulatorjs/data/src/compression.js',
+      'consts.js': '/emulatorjs/data/src/consts.js',
+      'GameManager.js': '/emulatorjs/data/src/GameManager.js',
+      'gamepad.js': '/emulatorjs/data/src/gamepad.js',
+      'license.js': '/emulatorjs/data/src/license.js',
+      'netplay.js': '/emulatorjs/data/src/netplay.js',
+      'setup.js': '/emulatorjs/data/src/setup.js',
+      'shaders.js': '/emulatorjs/data/src/shaders.js',
+      'storage.js': '/emulatorjs/data/src/storage.js',
+      'utils.js': '/emulatorjs/data/src/utils.js',
+      'nipplejs.js': '/emulatorjs/data/src/vendor/nipplejs.js',
+      'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
+    };
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
     window.EJS_forceLegacyCores = false;
