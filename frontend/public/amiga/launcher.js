@@ -342,6 +342,36 @@ function applyAmigaKeyboardInput(code, key, action) {
   `);
 }
 
+function applyAmigaMouseButton(button, action) {
+  if (!runtimeReady || !emulatorStarted) return;
+
+  const amigaButton = button === 3 ? 3 : 1;
+  const pressed = action === "down" ? 1 : 0;
+  runScript(`
+    if (typeof Module !== 'undefined' && typeof Module._wasm_mouse_button === 'function') {
+      Module._wasm_mouse_button(1, ${amigaButton}, ${pressed});
+    } else if (typeof wasm_mouse_button === 'function') {
+      wasm_mouse_button(1, ${amigaButton}, ${pressed});
+    }
+  `);
+}
+
+function applyAmigaMouseMove(dx, dy) {
+  if (!runtimeReady || !emulatorStarted) return;
+
+  const movementX = Math.max(-80, Math.min(80, Number(dx) || 0));
+  const movementY = Math.max(-80, Math.min(80, Number(dy) || 0));
+  if (!movementX && !movementY) return;
+
+  runScript(`
+    if (typeof Module !== 'undefined' && typeof Module._wasm_mouse === 'function') {
+      Module._wasm_mouse(1, ${movementX}, ${movementY});
+    } else if (typeof wasm_mouse === 'function') {
+      wasm_mouse(1, ${movementX}, ${movementY});
+    }
+  `);
+}
+
 window.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
@@ -384,6 +414,17 @@ window.addEventListener("message", (event) => {
   if (data.type === "amiga_keyboard") {
     applyAmigaKeyboardInput(data.code, data.key, data.action);
     connectNestedAmigaAudio();
+    return;
+  }
+
+  if (data.type === "amiga_mouse_button") {
+    applyAmigaMouseButton(data.button, data.action);
+    connectNestedAmigaAudio();
+    return;
+  }
+
+  if (data.type === "amiga_mouse_move") {
+    applyAmigaMouseMove(data.movementX, data.movementY);
     return;
   }
 

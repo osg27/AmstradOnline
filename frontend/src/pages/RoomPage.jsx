@@ -221,6 +221,14 @@ export default function RoomPage() {
       return `P${payload.player} state ${payload.mask} #${payload.seq}`;
     }
 
+    if (payload.type === 'amiga_mouse_button') {
+      return `Amiga mouse button ${payload.button} ${payload.action}`;
+    }
+
+    if (payload.type === 'amiga_mouse_move') {
+      return `Amiga mouse move ${payload.movementX},${payload.movementY}`;
+    }
+
     return `${payload.type || 'unknown'} input`;
   }
 
@@ -485,6 +493,62 @@ export default function RoomPage() {
     }
   }, [forwardInputToEmulator, isHost]);
 
+  const forwardAmigaMouse = useCallback((payload) => {
+    if (!isAmiga) return;
+
+    if (isHost) {
+      forwardInputToEmulator(payload);
+      return;
+    }
+
+    const channel = dataChannelRef.current;
+    if (channel?.readyState === 'open') {
+      channel.send(JSON.stringify(payload));
+    }
+  }, [forwardInputToEmulator, isAmiga, isHost]);
+
+  const handleAmigaPointerDown = useCallback((event) => {
+    if (!isAmiga) return;
+
+    captureInput();
+    const button = event.button === 2 ? 3 : 1;
+    const payload = {
+      type: 'amiga_mouse_button',
+      button,
+      action: 'down',
+    };
+
+    addInputDebug(`Amiga mouse button ${button} down`, null, isHost ? 'host mouse' : 'guest mouse');
+    forwardAmigaMouse(payload);
+    event.preventDefault();
+  }, [addInputDebug, captureInput, forwardAmigaMouse, isAmiga, isHost]);
+
+  const handleAmigaPointerUp = useCallback((event) => {
+    if (!isAmiga) return;
+
+    const button = event.button === 2 ? 3 : 1;
+    const payload = {
+      type: 'amiga_mouse_button',
+      button,
+      action: 'up',
+    };
+
+    addInputDebug(`Amiga mouse button ${button} up`, null, isHost ? 'host mouse' : 'guest mouse');
+    forwardAmigaMouse(payload);
+    event.preventDefault();
+  }, [addInputDebug, forwardAmigaMouse, isAmiga, isHost]);
+
+  const handleAmigaPointerMove = useCallback((event) => {
+    if (!isAmiga || !inputCaptured) return;
+    if (!event.movementX && !event.movementY) return;
+
+    forwardAmigaMouse({
+      type: 'amiga_mouse_move',
+      movementX: event.movementX,
+      movementY: event.movementY,
+    });
+  }, [forwardAmigaMouse, inputCaptured, isAmiga]);
+
   useEffect(() => {
     if (!inputCaptured) {
       return undefined;
@@ -701,6 +765,11 @@ export default function RoomPage() {
         forwardInputToEmulator({
           type: 'amstrad_audio_unlock',
         });
+      }
+
+      if (parsed.type === 'amiga_mouse_button' || parsed.type === 'amiga_mouse_move') {
+        addInputDebug(`forward to emulator ${formatInputPayload(parsed)}`, null, 'guest mouse');
+        forwardInputToEmulator(parsed);
       }
 
       if (parsed.type === 'input_state') {
@@ -1560,6 +1629,12 @@ export default function RoomPage() {
                   ref={mirrorCanvasRef}
                   className="video"
                   onClick={captureInput}
+                  onPointerDown={handleAmigaPointerDown}
+                  onPointerUp={handleAmigaPointerUp}
+                  onPointerMove={handleAmigaPointerMove}
+                  onContextMenu={(event) => {
+                    if (isAmiga) event.preventDefault();
+                  }}
                   style={{
                     width: '100%',
                     aspectRatio: '4 / 3',
@@ -1623,6 +1698,12 @@ export default function RoomPage() {
                   muted={false}
                   className="video"
                   onClick={captureInput}
+                  onPointerDown={handleAmigaPointerDown}
+                  onPointerUp={handleAmigaPointerUp}
+                  onPointerMove={handleAmigaPointerMove}
+                  onContextMenu={(event) => {
+                    if (isAmiga) event.preventDefault();
+                  }}
                 />
 
                 <button onClick={connectGuest} disabled={guestPrepared}>
