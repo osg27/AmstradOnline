@@ -550,6 +550,18 @@ export default function RoomPage() {
     });
   }, [forwardAmigaMouse, inputCaptured, isAmiga]);
 
+  const sendAmigaMouseClick = useCallback((button) => {
+    if (!isAmiga) return;
+
+    captureInput();
+    addInputDebug(`Amiga mouse button ${button} pulse`, null, isHost ? 'host mouse' : 'guest mouse');
+    forwardAmigaMouse({
+      type: 'amiga_mouse_button',
+      button,
+      action: 'down',
+    });
+  }, [addInputDebug, captureInput, forwardAmigaMouse, isAmiga, isHost]);
+
   useEffect(() => {
     if (!inputCaptured) {
       return undefined;
@@ -1701,6 +1713,18 @@ export default function RoomPage() {
                   {isAmiga ? (
                     <button type="button" className="secondary" onClick={openSwapDiskPicker} disabled={!hostStarted}>
                       Swap disk
+                    </button>
+                  ) : null}
+
+                  {isAmiga ? (
+                    <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>
+                      Left click
+                    </button>
+                  ) : null}
+
+                  {isAmiga ? (
+                    <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>
+                      Right click
                     </button>
                   ) : null}
 

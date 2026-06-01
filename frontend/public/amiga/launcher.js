@@ -374,9 +374,30 @@ function applyAmigaMouseButton(button, action) {
         }
       }
 
+      function dispatchMouse(button, type) {
+        var canvas = document.getElementById('canvas');
+        var target = canvas || document;
+        var makeEvent = function () {
+          return new MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            button: button === 3 ? 2 : 0,
+            buttons: type === 'mouseup' ? 0 : button === 3 ? 2 : 1,
+            which: button,
+            clientX: window.innerWidth / 2,
+            clientY: window.innerHeight / 2
+          });
+        };
+        target.dispatchEvent(makeEvent());
+        if (target !== document) {
+          document.dispatchEvent(makeEvent());
+        }
+      }
+
       for (var port = 1; port <= 2; port += 1) {
         mouseButton(port, ${amigaButton}, 1);
       }
+      dispatchMouse(${amigaButton}, 'mousedown');
 
       if (${amigaButton} === 1 && typeof emit_joystick_cmd === 'function') {
         emit_joystick_cmd('1PRESS_FIRE');
@@ -387,6 +408,8 @@ function applyAmigaMouseButton(button, action) {
         for (var port = 1; port <= 2; port += 1) {
           mouseButton(port, ${amigaButton}, 0);
         }
+        dispatchMouse(${amigaButton}, 'mouseup');
+        dispatchMouse(${amigaButton}, 'click');
 
         if (${amigaButton} === 1 && typeof emit_joystick_cmd === 'function') {
           emit_joystick_cmd('1RELEASE_FIRE');
