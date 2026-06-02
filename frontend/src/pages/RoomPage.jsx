@@ -29,7 +29,9 @@ export default function RoomPage() {
   const [activePartyPlayer, setActivePartyPlayer] = useState(1);
 
   const remoteMediaStreamRef = useRef(null);
+  const remoteVoiceStreamRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteVoiceAudioRef = useRef(null);
   const emulatorFrameRef = useRef(null);
   const mirrorCanvasRef = useRef(null);
   const mirrorLoopRef = useRef(null);
@@ -46,11 +48,18 @@ export default function RoomPage() {
   const inputSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const inputSequenceRef = useRef(0);
   const localJoystickMaskRef = useRef(0);
+  const localMicStreamRef = useRef(null);
+  const localMicSenderRef = useRef(null);
+  const micRenegotiationNeededRef = useRef(false);
   const lastRemoteInputSessionRef = useRef('');
   const lastRemoteInputSeqRef = useRef(0);
   const lastRemoteInputAtRef = useRef(0);
   const remoteJoystickMaskRef = useRef(0);
   const pendingIceCandidatesRef = useRef([]);
+  const isHostRef = useRef(false);
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
+  const [micStatus, setMicStatus] = useState('Mic off');
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -89,6 +98,10 @@ export default function RoomPage() {
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
+
+  useEffect(() => {
+    isHostRef.current = isHost === true;
+  }, [isHost]);
 
   const addLog = useCallback((message) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${message}`, ...prev].slice(0, 80));
@@ -1010,6 +1023,11 @@ export default function RoomPage() {
 
       addLog('Sent answer');
       setStatus('Answer sent');
+
+      if (micRenegotiationNeededRef.current && pc.signalingState === 'stable') {
+        micRenegotiationNeededRef.current = false;
+        await renegotiatePeerConnection('Microphone');
+      }
       return;
     }
 
@@ -1019,6 +1037,11 @@ export default function RoomPage() {
       await pc.setRemoteDescription(message.answer);
       await flushPendingIceCandidates();
       setStatus('Peer connected');
+
+      if (micRenegotiationNeededRef.current && pc.signalingState === 'stable') {
+        micRenegotiationNeededRef.current = false;
+        await renegotiatePeerConnection('microphone');
+      }
       return;
     }
 
@@ -1105,6 +1128,30 @@ export default function RoomPage() {
     };
 
     pc.ontrack = (event) => {
+      if (event.track.kind === 'audio' && isHostRef.current) {
+        if (!remoteVoiceStreamRef.current) {
+          remoteVoiceStreamRef.current = new MediaStream();
+        }
+
+        const voiceStream = remoteVoiceStreamRef.current;
+        const hasVoiceTrack = voiceStream.getTracks().some((track) => track.id === event.track.id);
+
+        if (!hasVoiceTrack) {
+          voiceStream.addTrack(event.track);
+        }
+
+        if (remoteVoiceAudioRef.current && remoteVoiceAudioRef.current.srcObject !== voiceStream) {
+          remoteVoiceAudioRef.current.srcObject = voiceStream;
+          remoteVoiceAudioRef.current.volume = 1;
+          remoteVoiceAudioRef.current.play().catch(() => {
+            addLog('Guest mic is connected; press Capture if audio is blocked');
+          });
+        }
+
+        addLog('Remote microphone track attached');
+        return;
+      }
+
       if (!remoteMediaStreamRef.current) {
         remoteMediaStreamRef.current = new MediaStream();
       }
@@ -1142,6 +1189,12 @@ export default function RoomPage() {
         cancelAnimationFrame(mirrorLoopRef.current);
       }
 
+      localMicStreamRef.current?.getTracks().forEach((track) => track.stop());
+      localMicStreamRef.current = null;
+      localMicSenderRef.current = null;
+      remoteVoiceAudioRef.current?.pause();
+      remoteVoiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      remoteVoiceStreamRef.current = null;
       dataChannelRef.current?.close();
       pc.close();
     };
@@ -1438,6 +1491,101 @@ export default function RoomPage() {
     return getHostAudioStream(iframe);
   }
 
+  async function renegotiatePeerConnection(reason = 'voice') {
+    const pc = pcRef.current;
+
+    if (!pc || !pc.remoteDescription || pc.signalingState !== 'stable') {
+      micRenegotiationNeededRef.current = true;
+      addLog(`${reason} will connect when the peer connection is ready`);
+      return;
+    }
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitForIceGatheringComplete(pc);
+
+    if (isHostRef.current) {
+      localOfferRef.current = pc.localDescription;
+    }
+
+    const sent = sendSignalRef.current({
+      type: 'offer',
+      offer: pc.localDescription,
+    });
+
+    addLog(sent ? `${reason} offer sent` : `${reason} offer queued`);
+  }
+
+  async function toggleMicrophone() {
+    if (isCpcParty) return;
+
+    const existingStream = localMicStreamRef.current;
+
+    if (existingStream) {
+      const nextMuted = !micMuted;
+      existingStream.getAudioTracks().forEach((track) => {
+        track.enabled = !nextMuted;
+      });
+      setMicMuted(nextMuted);
+      setMicStatus(nextMuted ? 'Mic muted' : 'Mic on');
+      addLog(nextMuted ? 'Microphone muted' : 'Microphone unmuted');
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicStatus('Mic unavailable');
+      setError('This browser cannot use the microphone here.');
+      addLog('Microphone is not available in this browser');
+      return;
+    }
+
+    try {
+      setMicStatus('Opening mic...');
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      const [track] = stream.getAudioTracks();
+
+      if (!track) {
+        throw new Error('No microphone track was provided by the browser');
+      }
+
+      const pc = pcRef.current;
+
+      if (!pc) {
+        throw new Error('Peer connection is not ready yet');
+      }
+
+      localMicStreamRef.current = stream;
+      localMicSenderRef.current = pc.addTrack(track, stream);
+      setMicEnabled(true);
+      setMicMuted(false);
+      setMicStatus('Mic on');
+      addLog('Microphone enabled');
+
+      if (pc.remoteDescription && pc.signalingState === 'stable') {
+        await renegotiatePeerConnection('Microphone');
+      } else {
+        micRenegotiationNeededRef.current = true;
+        addLog('Microphone will connect when the room stream is ready');
+      }
+    } catch (err) {
+      localMicStreamRef.current?.getTracks().forEach((track) => track.stop());
+      localMicStreamRef.current = null;
+      localMicSenderRef.current = null;
+      setMicEnabled(false);
+      setMicMuted(false);
+      setMicStatus('Mic blocked');
+      setError(err.message);
+      addLog(`Microphone error: ${err.message}`);
+    }
+  }
+
   async function startHostSession() {
     if (hostStartingRef.current || hostStartedRef.current) {
       return;
@@ -1699,11 +1847,14 @@ export default function RoomPage() {
           <span>{signalingOpen ? 'Signaling connected' : 'Connecting signaling'}</span>
           <span>{remoteConnected ? 'Peer connected' : 'Waiting for peer'}</span>
           {isCpcParty ? <span>Party turn: Player {activePartyPlayer} of {partyMaxPlayers}</span> : null}
+          {!isCpcParty ? <span>{micStatus}</span> : null}
           {loadedDiskName ? <span>{loadedDiskName}</span> : null}
           {isAmiga ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : 'ROM: AROS'}</span> : null}
         </div>
 
         {error ? <p className="error">{error}</p> : null}
+
+        <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
 
         <div className="room-layout">
           <div className="panel video-panel">
@@ -1714,6 +1865,16 @@ export default function RoomPage() {
                 <div className="assigned-control" aria-label="Assigned control">
                   {isCpcParty ? `Shared joystick: P${activePartyPlayer}` : isMegaDrive || isSnes ? (isHost ? 'Player 1: controller 1' : 'Player 2: controller 2') : isHost ? 'Player 1: cursors / X / Z' : 'Player 2: Q A O P / F / G'}
                 </div>
+
+                {!isCpcParty ? (
+                  <button
+                    type="button"
+                    className={micEnabled && !micMuted ? 'active' : 'secondary'}
+                    onClick={toggleMicrophone}
+                  >
+                    {micEnabled ? (micMuted ? 'Mic muted' : 'Mic on') : 'Mic off'}
+                  </button>
+                ) : null}
 
                 <button
                   type="button"
