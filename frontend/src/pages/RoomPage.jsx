@@ -27,6 +27,7 @@ export default function RoomPage() {
     events: [],
   });
   const [activePartyPlayer, setActivePartyPlayer] = useState(1);
+  const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
 
   const remoteMediaStreamRef = useRef(null);
   const remoteVoiceStreamRef = useRef(null);
@@ -40,7 +41,12 @@ export default function RoomPage() {
   const kickstartInputRef = useRef(null);
   const pcRef = useRef(null);
   const dataChannelRef = useRef(null);
+  const handleGuestPayloadOnHostRef = useRef(null);
   const localOfferRef = useRef(null);
+  const hostVideoStreamRef = useRef(null);
+  const hostAudioStreamRef = useRef(null);
+  const partyHostPeersRef = useRef(new Map());
+  const pendingPartyGuestsRef = useRef(new Map());
   const hostStartingRef = useRef(false);
   const hostStartedRef = useRef(false);
   const guestPreparedRef = useRef(false);
@@ -84,6 +90,7 @@ export default function RoomPage() {
   const isMegaDrive = roomSystem === 'megadrive';
   const isSnes = roomSystem === 'snes';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
+  const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
@@ -97,7 +104,7 @@ export default function RoomPage() {
     ? 'Loading controls'
     : isAmiga
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
-      : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `Shared joystick turn P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+      : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
@@ -627,8 +634,18 @@ export default function RoomPage() {
       remoteJoystickMaskRef.current = 0;
     }
 
+    for (const peer of partyHostPeersRef.current.values()) {
+      if (!peer.joystickMask) continue;
+      releaseCpcPartySharedInput(peer.joystickMask);
+      peer.joystickMask = 0;
+    }
+
     releaseCpcPartySharedInput();
     setActivePartyPlayer(nextPlayer);
+    sendSignalRef.current({
+      type: 'party-turn',
+      playerNumber: nextPlayer,
+    });
     addInputDebug(`party turn switched to P${nextPlayer}`, 0, 'party turn');
     addLog(`Party turn switched to player ${nextPlayer}`);
   }, [addInputDebug, addLog, isCpcParty, isHost, partyMaxPlayers, releaseCpcPartySharedInput]);
@@ -742,6 +759,19 @@ export default function RoomPage() {
     }
 
     const staleRemoteInputTimer = window.setInterval(() => {
+      if (isCpcParty) {
+        for (const peer of partyHostPeersRef.current.values()) {
+          if (!peer.joystickMask) continue;
+          if (!peer.lastInputAt) continue;
+          if (performance.now() - peer.lastInputAt < 180) continue;
+
+          addInputDebug(`P${peer.playerNumber} input timed out, releasing held input`, 0, 'guest remote');
+          forwardJoystickMaskAsKeys(0, 1, peer.joystickMask);
+          peer.joystickMask = 0;
+        }
+        return;
+      }
+
       if (remoteJoystickMaskRef.current === 0) return;
       if (!lastRemoteInputAtRef.current) return;
       if (performance.now() - lastRemoteInputAtRef.current < 180) return;
@@ -772,23 +802,47 @@ export default function RoomPage() {
     }
 
     const pumpRemoteHeldKeys = window.setInterval(() => {
+      if (isCpcParty) {
+        const activePeer = Array.from(partyHostPeersRef.current.values()).find((peer) => peer.playerNumber === activePartyPlayer);
+        const mask = activePeer?.joystickMask || 0;
+
+        if (!mask) return;
+
+        joystickMaskToKeys(mask, 1).forEach(([key, , active]) => {
+          if (!active) return;
+
+          forwardInputToEmulator({
+            type: 'amstrad_remote_input',
+            player: 1,
+            key,
+            action: 'down',
+          });
+          forwardInputToEmulator({
+            type: 'amstrad_remote_control',
+            player: 1,
+            key,
+            action: 'down',
+          });
+        });
+        return;
+      }
+
       const mask = remoteJoystickMaskRef.current;
 
       if (!mask) return;
-      if (isCpcParty && activePartyPlayer !== 2) return;
 
-      joystickMaskToKeys(mask, isCpcParty ? 1 : 2).forEach(([key, , active]) => {
+      joystickMaskToKeys(mask, 2).forEach(([key, , active]) => {
         if (!active) return;
 
         forwardInputToEmulator({
           type: 'amstrad_remote_input',
-          player: isCpcParty ? 1 : 2,
+          player: 2,
           key,
           action: 'down',
         });
         forwardInputToEmulator({
           type: 'amstrad_remote_control',
-          player: isCpcParty ? 1 : 2,
+          player: 2,
           key,
           action: 'down',
         });
@@ -824,13 +878,47 @@ export default function RoomPage() {
     };
   }, [isHost, sendLocalJoystickMask]);
 
-  const handleGuestPayloadOnHost = useCallback((rawMessage) => {
+  const handleGuestPayloadOnHost = useCallback((rawMessage, partyPlayerOverride = null, partyPeerState = null) => {
     try {
       const parsed = JSON.parse(rawMessage);
       addInputDebug(`host received ${formatInputPayload(parsed)}`, parsed.mask ?? null, 'guest remote');
 
+      const getRemoteMask = () => (partyPeerState ? partyPeerState.joystickMask || 0 : remoteJoystickMaskRef.current);
+      const setRemoteMask = (mask) => {
+        if (partyPeerState) {
+          partyPeerState.joystickMask = mask;
+        } else {
+          remoteJoystickMaskRef.current = mask;
+        }
+      };
+      const getLastSession = () => (partyPeerState ? partyPeerState.lastSession || '' : lastRemoteInputSessionRef.current);
+      const setLastSession = (sessionId) => {
+        if (partyPeerState) {
+          partyPeerState.lastSession = sessionId;
+        } else {
+          lastRemoteInputSessionRef.current = sessionId;
+        }
+      };
+      const getLastSeq = () => (partyPeerState ? partyPeerState.lastSeq || 0 : lastRemoteInputSeqRef.current);
+      const setLastSeq = (seq) => {
+        if (partyPeerState) {
+          partyPeerState.lastSeq = seq;
+        } else {
+          lastRemoteInputSeqRef.current = seq;
+        }
+      };
+      const markInputAt = () => {
+        if (partyPeerState) {
+          partyPeerState.lastInputAt = performance.now();
+        } else {
+          lastRemoteInputAtRef.current = performance.now();
+        }
+      };
+
       if (parsed.type === 'key') {
-        if (isCpcParty && activePartyPlayer !== 2) {
+        const player = isCpcParty ? partyPlayerOverride || 2 : parsed.player;
+
+        if (isCpcParty && activePartyPlayer !== player) {
           addInputDebug(`ignored guest key, party turn is P${activePartyPlayer}`, null, 'party turn');
           return;
         }
@@ -840,12 +928,14 @@ export default function RoomPage() {
           type: 'amstrad_remote_input',
           key: parsed.key,
           action: parsed.action,
-          player: isCpcParty ? 1 : parsed.player,
+          player: isCpcParty ? 1 : player,
         });
       }
 
       if (parsed.type === 'control') {
-        if (isCpcParty && activePartyPlayer !== 2) {
+        const player = isCpcParty ? partyPlayerOverride || 2 : parsed.player;
+
+        if (isCpcParty && activePartyPlayer !== player) {
           addInputDebug(`ignored guest control, party turn is P${activePartyPlayer}`, null, 'party turn');
           return;
         }
@@ -855,7 +945,7 @@ export default function RoomPage() {
           type: 'amstrad_remote_control',
           key: parsed.key,
           action: parsed.action,
-          player: isCpcParty ? 1 : parsed.player,
+          player: isCpcParty ? 1 : player,
         });
       }
 
@@ -872,13 +962,13 @@ export default function RoomPage() {
       }
 
       if (parsed.type === 'input_state') {
-        const player = parsed.player === 2 ? 2 : 1;
+        const player = isCpcParty ? partyPlayerOverride || 2 : parsed.player === 2 ? 2 : 1;
         const mask = parsed.mask | 0;
         const seq = Number(parsed.seq) || 0;
         const sessionId = String(parsed.sessionId || 'legacy');
 
-        if (sessionId !== lastRemoteInputSessionRef.current) {
-          const previousMask = remoteJoystickMaskRef.current;
+        if (sessionId !== getLastSession()) {
+          const previousMask = getRemoteMask();
 
           if (previousMask) {
             if (isAmiga || isMegaDrive || isSnes) {
@@ -892,29 +982,29 @@ export default function RoomPage() {
             }
           }
 
-          lastRemoteInputSessionRef.current = sessionId;
-          lastRemoteInputSeqRef.current = 0;
-          remoteJoystickMaskRef.current = 0;
+          setLastSession(sessionId);
+          setLastSeq(0);
+          setRemoteMask(0);
           addInputDebug(`guest input session ${sessionId}`, 0, 'guest remote');
         }
 
-        if (seq && seq <= lastRemoteInputSeqRef.current) {
-          addInputDebug(`ignored old P${player} state #${seq}`, remoteJoystickMaskRef.current, 'guest remote');
+        if (seq && seq <= getLastSeq()) {
+          addInputDebug(`ignored old P${player} state #${seq}`, getRemoteMask(), 'guest remote');
           return;
         }
 
-        const previousMask = remoteJoystickMaskRef.current;
+        const previousMask = getRemoteMask();
 
-        lastRemoteInputSeqRef.current = seq || lastRemoteInputSeqRef.current;
-        lastRemoteInputAtRef.current = performance.now();
+        setLastSeq(seq || getLastSeq());
+        markInputAt();
         if (mask !== previousMask) {
           addInputDebug(`host received P${player} state ${mask} #${seq}`, mask, 'guest remote');
         }
-        if (isCpcParty && activePartyPlayer !== 2) {
+        if (isCpcParty && activePartyPlayer !== player) {
           if (previousMask) {
             forwardJoystickMaskAsKeys(0, 1, previousMask);
           }
-          remoteJoystickMaskRef.current = 0;
+          setRemoteMask(0);
           addInputDebug(`ignored guest state, party turn is P${activePartyPlayer}`, 0, 'party turn');
           return;
         }
@@ -928,21 +1018,21 @@ export default function RoomPage() {
         } else {
           forwardJoystickMaskAsKeys(mask, isCpcParty ? 1 : player, previousMask);
         }
-        remoteJoystickMaskRef.current = mask;
+        setRemoteMask(mask);
       }
 
       if (parsed.type === 'joystick') {
-        const player = parsed.player === 2 ? 2 : 1;
+        const player = isCpcParty ? partyPlayerOverride || 2 : parsed.player === 2 ? 2 : 1;
         const mask = parsed.mask | 0;
-        const previousMask = remoteJoystickMaskRef.current;
+        const previousMask = getRemoteMask();
 
-        lastRemoteInputAtRef.current = performance.now();
+        markInputAt();
         addInputDebug(`host received P${player} held mask ${mask}`, mask, 'guest remote');
-        if (isCpcParty && activePartyPlayer !== 2) {
+        if (isCpcParty && activePartyPlayer !== player) {
           if (previousMask) {
             forwardJoystickMaskAsKeys(0, 1, previousMask);
           }
-          remoteJoystickMaskRef.current = 0;
+          setRemoteMask(0);
           addInputDebug(`ignored guest held mask, party turn is P${activePartyPlayer}`, 0, 'party turn');
           return;
         }
@@ -956,13 +1046,17 @@ export default function RoomPage() {
         } else {
           forwardJoystickMaskAsKeys(mask, isCpcParty ? 1 : player, previousMask);
         }
-        remoteJoystickMaskRef.current = mask;
+        setRemoteMask(mask);
       }
     } catch (err) {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
   }, [activePartyPlayer, addInputDebug, addLog, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isCpcParty, isMegaDrive, isSnes]);
+
+  useEffect(() => {
+    handleGuestPayloadOnHostRef.current = handleGuestPayloadOnHost;
+  }, [handleGuestPayloadOnHost]);
 
   const onSignalMessage = useCallback(async (message) => {
     if (message.to && message.to !== signalingClientIdRef.current) {
@@ -974,10 +1068,77 @@ export default function RoomPage() {
       return;
     }
 
-    if (message.type === 'live-slot-taken') {
-      setStatus('Live guest slot already taken');
-      setError('This room already has its live guest connected. Live controls and streamed video are limited to one guest in this build.');
-      addLog('Live guest slot already taken');
+    if (message.type === 'party-room-full') {
+      setStatus('Party room full');
+      setError('This party room has no free live player slots.');
+      addLog('Party room full');
+      return;
+    }
+
+    if (message.type === 'party-assigned') {
+      setPartyPlayerNumber(message.playerNumber || null);
+      addLog(`Assigned party player P${message.playerNumber}`);
+      return;
+    }
+
+    if (message.type === 'party-turn') {
+      setActivePartyPlayer(message.playerNumber || 1);
+      addInputDebug(`party turn is P${message.playerNumber || 1}`, 0, 'party turn');
+      return;
+    }
+
+    if (isHost && isCpcParty) {
+      if (message.type === 'peer-ready' && message.role === 'guest') {
+        await createPartyPeerForGuest(message);
+        return;
+      }
+
+      if (message.type === 'answer') {
+        const peer = partyHostPeersRef.current.get(message.from);
+        if (!peer) {
+          addLog('Ignored party answer from unknown guest');
+          return;
+        }
+
+        await peer.pc.setRemoteDescription(message.answer);
+
+        const candidates = peer.pendingIceCandidates;
+        peer.pendingIceCandidates = [];
+        for (const candidate of candidates) {
+          try {
+            await peer.pc.addIceCandidate(candidate);
+            addLog(`Added queued ICE candidate for P${peer.playerNumber}`);
+          } catch (err) {
+            addLog(`Party ICE error: ${err.message}`);
+          }
+        }
+
+        addLog(`Received answer from P${peer.playerNumber}`);
+        return;
+      }
+
+      if (message.type === 'ice-candidate' && message.candidate) {
+        const peer = partyHostPeersRef.current.get(message.from);
+        if (!peer) {
+          addLog('Ignored party ICE from unknown guest');
+          return;
+        }
+
+        if (!peer.pc.remoteDescription) {
+          peer.pendingIceCandidates.push(message.candidate);
+          addLog(`Queued ICE candidate for P${peer.playerNumber}`);
+          return;
+        }
+
+        try {
+          await peer.pc.addIceCandidate(message.candidate);
+          addLog(`Added ICE candidate for P${peer.playerNumber}`);
+        } catch (err) {
+          addLog(`Party ICE error: ${err.message}`);
+        }
+        return;
+      }
+
       return;
     }
 
@@ -1106,7 +1267,7 @@ export default function RoomPage() {
         addLog(`ICE error: ${err.message}`);
       }
     }
-  }, [addLog, isHost]);
+  }, [addLog, isCpcParty, isHost, partyMaxPlayers]);
 
   const { send: sendSignal, isOpen: signalingOpen } = useSignaling(roomCode, onSignalMessage, signalingClientIdRef.current);
 
@@ -1229,7 +1390,7 @@ export default function RoomPage() {
         remoteJoystickMaskRef.current = 0;
         addLog('Input data channel open');
       };
-      channel.onmessage = (msg) => handleGuestPayloadOnHost(msg.data);
+      channel.onmessage = (msg) => handleGuestPayloadOnHostRef.current?.(msg.data);
     };
 
     return () => {
@@ -1243,10 +1404,17 @@ export default function RoomPage() {
       remoteVoiceAudioRef.current?.pause();
       remoteVoiceStreamRef.current?.getTracks().forEach((track) => track.stop());
       remoteVoiceStreamRef.current = null;
+      for (const [guestId] of partyHostPeersRef.current) {
+        closePartyPeer(guestId);
+      }
+      partyHostPeersRef.current.clear();
+      pendingPartyGuestsRef.current.clear();
+      hostVideoStreamRef.current = null;
+      hostAudioStreamRef.current = null;
       dataChannelRef.current?.close();
       pc.close();
     };
-  }, [addLog, handleGuestPayloadOnHost]);
+  }, [addLog]);
 
   useEffect(() => {
     if (isHost !== true) return undefined;
@@ -1539,6 +1707,156 @@ export default function RoomPage() {
     return getHostAudioStream(iframe);
   }
 
+  function getNextPartyPlayerNumber() {
+    const usedPlayers = new Set(
+      Array.from(partyHostPeersRef.current.values()).map((peer) => peer.playerNumber),
+    );
+
+    for (let playerNumber = 2; playerNumber <= partyMaxPlayers; playerNumber += 1) {
+      if (!usedPlayers.has(playerNumber)) return playerNumber;
+    }
+
+    return null;
+  }
+
+  function closePartyPeer(guestId) {
+    const peer = partyHostPeersRef.current.get(guestId);
+    if (!peer) return;
+
+    if (peer.joystickMask) {
+      releaseCpcPartySharedInput(peer.joystickMask);
+    }
+
+    peer.channel?.close();
+    peer.pc?.close();
+    partyHostPeersRef.current.delete(guestId);
+    setRemoteConnected(Array.from(partyHostPeersRef.current.values()).some((item) => item.pc?.connectionState === 'connected'));
+  }
+
+  async function createPartyPeerForGuest(guestMessage) {
+    const guestId = guestMessage.from;
+    if (!guestId || !isCpcParty || !isHost) return;
+
+    const existingPeer = partyHostPeersRef.current.get(guestId);
+    if (existingPeer?.offer) {
+      sendSignalRef.current({
+        type: 'offer',
+        to: guestId,
+        offer: existingPeer.offer,
+      });
+      addLog(`Re-sent party offer to P${existingPeer.playerNumber}`);
+      return;
+    }
+
+    if (!hostVideoStreamRef.current) {
+      pendingPartyGuestsRef.current.set(guestId, guestMessage);
+      addLog(`Queued party guest ${guestMessage.username || guestId} until stream starts`);
+      return;
+    }
+
+    const playerNumber = getNextPartyPlayerNumber();
+    if (!playerNumber) {
+      sendSignalRef.current({
+        type: 'party-room-full',
+        to: guestId,
+      });
+      addLog(`Party room full; rejected ${guestMessage.username || guestId}`);
+      return;
+    }
+
+    const pc = new RTCPeerConnection(buildRtcConfig());
+    const peerState = {
+      pc,
+      channel: null,
+      playerNumber,
+      joystickMask: 0,
+      lastInputAt: 0,
+      lastSeq: 0,
+      lastSession: '',
+      pendingIceCandidates: [],
+      offer: null,
+      username: guestMessage.username || `Player ${playerNumber}`,
+    };
+
+    partyHostPeersRef.current.set(guestId, peerState);
+
+    pc.onicecandidate = (event) => {
+      if (!event.candidate) return;
+
+      sendSignalRef.current({
+        type: 'ice-candidate',
+        to: guestId,
+        candidate: event.candidate,
+      });
+    };
+
+    pc.onconnectionstatechange = () => {
+      addLog(`P${playerNumber} connection: ${pc.connectionState}`);
+      setRemoteConnected(Array.from(partyHostPeersRef.current.values()).some((item) => item.pc?.connectionState === 'connected'));
+
+      if (['failed', 'closed'].includes(pc.connectionState)) {
+        closePartyPeer(guestId);
+      }
+    };
+
+    hostVideoStreamRef.current.getTracks().forEach((track) => {
+      pc.addTrack(track, hostVideoStreamRef.current);
+    });
+
+    hostAudioStreamRef.current?.getTracks().forEach((track) => {
+      pc.addTrack(track, hostAudioStreamRef.current);
+    });
+
+    const channel = pc.createDataChannel('inputs');
+    peerState.channel = channel;
+
+    channel.onopen = () => {
+      peerState.joystickMask = 0;
+      peerState.lastInputAt = 0;
+      peerState.lastSeq = 0;
+      peerState.lastSession = '';
+      addLog(`P${playerNumber} input data channel open`);
+    };
+    channel.onmessage = (msg) => handleGuestPayloadOnHostRef.current?.(msg.data, playerNumber, peerState);
+    channel.onclose = () => {
+      if (peerState.joystickMask) {
+        releaseCpcPartySharedInput(peerState.joystickMask);
+      }
+      peerState.joystickMask = 0;
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitForIceGatheringComplete(pc);
+    peerState.offer = pc.localDescription;
+
+    sendSignalRef.current({
+      type: 'party-assigned',
+      to: guestId,
+      playerNumber,
+    });
+
+    sendSignalRef.current({
+      type: 'offer',
+      to: guestId,
+      offer: peerState.offer,
+    });
+
+    addLog(`Party guest ${peerState.username} assigned P${playerNumber}`);
+    setStatus(`Party host ready: ${partyHostPeersRef.current.size} guest(s) connected`);
+  }
+
+  async function connectPendingPartyGuests() {
+    if (!isCpcParty || !isHost || !hostVideoStreamRef.current) return;
+
+    const pendingGuests = Array.from(pendingPartyGuestsRef.current.values());
+    pendingPartyGuestsRef.current.clear();
+
+    for (const guestMessage of pendingGuests) {
+      await createPartyPeerForGuest(guestMessage);
+    }
+  }
+
   async function renegotiatePeerConnection(reason = 'voice') {
     const pc = pcRef.current;
 
@@ -1674,13 +1992,23 @@ export default function RoomPage() {
       }
 
       const stream = mirrorCanvas.captureStream(60);
-      stream.getVideoTracks().forEach((track) => pc.addTrack(track, stream));
+      hostVideoStreamRef.current = stream;
 
       const audioStream = await waitForHostAudioStream(iframe);
+      hostAudioStreamRef.current = audioStream || null;
+
+      if (isCpcParty) {
+        addLog(`Party stream ready with ${stream.getVideoTracks().length} video track(s) and ${audioStream?.getAudioTracks().length || 0} audio track(s)`);
+        setStatus('Party host ready, waiting for guests');
+        hostStartedRef.current = true;
+        await connectPendingPartyGuests();
+        return;
+      }
+
+      stream.getVideoTracks().forEach((track) => pc.addTrack(track, stream));
       if (audioStream) {
         audioStream.getAudioTracks().forEach((track) => pc.addTrack(track, audioStream));
       }
-
       addLog(`Added ${stream.getVideoTracks().length} video track(s) and ${audioStream?.getAudioTracks().length || 0} audio track(s)`);
 
       const channel = pc.createDataChannel('inputs');
@@ -1693,19 +2021,12 @@ export default function RoomPage() {
         remoteJoystickMaskRef.current = 0;
         addLog('Host input data channel open');
       };
-      channel.onmessage = (msg) => handleGuestPayloadOnHost(msg.data);
+      channel.onmessage = (msg) => handleGuestPayloadOnHostRef.current?.(msg.data);
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await waitForIceGatheringComplete(pc);
       localOfferRef.current = pc.localDescription;
-
-      if (isCpcParty && !activeGuestSignalIdRef.current) {
-        addLog('Offer ready; waiting for first party guest');
-        setStatus('Offer created, waiting for guest');
-        hostStartedRef.current = true;
-        return;
-      }
 
       const sent = sendSignal({
         type: 'offer',
@@ -1920,7 +2241,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isCpcParty ? `Shared joystick: P${activePartyPlayer}` : isMegaDrive || isSnes ? (isHost ? 'Player 1: controller 1' : 'Player 2: controller 2') : isHost ? 'Player 1: cursors / X / Z' : 'Player 2: Q A O P / F / G'}
+                  {isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isMegaDrive || isSnes ? (isHost ? 'Player 1: controller 1' : 'Player 2: controller 2') : isHost ? 'Player 1: cursors / X / Z' : 'Player 2: Q A O P / F / G'}
                 </div>
 
                 {!isCpcParty ? (
