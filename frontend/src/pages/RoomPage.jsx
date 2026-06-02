@@ -121,6 +121,36 @@ export default function RoomPage() {
       : isHost
         ? `P1: ${playerOneName}`
         : `P2: ${playerTwoName}`;
+  const displayedPlayers = isCpcParty
+    ? partyRoster
+    : [
+      {
+        playerNumber: 1,
+        username: playerOneName,
+        role: 'Host',
+        connected: Boolean(hostDisplayName),
+      },
+      {
+        playerNumber: 2,
+        username: playerTwoName,
+        role: 'Guest',
+        connected: Boolean(guestDisplayName),
+      },
+    ];
+  const healthItems = [
+    {
+      label: 'Signaling',
+      ok: signalingOpen,
+    },
+    {
+      label: isCpcParty ? 'Players' : 'Peer',
+      ok: remoteConnected,
+    },
+    {
+      label: isHost ? 'Host stream' : 'Guest link',
+      ok: isHost ? hostStarted : guestPrepared,
+    },
+  ];
   const partyPlayerNameByNumber = useMemo(() => {
     const names = new Map();
     partyRoster.forEach((player) => {
@@ -2270,12 +2300,10 @@ export default function RoomPage() {
           <div className="room-title">
             <BrandMark compact />
             <h1>Room {roomCode}</h1>
-            <div className="room-meta">
-              <span>{username}</span>
-              <span>{roleLabel}</span>
-              <span>{systemLabel}</span>
-              {!isCpcParty ? <span>{normalPlayerSummary}</span> : null}
-              <span>{controlLabel}</span>
+            <div className="room-identity">
+              <span>You are</span>
+              <strong>{username}</strong>
+              <small>{roleLabel} · {systemLabel}</small>
             </div>
           </div>
 
@@ -2296,16 +2324,44 @@ export default function RoomPage() {
           </div>
         </div>
 
-        <div className="session-strip">
-          <span>{status}</span>
-          <span>{signalingOpen ? 'Signaling connected' : 'Connecting signaling'}</span>
-          <span>{remoteConnected ? 'Peer connected' : 'Waiting for peer'}</span>
-          {!isCpcParty ? <span>{normalPlayerSummary}</span> : null}
-          {isCpcParty ? <span>Party turn: Player {activePartyPlayer} of {partyMaxPlayers}</span> : null}
-          {!isCpcParty ? <span>{micStatus}</span> : null}
-          {loadedDiskName ? <span>{loadedDiskName}</span> : null}
-          {isAmiga ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : 'ROM: AROS'}</span> : null}
+        <div className="room-summary">
+          <div className="player-strip" aria-label="Players">
+            {displayedPlayers.map((player) => (
+              <div
+                key={player.playerNumber}
+                className={`player-card ${player.connected ? 'connected' : ''} ${player.playerNumber === currentPartyPlayerNumber ? 'you' : ''}`}
+              >
+                <span>P{player.playerNumber}</span>
+                <strong>{player.username}</strong>
+                <small>{player.role}</small>
+              </div>
+            ))}
+          </div>
+
+          <div className="health-strip" aria-label="Connection status">
+            {healthItems.map((item) => (
+              <span key={item.label} className={`health-item ${item.ok ? 'ok' : 'waiting'}`}>
+                <span className="health-dot" aria-hidden="true" />
+                {item.label}
+              </span>
+            ))}
+          </div>
         </div>
+
+        {(loadedDiskName || isAmiga) ? (
+          <div className="session-strip">
+            {loadedDiskName ? <span>{loadedDiskName}</span> : null}
+            {isAmiga ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : 'ROM: AROS'}</span> : null}
+          </div>
+        ) : null}
+
+        {showDiagnostics ? (
+          <div className="session-strip diagnostics-summary">
+            <span>{status}</span>
+            {!isCpcParty ? <span>{micStatus}</span> : null}
+            <span>{controlLabel}</span>
+          </div>
+        ) : null}
 
         {error ? <p className="error">{error}</p> : null}
 

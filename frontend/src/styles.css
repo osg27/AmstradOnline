@@ -470,8 +470,10 @@ input:focus {
   line-height: 1.1;
 }
 
-.room-meta,
 .session-strip,
+.room-summary,
+.player-strip,
+.health-strip,
 .room-actions,
 .play-header,
 .input-toolbar,
@@ -481,13 +483,102 @@ input:focus {
   flex-wrap: wrap;
 }
 
-.room-meta {
-  gap: 0.45rem;
+.room-identity {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
   margin-top: 0.65rem;
-  color: #b8b8b4;
 }
 
-.room-meta span,
+.room-identity span,
+.room-identity small {
+  color: var(--muted);
+}
+
+.room-identity strong {
+  color: #fff7dd;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.room-summary {
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.player-strip {
+  gap: 0.5rem;
+}
+
+.player-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.05rem 0.45rem;
+  min-width: 150px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #141716;
+}
+
+.player-card span {
+  grid-row: 1 / 3;
+  align-self: center;
+  color: var(--gold);
+  font-weight: 900;
+}
+
+.player-card strong {
+  color: #fff7dd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-card small {
+  color: var(--muted);
+}
+
+.player-card.connected {
+  border-color: rgba(122, 235, 161, 0.48);
+}
+
+.player-card.you {
+  background: #17201c;
+  border-color: rgba(122, 235, 161, 0.7);
+}
+
+.health-strip {
+  gap: 0.45rem;
+}
+
+.health-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.health-dot {
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  background: #8d3b32;
+  box-shadow: 0 0 0 3px rgba(179, 78, 68, 0.12);
+}
+
+.health-item.ok .health-dot {
+  background: var(--green-bright);
+  box-shadow: 0 0 0 3px rgba(122, 235, 161, 0.12);
+}
+
+.health-item.ok {
+  color: #d9e7dc;
+}
+
 .session-strip span,
 .capture-state {
   border: 1px solid var(--line);
@@ -512,8 +603,12 @@ input:focus {
 
 .session-strip {
   gap: 0.45rem;
-  margin-top: 1rem;
+  margin-top: 0.7rem;
   color: #c8c8c2;
+}
+
+.diagnostics-summary {
+  opacity: 0.86;
 }
 
 .play-header {
