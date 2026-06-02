@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.feedback import router as feedback_router
 from app.api.routes.rooms import router as rooms_router
 from app.core.config import settings
 from app.core.database import Base, engine
@@ -30,5 +31,6 @@ def health_check():
 
 app.include_router(auth_router)
 app.include_router(rooms_router)
+app.include_router(feedback_router)
 app.include_router(admin_router)
 app.include_router(signaling_router)

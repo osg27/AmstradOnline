@@ -5,6 +5,7 @@ import RegisterPage from './pages/RegisterPage';
 import LobbyPage from './pages/LobbyPage';
 import RoomPage from './pages/RoomPage';
 import AdminPage from './pages/AdminPage';
+import FeedbackPage from './pages/FeedbackPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
@@ -38,6 +39,14 @@ export default function App() {
         element={(
           <PrivateRoute>
             <AdminPage />
+          </PrivateRoute>
+        )}
+      />
+      <Route
+        path="/feedback"
+        element={(
+          <PrivateRoute>
+            <FeedbackPage />
           </PrivateRoute>
         )}
       />

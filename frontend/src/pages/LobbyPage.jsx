@@ -132,6 +132,9 @@ export default function LobbyPage() {
           <BrandMark />
           <div className="account-strip">
             <span>{username}</span>
+            {canUsePreviewSystems ? (
+              <button className="secondary" onClick={() => navigate('/feedback')}>Feedback</button>
+            ) : null}
             {isAdmin ? (
               <button className="secondary" onClick={() => navigate('/admin')}>Admin</button>
             ) : null}
