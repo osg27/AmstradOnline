@@ -57,6 +57,9 @@ export default function RoomPage() {
   const remoteJoystickMaskRef = useRef(0);
   const pendingIceCandidatesRef = useRef([]);
   const isHostRef = useRef(false);
+  const signalingClientIdRef = useRef(window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const activeGuestSignalIdRef = useRef('');
+  const activePeerSignalIdRef = useRef('');
   const [micEnabled, setMicEnabled] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
   const [micStatus, setMicStatus] = useState('Mic off');
@@ -962,8 +965,19 @@ export default function RoomPage() {
   }, [activePartyPlayer, addInputDebug, addLog, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isCpcParty, isMegaDrive, isSnes]);
 
   const onSignalMessage = useCallback(async (message) => {
+    if (message.to && message.to !== signalingClientIdRef.current) {
+      return;
+    }
+
     if (message.type === 'system') {
       addLog(message.message);
+      return;
+    }
+
+    if (message.type === 'live-slot-taken') {
+      setStatus('Live guest slot already taken');
+      setError('This room already has its live guest connected. Live controls and streamed video are limited to one guest in this build.');
+      addLog('Live guest slot already taken');
       return;
     }
 
@@ -992,9 +1006,27 @@ export default function RoomPage() {
     }
 
     if (message.type === 'peer-ready') {
-      if (isHost && localOfferRef.current) {
+      if (isHost && message.role === 'guest') {
+        if (!activeGuestSignalIdRef.current && message.from) {
+          activeGuestSignalIdRef.current = message.from;
+          activePeerSignalIdRef.current = message.from;
+          addLog(`Live guest slot assigned to ${message.username || 'guest'}`);
+        }
+
+        if (activeGuestSignalIdRef.current && message.from && message.from !== activeGuestSignalIdRef.current) {
+          sendSignalRef.current({
+            type: 'live-slot-taken',
+            to: message.from,
+          });
+          addLog(`Ignored extra guest ${message.username || message.from}`);
+          return;
+        }
+      }
+
+      if (isHost && localOfferRef.current && (!activeGuestSignalIdRef.current || message.from === activeGuestSignalIdRef.current)) {
         const sent = sendSignalRef.current({
           type: 'offer',
+          to: activeGuestSignalIdRef.current || undefined,
           offer: localOfferRef.current,
         });
 
@@ -1006,6 +1038,9 @@ export default function RoomPage() {
 
     if (message.type === 'offer') {
       addLog('Received offer');
+      if (message.from) {
+        activePeerSignalIdRef.current = message.from;
+      }
 
       await pc.setRemoteDescription(message.offer);
       await flushPendingIceCandidates();
@@ -1016,6 +1051,7 @@ export default function RoomPage() {
 
       sendSignalRef.current({
         type: 'answer',
+        to: message.from || undefined,
         answer: pc.localDescription,
       });
 
@@ -1030,7 +1066,15 @@ export default function RoomPage() {
     }
 
     if (message.type === 'answer') {
+      if (isHost && activeGuestSignalIdRef.current && message.from && message.from !== activeGuestSignalIdRef.current) {
+        addLog('Ignored answer from extra guest');
+        return;
+      }
+
       addLog('Received answer');
+      if (message.from) {
+        activePeerSignalIdRef.current = message.from;
+      }
 
       await pc.setRemoteDescription(message.answer);
       await flushPendingIceCandidates();
@@ -1044,6 +1088,11 @@ export default function RoomPage() {
     }
 
     if (message.type === 'ice-candidate' && message.candidate) {
+      if (isHost && activeGuestSignalIdRef.current && message.from && message.from !== activeGuestSignalIdRef.current) {
+        addLog('Ignored ICE candidate from extra guest');
+        return;
+      }
+
       if (!pc.remoteDescription) {
         pendingIceCandidatesRef.current.push(message.candidate);
         addLog('Queued ICE candidate until remote description');
@@ -1059,7 +1108,7 @@ export default function RoomPage() {
     }
   }, [addLog, isHost]);
 
-  const { send: sendSignal, isOpen: signalingOpen } = useSignaling(roomCode, onSignalMessage);
+  const { send: sendSignal, isOpen: signalingOpen } = useSignaling(roomCode, onSignalMessage, signalingClientIdRef.current);
 
   useEffect(() => {
     sendSignalRef.current = sendSignal;
@@ -1105,6 +1154,7 @@ export default function RoomPage() {
       if (event.candidate) {
         const sent = sendSignalRef.current({
           type: 'ice-candidate',
+          to: isHostRef.current ? activeGuestSignalIdRef.current || undefined : activePeerSignalIdRef.current || undefined,
           candidate: event.candidate,
         });
 
@@ -1508,6 +1558,7 @@ export default function RoomPage() {
 
     const sent = sendSignalRef.current({
       type: 'offer',
+      to: isHostRef.current ? activeGuestSignalIdRef.current || undefined : activePeerSignalIdRef.current || undefined,
       offer: pc.localDescription,
     });
 
@@ -1649,8 +1700,16 @@ export default function RoomPage() {
       await waitForIceGatheringComplete(pc);
       localOfferRef.current = pc.localDescription;
 
+      if (isCpcParty && !activeGuestSignalIdRef.current) {
+        addLog('Offer ready; waiting for first party guest');
+        setStatus('Offer created, waiting for guest');
+        hostStartedRef.current = true;
+        return;
+      }
+
       const sent = sendSignal({
         type: 'offer',
+        to: activeGuestSignalIdRef.current || undefined,
         offer: localOfferRef.current,
       });
 

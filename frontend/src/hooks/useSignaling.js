@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSignalingUrl } from '../api/client';
 
-export default function useSignaling(roomCode, onMessage) {
+function createClientId() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export default function useSignaling(roomCode, onMessage, requestedClientId = null) {
   const wsRef = useRef(null);
   const queueRef = useRef([]);
   const onMessageRef = useRef(onMessage);
+  const clientIdRef = useRef(requestedClientId || createClientId());
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -18,7 +27,10 @@ export default function useSignaling(roomCode, onMessage) {
 
     while (queueRef.current.length > 0) {
       const message = queueRef.current.shift();
-      wsRef.current.send(JSON.stringify(message));
+      wsRef.current.send(JSON.stringify({
+        ...message,
+        from: message.from || clientIdRef.current,
+      }));
     }
   }, []);
 
@@ -60,14 +72,19 @@ export default function useSignaling(roomCode, onMessage) {
   }, [roomCode, flushQueue]);
 
   const send = useCallback((message) => {
+    const messageWithSender = {
+      ...message,
+      from: message.from || clientIdRef.current,
+    };
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
+      wsRef.current.send(JSON.stringify(messageWithSender));
       return true;
     }
 
-    queueRef.current.push(message);
+    queueRef.current.push(messageWithSender);
     return false;
   }, []);
 
-  return { send, isOpen };
+  return { send, isOpen, clientId: clientIdRef.current };
 }
