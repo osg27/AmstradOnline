@@ -415,6 +415,49 @@ export default function RoomPage() {
     });
   }, [addInputDebug, forwardInputToEmulator]);
 
+  const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
+    joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
+      const wasActive = Boolean(previousMask & bit);
+
+      if (active === wasActive) return;
+
+      const action = active ? 'down' : 'up';
+
+      addInputDebug(`forward held P${player} key ${key} ${action}`, mask, 'shared joystick');
+      if (active && key.length === 1) {
+        forwardInputToEmulator({
+          type: 'amstrad_remote_input',
+          player,
+          key,
+          action,
+        });
+      }
+
+      forwardInputToEmulator({
+        type: 'amstrad_remote_control',
+        player,
+        key,
+        action,
+      });
+    });
+  }, [addInputDebug, forwardInputToEmulator]);
+
+  const releaseCpcPartySharedInput = useCallback((previousMask = 63) => {
+    if (!isCpcParty) return;
+
+    forwardJoystickMaskAsKeys(0, 1, previousMask);
+    forwardInputToEmulator({
+      type: 'amstrad_remote_joystick',
+      player: 1,
+      mask: 0,
+    });
+    forwardInputToEmulator({
+      type: 'amstrad_remote_joystick',
+      player: 2,
+      mask: 0,
+    });
+  }, [forwardInputToEmulator, forwardJoystickMaskAsKeys, isCpcParty]);
+
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : 2;
     const joystickMask = isAmiga || isMegaDrive || isSnes ? mask : mask & 31;
@@ -430,25 +473,26 @@ export default function RoomPage() {
     if (isHost) {
       if (isCpcParty && activePartyPlayer !== 1) {
         if (previousMask) {
-          forwardInputToEmulator({
-            type: 'amstrad_remote_joystick',
-            player: 1,
-            mask: 0,
-          });
-          forwardExtraButtonAsKey(0, 1, previousMask);
+          releaseCpcPartySharedInput(previousMask);
         }
         localJoystickMaskRef.current = 0;
         addInputDebug(`ignored host input, party turn is P${activePartyPlayer}`, 0, 'party turn');
         return;
       }
 
+      if (isCpcParty) {
+        forwardJoystickMaskAsKeys(mask, 1, previousMask);
+        localJoystickMaskRef.current = mask;
+        return;
+      }
+
       forwardInputToEmulator({
         type: 'amstrad_remote_joystick',
-        player: isCpcParty ? 1 : player,
+        player,
         mask: joystickMask,
       });
       if (!isAmiga && !isMegaDrive && !isSnes) {
-        forwardExtraButtonAsKey(mask, isCpcParty ? 1 : player, previousMask);
+        forwardExtraButtonAsKey(mask, player, previousMask);
       }
       localJoystickMaskRef.current = mask;
       return;
@@ -472,34 +516,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmiga, isCpcParty, isHost, isMegaDrive, isSnes]);
-
-  const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
-    joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
-      const wasActive = Boolean(previousMask & bit);
-
-      if (active === wasActive) return;
-
-      const action = active ? 'down' : 'up';
-
-      addInputDebug(`forward held P${player} key ${key} ${action}`, mask, 'guest remote');
-      if (active && key.length === 1) {
-        forwardInputToEmulator({
-          type: 'amstrad_remote_input',
-          player,
-          key,
-          action,
-        });
-      }
-
-      forwardInputToEmulator({
-        type: 'amstrad_remote_control',
-        player,
-        key,
-        action,
-      });
-    });
-  }, [addInputDebug, forwardInputToEmulator]);
+  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -598,39 +615,20 @@ export default function RoomPage() {
     const nextPlayer = Math.min(partyMaxPlayers, Math.max(1, playerNumber));
 
     if (localJoystickMaskRef.current) {
-      forwardInputToEmulator({
-        type: 'amstrad_remote_joystick',
-        player: 1,
-        mask: 0,
-      });
-      forwardExtraButtonAsKey(0, 1, localJoystickMaskRef.current);
+      releaseCpcPartySharedInput(localJoystickMaskRef.current);
       localJoystickMaskRef.current = 0;
     }
 
     if (remoteJoystickMaskRef.current) {
-      joystickMaskToKeys(remoteJoystickMaskRef.current, 1).forEach(([key, , active]) => {
-        if (!active) return;
-
-        forwardInputToEmulator({
-          type: 'amstrad_remote_input',
-          player: 1,
-          key,
-          action: 'up',
-        });
-        forwardInputToEmulator({
-          type: 'amstrad_remote_control',
-          player: 1,
-          key,
-          action: 'up',
-        });
-      });
+      releaseCpcPartySharedInput(remoteJoystickMaskRef.current);
       remoteJoystickMaskRef.current = 0;
     }
 
+    releaseCpcPartySharedInput();
     setActivePartyPlayer(nextPlayer);
     addInputDebug(`party turn switched to P${nextPlayer}`, 0, 'party turn');
     addLog(`Party turn switched to player ${nextPlayer}`);
-  }, [addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, isCpcParty, isHost, partyMaxPlayers]);
+  }, [addInputDebug, addLog, isCpcParty, isHost, partyMaxPlayers, releaseCpcPartySharedInput]);
 
   const nextPartyTurn = useCallback(() => {
     setPartyTurn(activePartyPlayer >= partyMaxPlayers ? 1 : activePartyPlayer + 1);
@@ -2006,7 +2004,13 @@ export default function RoomPage() {
                   <div className="party-turn-panel">
                     <div className="party-turn-header">
                       <strong>Party turn</strong>
-                      <span>Player {activePartyPlayer} controls the shared joystick</span>
+                      <span>
+                        {activePartyPlayer === 1
+                          ? 'Host controls the shared joystick'
+                          : activePartyPlayer === 2
+                            ? 'Guest controls the shared joystick'
+                            : `Player ${activePartyPlayer} is a pass-and-play turn marker`}
+                      </span>
                     </div>
                     <div className="party-turn-controls">
                       <button type="button" className="secondary" onClick={nextPartyTurn}>
@@ -2023,9 +2027,7 @@ export default function RoomPage() {
                         </button>
                       ))}
                     </div>
-                    {activePartyPlayer > 2 ? (
-                      <p className="muted">Players 3-8 are ready for the multi-guest connection pass; selecting them pauses shared input for now.</p>
-                    ) : null}
+                    <p className="muted">Current build supports live browser controls for P1 host and P2 guest; P3-P8 are turn markers for pass-and-play or streamer-managed sessions.</p>
                   </div>
                 ) : null}
               </>

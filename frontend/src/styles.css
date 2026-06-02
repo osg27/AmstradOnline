@@ -242,9 +242,15 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
   color: var(--muted);
   font-weight: 700;
+}
+
+.party-player-select small {
+  flex-basis: 100%;
+  font-weight: 500;
 }
 
 .party-player-select select {

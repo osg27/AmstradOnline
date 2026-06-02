@@ -183,7 +183,7 @@ export default function LobbyPage() {
             </div>
             {selectedSystem === 'cpc_party' ? (
               <label className="party-player-select">
-                <span>Players</span>
+                <span>Turn markers</span>
                 <select
                   value={partyMaxPlayers}
                   onChange={(event) => setPartyMaxPlayers(Number(event.target.value))}
@@ -192,6 +192,7 @@ export default function LobbyPage() {
                     <option key={count} value={count}>{count}</option>
                   ))}
                 </select>
+                <small>P1 host and P2 guest have live controls for now.</small>
               </label>
             ) : null}
             <button onClick={handleCreate} disabled={loadingCreate || !selectedMachine || selectedMachine.disabled}>
