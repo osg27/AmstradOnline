@@ -72,6 +72,8 @@ export default function RoomPage() {
   const [micEnabled, setMicEnabled] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
   const [micStatus, setMicStatus] = useState('Mic off');
+  const [micDevices, setMicDevices] = useState([]);
+  const [selectedMicDeviceId, setSelectedMicDeviceId] = useState('');
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -133,6 +135,23 @@ export default function RoomPage() {
   useEffect(() => {
     isHostRef.current = isHost === true;
   }, [isHost]);
+
+  useEffect(() => {
+    if (isCpcParty || !navigator.mediaDevices?.addEventListener) {
+      return undefined;
+    }
+
+    const handleDeviceChange = () => {
+      refreshMicrophoneDevices();
+    };
+
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    refreshMicrophoneDevices();
+
+    return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+    };
+  }, [isCpcParty]);
 
   useEffect(() => {
     if (!room || !username) return;
@@ -1988,6 +2007,95 @@ export default function RoomPage() {
     addLog(sent ? `${reason} offer sent` : `${reason} offer queued`);
   }
 
+  async function refreshMicrophoneDevices() {
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices
+        .filter((device) => device.kind === 'audioinput')
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Microphone ${index + 1}`,
+        }));
+
+      setMicDevices(audioInputs);
+    } catch (err) {
+      addLog(`Microphone device list error: ${err.message}`);
+    }
+  }
+
+  async function openMicrophone(deviceId = '') {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicStatus('Mic unavailable');
+      setError('This browser cannot use the microphone here.');
+      addLog('Microphone is not available in this browser');
+      return;
+    }
+
+    let nextStream = null;
+
+    try {
+      setMicStatus(deviceId ? 'Switching mic...' : 'Opening mic...');
+      nextStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      const [track] = nextStream.getAudioTracks();
+
+      if (!track) {
+        throw new Error('No microphone track was provided by the browser');
+      }
+
+      const pc = pcRef.current;
+
+      if (!pc) {
+        throw new Error('Peer connection is not ready yet');
+      }
+
+      const previousStream = localMicStreamRef.current;
+      const existingSender = localMicSenderRef.current;
+
+      if (existingSender) {
+        await existingSender.replaceTrack(track);
+      } else {
+        localMicSenderRef.current = pc.addTrack(track, nextStream);
+      }
+
+      previousStream?.getTracks().forEach((previousTrack) => previousTrack.stop());
+      localMicStreamRef.current = nextStream;
+      setMicEnabled(true);
+      setMicMuted(false);
+      setMicStatus('Mic on');
+      setSelectedMicDeviceId(track.getSettings?.().deviceId || deviceId || '');
+      addLog(existingSender ? 'Microphone switched' : 'Microphone enabled');
+      await refreshMicrophoneDevices();
+
+      if (!existingSender && pc.remoteDescription && pc.signalingState === 'stable') {
+        await renegotiatePeerConnection('Microphone');
+      } else if (!existingSender) {
+        micRenegotiationNeededRef.current = true;
+        addLog('Microphone will connect when the room stream is ready');
+      }
+    } catch (err) {
+      nextStream?.getTracks().forEach((track) => track.stop());
+      if (!localMicStreamRef.current) {
+        localMicSenderRef.current = null;
+        setMicEnabled(false);
+        setMicMuted(false);
+        setMicStatus('Mic blocked');
+      } else {
+        setMicStatus(micMuted ? 'Mic muted' : 'Mic on');
+      }
+      setError(err.message);
+      addLog(`Microphone error: ${err.message}`);
+    }
+  }
+
   async function toggleMicrophone() {
     if (isCpcParty) return;
 
@@ -2004,58 +2112,7 @@ export default function RoomPage() {
       return;
     }
 
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setMicStatus('Mic unavailable');
-      setError('This browser cannot use the microphone here.');
-      addLog('Microphone is not available in this browser');
-      return;
-    }
-
-    try {
-      setMicStatus('Opening mic...');
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      const [track] = stream.getAudioTracks();
-
-      if (!track) {
-        throw new Error('No microphone track was provided by the browser');
-      }
-
-      const pc = pcRef.current;
-
-      if (!pc) {
-        throw new Error('Peer connection is not ready yet');
-      }
-
-      localMicStreamRef.current = stream;
-      localMicSenderRef.current = pc.addTrack(track, stream);
-      setMicEnabled(true);
-      setMicMuted(false);
-      setMicStatus('Mic on');
-      addLog('Microphone enabled');
-
-      if (pc.remoteDescription && pc.signalingState === 'stable') {
-        await renegotiatePeerConnection('Microphone');
-      } else {
-        micRenegotiationNeededRef.current = true;
-        addLog('Microphone will connect when the room stream is ready');
-      }
-    } catch (err) {
-      localMicStreamRef.current?.getTracks().forEach((track) => track.stop());
-      localMicStreamRef.current = null;
-      localMicSenderRef.current = null;
-      setMicEnabled(false);
-      setMicMuted(false);
-      setMicStatus('Mic blocked');
-      setError(err.message);
-      addLog(`Microphone error: ${err.message}`);
-    }
+    await openMicrophone(selectedMicDeviceId);
   }
 
   async function startHostSession() {
@@ -2378,13 +2435,35 @@ export default function RoomPage() {
                 </div>
 
                 {!isCpcParty ? (
-                  <button
-                    type="button"
-                    className={micEnabled && !micMuted ? 'active' : 'secondary'}
-                    onClick={toggleMicrophone}
-                  >
-                    {micEnabled ? (micMuted ? 'Mic muted' : 'Mic on') : 'Mic off'}
-                  </button>
+                  <div className="mic-controls">
+                    <button
+                      type="button"
+                      className={micEnabled && !micMuted ? 'active' : 'secondary'}
+                      onClick={toggleMicrophone}
+                    >
+                      {micEnabled ? (micMuted ? 'Mic muted' : 'Mic on') : 'Mic off'}
+                    </button>
+
+                    <select
+                      aria-label="Microphone"
+                      value={selectedMicDeviceId}
+                      onFocus={refreshMicrophoneDevices}
+                      onChange={(event) => {
+                        const nextDeviceId = event.target.value;
+                        setSelectedMicDeviceId(nextDeviceId);
+                        if (micEnabled) {
+                          openMicrophone(nextDeviceId);
+                        }
+                      }}
+                    >
+                      <option value="">Default mic</option>
+                      {micDevices.map((device) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 ) : null}
 
                 <button
