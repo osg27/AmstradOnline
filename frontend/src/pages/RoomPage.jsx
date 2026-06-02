@@ -26,6 +26,8 @@ export default function RoomPage() {
     source: 'none',
     events: [],
   });
+  const [hostDisplayName, setHostDisplayName] = useState('');
+  const [guestDisplayName, setGuestDisplayName] = useState('');
   const [activePartyPlayer, setActivePartyPlayer] = useState(1);
   const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
   const [partyRoster, setPartyRoster] = useState([]);
@@ -109,6 +111,16 @@ export default function RoomPage() {
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
+  const playerOneName = hostDisplayName || (isHost ? username : 'Host');
+  const playerTwoName = guestDisplayName || (!isHost ? username : 'Guest');
+  const normalPlayerSummary = `P1: ${playerOneName} / P2: ${playerTwoName}`;
+  const assignedControlLabel = isCpcParty
+    ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}`
+    : isMegaDrive || isSnes
+      ? `${isHost ? `P1: ${playerOneName}` : `P2: ${playerTwoName}`} / controller ${isHost ? '1' : '2'}`
+      : isHost
+        ? `P1: ${playerOneName}`
+        : `P2: ${playerTwoName}`;
   const partyPlayerNameByNumber = useMemo(() => {
     const names = new Map();
     partyRoster.forEach((player) => {
@@ -121,6 +133,16 @@ export default function RoomPage() {
   useEffect(() => {
     isHostRef.current = isHost === true;
   }, [isHost]);
+
+  useEffect(() => {
+    if (!room || !username) return;
+
+    if (isHost) {
+      setHostDisplayName(username);
+    } else {
+      setGuestDisplayName(username);
+    }
+  }, [isHost, room, username]);
 
   useEffect(() => {
     if (!isCpcParty || !isHost) {
@@ -1158,6 +1180,16 @@ export default function RoomPage() {
       }
 
       return;
+    }
+
+    if (message.type === 'peer-ready') {
+      if (message.role === 'host') {
+        setHostDisplayName(message.username || 'Host');
+      }
+
+      if (message.role === 'guest') {
+        setGuestDisplayName(message.username || 'Guest');
+      }
     }
 
     const pc = pcRef.current;
@@ -2242,6 +2274,7 @@ export default function RoomPage() {
               <span>{username}</span>
               <span>{roleLabel}</span>
               <span>{systemLabel}</span>
+              {!isCpcParty ? <span>{normalPlayerSummary}</span> : null}
               <span>{controlLabel}</span>
             </div>
           </div>
@@ -2267,6 +2300,7 @@ export default function RoomPage() {
           <span>{status}</span>
           <span>{signalingOpen ? 'Signaling connected' : 'Connecting signaling'}</span>
           <span>{remoteConnected ? 'Peer connected' : 'Waiting for peer'}</span>
+          {!isCpcParty ? <span>{normalPlayerSummary}</span> : null}
           {isCpcParty ? <span>Party turn: Player {activePartyPlayer} of {partyMaxPlayers}</span> : null}
           {!isCpcParty ? <span>{micStatus}</span> : null}
           {loadedDiskName ? <span>{loadedDiskName}</span> : null}
@@ -2284,7 +2318,7 @@ export default function RoomPage() {
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
-                  {isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isMegaDrive || isSnes ? (isHost ? 'Player 1: controller 1' : 'Player 2: controller 2') : isHost ? 'Player 1: cursors / X / Z' : 'Player 2: Q A O P / F / G'}
+                  {assignedControlLabel}
                 </div>
 
                 {!isCpcParty ? (
