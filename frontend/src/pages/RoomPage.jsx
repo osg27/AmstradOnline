@@ -121,36 +121,6 @@ export default function RoomPage() {
       : isHost
         ? `P1: ${playerOneName}`
         : `P2: ${playerTwoName}`;
-  const displayedPlayers = isCpcParty
-    ? partyRoster
-    : [
-      {
-        playerNumber: 1,
-        username: playerOneName,
-        role: 'Host',
-        connected: Boolean(hostDisplayName),
-      },
-      {
-        playerNumber: 2,
-        username: playerTwoName,
-        role: 'Guest',
-        connected: Boolean(guestDisplayName),
-      },
-    ];
-  const healthItems = [
-    {
-      label: 'Signaling',
-      ok: signalingOpen,
-    },
-    {
-      label: isCpcParty ? 'Players' : 'Peer',
-      ok: remoteConnected,
-    },
-    {
-      label: isHost ? 'Host stream' : 'Guest link',
-      ok: isHost ? hostStarted : guestPrepared,
-    },
-  ];
   const partyPlayerNameByNumber = useMemo(() => {
     const names = new Map();
     partyRoster.forEach((player) => {
@@ -1350,6 +1320,36 @@ export default function RoomPage() {
   }, [addLog, isCpcParty, isHost, partyMaxPlayers]);
 
   const { send: sendSignal, isOpen: signalingOpen } = useSignaling(roomCode, onSignalMessage, signalingClientIdRef.current);
+  const displayedPlayers = isCpcParty
+    ? partyRoster
+    : [
+      {
+        playerNumber: 1,
+        username: playerOneName,
+        role: 'Host',
+        connected: Boolean(hostDisplayName),
+      },
+      {
+        playerNumber: 2,
+        username: playerTwoName,
+        role: 'Guest',
+        connected: Boolean(guestDisplayName),
+      },
+    ];
+  const healthItems = [
+    {
+      label: 'Signaling',
+      ok: signalingOpen,
+    },
+    {
+      label: isCpcParty ? 'Players' : 'Peer',
+      ok: remoteConnected,
+    },
+    {
+      label: isHost ? 'Host stream' : 'Guest link',
+      ok: isHost ? hostStarted : guestPrepared,
+    },
+  ];
 
   useEffect(() => {
     sendSignalRef.current = sendSignal;
