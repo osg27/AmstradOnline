@@ -28,6 +28,7 @@ export default function RoomPage() {
   });
   const [activePartyPlayer, setActivePartyPlayer] = useState(1);
   const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
+  const [partyRoster, setPartyRoster] = useState([]);
 
   const remoteMediaStreamRef = useRef(null);
   const remoteVoiceStreamRef = useRef(null);
@@ -108,10 +109,27 @@ export default function RoomPage() {
   const roleLabel = !room
     ? 'Loading...'
     : isHost ? 'Host' : 'Guest';
+  const partyPlayerNameByNumber = useMemo(() => {
+    const names = new Map();
+    partyRoster.forEach((player) => {
+      names.set(player.playerNumber, player.username);
+    });
+    return names;
+  }, [partyRoster]);
+  const activePartyPlayerName = partyPlayerNameByNumber.get(activePartyPlayer);
 
   useEffect(() => {
     isHostRef.current = isHost === true;
   }, [isHost]);
+
+  useEffect(() => {
+    if (!isCpcParty || !isHost) {
+      setPartyRoster([]);
+      return;
+    }
+
+    refreshPartyRoster();
+  }, [isCpcParty, isHost, username]);
 
   const addLog = useCallback((message) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${message}`, ...prev].slice(0, 80));
@@ -1719,6 +1737,27 @@ export default function RoomPage() {
     return null;
   }
 
+  function refreshPartyRoster() {
+    const players = [
+      {
+        playerNumber: 1,
+        username: username || 'Host',
+        connected: true,
+        role: 'Host',
+      },
+      ...Array.from(partyHostPeersRef.current.values())
+        .map((peer) => ({
+          playerNumber: peer.playerNumber,
+          username: peer.username || `Player ${peer.playerNumber}`,
+          connected: ['connected', 'completed'].includes(peer.pc?.iceConnectionState) || peer.pc?.connectionState === 'connected',
+          role: 'Guest',
+        }))
+        .sort((a, b) => a.playerNumber - b.playerNumber),
+    ];
+
+    setPartyRoster(players);
+  }
+
   function closePartyPeer(guestId) {
     const peer = partyHostPeersRef.current.get(guestId);
     if (!peer) return;
@@ -1730,6 +1769,7 @@ export default function RoomPage() {
     peer.channel?.close();
     peer.pc?.close();
     partyHostPeersRef.current.delete(guestId);
+    refreshPartyRoster();
     setRemoteConnected(Array.from(partyHostPeersRef.current.values()).some((item) => item.pc?.connectionState === 'connected'));
   }
 
@@ -1779,6 +1819,7 @@ export default function RoomPage() {
     };
 
     partyHostPeersRef.current.set(guestId, peerState);
+    refreshPartyRoster();
 
     pc.onicecandidate = (event) => {
       if (!event.candidate) return;
@@ -1792,6 +1833,7 @@ export default function RoomPage() {
 
     pc.onconnectionstatechange = () => {
       addLog(`P${playerNumber} connection: ${pc.connectionState}`);
+      refreshPartyRoster();
       setRemoteConnected(Array.from(partyHostPeersRef.current.values()).some((item) => item.pc?.connectionState === 'connected'));
 
       if (['failed', 'closed'].includes(pc.connectionState)) {
@@ -1843,6 +1885,7 @@ export default function RoomPage() {
     });
 
     addLog(`Party guest ${peerState.username} assigned P${playerNumber}`);
+    refreshPartyRoster();
     setStatus(`Party host ready: ${partyHostPeersRef.current.size} guest(s) connected`);
   }
 
@@ -2385,11 +2428,9 @@ export default function RoomPage() {
                     <div className="party-turn-header">
                       <strong>Party turn</strong>
                       <span>
-                        {activePartyPlayer === 1
-                          ? 'Host controls the shared joystick'
-                          : activePartyPlayer === 2
-                            ? 'Guest controls the shared joystick'
-                            : `Player ${activePartyPlayer} is a pass-and-play turn marker`}
+                        {activePartyPlayerName
+                          ? `P${activePartyPlayer}: ${activePartyPlayerName} controls the shared joystick`
+                          : `P${activePartyPlayer}: waiting for assigned player`}
                       </span>
                     </div>
                     <div className="party-turn-controls">
@@ -2403,11 +2444,21 @@ export default function RoomPage() {
                           className={activePartyPlayer === playerNumber ? 'active' : 'secondary'}
                           onClick={() => setPartyTurn(playerNumber)}
                         >
-                          P{playerNumber}
+                          <span>P{playerNumber}</span>
+                          {partyPlayerNameByNumber.get(playerNumber) ? <small>{partyPlayerNameByNumber.get(playerNumber)}</small> : null}
                         </button>
                       ))}
                     </div>
-                    <p className="muted">Current build supports live browser controls for P1 host and P2 guest; P3-P8 are turn markers for pass-and-play or streamer-managed sessions.</p>
+                    <div className="party-roster" aria-label="Party players">
+                      {partyRoster.map((player) => (
+                        <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
+                          <strong>P{player.playerNumber}</strong>
+                          <span>{player.username}</span>
+                          <small>{player.role}{player.connected ? ' connected' : ' joining'}</small>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="muted">Guests appear here as they join, so the host can pick the right player turn before the game starts.</p>
                   </div>
                 ) : null}
               </>

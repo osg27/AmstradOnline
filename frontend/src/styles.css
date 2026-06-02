@@ -596,6 +596,47 @@ input:focus {
 
 .party-turn-controls button {
   min-width: 54px;
+  display: grid;
+  gap: 0.1rem;
+  justify-items: center;
+  line-height: 1.15;
+}
+
+.party-turn-controls button small {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.82;
+  white-space: nowrap;
+}
+
+.party-roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.party-roster div {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #17191a;
+}
+
+.party-roster div.connected {
+  border-color: rgba(122, 235, 161, 0.55);
+}
+
+.party-roster strong {
+  color: var(--gold);
+}
+
+.party-roster small {
+  color: var(--muted);
 }
 
 .input-debug-grid {
