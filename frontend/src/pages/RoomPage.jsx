@@ -2262,10 +2262,10 @@ export default function RoomPage() {
   }
 
   useEffect(() => {
-    if (isHost && signalingOpen && !isAmiga) {
+    if (isHost && signalingOpen && !isAmiga && !isArcade) {
       startHostSession();
     }
-  }, [isAmiga, isHost, signalingOpen]);
+  }, [isAmiga, isArcade, isHost, signalingOpen]);
 
   useEffect(() => {
     if (room && !isHost) {
@@ -2349,6 +2349,9 @@ export default function RoomPage() {
 
       if (isArcade) {
         setArcadeDriver(arcadeDriverName);
+        if (!hostStartedRef.current && !hostStartingRef.current) {
+          await startHostSession();
+        }
       }
       setLoadedDiskName(file.name);
       addLog(`${isSwapDisk ? 'Swapped disk' : 'Loaded file'}: ${file.name}`);
@@ -2633,7 +2636,7 @@ export default function RoomPage() {
                     {hostStarted ? 'Host session running' : 'Start host session'}
                   </button>
 
-                  <button onClick={openDiskPicker} disabled={!hostStarted}>
+                  <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade}>
                     {mediaLabel}
                   </button>
 
