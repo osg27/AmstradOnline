@@ -1,12 +1,9 @@
 (function () {
   const screen = document.getElementById('arcade-screen');
-  const container = document.getElementById('mame-container');
   const context = screen.getContext('2d', { alpha: false });
 
-  let currentRom = null;
-  let currentMame = null;
-  let loaderScript = null;
-  let gameUrl = null;
+  let currentRun = null;
+  let scriptElement = null;
   let statusText = 'MAME ready';
   let localMask = 0;
   let remoteMask = 0;
@@ -48,96 +45,195 @@
     return sharedAudioContext;
   }
 
+  if (OriginalAudioContext) {
+    function SharedAudioContext(...args) {
+      if (!sharedAudioContext) {
+        sharedAudioContext = new OriginalAudioContext(...args);
+      }
+      ensureAudio();
+      return sharedAudioContext;
+    }
+
+    SharedAudioContext.prototype = OriginalAudioContext.prototype;
+    window.AudioContext = SharedAudioContext;
+    window.webkitAudioContext = SharedAudioContext;
+
+    const originalConnect = window.AudioNode?.prototype?.connect;
+    if (originalConnect && !window.__oldStyleArcadeAudioPatched) {
+      window.__oldStyleArcadeAudioPatched = true;
+      window.AudioNode.prototype.connect = function patchedConnect(destination, ...args) {
+        const result = originalConnect.call(this, destination, ...args);
+        if (
+          audioDestination
+          && destination === sharedAudioContext?.destination
+          && this !== audioDestination
+        ) {
+          try {
+            originalConnect.call(this, audioDestination);
+          } catch {
+            // Keep the normal MAME audio path working if this node cannot be split.
+          }
+        }
+        return result;
+      };
+    }
+  }
+
   window.getArcadeAudioStream = function getArcadeAudioStream() {
     const audioContext = ensureAudio();
     audioContext?.resume?.().catch(() => {});
     return audioDestination?.stream || null;
   };
 
+  function normalizeRuntime(runtime) {
+    const name = String(runtime || 'mametiny.js').trim() || 'mametiny.js';
+    return name.endsWith('.js') ? name : `${name}.js`;
+  }
+
   function driverFromFileName(fileName) {
     return String(fileName || 'game.zip')
-      .replace(/\.[^.]+$/, '')
+      .replace(/\.(zip|7z|rar|chd)$/i, '')
       .trim()
       .toLowerCase();
   }
 
-  function clearMame() {
-    container.innerHTML = '';
-    currentMame = null;
-    if (loaderScript) {
-      loaderScript.remove();
-      loaderScript = null;
-    }
-    if (gameUrl) {
-      URL.revokeObjectURL(gameUrl);
-      gameUrl = null;
-    }
+  function splitArgs(args) {
+    return String(args || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
   }
 
-  async function preflightMame() {
-    const required = [
-      '/arcade/mamejs.js',
-      '/arcade/mame/mame.js',
+  async function preflightRuntime(runtime) {
+    const paths = [
+      `/arcade/mame/${runtime}`,
+      `/arcade/mame/${runtime.replace(/\.js$/i, '.wasm')}`,
     ];
 
-    for (const path of required) {
+    for (const path of paths) {
       const response = await fetch(`${path}?v=${Date.now()}`, { cache: 'no-store' });
       const contentType = response.headers.get('content-type') || '';
-
       if (!response.ok || contentType.includes('text/html')) {
         throw new Error(`${path} missing`);
       }
     }
   }
 
-  function loadScript(src) {
+  function buildArguments(run) {
+    const args = [
+      run.driver,
+      '-verbose',
+      '-window',
+      '-video',
+      'soft',
+      '-resolution',
+      '640x480',
+      '-rompath',
+      '/roms',
+    ];
+
+    splitArgs(run.args).forEach((arg) => args.push(arg));
+    return args;
+  }
+
+  function clearPreviousRuntime() {
+    if (scriptElement) {
+      scriptElement.remove();
+      scriptElement = null;
+    }
+    delete window.Module;
+  }
+
+  function configureModule(run) {
+    const canvas = screen;
+    canvas.className = 'emscripten';
+    canvas.tabIndex = -1;
+
+    window.Module = {
+      noInitialRun: false,
+      arguments: buildArguments(run),
+      locateFile(path) {
+        return `/arcade/mame/${path}`;
+      },
+      preRun: [
+        function mountLocalRoms() {
+          window.Module.addRunDependency('oldstyle-roms');
+          try {
+            FS.mkdir('/roms');
+          } catch {}
+
+          try {
+            run.files.forEach((file) => {
+              FS.writeFile(`/roms/${file.name}`, file.bytes);
+              console.log(`Mounted ${file.name} to /roms/${file.name}`);
+            });
+          } finally {
+            window.Module.removeRunDependency('oldstyle-roms');
+          }
+        },
+      ],
+      postRun: [],
+      print(text) {
+        console.log(text);
+      },
+      printErr(text) {
+        console.warn(text);
+      },
+      canvas,
+      setStatus(text) {
+        if (text) {
+          drawStatus('MAME loading', text);
+        }
+      },
+      monitorRunDependencies(left) {
+        if (left) {
+          drawStatus('MAME loading', `Preparing ${left} dependencies`);
+        }
+      },
+    };
+  }
+
+  function loadScript(runtime) {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = `${src}?v=${Date.now()}`;
       script.async = true;
+      script.type = 'text/javascript';
+      script.src = `/arcade/mame/${runtime}?v=${Date.now()}`;
       script.onload = resolve;
-      script.onerror = () => reject(new Error(`Could not load ${src}`));
+      script.onerror = () => reject(new Error(`Could not load ${runtime}`));
       document.body.appendChild(script);
-      loaderScript = script;
+      scriptElement = script;
     });
   }
 
-  async function loadCurrentRom() {
-    if (!currentRom) {
-      drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
+  async function startRun(run) {
+    const runtime = normalizeRuntime(run.runtime);
+    const driver = String(run.driver || driverFromFileName(run.files?.[0]?.name)).trim().toLowerCase();
+
+    if (!driver) {
+      drawStatus('MAME driver needed', 'Enter a driver name before loading the ROM');
       return;
     }
+
+    currentRun = {
+      ...run,
+      runtime,
+      driver,
+      files: (run.files || []).map((file) => ({
+        name: file.name,
+        bytes: file.bytes instanceof Uint8Array ? file.bytes : new Uint8Array(file.bytes || []),
+      })),
+    };
 
     ensureAudio()?.resume?.().catch(() => {});
-    drawStatus('Checking MAME runtime', currentRom.fileName);
+    drawStatus('Checking MAME runtime', `${runtime} / ${driver}`);
+    await preflightRuntime(runtime);
 
-    try {
-      await preflightMame();
-    } catch (error) {
-      drawStatus('MAME runtime missing', error.message);
-      return;
-    }
-
-    clearMame();
-    const gameBlob = new Blob([currentRom.bytes], { type: 'application/zip' });
-    gameUrl = URL.createObjectURL(gameBlob);
-    const driver = driverFromFileName(currentRom.fileName);
-
-    drawStatus('Loading MAME', `${driver} from ${currentRom.fileName}`);
-    await loadScript('/arcade/mamejs.js');
-
-    if (!window.mamejs?.load) {
-      drawStatus('MAME loader missing', 'mamejs.js did not expose window.mamejs');
-      return;
-    }
-
-    currentMame = await window.mamejs.load('/arcade/mame/mame.js', container, {
-      print: (text) => console.log('MAME:', text),
-      printErr: (text) => console.warn('MAME:', text),
-    });
-    await currentMame.loadRoms({ [currentRom.fileName]: gameUrl });
+    clearPreviousRuntime();
+    configureModule(currentRun);
+    drawStatus('Starting MAME', `${driver} (${runtime})`);
+    await loadScript(runtime);
     statusText = '';
-    await currentMame.runGame(driver, { width: 640, height: 480 });
   }
 
   function keyForMask(player, bit) {
@@ -167,9 +263,6 @@
   function dispatchKey(key, action) {
     if (!key) return;
 
-    const target = container.querySelector('iframe')?.contentDocument?.querySelector('canvas')
-      || container.querySelector('canvas')
-      || window;
     const eventType = action === 'down' ? 'keydown' : 'keyup';
     const event = new KeyboardEvent(eventType, {
       key,
@@ -178,7 +271,8 @@
       cancelable: true,
     });
 
-    target.dispatchEvent(event);
+    screen.dispatchEvent(event);
+    window.dispatchEvent(event);
   }
 
   function setMask(player, nextMask) {
@@ -247,29 +341,6 @@
     setMask(player, next);
   }
 
-  function mirrorMameCanvas() {
-    const mameCanvas = container.querySelector('iframe')?.contentDocument?.querySelector('canvas')
-      || container.querySelector('canvas');
-
-    if (mameCanvas && mameCanvas.width && mameCanvas.height) {
-      context.fillStyle = '#000';
-      context.fillRect(0, 0, screen.width, screen.height);
-
-      const scale = Math.min(screen.width / mameCanvas.width, screen.height / mameCanvas.height);
-      const width = mameCanvas.width * scale;
-      const height = mameCanvas.height * scale;
-      const x = (screen.width - width) / 2;
-      const y = (screen.height - height) / 2;
-
-      context.imageSmoothingEnabled = false;
-      context.drawImage(mameCanvas, x, y, width, height);
-    } else if (statusText) {
-      // Keep the drawn status frame visible.
-    }
-
-    requestAnimationFrame(mirrorMameCanvas);
-  }
-
   window.addEventListener('message', (event) => {
     if (event.origin !== window.location.origin) return;
 
@@ -280,11 +351,17 @@
     }
 
     if (message.type === 'arcade_autoload') {
-      currentRom = {
-        fileName: message.fileName || 'game.zip',
-        bytes: new Uint8Array(message.bytes || []),
-      };
-      loadCurrentRom().catch((error) => {
+      startRun({
+        runtime: message.runtime,
+        driver: message.driver,
+        args: message.args,
+        files: [
+          {
+            name: message.fileName || 'game.zip',
+            bytes: new Uint8Array(message.bytes || []),
+          },
+        ],
+      }).catch((error) => {
         console.error('Old Style Gaming MAME error:', error);
         drawStatus('MAME error', error.message || 'Check browser console');
       });
@@ -292,7 +369,11 @@
     }
 
     if (message.type === 'arcade_reset') {
-      loadCurrentRom().catch((error) => {
+      if (!currentRun) {
+        drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
+        return;
+      }
+      startRun(currentRun).catch((error) => {
         console.error('Old Style Gaming MAME reset error:', error);
         drawStatus('MAME error', error.message || 'Check browser console');
       });
@@ -330,6 +411,5 @@
     window.focus();
   });
 
-  drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
-  mirrorMameCanvas();
+  drawStatus('MAME ready', 'Build mametiny.js + mametiny.wasm into /arcade/mame');
 })();

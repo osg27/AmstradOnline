@@ -74,6 +74,9 @@ export default function RoomPage() {
   const [micStatus, setMicStatus] = useState('Mic off');
   const [micDevices, setMicDevices] = useState([]);
   const [selectedMicDeviceId, setSelectedMicDeviceId] = useState('');
+  const [arcadeDriver, setArcadeDriver] = useState('');
+  const [arcadeRuntime, setArcadeRuntime] = useState('mametiny.js');
+  const [arcadeArgs, setArcadeArgs] = useState('');
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -100,7 +103,7 @@ export default function RoomPage() {
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-03-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-03-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga
     ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
@@ -2300,6 +2303,7 @@ export default function RoomPage() {
 
       const isSwapDisk = isAmiga && event.target.dataset.mode === 'swap';
       const lowerName = file.name.toLowerCase();
+      const arcadeDriverName = arcadeDriver.trim() || file.name.replace(/\.(zip|7z|rar|chd)$/i, '').toLowerCase();
       const allowedExtensions = isAmiga
         ? ['.adf', '.adz', '.dms', '.hdf', '.hdz', '.lha', '.zip']
         : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isArcade ? ['.zip'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
@@ -2317,6 +2321,12 @@ export default function RoomPage() {
         return;
       }
 
+      if (isArcade && !arcadeDriverName) {
+        setError('Enter the MAME driver name first');
+        event.target.value = '';
+        return;
+      }
+
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
 
@@ -2324,8 +2334,14 @@ export default function RoomPage() {
         type: isSwapDisk ? 'amiga_swap_disk' : isAmiga ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: file.name,
         bytes,
+        driver: arcadeDriverName,
+        runtime: arcadeRuntime.trim() || 'mametiny.js',
+        args: arcadeArgs.trim(),
       });
 
+      if (isArcade) {
+        setArcadeDriver(arcadeDriverName);
+      }
       setLoadedDiskName(file.name);
       addLog(`${isSwapDisk ? 'Swapped disk' : 'Loaded file'}: ${file.name}`);
       setStatus(`${isSwapDisk ? 'Disk swapped' : 'File loaded'}: ${file.name}`);
@@ -2568,6 +2584,35 @@ export default function RoomPage() {
                     onChange={handleKickstartSelected}
                     style={{ display: 'none' }}
                   />
+                ) : null}
+
+                {isArcade ? (
+                  <div className="arcade-config">
+                    <label>
+                      <span>Runtime</span>
+                      <input
+                        value={arcadeRuntime}
+                        onChange={(event) => setArcadeRuntime(event.target.value)}
+                        placeholder="mametiny.js"
+                      />
+                    </label>
+                    <label>
+                      <span>Driver</span>
+                      <input
+                        value={arcadeDriver}
+                        onChange={(event) => setArcadeDriver(event.target.value.toLowerCase().trim())}
+                        placeholder="pacman"
+                      />
+                    </label>
+                    <label>
+                      <span>Args</span>
+                      <input
+                        value={arcadeArgs}
+                        onChange={(event) => setArcadeArgs(event.target.value)}
+                        placeholder="-window -video soft"
+                      />
+                    </label>
+                  </div>
                 ) : null}
 
                 <div style={{

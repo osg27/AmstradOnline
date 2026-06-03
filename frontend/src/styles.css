@@ -618,6 +618,28 @@ input:focus {
   font-size: 0.88rem;
 }
 
+.arcade-config {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(130px, 0.7fr) minmax(180px, 1fr);
+  gap: 0.7rem;
+  align-items: end;
+}
+
+.arcade-config label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.arcade-config input {
+  min-height: 40px;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.92rem;
+}
+
 .session-strip {
   gap: 0.45rem;
   margin-top: 0.7rem;
