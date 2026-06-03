@@ -1754,6 +1754,72 @@ export default function RoomPage() {
 
     ctx.imageSmoothingEnabled = false;
 
+    let arcadeCrop = null;
+    let cropFrame = 0;
+
+    function detectArcadeCrop(sourceWidth, sourceHeight) {
+      if (!isArcade) return null;
+
+      const sourceContext = sourceCanvas.getContext('2d', { willReadFrequently: true });
+      if (!sourceContext) return null;
+
+      const sampleStep = 4;
+      const image = sourceContext.getImageData(0, 0, sourceWidth, sourceHeight).data;
+      let minX = sourceWidth;
+      let minY = sourceHeight;
+      let maxX = -1;
+      let maxY = -1;
+
+      for (let y = 0; y < sourceHeight; y += sampleStep) {
+        for (let x = 0; x < sourceWidth; x += sampleStep) {
+          const index = (y * sourceWidth + x) * 4;
+          const red = image[index];
+          const green = image[index + 1];
+          const blue = image[index + 2];
+
+          if (red > 18 || green > 18 || blue > 18) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+      }
+
+      const width = maxX - minX + sampleStep;
+      const height = maxY - minY + sampleStep;
+      if (width < 48 || height < 48) return arcadeCrop;
+
+      const pad = 10;
+      return {
+        x: Math.max(0, minX - pad),
+        y: Math.max(0, minY - pad),
+        width: Math.min(sourceWidth - Math.max(0, minX - pad), width + pad * 2),
+        height: Math.min(sourceHeight - Math.max(0, minY - pad), height + pad * 2),
+      };
+    }
+
+    function drawContained(sourceX, sourceY, sourceWidth, sourceHeight) {
+      const scale = Math.min(mirrorCanvas.width / sourceWidth, mirrorCanvas.height / sourceHeight);
+      const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+      const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+      const targetX = Math.round((mirrorCanvas.width - targetWidth) / 2);
+      const targetY = Math.round((mirrorCanvas.height - targetHeight) / 2);
+
+      ctx.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
+      ctx.drawImage(
+        sourceCanvas,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        targetX,
+        targetY,
+        targetWidth,
+        targetHeight,
+      );
+    }
+
     const draw = () => {
       try {
         const sourceWidth = sourceCanvas.width || sourceCanvas.clientWidth;
@@ -1762,7 +1828,17 @@ export default function RoomPage() {
           mirrorLoopRef.current = requestAnimationFrame(draw);
           return;
         }
-        ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
+
+        if (isArcade && cropFrame % 12 === 0) {
+          arcadeCrop = detectArcadeCrop(sourceWidth, sourceHeight);
+        }
+        cropFrame += 1;
+
+        if (isArcade && arcadeCrop) {
+          drawContained(arcadeCrop.x, arcadeCrop.y, arcadeCrop.width, arcadeCrop.height);
+        } else {
+          ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
+        }
       } catch {
         // ignore transient draw issues
       }
