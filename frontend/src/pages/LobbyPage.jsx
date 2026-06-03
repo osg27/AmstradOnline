@@ -29,7 +29,7 @@ export default function LobbyPage() {
     {
       id: 'party',
       label: 'Party Games',
-      adminOnly: true,
+      previewOnly: true,
       systems: [
         { id: 'cpc_party', label: 'Amstrad CPC Party', note: 'Preview' },
       ],
@@ -37,16 +37,28 @@ export default function LobbyPage() {
     {
       id: '16bit',
       label: '16-bit',
-      adminOnly: true,
+      previewOnly: true,
       systems: [
         { id: 'amiga', label: 'Amiga', note: 'Preview' },
         { id: 'megadrive', label: 'Mega Drive', note: 'Preview' },
         { id: 'snes', label: 'SNES', note: 'Preview' },
       ],
     },
+    {
+      id: 'arcade',
+      label: 'Arcade',
+      adminOnly: true,
+      systems: [
+        { id: 'arcade', label: 'MAME', note: 'Admin' },
+      ],
+    },
   ];
 
-  const visibleGroups = systemGroups.filter((group) => !group.adminOnly || canUsePreviewSystems);
+  const visibleGroups = systemGroups.filter((group) => {
+    if (group.adminOnly) return isAdmin;
+    if (group.previewOnly) return canUsePreviewSystems;
+    return true;
+  });
   const selectedGroup = visibleGroups.find((group) => group.id === selectedEra) || visibleGroups[0];
   const selectedMachine = selectedGroup?.systems.find((system) => system.id === selectedSystem);
 

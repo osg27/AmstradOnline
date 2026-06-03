@@ -11,6 +11,7 @@ const SYSTEM_OPTIONS = [
   ['amiga', 'Amiga'],
   ['megadrive', 'Mega Drive'],
   ['snes', 'SNES'],
+  ['arcade', 'Arcade / MAME'],
 ];
 
 function formatDate(value) {
