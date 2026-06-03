@@ -15,8 +15,21 @@
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
+  function postArcadeLog(message, level = 'info') {
+    try {
+      window.parent?.postMessage({
+        type: 'arcade_log',
+        level,
+        message: String(message || ''),
+      }, window.location.origin);
+    } catch {
+      // Parent logging is best-effort only.
+    }
+  }
+
   function drawStatus(main, sub = '') {
     statusText = main;
+    postArcadeLog(sub ? `${main}: ${sub}` : main, main.toLowerCase().includes('error') ? 'error' : 'info');
     if (!statusPanel || !statusTitle || !statusDetail) return;
     statusTitle.textContent = main;
     statusDetail.textContent = sub;
@@ -169,6 +182,7 @@
           try {
             run.files.forEach((file) => {
               FS.writeFile(`/roms/${file.name}`, file.bytes);
+              postArcadeLog(`Mounted ${file.name} to /roms/${file.name} (${file.bytes.length} bytes)`);
               console.log(`Mounted ${file.name} to /roms/${file.name}`);
             });
           } finally {
@@ -178,9 +192,11 @@
       ],
       postRun: [],
       print(text) {
+        postArcadeLog(text);
         console.log(text);
       },
       printErr(text) {
+        postArcadeLog(text, 'error');
         console.warn(text);
       },
       canvas,
@@ -205,7 +221,10 @@
       script.async = true;
       script.type = 'text/javascript';
       script.src = `/arcade/mame/${runtime}?v=${Date.now()}`;
-      script.onload = resolve;
+      script.onload = () => {
+        postArcadeLog(`Loaded runtime ${runtime}`);
+        resolve();
+      };
       script.onerror = () => reject(new Error(`Could not load ${runtime}`));
       document.body.appendChild(script);
       scriptElement = script;
@@ -238,6 +257,7 @@
     clearPreviousRuntime();
     configureModule(currentRun);
     drawStatus('Starting MAME', `${driver} (${runtime})`);
+    postArcadeLog(`Starting driver ${driver} with ${currentRun.files.length} file(s)`);
     await loadScript(runtime);
     hideStatus();
     statusText = '';
@@ -358,6 +378,7 @@
     }
 
     if (message.type === 'arcade_autoload') {
+      postArcadeLog(`Received ROM ${message.fileName || 'game.zip'} for driver ${message.driver || '(auto)'}`);
       startRun({
         runtime: message.runtime,
         driver: message.driver,
@@ -370,6 +391,7 @@
         ],
       }).catch((error) => {
         console.error('Old Style Gaming MAME error:', error);
+        postArcadeLog(error?.stack || error?.message || error, 'error');
         drawStatus('MAME error', error.message || 'Check browser console');
       });
       return;
@@ -382,6 +404,7 @@
       }
       startRun(currentRun).catch((error) => {
         console.error('Old Style Gaming MAME reset error:', error);
+        postArcadeLog(error?.stack || error?.message || error, 'error');
         drawStatus('MAME error', error.message || 'Check browser console');
       });
       return;
@@ -405,11 +428,13 @@
   window.addEventListener('error', (event) => {
     const message = event.message || 'Check browser console';
     console.error('Old Style Gaming MAME window error:', event.error || message);
+    postArcadeLog(event.error?.stack || message, 'error');
     drawStatus('MAME error', message);
   });
 
   window.addEventListener('unhandledrejection', (event) => {
     console.error('Old Style Gaming MAME promise error:', event.reason);
+    postArcadeLog(event.reason?.stack || event.reason?.message || event.reason, 'error');
     drawStatus('MAME error', event.reason?.message || 'Check browser console');
   });
 
@@ -419,4 +444,5 @@
   });
 
   drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
+  postArcadeLog('Arcade launcher ready');
 })();

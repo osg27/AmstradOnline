@@ -460,6 +460,24 @@ export default function RoomPage() {
     targetWindow.postMessage(payload, window.location.origin);
   }, []);
 
+  useEffect(() => {
+    function handleArcadeMessage(event) {
+      if (event.origin !== window.location.origin) return;
+
+      const message = event.data || {};
+      if (message.type !== 'arcade_log') return;
+
+      const prefix = message.level === 'error' ? 'Arcade error' : 'Arcade';
+      addLog(`${prefix}: ${message.message}`);
+    }
+
+    window.addEventListener('message', handleArcadeMessage);
+
+    return () => {
+      window.removeEventListener('message', handleArcadeMessage);
+    };
+  }, [addLog]);
+
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
     const active = Boolean(mask & extraBit);
