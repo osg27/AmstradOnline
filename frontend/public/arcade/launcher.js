@@ -86,7 +86,7 @@
   };
 
   function normalizeRuntime(runtime) {
-    const name = String(runtime || 'mametiny.js').trim() || 'mametiny.js';
+    const name = String(runtime || 'mamepacmantest.js').trim() || 'mamepacmantest.js';
     return name.endsWith('.js') ? name : `${name}.js`;
   }
 
@@ -411,5 +411,5 @@
     window.focus();
   });
 
-  drawStatus('MAME ready', 'Build mametiny.js + mametiny.wasm into /arcade/mame');
+  drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
 })();

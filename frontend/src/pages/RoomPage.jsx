@@ -75,7 +75,7 @@ export default function RoomPage() {
   const [micDevices, setMicDevices] = useState([]);
   const [selectedMicDeviceId, setSelectedMicDeviceId] = useState('');
   const [arcadeDriver, setArcadeDriver] = useState('');
-  const [arcadeRuntime, setArcadeRuntime] = useState('mametiny.js');
+  const [arcadeRuntime, setArcadeRuntime] = useState('mamepacmantest.js');
   const [arcadeArgs, setArcadeArgs] = useState('');
 
   const userId = useMemo(() => {
@@ -2335,7 +2335,7 @@ export default function RoomPage() {
         fileName: file.name,
         bytes,
         driver: arcadeDriverName,
-        runtime: arcadeRuntime.trim() || 'mametiny.js',
+        runtime: arcadeRuntime.trim() || 'mamepacmantest.js',
         args: arcadeArgs.trim(),
       });
 
@@ -2593,7 +2593,7 @@ export default function RoomPage() {
                       <input
                         value={arcadeRuntime}
                         onChange={(event) => setArcadeRuntime(event.target.value)}
-                        placeholder="mametiny.js"
+                        placeholder="mamepacmantest.js"
                       />
                     </label>
                     <label>
