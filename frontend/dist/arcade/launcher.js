@@ -133,12 +133,6 @@
   function buildArguments(run) {
     const args = [
       run.driver,
-      '-verbose',
-      '-window',
-      '-video',
-      'soft',
-      '-resolution',
-      '640x480',
       '-rompath',
       '/roms',
     ];

@@ -2638,7 +2638,7 @@ export default function RoomPage() {
                       <input
                         value={arcadeArgs}
                         onChange={(event) => setArcadeArgs(event.target.value)}
-                        placeholder="-window -video soft"
+                        placeholder="Optional MAME args"
                       />
                     </label>
                   </div>
