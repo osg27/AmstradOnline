@@ -2525,7 +2525,7 @@ export default function RoomPage() {
                   src={emulatorSrc}
                   style={{
                     position: 'absolute',
-                    left: '-99999px',
+                    left: '0',
                     top: '0',
                     width: '768px',
                     height: '544px',

@@ -15,6 +15,8 @@
 
   function drawStatus(main, sub = '') {
     statusText = main;
+    if (!screen.width) screen.width = 640;
+    if (!screen.height) screen.height = 480;
     context.fillStyle = '#000';
     context.fillRect(0, 0, screen.width, screen.height);
     context.fillStyle = '#fff';
@@ -25,7 +27,26 @@
     if (sub) {
       context.fillStyle = '#bcc4cf';
       context.font = '22px system-ui, sans-serif';
-      context.fillText(sub, screen.width / 2, screen.height / 2 + 24);
+      const text = String(sub);
+      const maxWidth = Math.max(220, screen.width - 48);
+      const words = text.split(/\s+/);
+      const lines = [];
+      let line = '';
+
+      words.forEach((word) => {
+        const nextLine = line ? `${line} ${word}` : word;
+        if (context.measureText(nextLine).width > maxWidth && line) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = nextLine;
+        }
+      });
+      if (line) lines.push(line);
+
+      lines.slice(0, 4).forEach((textLine, index) => {
+        context.fillText(textLine, screen.width / 2, screen.height / 2 + 24 + (index * 28));
+      });
     }
   }
 
@@ -148,6 +169,12 @@
     const canvas = screen;
     canvas.className = 'emscripten';
     canvas.tabIndex = -1;
+    canvas.width = 640;
+    canvas.height = 480;
+    canvas.addEventListener('webglcontextlost', (event) => {
+      event.preventDefault();
+      drawStatus('MAME error', 'WebGL context lost. Reload the room.');
+    }, false);
 
     window.Module = {
       noInitialRun: false,
