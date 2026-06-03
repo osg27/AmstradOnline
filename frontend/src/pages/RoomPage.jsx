@@ -1734,8 +1734,16 @@ export default function RoomPage() {
       throw new Error('Could not get mirror canvas context');
     }
 
+    ctx.imageSmoothingEnabled = false;
+
     const draw = () => {
       try {
+        const sourceWidth = sourceCanvas.width || sourceCanvas.clientWidth;
+        const sourceHeight = sourceCanvas.height || sourceCanvas.clientHeight;
+        if (!sourceWidth || !sourceHeight) {
+          mirrorLoopRef.current = requestAnimationFrame(draw);
+          return;
+        }
         ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
       } catch {
         // ignore transient draw issues

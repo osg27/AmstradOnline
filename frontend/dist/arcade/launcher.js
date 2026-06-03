@@ -1,6 +1,8 @@
 (function () {
   const screen = document.getElementById('arcade-screen');
-  const context = screen.getContext('2d', { alpha: false });
+  const statusPanel = document.getElementById('arcade-status');
+  const statusTitle = statusPanel?.querySelector('strong');
+  const statusDetail = statusPanel?.querySelector('span');
 
   let currentRun = null;
   let scriptElement = null;
@@ -15,39 +17,14 @@
 
   function drawStatus(main, sub = '') {
     statusText = main;
-    if (!screen.width) screen.width = 640;
-    if (!screen.height) screen.height = 480;
-    context.fillStyle = '#000';
-    context.fillRect(0, 0, screen.width, screen.height);
-    context.fillStyle = '#fff';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.font = '700 34px system-ui, sans-serif';
-    context.fillText(main, screen.width / 2, screen.height / 2 - 18);
-    if (sub) {
-      context.fillStyle = '#bcc4cf';
-      context.font = '22px system-ui, sans-serif';
-      const text = String(sub);
-      const maxWidth = Math.max(220, screen.width - 48);
-      const words = text.split(/\s+/);
-      const lines = [];
-      let line = '';
+    if (!statusPanel || !statusTitle || !statusDetail) return;
+    statusTitle.textContent = main;
+    statusDetail.textContent = sub;
+    statusPanel.classList.remove('hidden');
+  }
 
-      words.forEach((word) => {
-        const nextLine = line ? `${line} ${word}` : word;
-        if (context.measureText(nextLine).width > maxWidth && line) {
-          lines.push(line);
-          line = word;
-        } else {
-          line = nextLine;
-        }
-      });
-      if (line) lines.push(line);
-
-      lines.slice(0, 4).forEach((textLine, index) => {
-        context.fillText(textLine, screen.width / 2, screen.height / 2 + 24 + (index * 28));
-      });
-    }
+  function hideStatus() {
+    statusPanel?.classList.add('hidden');
   }
 
   function ensureAudio() {
@@ -210,6 +187,8 @@
       setStatus(text) {
         if (text) {
           drawStatus('MAME loading', text);
+        } else {
+          hideStatus();
         }
       },
       monitorRunDependencies(left) {
@@ -260,6 +239,7 @@
     configureModule(currentRun);
     drawStatus('Starting MAME', `${driver} (${runtime})`);
     await loadScript(runtime);
+    hideStatus();
     statusText = '';
   }
 
