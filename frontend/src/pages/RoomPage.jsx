@@ -550,7 +550,12 @@ export default function RoomPage() {
       }
 
       if (isCpcParty) {
-        forwardJoystickMaskAsKeys(mask, 1, previousMask);
+        forwardInputToEmulator({
+          type: 'amstrad_remote_joystick',
+          player: 1,
+          mask: joystickMask,
+        });
+        forwardExtraButtonAsKey(mask, 1, previousMask);
         localJoystickMaskRef.current = mask;
         return;
       }
@@ -585,7 +590,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmiga, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -825,7 +830,7 @@ export default function RoomPage() {
           if (performance.now() - peer.lastInputAt < 180) continue;
 
           addInputDebug(`P${peer.playerNumber} input timed out, releasing held input`, 0, 'guest remote');
-          forwardJoystickMaskAsKeys(0, 1, peer.joystickMask);
+          releaseCpcPartySharedInput(peer.joystickMask);
           peer.joystickMask = 0;
         }
         return;
@@ -853,7 +858,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(staleRemoteInputTimer);
     };
-  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isCpcParty, isHost, isMegaDrive, isSnes]);
+  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     if (isHost !== true || isAmiga || isMegaDrive || isSnes) {
@@ -867,21 +872,10 @@ export default function RoomPage() {
 
         if (!mask) return;
 
-        joystickMaskToKeys(mask, 1).forEach(([key, , active]) => {
-          if (!active) return;
-
-          forwardInputToEmulator({
-            type: 'amstrad_remote_input',
-            player: 1,
-            key,
-            action: 'down',
-          });
-          forwardInputToEmulator({
-            type: 'amstrad_remote_control',
-            player: 1,
-            key,
-            action: 'down',
-          });
+        forwardInputToEmulator({
+          type: 'amstrad_remote_joystick',
+          player: 1,
+          mask: mask & 31,
         });
         return;
       }
@@ -1030,7 +1024,9 @@ export default function RoomPage() {
           const previousMask = getRemoteMask();
 
           if (previousMask) {
-            if (isAmiga || isMegaDrive || isSnes) {
+            if (isCpcParty) {
+              releaseCpcPartySharedInput(previousMask);
+            } else if (isAmiga || isMegaDrive || isSnes) {
               forwardInputToEmulator({
                 type: 'amstrad_remote_joystick',
                 player,
@@ -1061,14 +1057,21 @@ export default function RoomPage() {
         }
         if (isCpcParty && activePartyPlayer !== player) {
           if (previousMask) {
-            forwardJoystickMaskAsKeys(0, 1, previousMask);
+            releaseCpcPartySharedInput(previousMask);
           }
           setRemoteMask(0);
           addInputDebug(`ignored guest state, party turn is P${activePartyPlayer}`, 0, 'party turn');
           return;
         }
 
-        if (isAmiga || isMegaDrive || isSnes) {
+        if (isCpcParty) {
+          forwardInputToEmulator({
+            type: 'amstrad_remote_joystick',
+            player: 1,
+            mask: mask & 31,
+          });
+          forwardExtraButtonAsKey(mask, 1, previousMask);
+        } else if (isAmiga || isMegaDrive || isSnes) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player,
@@ -1089,14 +1092,21 @@ export default function RoomPage() {
         addInputDebug(`host received P${player} held mask ${mask}`, mask, 'guest remote');
         if (isCpcParty && activePartyPlayer !== player) {
           if (previousMask) {
-            forwardJoystickMaskAsKeys(0, 1, previousMask);
+            releaseCpcPartySharedInput(previousMask);
           }
           setRemoteMask(0);
           addInputDebug(`ignored guest held mask, party turn is P${activePartyPlayer}`, 0, 'party turn');
           return;
         }
 
-        if (isAmiga || isMegaDrive || isSnes) {
+        if (isCpcParty) {
+          forwardInputToEmulator({
+            type: 'amstrad_remote_joystick',
+            player: 1,
+            mask: mask & 31,
+          });
+          forwardExtraButtonAsKey(mask, 1, previousMask);
+        } else if (isAmiga || isMegaDrive || isSnes) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player,
@@ -1111,7 +1121,7 @@ export default function RoomPage() {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
-  }, [activePartyPlayer, addInputDebug, addLog, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isCpcParty, isMegaDrive, isSnes]);
+  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isCpcParty, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     handleGuestPayloadOnHostRef.current = handleGuestPayloadOnHost;
