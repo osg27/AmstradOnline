@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import useSignaling from '../hooks/useSignaling';
@@ -8,7 +8,9 @@ import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 export default function RoomPage() {
   const navigate = useNavigate();
   const { roomCode } = useParams();
+  const [searchParams] = useSearchParams();
   const username = localStorage.getItem('username');
+  const isSoloMode = searchParams.get('mode') === 'solo';
 
   const [room, setRoom] = useState(null);
   const [status, setStatus] = useState('Loading room...');
@@ -111,16 +113,22 @@ export default function RoomPage() {
   const mediaLabel = isAmiga ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
-    : isAmiga
+    : isSoloMode
+      ? isAmiga
+        ? 'P1 Amiga controls + keyboard/mouse'
+        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isSnes ? 'P1 controller 1 / B Y A / Start' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
+      : isAmiga
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
       : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
-    : isHost ? 'Host' : 'Guest';
+    : isSoloMode ? 'Solo' : isHost ? 'Host' : 'Guest';
   const playerOneName = hostDisplayName || (isHost ? username : 'Host');
   const playerTwoName = guestDisplayName || (!isHost ? username : 'Guest');
   const normalPlayerSummary = `P1: ${playerOneName} / P2: ${playerTwoName}`;
-  const assignedControlLabel = isCpcParty
+  const assignedControlLabel = isSoloMode
+    ? `P1: ${username || playerOneName}`
+    : isCpcParty
     ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}`
     : isMegaDrive || isSnes || isArcade
       ? `${isHost ? `P1: ${playerOneName}` : `P2: ${playerTwoName}`} / controller ${isHost ? '1' : '2'}`
@@ -1370,8 +1378,17 @@ export default function RoomPage() {
     }
   }, [addLog, isCpcParty, isHost, partyMaxPlayers]);
 
-  const { send: sendSignal, isOpen: signalingOpen } = useSignaling(roomCode, onSignalMessage, signalingClientIdRef.current);
-  const displayedPlayers = isCpcParty
+  const { send: sendSignal, isOpen: signalingOpen } = useSignaling(isSoloMode ? null : roomCode, onSignalMessage, signalingClientIdRef.current);
+  const displayedPlayers = isSoloMode
+    ? [
+      {
+        playerNumber: 1,
+        username: username || playerOneName,
+        role: 'Solo',
+        connected: true,
+      },
+    ]
+    : isCpcParty
     ? partyRoster
     : [
       {
@@ -1387,20 +1404,31 @@ export default function RoomPage() {
         connected: Boolean(guestDisplayName),
       },
     ];
-  const healthItems = [
-    {
-      label: 'Signaling',
-      ok: signalingOpen,
-    },
-    {
-      label: isCpcParty ? 'Players' : 'Peer',
-      ok: remoteConnected,
-    },
-    {
-      label: isHost ? 'Host stream' : 'Guest link',
-      ok: isHost ? hostStarted : guestPrepared,
-    },
-  ];
+  const healthItems = isSoloMode
+    ? [
+      {
+        label: 'Local mode',
+        ok: true,
+      },
+      {
+        label: 'Emulator',
+        ok: hostStarted,
+      },
+    ]
+    : [
+      {
+        label: 'Signaling',
+        ok: signalingOpen,
+      },
+      {
+        label: isCpcParty ? 'Players' : 'Peer',
+        ok: remoteConnected,
+      },
+      {
+        label: isHost ? 'Host stream' : 'Guest link',
+        ok: isHost ? hostStarted : guestPrepared,
+      },
+    ];
 
   useEffect(() => {
     sendSignalRef.current = sendSignal;
@@ -1421,13 +1449,13 @@ export default function RoomPage() {
   }, [roomCode]);
 
   useEffect(() => {
-    if (signalingOpen) {
+    if (!isSoloMode && signalingOpen) {
       addLog('Signaling socket open');
     }
-  }, [signalingOpen, addLog]);
+  }, [isSoloMode, signalingOpen, addLog]);
 
   useEffect(() => {
-    if (!signalingOpen || !room) {
+    if (isSoloMode || !signalingOpen || !room) {
       return;
     }
 
@@ -1436,9 +1464,25 @@ export default function RoomPage() {
       role: isHost ? 'host' : 'guest',
       username,
     });
-  }, [isHost, room, sendSignal, signalingOpen, username]);
+  }, [isHost, isSoloMode, room, sendSignal, signalingOpen, username]);
 
   useEffect(() => {
+    if (isSoloMode) {
+      pcRef.current = null;
+      return () => {
+        if (mirrorLoopRef.current) {
+          cancelAnimationFrame(mirrorLoopRef.current);
+        }
+
+        localMicStreamRef.current?.getTracks().forEach((track) => track.stop());
+        localMicStreamRef.current = null;
+        localMicSenderRef.current = null;
+        hostVideoStreamRef.current = null;
+        hostAudioStreamRef.current = null;
+        dataChannelRef.current?.close();
+      };
+    }
+
     const pc = new RTCPeerConnection(buildRtcConfig());
     pcRef.current = pc;
 
@@ -1545,7 +1589,7 @@ export default function RoomPage() {
       dataChannelRef.current?.close();
       pc.close();
     };
-  }, [addLog]);
+  }, [addLog, isSoloMode]);
 
   useEffect(() => {
     if (isHost !== true) return undefined;
@@ -2281,6 +2325,17 @@ export default function RoomPage() {
       const audioStream = await waitForHostAudioStream(iframe);
       hostAudioStreamRef.current = audioStream || null;
 
+      if (isSoloMode) {
+        addLog('Local emulator ready');
+        setStatus('Local emulator ready');
+        hostStartedRef.current = true;
+        return;
+      }
+
+      if (!pc) {
+        throw new Error('Peer connection is not ready');
+      }
+
       if (isCpcParty) {
         addLog(`Party stream ready with ${stream.getVideoTracks().length} video track(s) and ${audioStream?.getAudioTracks().length || 0} audio track(s)`);
         setStatus('Party host ready, waiting for guests');
@@ -2358,16 +2413,21 @@ export default function RoomPage() {
   }
 
   useEffect(() => {
-    if (isHost && signalingOpen && !isAmiga && !isArcade) {
+    if (isSoloMode && isHost && room && !isArcade) {
+      startHostSession();
+      return;
+    }
+
+    if (!isSoloMode && isHost && signalingOpen && !isAmiga && !isArcade) {
       startHostSession();
     }
-  }, [isAmiga, isArcade, isHost, signalingOpen]);
+  }, [isAmiga, isArcade, isHost, isSoloMode, room, signalingOpen]);
 
   useEffect(() => {
-    if (room && !isHost) {
+    if (!isSoloMode && room && !isHost) {
       connectGuest();
     }
-  }, [isHost, room]);
+  }, [isHost, isSoloMode, room]);
 
   function openDiskPicker() {
     if (!isHost) return;
@@ -2500,7 +2560,7 @@ export default function RoomPage() {
         <div className="room-topbar">
           <div className="room-title">
             <BrandMark compact />
-            <h1>Room {roomCode}</h1>
+            <h1>{isSoloMode ? '1 Player' : `Room ${roomCode}`}</h1>
             <div className="room-identity">
               <span>You are</span>
               <strong>{username}</strong>
@@ -2559,7 +2619,7 @@ export default function RoomPage() {
         {showDiagnostics ? (
           <div className="session-strip diagnostics-summary">
             <span>{status}</span>
-            {!isCpcParty ? <span>{micStatus}</span> : null}
+            {!isCpcParty && !isSoloMode ? <span>{micStatus}</span> : null}
             <span>{controlLabel}</span>
           </div>
         ) : null}
@@ -2571,14 +2631,14 @@ export default function RoomPage() {
         <div className="room-layout">
           <div className="panel video-panel">
             <div className="play-header">
-              <h2>{isHost ? 'Host screen' : 'Remote screen'}</h2>
+              <h2>{isSoloMode ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
                   {assignedControlLabel}
                 </div>
 
-                {!isCpcParty ? (
+                {!isCpcParty && !isSoloMode ? (
                   <div className="mic-controls">
                     <button
                       type="button"
@@ -2728,8 +2788,10 @@ export default function RoomPage() {
                   flexWrap: 'wrap',
                 }}
                 >
-                  <button onClick={startHostSession} disabled={hostStarted}>
-                    {hostStarted ? 'Host session running' : 'Start host session'}
+                  <button type="button" onClick={startHostSession} disabled={hostStarted}>
+                    {isSoloMode
+                      ? hostStarted ? 'Emulator running' : 'Start emulator'
+                      : hostStarted ? 'Host session running' : 'Start host session'}
                   </button>
 
                   <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade}>
