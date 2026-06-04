@@ -133,6 +133,12 @@
   function buildArguments(run) {
     const args = [
       run.driver,
+      '-verbose',
+      '-window',
+      '-video',
+      'soft',
+      '-resolution',
+      '640x480',
       '-rompath',
       '/roms',
     ];
@@ -252,6 +258,7 @@
     configureModule(currentRun);
     drawStatus('Starting MAME', `${driver} (${runtime})`);
     postArcadeLog(`Starting driver ${driver} with ${currentRun.files.length} file(s)`);
+    postArcadeLog(`MAME args: ${buildArguments(currentRun).join(' ')}`);
     await loadScript(runtime);
     hideStatus();
     statusText = '';
