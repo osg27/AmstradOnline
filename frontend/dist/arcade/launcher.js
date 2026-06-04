@@ -115,23 +115,6 @@
       .filter(Boolean);
   }
 
-  function stripDefaultVideoArgs(args) {
-    const parts = splitArgs(args);
-    const filtered = [];
-
-    for (let index = 0; index < parts.length; index += 1) {
-      const arg = parts[index].toLowerCase();
-      if (arg === '-window') continue;
-      if (arg === '-video' || arg === '-resolution' || arg === '-rompath') {
-        index += 1;
-        continue;
-      }
-      filtered.push(parts[index]);
-    }
-
-    return filtered;
-  }
-
   async function preflightRuntime(runtime) {
     const paths = [
       `/arcade/mame/${runtime}`,
@@ -154,7 +137,7 @@
       '/roms',
     ];
 
-    stripDefaultVideoArgs(run.args).forEach((arg) => args.push(arg));
+    splitArgs(run.args).forEach((arg) => args.push(arg));
     return args;
   }
 
@@ -170,6 +153,8 @@
     const canvas = screen;
     canvas.className = 'emscripten';
     canvas.tabIndex = -1;
+    canvas.width = 640;
+    canvas.height = 480;
     canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       drawStatus('MAME error', 'WebGL context lost. Reload the room.');

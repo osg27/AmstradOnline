@@ -17,8 +17,15 @@
       }
 
       #arcade-screen {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
         display: block;
-        margin: 0 auto;
+        width: 640px;
+        height: 480px;
+        max-width: 100vw;
+        max-height: 100vh;
+        margin: auto;
         background: #000;
         image-rendering: pixelated;
       }
@@ -71,7 +78,7 @@
     </style>
   </head>
   <body>
-    <canvas id="arcade-screen" class="emscripten" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <canvas id="arcade-screen" class="emscripten" width="640" height="480" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
     <div id="arcade-status">
       <strong>MAME ready</strong>
       <span>Load a MAME ROM zip from the room</span>
