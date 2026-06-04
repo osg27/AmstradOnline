@@ -589,7 +589,6 @@
         return;
       }
 
-      sessionStorage.removeItem(PENDING_RUN_FLAG);
       postArcadeLog('Booting stored MAME run after clean reload');
       await startRun(storedRun);
     } catch (error) {
