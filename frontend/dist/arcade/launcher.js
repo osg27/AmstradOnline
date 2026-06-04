@@ -19,6 +19,12 @@
   const CURRENT_RUN_KEY = 'current';
   const PENDING_RUN_FLAG = 'oldstyle-arcade-pending-run';
   const DEFAULT_MAME_ARGS = [
+    '-verbose',
+    '-window',
+    '-video',
+    'soft',
+    '-resolution',
+    '640x480',
     '-rompath',
     '/roms',
   ];
