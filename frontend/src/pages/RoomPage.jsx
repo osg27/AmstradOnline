@@ -103,7 +103,7 @@ export default function RoomPage() {
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-7' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga
     ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
