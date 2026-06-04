@@ -277,8 +277,8 @@ export default function LobbyPage() {
 
         <section className="lobby-hero">
           <div>
-            <p className="lobby-eyebrow">Old Style Gaming</p>
-            <h1>Choose the machine. Then choose the way to play.</h1>
+            <p className="lobby-eyebrow">Retro Gaming is better with mates</p>
+            <h1>Choose a machine and play.</h1>
           </div>
           <form
             className="quick-join"

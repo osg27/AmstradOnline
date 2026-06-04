@@ -23,6 +23,7 @@ export default function RoomPage() {
   const [kickstartRomName, setKickstartRomName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
   const [inputDebug, setInputDebug] = useState({
     mask: 0,
     source: 'none',
@@ -2626,7 +2627,7 @@ export default function RoomPage() {
         <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
 
         <div className="room-layout">
-          <div className="panel video-panel">
+          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''}`}>
             <div className="play-header">
               <h2>{isSoloMode ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
@@ -2673,6 +2674,14 @@ export default function RoomPage() {
                   onClick={inputCaptured ? releaseInputCapture : captureInput}
                 >
                   {inputCaptured ? 'Release' : 'Capture'}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setIsScreenFullscreen((value) => !value)}
+                >
+                  {isScreenFullscreen ? 'Back to room' : 'Fullscreen'}
                 </button>
               </div>
             </div>

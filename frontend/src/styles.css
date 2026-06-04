@@ -97,7 +97,7 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.25rem;
+  padding: 1rem;
 }
 
 .card,
@@ -112,17 +112,17 @@ input:focus {
 }
 
 .room-card {
-  max-width: 1320px;
+  max-width: 1220px;
 }
 
 .lobby-page {
   align-items: flex-start;
-  padding-block: clamp(1rem, 3vw, 2.5rem);
+  padding-block: 0.65rem;
 }
 
 .lobby-shell {
   max-width: 1420px;
-  padding: clamp(1rem, 2vw, 1.35rem);
+  padding: 1rem 1.15rem;
   background:
     linear-gradient(180deg, rgba(26, 29, 28, 0.98), rgba(16, 18, 18, 0.98)),
     radial-gradient(circle at top left, rgba(122, 217, 155, 0.12), transparent 42%);
@@ -210,18 +210,27 @@ input:focus {
   padding: 0.4rem 0.65rem;
 }
 
+.lobby-header .brand-mark img {
+  width: 62px;
+  height: 62px;
+}
+
+.lobby-header .brand-copy strong {
+  font-size: 1.55rem;
+}
+
 .lobby-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 410px);
-  gap: 1rem;
-  align-items: end;
-  margin: clamp(1.35rem, 3vw, 2.4rem) 0 1rem;
+  gap: 0.8rem;
+  align-items: start;
+  margin: 0.7rem 0 0.8rem;
 }
 
 .lobby-eyebrow {
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.25rem;
   color: #86e6bd;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -231,8 +240,8 @@ input:focus {
   max-width: 870px;
   margin: 0;
   color: #fff7dd;
-  font-size: clamp(2rem, 5vw, 4.4rem);
-  line-height: 0.96;
+  font-size: clamp(1.75rem, 3.2vw, 3rem);
+  line-height: 1;
 }
 
 .quick-join {
@@ -240,7 +249,7 @@ input:focus {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.65rem;
   align-items: end;
-  padding: 0.8rem;
+  padding: 0.65rem;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #111414;
@@ -260,22 +269,22 @@ input:focus {
 
 .library-layout {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr) minmax(300px, 380px);
-  gap: 1rem;
+  grid-template-columns: 150px minmax(0, 1fr) minmax(290px, 380px);
+  gap: 0.75rem;
   align-items: start;
 }
 
 .platform-tabs {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .platform-tabs button {
-  min-height: 72px;
+  min-height: 58px;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.2rem;
-  padding: 0.8rem;
+  padding: 0.65rem 0.75rem;
   text-align: left;
 }
 
@@ -290,18 +299,18 @@ input:focus {
 
 .system-library,
 .mode-panel {
-  min-height: 560px;
+  min-height: 470px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #101313;
-  padding: 1rem;
+  padding: 0.85rem;
 }
 
 .library-head {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.65rem;
 }
 
 .library-head h2,
@@ -319,17 +328,17 @@ input:focus {
 .system-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 0.75rem;
+  gap: 0.65rem;
 }
 
 .system-card {
   position: relative;
   display: grid;
-  gap: 0.55rem;
-  min-height: 220px;
+  gap: 0.45rem;
+  min-height: 170px;
   align-items: start;
   justify-content: stretch;
-  padding: 1rem;
+  padding: 0.9rem;
   overflow: hidden;
   text-align: left;
   background: #171a1a;
@@ -369,7 +378,7 @@ input:focus {
 
 .system-name {
   color: #fff7dd;
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   font-weight: 900;
   line-height: 1.05;
 }
@@ -399,14 +408,14 @@ input:focus {
 
 .mode-panel {
   position: sticky;
-  top: 1rem;
+  top: 0.65rem;
   display: grid;
-  gap: 0.9rem;
+  gap: 0.65rem;
 }
 
 .mode-head span {
   display: inline-flex;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.35rem;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   padding: 0.25rem 0.5rem;
@@ -416,16 +425,16 @@ input:focus {
 
 .mode-list {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .mode-card {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 0.2rem 0.7rem;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 0.15rem 0.65rem;
   justify-content: stretch;
-  min-height: 78px;
-  padding: 0.75rem;
+  min-height: 66px;
+  padding: 0.6rem 0.7rem;
   text-align: left;
   background: #171a1a;
 }
@@ -682,14 +691,14 @@ input:focus {
 
 .room-layout {
   display: block;
-  margin-top: 1rem;
+  margin-top: 0.75rem;
 }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.85rem;
 }
 
 .action-panel {
@@ -721,7 +730,7 @@ input:focus {
 }
 
 .room-title h1 {
-  margin: 0.85rem 0 0;
+  margin: 0.45rem 0 0;
   font-size: clamp(1.35rem, 2vw, 2rem);
   line-height: 1.1;
 }
@@ -744,7 +753,7 @@ input:focus {
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.35rem 0.55rem;
-  margin-top: 0.65rem;
+  margin-top: 0.35rem;
 }
 
 .room-identity span,
@@ -761,7 +770,7 @@ input:focus {
 .room-summary {
   justify-content: space-between;
   gap: 0.8rem;
-  margin-top: 1rem;
+  margin-top: 0.65rem;
 }
 
 .player-strip {
@@ -773,7 +782,7 @@ input:focus {
   grid-template-columns: auto 1fr;
   gap: 0.05rem 0.45rem;
   min-width: 150px;
-  padding: 0.55rem 0.65rem;
+  padding: 0.45rem 0.6rem;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #141716;
@@ -898,7 +907,7 @@ input:focus {
 
 .session-strip {
   gap: 0.45rem;
-  margin-top: 0.7rem;
+  margin-top: 0.5rem;
   color: #c8c8c2;
 }
 
@@ -1111,11 +1120,38 @@ input:focus {
 
 .video {
   width: 100%;
-  min-height: 480px;
+  min-height: 320px;
+  max-height: min(52vh, 470px);
+  object-fit: contain;
   background: black;
   border-radius: 6px;
   border: 1px solid #1f2f4a;
   cursor: crosshair;
+}
+
+.video-panel.fullscreen-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 0.75rem;
+  border-radius: 0;
+  background: #050606;
+}
+
+.video-panel.fullscreen-screen .play-header {
+  flex: 0 0 auto;
+}
+
+.video-panel.fullscreen-screen .capture-state {
+  align-self: flex-start;
+}
+
+.video-panel.fullscreen-screen .video {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: calc(100vh - 8.5rem);
+  object-fit: contain;
 }
 
 .log-list {
