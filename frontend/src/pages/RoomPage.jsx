@@ -2286,6 +2286,7 @@ export default function RoomPage() {
     hostStartingRef.current = true;
 
     try {
+      setError('');
       const pc = pcRef.current;
       const iframe = emulatorFrameRef.current;
 
@@ -2380,6 +2381,7 @@ export default function RoomPage() {
       setError(err.message);
       addLog(`Host session error: ${err.message}`);
       setHostStarted(false);
+      hostStartedRef.current = false;
     } finally {
       hostStartingRef.current = false;
     }
@@ -2413,11 +2415,6 @@ export default function RoomPage() {
   }
 
   useEffect(() => {
-    if (isSoloMode && isHost && room && !isArcade) {
-      startHostSession();
-      return;
-    }
-
     if (!isSoloMode && isHost && signalingOpen && !isAmiga && !isArcade) {
       startHostSession();
     }
