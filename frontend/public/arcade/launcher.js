@@ -14,6 +14,20 @@
   let keepAlive = null;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+  const RUN_DB = 'oldstyle-arcade-mame';
+  const RUN_STORE = 'runs';
+  const CURRENT_RUN_KEY = 'current';
+  const PENDING_RUN_FLAG = 'oldstyle-arcade-pending-run';
+  const DEFAULT_MAME_ARGS = [
+    '-verbose',
+    '-window',
+    '-video',
+    'soft',
+    '-resolution',
+    '640x480',
+    '-rompath',
+    '/roms',
+  ];
 
   function postArcadeLog(message, level = 'info') {
     try {
@@ -121,7 +135,7 @@
 
     for (let index = 0; index < parts.length; index += 1) {
       const arg = parts[index].toLowerCase();
-      if (arg === '-window') continue;
+      if (arg === '-verbose' || arg === '-window') continue;
       if (arg === '-video' || arg === '-resolution' || arg === '-rompath') {
         index += 1;
         continue;
@@ -147,12 +161,101 @@
     }
   }
 
+  function openRunDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(RUN_DB, 1);
+
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore(RUN_STORE);
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('Could not open arcade ROM storage'));
+    });
+  }
+
+  function withRunStore(mode, callback) {
+    return openRunDb().then((db) => new Promise((resolve, reject) => {
+      const transaction = db.transaction(RUN_STORE, mode);
+      const store = transaction.objectStore(RUN_STORE);
+      const request = callback(store);
+
+      transaction.oncomplete = () => {
+        db.close();
+        resolve(request?.result);
+      };
+      transaction.onerror = () => {
+        db.close();
+        reject(transaction.error || new Error('Arcade ROM storage failed'));
+      };
+      transaction.onabort = () => {
+        db.close();
+        reject(transaction.error || new Error('Arcade ROM storage aborted'));
+      };
+    }));
+  }
+
+  function bytesToBuffer(bytes) {
+    const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    return source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+  }
+
+  function normalizeRun(run) {
+    const files = (run.files || []).map((file) => ({
+      name: file.name || 'game.zip',
+      bytes: file.bytes instanceof Uint8Array ? file.bytes : new Uint8Array(file.bytes || []),
+    }));
+
+    return {
+      runtime: normalizeRuntime(run.runtime),
+      driver: String(run.driver || driverFromFileName(files[0]?.name)).trim().toLowerCase(),
+      args: run.args || '',
+      files,
+    };
+  }
+
+  async function saveStoredRun(run) {
+    const normalized = normalizeRun(run);
+    const stored = {
+      ...normalized,
+      files: normalized.files.map((file) => ({
+        name: file.name,
+        bytes: bytesToBuffer(file.bytes),
+      })),
+    };
+
+    await withRunStore('readwrite', (store) => store.put(stored, CURRENT_RUN_KEY));
+    return normalized;
+  }
+
+  async function loadStoredRun() {
+    const stored = await withRunStore('readonly', (store) => store.get(CURRENT_RUN_KEY));
+
+    if (!stored) return null;
+
+    return normalizeRun({
+      ...stored,
+      files: (stored.files || []).map((file) => ({
+        name: file.name,
+        bytes: new Uint8Array(file.bytes || []),
+      })),
+    });
+  }
+
+  async function persistRunAndReload(run) {
+    const storedRun = await saveStoredRun(run);
+
+    if (!storedRun.driver) {
+      drawStatus('MAME driver needed', 'Enter a driver name before loading the ROM');
+      return;
+    }
+
+    sessionStorage.setItem(PENDING_RUN_FLAG, '1');
+    postArcadeLog(`Stored ${storedRun.files.length} ROM file(s); restarting clean MAME page`);
+    window.location.reload();
+  }
+
   function buildArguments(run) {
-    const args = [
-      run.driver,
-      '-rompath',
-      '/roms',
-    ];
+    const args = [run.driver, ...DEFAULT_MAME_ARGS];
 
     stripDefaultVideoArgs(run.args).forEach((arg) => args.push(arg));
     return args;
@@ -241,23 +344,16 @@
   }
 
   async function startRun(run) {
-    const runtime = normalizeRuntime(run.runtime);
-    const driver = String(run.driver || driverFromFileName(run.files?.[0]?.name)).trim().toLowerCase();
+    const normalizedRun = normalizeRun(run);
+    const runtime = normalizedRun.runtime;
+    const driver = normalizedRun.driver;
 
     if (!driver) {
       drawStatus('MAME driver needed', 'Enter a driver name before loading the ROM');
       return;
     }
 
-    currentRun = {
-      ...run,
-      runtime,
-      driver,
-      files: (run.files || []).map((file) => ({
-        name: file.name,
-        bytes: file.bytes instanceof Uint8Array ? file.bytes : new Uint8Array(file.bytes || []),
-      })),
-    };
+    currentRun = normalizedRun;
 
     ensureAudio()?.resume?.().catch(() => {});
     drawStatus('Checking MAME runtime', `${runtime} / ${driver}`);
@@ -267,6 +363,7 @@
     configureModule(currentRun);
     drawStatus('Starting MAME', `${driver} (${runtime})`);
     postArcadeLog(`Starting driver ${driver} with ${currentRun.files.length} file(s)`);
+    postArcadeLog(`MAME args: ${buildArguments(currentRun).join(' ')}`);
     await loadScript(runtime);
     hideStatus();
     statusText = '';
@@ -388,7 +485,7 @@
 
     if (message.type === 'arcade_autoload') {
       postArcadeLog(`Received ROM ${message.fileName || 'game.zip'} for driver ${message.driver || '(auto)'}`);
-      startRun({
+      persistRunAndReload({
         runtime: message.runtime,
         driver: message.driver,
         args: message.args,
@@ -399,7 +496,7 @@
           },
         ],
       }).catch((error) => {
-        console.error('Old Style Gaming MAME error:', error);
+        console.error('Old Style Gaming MAME storage error:', error);
         postArcadeLog(error?.stack || error?.message || error, 'error');
         drawStatus('MAME error', error.message || 'Check browser console');
       });
@@ -407,11 +504,13 @@
     }
 
     if (message.type === 'arcade_reset') {
-      if (!currentRun) {
-        drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
-        return;
-      }
-      startRun(currentRun).catch((error) => {
+      Promise.resolve(currentRun || loadStoredRun()).then((run) => {
+        if (!run) {
+          drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
+          return null;
+        }
+        return persistRunAndReload(run);
+      }).catch((error) => {
         console.error('Old Style Gaming MAME reset error:', error);
         postArcadeLog(error?.stack || error?.message || error, 'error');
         drawStatus('MAME error', error.message || 'Check browser console');
@@ -452,6 +551,30 @@
     window.focus();
   });
 
-  drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
-  postArcadeLog('Arcade launcher ready');
+  async function bootStoredRun() {
+    if (sessionStorage.getItem(PENDING_RUN_FLAG) !== '1') {
+      drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
+      postArcadeLog('Arcade launcher ready');
+      return;
+    }
+
+    try {
+      const storedRun = await loadStoredRun();
+      if (!storedRun) {
+        sessionStorage.removeItem(PENDING_RUN_FLAG);
+        drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
+        postArcadeLog('Arcade launcher ready; no stored ROM found');
+        return;
+      }
+
+      postArcadeLog('Booting stored MAME run after clean reload');
+      await startRun(storedRun);
+    } catch (error) {
+      console.error('Old Style Gaming MAME boot error:', error);
+      postArcadeLog(error?.stack || error?.message || error, 'error');
+      drawStatus('MAME error', error.message || 'Check browser console');
+    }
+  }
+
+  bootStoredRun();
 })();
