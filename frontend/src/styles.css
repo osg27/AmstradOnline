@@ -1150,8 +1150,59 @@ input:focus {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
-  height: calc(100vh - 8.5rem);
+  width: min(100%, calc((100vh - 8.5rem) * 1.333));
+  height: auto;
+  max-height: calc(100vh - 8.5rem);
   object-fit: contain;
+}
+
+.video-panel.fullscreen-screen.party-fullscreen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-rows: auto auto 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.video-panel.fullscreen-screen.party-fullscreen .play-header {
+  grid-column: 1 / -1;
+}
+
+.video-panel.fullscreen-screen.party-fullscreen .capture-state {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.video-panel.fullscreen-screen.party-fullscreen .video {
+  grid-column: 1;
+  grid-row: 3 / 5;
+  align-self: center;
+  justify-self: center;
+  width: min(100%, calc((100vh - 7rem) * 1.333));
+  max-height: calc(100vh - 7rem);
+}
+
+.video-panel.fullscreen-screen.party-fullscreen .host-control-bar {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: stretch;
+}
+
+.video-panel.fullscreen-screen.party-fullscreen .host-control-bar button {
+  flex: 1 1 145px;
+}
+
+.video-panel.fullscreen-screen.party-fullscreen .party-turn-panel {
+  grid-column: 2;
+  grid-row: 3 / 5;
+  min-height: 0;
+  max-height: calc(100vh - 7rem);
+  margin-top: 0;
+  overflow: auto;
+}
+
+.video-panel.fullscreen-screen.party-fullscreen .party-roster {
+  grid-template-columns: 1fr;
 }
 
 .log-list {

@@ -2627,7 +2627,7 @@ export default function RoomPage() {
         <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
 
         <div className="room-layout">
-          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''}`}>
+          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isCpcParty ? 'party-fullscreen' : ''}`}>
             <div className="play-header">
               <h2>{isSoloMode ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
@@ -2788,11 +2788,13 @@ export default function RoomPage() {
                   </div>
                 ) : null}
 
-                <div style={{
-                  display: 'flex',
-                  gap: '10px',
-                  flexWrap: 'wrap',
-                }}
+                <div
+                  className="host-control-bar"
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    flexWrap: 'wrap',
+                  }}
                 >
                   <button type="button" onClick={startHostSession} disabled={hostStarted}>
                     {isSoloMode
