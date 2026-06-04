@@ -22,7 +22,6 @@
     '-rompath',
     '/roms',
   ];
-  const MAX_VISIBLE_CANVAS_SCALE = 0.45;
 
   function postArcadeLog(message, level = 'info') {
     try {
@@ -48,31 +47,6 @@
   function hideStatus() {
     statusPanel?.classList.add('hidden');
   }
-
-  function fitArcadeCanvas() {
-    const width = Number(screen.width) || 640;
-    const height = Number(screen.height) || 480;
-    const viewportWidth = Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
-    const viewportHeight = Math.max(1, document.documentElement.clientHeight || window.innerHeight || 1);
-    const fitScale = Math.min(
-      (viewportWidth - 16) / width,
-      (viewportHeight - 16) / height,
-      MAX_VISIBLE_CANVAS_SCALE,
-    );
-    const scale = Math.max(0.05, fitScale);
-
-    document.documentElement.style.setProperty('--arcade-fit-scale', String(scale));
-
-    const detail = `${width}x${height} at ${Math.round(scale * 100)}% in ${viewportWidth}x${viewportHeight}`;
-    if (fitArcadeCanvas.lastDetail !== detail) {
-      fitArcadeCanvas.lastDetail = detail;
-      postArcadeLog(`Canvas fit: ${detail}`);
-    }
-  }
-
-  window.addEventListener('resize', fitArcadeCanvas);
-  setInterval(fitArcadeCanvas, 500);
-  fitArcadeCanvas();
 
   function ensureAudio() {
     if (!OriginalAudioContext) return null;
@@ -293,7 +267,6 @@
     const canvas = screen;
     canvas.className = 'emscripten';
     canvas.tabIndex = -1;
-    fitArcadeCanvas();
     canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       drawStatus('MAME error', 'WebGL context lost. Reload the room.');
@@ -386,7 +359,6 @@
     postArcadeLog(`Starting driver ${driver} with ${currentRun.files.length} file(s)`);
     postArcadeLog(`MAME args: ${buildArguments(currentRun).join(' ')}`);
     await loadScript(runtime);
-    fitArcadeCanvas();
     hideStatus();
     statusText = '';
   }
