@@ -39,10 +39,10 @@ def create_room(
     user_id: int = Depends(get_current_user_id),
 ):
     system = payload.system if payload else "cpc"
-    if system == "arcade":
+    if system in {"arcade", "amiga_aga"}:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not is_admin_user(user):
-            raise HTTPException(status_code=403, detail="Arcade rooms are limited to admins for now")
+            raise HTTPException(status_code=403, detail="This room type is limited to admins for now")
     elif system in {"cpc_party", "amiga", "megadrive", "snes"}:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not can_use_preview_systems(user):

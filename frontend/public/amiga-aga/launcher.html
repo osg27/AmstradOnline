@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Amiga AGA Launcher</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        color: #efeae0;
+        font-family: system-ui, sans-serif;
+      }
+
+      #game {
+        width: 100vw;
+        height: 100vh;
+        background: #000;
+      }
+
+      #status {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        background: #050606;
+        color: #86e6bd;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="status">Load an Amiga AGA file to start PUAE</div>
+
+    <script>
+      const statusElement = document.getElementById("status");
+      const gameElement = document.getElementById("game");
+
+      let pendingGame = null;
+      let pendingKickstart = null;
+      let started = false;
+      let gameUrl = "";
+      let biosUrl = "";
+
+      function setStatus(message) {
+        statusElement.textContent = message;
+      }
+
+      function toBlobUrl(fileName, bytes, fallbackType = "application/octet-stream") {
+        const lowerName = (fileName || "").toLowerCase();
+        const type = lowerName.endsWith(".uae") ? "text/plain" : fallbackType;
+        return URL.createObjectURL(new Blob([bytes], { type }));
+      }
+
+      function destroyBlobUrls() {
+        if (gameUrl) URL.revokeObjectURL(gameUrl);
+        if (biosUrl) URL.revokeObjectURL(biosUrl);
+        gameUrl = "";
+        biosUrl = "";
+      }
+
+      function startEmulator() {
+        if (started) return;
+
+        if (!pendingGame) {
+          setStatus("Choose an Amiga AGA file first");
+          return;
+        }
+
+        started = true;
+        statusElement.style.display = "none";
+        gameElement.innerHTML = "";
+        destroyBlobUrls();
+
+        gameUrl = toBlobUrl(pendingGame.fileName, pendingGame.bytes);
+        if (pendingKickstart) {
+          biosUrl = toBlobUrl(pendingKickstart.fileName, pendingKickstart.bytes);
+        }
+
+        window.EJS_player = "#game";
+        window.EJS_core = "puae";
+        window.EJS_gameName = pendingGame.fileName || "Amiga AGA";
+        window.EJS_gameUrl = gameUrl;
+        window.EJS_biosUrl = biosUrl || undefined;
+        window.EJS_pathtodata = "/emulatorjs/data/";
+        window.EJS_DEBUG_XX = true;
+        window.EJS_startOnLoaded = true;
+        window.EJS_disableAutoLang = true;
+        window.EJS_threads = false;
+        window.EJS_defaultOptions = {
+          "puae_model": "A1200",
+          "puae_chipset": "AGA",
+          "puae_cpu_model": "68020",
+          "puae_chipmem_size": "4",
+          "puae_fastmem_size": "8",
+        };
+
+        const script = document.createElement("script");
+        script.src = "/emulatorjs/data/loader.js";
+        document.body.appendChild(script);
+      }
+
+      window.getAmigaAgaAudioStream = () => null;
+
+      window.addEventListener("message", (event) => {
+        if (event.origin !== window.location.origin) return;
+        const data = event.data || {};
+
+        if (data.type === "amiga_aga_start") {
+          startEmulator();
+        }
+
+        if (data.type === "amiga_aga_autoload") {
+          pendingGame = {
+            fileName: data.fileName || "game.uae",
+            bytes: new Uint8Array(data.bytes || []),
+          };
+          setStatus(`Starting ${pendingGame.fileName} with PUAE...`);
+          startEmulator();
+        }
+
+        if (data.type === "amiga_kickstart") {
+          pendingKickstart = {
+            fileName: data.fileName || "kick.rom",
+            bytes: new Uint8Array(data.bytes || []),
+          };
+          setStatus(`Kickstart ready: ${pendingKickstart.fileName}`);
+        }
+
+        if (data.type === "amiga_aga_reset") {
+          window.location.reload();
+        }
+      });
+    </script>
+  </body>
+</html>

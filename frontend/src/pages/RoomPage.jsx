@@ -98,27 +98,31 @@ export default function RoomPage() {
   const isCpcParty = roomSystem === 'cpc_party';
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
+  const isAmigaAga = roomSystem === 'amiga_aga';
+  const isAmigaFamily = isAmiga || isAmigaAga;
   const isMegaDrive = roomSystem === 'megadrive';
   const isSnes = roomSystem === 'snes';
   const isArcade = roomSystem === 'arcade';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
-  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-  const emulatorSrc = isAmiga
+  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const emulatorSrc = isAmigaAga
+    ? '/amiga-aga/launcher.html?v=2026-06-04-1'
+    : isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
-  const acceptedMedia = isAmiga
-    ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
+  const acceptedMedia = isAmigaFamily
+    ? '.uae,.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
     : isMegaDrive ? '.bin,.gen,.md,.smd' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2' : isArcade ? '.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
-  const mediaLabel = isAmiga ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
+  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
     : isSoloMode
-      ? isAmiga
+      ? isAmigaFamily
         ? 'P1 Amiga controls + keyboard/mouse'
         : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isSnes ? 'P1 controller 1 / B Y A / Start' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
-      : isAmiga
+      : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
       : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
@@ -560,7 +564,7 @@ export default function RoomPage() {
 
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : 2;
-    const joystickMask = isAmiga || isMegaDrive || isSnes || isArcade ? mask : mask & 31;
+    const joystickMask = isAmigaFamily || isMegaDrive || isSnes || isArcade ? mask : mask & 31;
     const previousMask = localJoystickMaskRef.current;
     const payload = {
       type: 'joystick',
@@ -596,7 +600,7 @@ export default function RoomPage() {
         player,
         mask: joystickMask,
       });
-      if (!isAmiga && !isMegaDrive && !isSnes && !isArcade) {
+      if (!isAmigaFamily && !isMegaDrive && !isSnes && !isArcade) {
         forwardExtraButtonAsKey(mask, player, previousMask);
       }
       localJoystickMaskRef.current = mask;
@@ -621,7 +625,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmiga, isArcade, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isArcade, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -647,7 +651,7 @@ export default function RoomPage() {
   }, [forwardInputToEmulator, isHost]);
 
   const forwardAmigaMouse = useCallback((payload) => {
-    if (!isAmiga) return;
+    if (!isAmigaFamily) return;
 
     if (isHost) {
       forwardInputToEmulator(payload);
@@ -658,10 +662,10 @@ export default function RoomPage() {
     if (channel?.readyState === 'open') {
       channel.send(JSON.stringify(payload));
     }
-  }, [forwardInputToEmulator, isAmiga, isHost]);
+  }, [forwardInputToEmulator, isAmigaFamily, isHost]);
 
   const handleAmigaPointerDown = useCallback((event) => {
-    if (!isAmiga) return;
+    if (!isAmigaFamily) return;
 
     captureInput();
     const button = event.button === 2 ? 3 : 1;
@@ -674,10 +678,10 @@ export default function RoomPage() {
     addInputDebug(`Amiga mouse button ${button} down`, null, isHost ? 'host mouse' : 'guest mouse');
     forwardAmigaMouse(payload);
     event.preventDefault();
-  }, [addInputDebug, captureInput, forwardAmigaMouse, isAmiga, isHost]);
+  }, [addInputDebug, captureInput, forwardAmigaMouse, isAmigaFamily, isHost]);
 
   const handleAmigaPointerUp = useCallback((event) => {
-    if (!isAmiga) return;
+    if (!isAmigaFamily) return;
 
     const button = event.button === 2 ? 3 : 1;
     const payload = {
@@ -689,10 +693,10 @@ export default function RoomPage() {
     addInputDebug(`Amiga mouse button ${button} up`, null, isHost ? 'host mouse' : 'guest mouse');
     forwardAmigaMouse(payload);
     event.preventDefault();
-  }, [addInputDebug, forwardAmigaMouse, isAmiga, isHost]);
+  }, [addInputDebug, forwardAmigaMouse, isAmigaFamily, isHost]);
 
   const handleAmigaPointerMove = useCallback((event) => {
-    if (!isAmiga || !inputCaptured) return;
+    if (!isAmigaFamily || !inputCaptured) return;
     if (!event.movementX && !event.movementY) return;
 
     forwardAmigaMouse({
@@ -700,10 +704,10 @@ export default function RoomPage() {
       movementX: event.movementX,
       movementY: event.movementY,
     });
-  }, [forwardAmigaMouse, inputCaptured, isAmiga]);
+  }, [forwardAmigaMouse, inputCaptured, isAmigaFamily]);
 
   const sendAmigaMouseClick = useCallback((button) => {
-    if (!isAmiga) return;
+    if (!isAmigaFamily) return;
 
     captureInput();
     addInputDebug(`Amiga mouse button ${button} pulse`, null, isHost ? 'host mouse' : 'guest mouse');
@@ -712,7 +716,7 @@ export default function RoomPage() {
       button,
       action: 'down',
     });
-  }, [addInputDebug, captureInput, forwardAmigaMouse, isAmiga, isHost]);
+  }, [addInputDebug, captureInput, forwardAmigaMouse, isAmigaFamily, isHost]);
 
   const setPartyTurn = useCallback((playerNumber) => {
     if (!isCpcParty || !isHost) return;
@@ -874,7 +878,7 @@ export default function RoomPage() {
       const previousMask = remoteJoystickMaskRef.current;
 
       addInputDebug('guest input timed out, releasing held input', 0, 'guest remote');
-      if (isAmiga || isMegaDrive || isSnes || isArcade) {
+      if (isAmigaFamily || isMegaDrive || isSnes || isArcade) {
         forwardInputToEmulator({
           type: 'amstrad_remote_joystick',
           player: 2,
@@ -889,10 +893,10 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(staleRemoteInputTimer);
     };
-  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isArcade, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
+  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmigaFamily, isArcade, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
 
   useEffect(() => {
-    if (isHost !== true || isAmiga || isMegaDrive || isSnes || isArcade) {
+    if (isHost !== true || isAmigaFamily || isMegaDrive || isSnes || isArcade) {
       return undefined;
     }
 
@@ -936,7 +940,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
     };
-  }, [activePartyPlayer, forwardInputToEmulator, isAmiga, isArcade, isCpcParty, isHost, isMegaDrive, isSnes]);
+  }, [activePartyPlayer, forwardInputToEmulator, isAmigaFamily, isArcade, isCpcParty, isHost, isMegaDrive, isSnes]);
 
   useEffect(() => {
     if (isHost !== false) {
@@ -1057,7 +1061,7 @@ export default function RoomPage() {
           if (previousMask) {
             if (isCpcParty) {
               releaseCpcPartySharedInput(previousMask);
-            } else if (isAmiga || isMegaDrive || isSnes || isArcade) {
+            } else if (isAmigaFamily || isMegaDrive || isSnes || isArcade) {
               forwardInputToEmulator({
                 type: 'amstrad_remote_joystick',
                 player,
@@ -1102,7 +1106,7 @@ export default function RoomPage() {
             mask: mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
-        } else if (isAmiga || isMegaDrive || isSnes || isArcade) {
+        } else if (isAmigaFamily || isMegaDrive || isSnes || isArcade) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player,
@@ -1137,7 +1141,7 @@ export default function RoomPage() {
             mask: mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
-        } else if (isAmiga || isMegaDrive || isSnes || isArcade) {
+        } else if (isAmigaFamily || isMegaDrive || isSnes || isArcade) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player,
@@ -1152,7 +1156,7 @@ export default function RoomPage() {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
-  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmiga, isArcade, isCpcParty, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmigaFamily, isArcade, isCpcParty, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     handleGuestPayloadOnHostRef.current = handleGuestPayloadOnHost;
@@ -1599,7 +1603,7 @@ export default function RoomPage() {
       if (!shouldHandleHostKey(event)) return;
 
       const key = getKeyboardKey(event);
-      if (isAmiga) {
+      if (isAmigaFamily) {
         if (event.repeat) {
           event.preventDefault();
           return;
@@ -1643,7 +1647,7 @@ export default function RoomPage() {
       if (!shouldHandleHostKey(event)) return;
 
       const key = getKeyboardKey(event);
-      if (isAmiga) {
+      if (isAmigaFamily) {
         addInputDebug(`host Amiga key ${event.code} up`, null, 'host keyboard');
         forwardInputToEmulator({
           type: 'amiga_keyboard',
@@ -1684,7 +1688,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown, true);
       window.removeEventListener('keyup', handleHostKeyUp, true);
     };
-  }, [activePartyPlayer, addInputDebug, forwardInputToEmulator, isAmiga, isCpcParty, isHost]);
+  }, [activePartyPlayer, addInputDebug, forwardInputToEmulator, isAmigaFamily, isCpcParty, isHost]);
 
   useEffect(() => {
     if (isHost !== false) return undefined;
@@ -1944,6 +1948,7 @@ export default function RoomPage() {
   }
 
   function getHostAudioStream(iframe) {
+    if (isAmigaAga) return iframe.contentWindow?.getAmigaAgaAudioStream?.() || null;
     if (isAmiga) return iframe.contentWindow?.getAmigaAudioStream?.() || null;
     if (isMegaDrive) return iframe.contentWindow?.getMegaDriveAudioStream?.() || null;
     if (isSnes) return iframe.contentWindow?.getSnesAudioStream?.() || null;
@@ -2301,6 +2306,9 @@ export default function RoomPage() {
       if (isAmiga) {
         iframe.contentWindow?.postMessage({ type: 'amiga_start' }, window.location.origin);
       }
+      if (isAmigaAga) {
+        iframe.contentWindow?.postMessage({ type: 'amiga_aga_start' }, window.location.origin);
+      }
       if (isMegaDrive) {
         iframe.contentWindow?.postMessage({ type: 'megadrive_start' }, window.location.origin);
       }
@@ -2416,10 +2424,10 @@ export default function RoomPage() {
   }
 
   useEffect(() => {
-    if (!isSoloMode && isHost && signalingOpen && !isAmiga && !isArcade) {
+    if (!isSoloMode && isHost && signalingOpen && !isAmigaFamily && !isArcade) {
       startHostSession();
     }
-  }, [isAmiga, isArcade, isHost, isSoloMode, room, signalingOpen]);
+  }, [isAmigaFamily, isArcade, isHost, isSoloMode, room, signalingOpen]);
 
   useEffect(() => {
     if (!isSoloMode && room && !isHost) {
@@ -2434,13 +2442,13 @@ export default function RoomPage() {
   }
 
   function openKickstartPicker() {
-    if (!isHost || !isAmiga) return;
+    if (!isHost || !isAmigaFamily) return;
 
     kickstartInputRef.current?.click();
   }
 
   function openSwapDiskPicker() {
-    if (!isHost || !isAmiga || !hostStarted) return;
+    if (!isHost || !isAmigaFamily || !hostStarted) return;
 
     swapDiskInputRef.current?.click();
   }
@@ -2450,6 +2458,8 @@ export default function RoomPage() {
 
     const type = isAmiga
       ? 'amiga_reset'
+      : isAmigaAga
+        ? 'amiga_aga_reset'
       : isMegaDrive ? 'megadrive_reset' : isSnes ? 'snes_reset' : isArcade ? 'arcade_reset' : isSpectrum ? 'spectrum_reset' : 'amstrad_reset';
 
     forwardInputToEmulator({ type });
@@ -2463,11 +2473,11 @@ export default function RoomPage() {
 
       if (!file) return;
 
-      const isSwapDisk = isAmiga && event.target.dataset.mode === 'swap';
+      const isSwapDisk = isAmigaFamily && event.target.dataset.mode === 'swap';
       const lowerName = file.name.toLowerCase();
       const arcadeDriverName = arcadeDriver.trim() || file.name.replace(/\.(zip|7z|rar|chd)$/i, '').toLowerCase();
-      const allowedExtensions = isAmiga
-        ? ['.adf', '.adz', '.dms', '.hdf', '.hdz', '.lha', '.zip']
+      const allowedExtensions = isAmigaFamily
+        ? ['.uae', '.adf', '.adz', '.dms', '.hdf', '.hdz', '.lha', '.zip']
         : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isArcade ? ['.zip'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
 
       if (!allowedExtensions.some((extension) => lowerName.endsWith(extension))) {
@@ -2477,7 +2487,7 @@ export default function RoomPage() {
           event.target.value = '';
           return;
         }
-        setError(isAmiga ? 'Amiga rooms support .adf, .adz, .dms, .hdf, .hdz, .lha, and .zip files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, and .dx2 ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
+        setError(isAmigaFamily ? 'Amiga rooms support .uae, .adf, .adz, .dms, .hdf, .hdz, .lha, and .zip files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, and .dx2 ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${file.name}`);
         event.target.value = '';
         return;
@@ -2493,7 +2503,7 @@ export default function RoomPage() {
       const bytes = new Uint8Array(arrayBuffer);
 
       forwardInputToEmulator({
-        type: isSwapDisk ? 'amiga_swap_disk' : isAmiga ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
+        type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: file.name,
         bytes,
         driver: arcadeDriverName,
@@ -2501,8 +2511,10 @@ export default function RoomPage() {
         args: arcadeArgs.trim(),
       });
 
-      if (isArcade) {
-        setArcadeDriver(arcadeDriverName);
+      if (isArcade || isAmigaAga) {
+        if (isArcade) {
+          setArcadeDriver(arcadeDriverName);
+        }
         if (!hostStartedRef.current && !hostStartingRef.current) {
           await startHostSession();
         }
@@ -2607,10 +2619,10 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {(loadedDiskName || isAmiga) ? (
+        {(loadedDiskName || isAmigaFamily) ? (
           <div className="session-strip">
             {loadedDiskName ? <span>{loadedDiskName}</span> : null}
-            {isAmiga ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : 'ROM: AROS'}</span> : null}
+            {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isAmigaAga ? 'ROM: A1200 Kickstart recommended' : 'ROM: AROS'}</span> : null}
           </div>
         ) : null}
 
@@ -2716,7 +2728,7 @@ export default function RoomPage() {
                   onPointerUp={handleAmigaPointerUp}
                   onPointerMove={handleAmigaPointerMove}
                   onContextMenu={(event) => {
-                    if (isAmiga) event.preventDefault();
+                    if (isAmigaFamily) event.preventDefault();
                   }}
                   style={{
                     width: '100%',
@@ -2738,7 +2750,7 @@ export default function RoomPage() {
                   style={{ display: 'none' }}
                 />
 
-                {isAmiga ? (
+                {isAmigaFamily ? (
                   <input
                     ref={swapDiskInputRef}
                     type="file"
@@ -2749,7 +2761,7 @@ export default function RoomPage() {
                   />
                 ) : null}
 
-                {isAmiga ? (
+                {isAmigaFamily ? (
                   <input
                     ref={kickstartInputRef}
                     type="file"
@@ -2802,23 +2814,23 @@ export default function RoomPage() {
                       : hostStarted ? 'Host session running' : 'Start host session'}
                   </button>
 
-                  <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade}>
+                  <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isAmigaAga}>
                     {mediaLabel}
                   </button>
 
-                  {isAmiga ? (
+                  {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={openSwapDiskPicker} disabled={!hostStarted}>
                       Swap disk
                     </button>
                   ) : null}
 
-                  {isAmiga ? (
+                  {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>
                       Left click
                     </button>
                   ) : null}
 
-                  {isAmiga ? (
+                  {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>
                       Right click
                     </button>
@@ -2828,7 +2840,7 @@ export default function RoomPage() {
                     Reset emulator
                   </button>
 
-                  {isAmiga ? (
+                  {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted}>
                       {kickstartRomName ? 'Change Kickstart ROM' : 'Load Kickstart ROM'}
                     </button>
@@ -2887,7 +2899,7 @@ export default function RoomPage() {
                   onPointerUp={handleAmigaPointerUp}
                   onPointerMove={handleAmigaPointerMove}
                   onContextMenu={(event) => {
-                    if (isAmiga) event.preventDefault();
+                    if (isAmigaFamily) event.preventDefault();
                   }}
                 />
 

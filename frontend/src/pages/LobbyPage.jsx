@@ -84,6 +84,22 @@ const SYSTEM_GROUPS = [
         },
       },
       {
+        id: 'amiga_aga',
+        name: 'Amiga AGA',
+        shortName: 'A1200',
+        accent: 'blue',
+        summary: 'Admin test bench for A1200/AGA games through EmulatorJS and PUAE.',
+        formats: '.uae .adf .adz .dms .hdf .lha .zip',
+        badge: 'Admin',
+        adminOnly: true,
+        modes: {
+          solo: { enabled: true },
+          hosted: { enabled: true },
+          party: { enabled: false, note: 'Not wired' },
+          link: { enabled: false, note: 'Serial bridge later' },
+        },
+      },
+      {
         id: 'megadrive',
         name: 'Mega Drive',
         shortName: 'MD',
@@ -155,10 +171,13 @@ export default function LobbyPage() {
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const canUsePreviewSystems = isAdmin || isTester;
 
-  const visibleGroups = useMemo(() => SYSTEM_GROUPS.filter((group) => {
+  const visibleGroups = useMemo(() => SYSTEM_GROUPS.map((group) => ({
+    ...group,
+    systems: group.systems.filter((system) => !system.adminOnly || isAdmin),
+  })).filter((group) => {
     if (group.adminOnly) return isAdmin;
     if (group.previewOnly) return canUsePreviewSystems;
-    return true;
+    return group.systems.length > 0;
   }), [canUsePreviewSystems, isAdmin]);
 
   const selectedGroup = visibleGroups.find((group) => group.id === selectedEra) || visibleGroups[0];
