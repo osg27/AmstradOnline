@@ -2577,7 +2577,13 @@ export default function RoomPage() {
                   ref={emulatorFrameRef}
                   title={emulatorTitle}
                   src={emulatorSrc}
-                  style={{
+                  style={isArcade ? {
+                    width: '100%',
+                    aspectRatio: '4 / 3',
+                    border: '1px solid #1f2f4a',
+                    borderRadius: '8px',
+                    background: '#000',
+                  } : {
                     position: 'absolute',
                     left: '0',
                     top: '0',
@@ -2605,6 +2611,15 @@ export default function RoomPage() {
                     border: '1px solid #1f2f4a',
                     borderRadius: '8px',
                     background: '#000',
+                    ...(isArcade ? {
+                      position: 'absolute',
+                      left: '-9999px',
+                      top: '0',
+                      width: '768px',
+                      height: '544px',
+                      opacity: 0,
+                      pointerEvents: 'none',
+                    } : {}),
                   }}
                   width={768}
                   height={544}
