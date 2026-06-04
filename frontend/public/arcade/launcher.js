@@ -153,8 +153,6 @@
     const canvas = screen;
     canvas.className = 'emscripten';
     canvas.tabIndex = -1;
-    canvas.width = 640;
-    canvas.height = 480;
     canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       drawStatus('MAME error', 'WebGL context lost. Reload the room.');

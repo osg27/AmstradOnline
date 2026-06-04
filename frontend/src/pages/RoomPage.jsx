@@ -103,7 +103,7 @@ export default function RoomPage() {
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-03-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-5' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmiga
     ? '.adf,.adz,.dms,.hdf,.hdz,.lha,.zip'
@@ -1836,6 +1836,8 @@ export default function RoomPage() {
 
         if (isArcade && arcadeCrop) {
           drawContained(arcadeCrop.x, arcadeCrop.y, arcadeCrop.width, arcadeCrop.height);
+        } else if (isArcade) {
+          drawContained(0, 0, sourceWidth, sourceHeight);
         } else {
           ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
         }
