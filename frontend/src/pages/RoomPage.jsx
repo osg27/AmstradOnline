@@ -79,7 +79,6 @@ export default function RoomPage() {
   const [hostStarted, setHostStarted] = useState(false);
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
-  const [loadedAgaDiskCount, setLoadedAgaDiskCount] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -170,7 +169,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
-    ? '/amiga-aga/launcher.html?v=2026-06-05-6'
+    ? '/amiga-aga/launcher.html?v=2026-06-05-7'
     : isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
@@ -2595,7 +2594,7 @@ export default function RoomPage() {
     if (isAmigaAga) {
       forwardInputToEmulator({ type: 'amiga_aga_next_disk' });
       addLog('Requested next AGA disk');
-      setStatus(loadedAgaDiskCount > 1 ? 'Requested next AGA disk' : 'Load all AGA disks together before starting');
+      setStatus('Requested next AGA disk');
       return;
     }
 
@@ -2618,8 +2617,7 @@ export default function RoomPage() {
 
   async function handleDiskSelected(event) {
     try {
-      const selectedFiles = Array.from(event.target.files || []);
-      const file = selectedFiles[0];
+      const file = event.target.files?.[0];
 
       if (!file) return;
 
@@ -2629,20 +2627,17 @@ export default function RoomPage() {
         ? ['.uae', '.adf', '.adz', '.dms', '.hdf', '.hdz', '.lha', '.zip']
         : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isArcade ? ['.zip'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
 
-      const invalidFile = selectedFiles.find((selectedFile) => {
-        const selectedLowerName = selectedFile.name.toLowerCase();
-        return !allowedExtensions.some((extension) => selectedLowerName.endsWith(extension));
-      });
+      const lowerName = file.name.toLowerCase();
 
-      if (invalidFile) {
+      if (!allowedExtensions.some((extension) => lowerName.endsWith(extension))) {
         if (isArcade) {
           setError('Arcade rooms support MAME .zip ROM files');
-          addLog(`Rejected file: ${invalidFile.name}`);
+          addLog(`Rejected file: ${file.name}`);
           event.target.value = '';
           return;
         }
         setError(isAmigaFamily ? 'Amiga rooms support .uae, .adf, .adz, .dms, .hdf, .hdz, .lha, and .zip files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, and .dx2 ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
-        addLog(`Rejected file: ${invalidFile.name}`);
+        addLog(`Rejected file: ${file.name}`);
         event.target.value = '';
         return;
       }
@@ -2653,20 +2648,13 @@ export default function RoomPage() {
         return;
       }
 
-      const filesToLoad = isAmigaAga && !isSwapDisk && selectedFiles.length > 1
-        ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
-        : [file];
-      const loadedFiles = await Promise.all(filesToLoad.map(async (selectedFile) => ({
-        fileName: selectedFile.name,
-        bytes: new Uint8Array(await selectedFile.arrayBuffer()),
-      })));
-      const bytes = loadedFiles[0].bytes;
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
 
       forwardInputToEmulator({
         type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
-        fileName: loadedFiles[0].fileName,
+        fileName: file.name,
         bytes,
-        disks: isAmigaAga && !isSwapDisk ? loadedFiles : undefined,
         driver: arcadeDriverName,
         runtime: arcadeRuntime.trim() || 'mamepacmantest.js',
         args: arcadeArgs.trim(),
@@ -2680,16 +2668,9 @@ export default function RoomPage() {
           await startHostSession();
         }
       }
-      if (isAmigaAga && !isSwapDisk) {
-        setLoadedAgaDiskCount(loadedFiles.length);
-      }
-
-      const loadedLabel = loadedFiles.length > 1
-        ? `${loadedFiles[0].fileName} + ${loadedFiles.length - 1} disk${loadedFiles.length === 2 ? '' : 's'}`
-        : file.name;
-      setLoadedDiskName(loadedLabel);
-      addLog(`${isSwapDisk ? 'Swapped disk' : 'Loaded file'}: ${loadedLabel}`);
-      setStatus(`${isSwapDisk ? 'Disk swapped' : 'File loaded'}: ${loadedLabel}`);
+      setLoadedDiskName(file.name);
+      addLog(`${isSwapDisk ? 'Swapped disk' : 'Loaded file'}: ${file.name}`);
+      setStatus(`${isSwapDisk ? 'Disk swapped' : 'File loaded'}: ${file.name}`);
       event.target.value = '';
     } catch (err) {
       setError(err.message);
@@ -2923,7 +2904,6 @@ export default function RoomPage() {
                   ref={fileInputRef}
                   type="file"
                   accept={acceptedMedia}
-                  multiple={isAmigaAga}
                   data-mode="load"
                   onChange={handleDiskSelected}
                   style={{ display: 'none' }}
