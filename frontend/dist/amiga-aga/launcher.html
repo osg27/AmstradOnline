@@ -45,6 +45,7 @@
       let pendingGame = null;
       let pendingKickstart = null;
       let started = false;
+      let joystickMask = 0;
 
       function setStatus(message) {
         statusElement.textContent = message;
@@ -64,6 +65,78 @@
         }
 
         return fileName || "kick.rom";
+      }
+
+      function simulateInput(player, button, value) {
+        const manager = window.EJS_emulator?.gameManager;
+
+        if (!manager || !window.EJS_emulator?.started) return;
+
+        manager.simulateInput(player, button, value);
+      }
+
+      function applyJoystickMask(mask) {
+        joystickMask = mask || 0;
+
+        simulateInput(0, 4, joystickMask & 1 ? 1 : 0);
+        simulateInput(0, 5, joystickMask & 2 ? 1 : 0);
+        simulateInput(0, 6, joystickMask & 4 ? 1 : 0);
+        simulateInput(0, 7, joystickMask & 8 ? 1 : 0);
+        simulateInput(0, 0, joystickMask & 16 ? 1 : 0);
+        simulateInput(0, 8, joystickMask & 32 ? 1 : 0);
+        simulateInput(0, 3, joystickMask & 64 ? 1 : 0);
+      }
+
+      function pulseInput(button) {
+        simulateInput(0, button, 1);
+        window.setTimeout(() => {
+          simulateInput(0, button, 0);
+        }, 80);
+      }
+
+      function keyEventType(action) {
+        return action === "up" ? "keyup" : "keydown";
+      }
+
+      function keyCodeFor(code, key) {
+        if (code === "ArrowUp") return 38;
+        if (code === "ArrowDown") return 40;
+        if (code === "ArrowLeft") return 37;
+        if (code === "ArrowRight") return 39;
+        if (code === "Enter") return 13;
+        if (code === "Space") return 32;
+        if (code === "Tab") return 9;
+        if (code?.startsWith("Key")) return code.charCodeAt(3);
+        if (code?.startsWith("Digit")) return code.charCodeAt(5);
+        if (key && key.length === 1) return key.toUpperCase().charCodeAt(0);
+        return 0;
+      }
+
+      function dispatchKeyboardInput(code, key, action) {
+        if (!code) return;
+
+        const type = keyEventType(action);
+        const keyCode = keyCodeFor(code, key);
+        const eventInit = {
+          key: key || (code.startsWith("Key") ? code.slice(3).toLowerCase() : code),
+          code,
+          keyCode,
+          which: keyCode,
+          bubbles: true,
+          cancelable: true,
+        };
+        const target = window.EJS_emulator?.elements?.parent || gameElement;
+        const targetEvent = new KeyboardEvent(type, eventInit);
+        const documentEvent = new KeyboardEvent(type, eventInit);
+
+        Object.defineProperty(targetEvent, "keyCode", { get: () => keyCode });
+        Object.defineProperty(targetEvent, "which", { get: () => keyCode });
+        Object.defineProperty(documentEvent, "keyCode", { get: () => keyCode });
+        Object.defineProperty(documentEvent, "which", { get: () => keyCode });
+
+        target.focus?.();
+        target.dispatchEvent(targetEvent);
+        document.dispatchEvent(documentEvent);
       }
 
       function startEmulator() {
@@ -135,6 +208,26 @@
 
         if (data.type === "amiga_aga_reset") {
           window.location.reload();
+        }
+
+        if (data.type === "amstrad_remote_joystick" || data.type === "joystick") {
+          applyJoystickMask(Number(data.mask) || 0);
+        }
+
+        if (data.type === "amiga_mouse_button") {
+          const button = data.button === 3 ? 8 : 0;
+
+          if (data.action === "down") {
+            simulateInput(0, button, 1);
+          } else if (data.action === "up") {
+            simulateInput(0, button, 0);
+          } else {
+            pulseInput(button);
+          }
+        }
+
+        if (data.type === "amiga_keyboard") {
+          dispatchKeyboardInput(data.code, data.key, data.action);
         }
       });
     </script>
