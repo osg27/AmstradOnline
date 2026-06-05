@@ -5,6 +5,65 @@ import BrandMark from '../components/BrandMark';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 
+const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
+const KICKSTART_STORE_NAME = 'roms';
+const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
+
+function openKickstartDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error('IndexedDB is not available'));
+      return;
+    }
+
+    const request = window.indexedDB.open(KICKSTART_DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(KICKSTART_STORE_NAME);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Could not open Kickstart storage'));
+  });
+}
+
+function requestToPromise(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Kickstart storage request failed'));
+  });
+}
+
+async function saveStoredKickstart(key, fileName, bytes) {
+  const db = await openKickstartDb();
+
+  try {
+    const transaction = db.transaction(KICKSTART_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(KICKSTART_STORE_NAME);
+    await requestToPromise(store.put({ fileName, bytes }, key));
+  } finally {
+    db.close();
+  }
+}
+
+async function loadStoredKickstart(key) {
+  const db = await openKickstartDb();
+
+  try {
+    const transaction = db.transaction(KICKSTART_STORE_NAME, 'readonly');
+    const store = transaction.objectStore(KICKSTART_STORE_NAME);
+    const stored = await requestToPromise(store.get(key));
+
+    if (!stored?.fileName || !stored?.bytes) return null;
+
+    return {
+      fileName: stored.fileName,
+      bytes: new Uint8Array(stored.bytes),
+    };
+  } finally {
+    db.close();
+  }
+}
+
 export default function RoomPage() {
   const navigate = useNavigate();
   const { roomCode } = useParams();
@@ -24,6 +83,7 @@ export default function RoomPage() {
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
+  const [emulatorFrameLoadCount, setEmulatorFrameLoadCount] = useState(0);
   const [inputDebug, setInputDebug] = useState({
     mask: 0,
     source: 'none',
@@ -72,6 +132,7 @@ export default function RoomPage() {
   const signalingClientIdRef = useRef(window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const activeGuestSignalIdRef = useRef('');
   const activePeerSignalIdRef = useRef('');
+  const sentStoredKickstartFrameRef = useRef(0);
   const [micEnabled, setMicEnabled] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
   const [micStatus, setMicStatus] = useState('Mic off');
@@ -103,11 +164,12 @@ export default function RoomPage() {
   const isMegaDrive = roomSystem === 'megadrive';
   const isSnes = roomSystem === 'snes';
   const isArcade = roomSystem === 'arcade';
+  const kickstartStorageKey = isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
-    ? '/amiga-aga/launcher.html?v=2026-06-04-1'
+    ? '/amiga-aga/launcher.html?v=2026-06-05-1'
     : isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
@@ -152,6 +214,11 @@ export default function RoomPage() {
   useEffect(() => {
     isHostRef.current = isHost === true;
   }, [isHost]);
+
+  useEffect(() => {
+    setEmulatorFrameLoadCount(0);
+    sentStoredKickstartFrameRef.current = 0;
+  }, [emulatorSrc]);
 
   useEffect(() => {
     if (isCpcParty || !navigator.mediaDevices?.addEventListener) {
@@ -490,6 +557,38 @@ export default function RoomPage() {
       window.removeEventListener('message', handleArcadeMessage);
     };
   }, [addLog]);
+
+  useEffect(() => {
+    if (!isHost || !emulatorFrameLoadCount || !kickstartStorageKey) return undefined;
+    if (sentStoredKickstartFrameRef.current === emulatorFrameLoadCount) return undefined;
+
+    let cancelled = false;
+    sentStoredKickstartFrameRef.current = emulatorFrameLoadCount;
+    const timer = window.setTimeout(async () => {
+      try {
+        const storedKickstart = await loadStoredKickstart(kickstartStorageKey);
+
+        if (cancelled || !storedKickstart) return;
+
+        forwardInputToEmulator({
+          type: 'amiga_kickstart',
+          fileName: storedKickstart.fileName,
+          bytes: storedKickstart.bytes,
+        });
+        setKickstartRomName(`${storedKickstart.fileName} (saved)`);
+        addLog(`Loaded saved Kickstart ROM: ${storedKickstart.fileName}`);
+      } catch (err) {
+        if (!cancelled) {
+          addLog(`Saved Kickstart unavailable: ${err.message}`);
+        }
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isHost, kickstartStorageKey]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -2590,6 +2689,15 @@ export default function RoomPage() {
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
 
+      if (kickstartStorageKey) {
+        try {
+          await saveStoredKickstart(kickstartStorageKey, file.name, bytes);
+          addLog(`Saved Kickstart ROM for next time: ${file.name}`);
+        } catch (err) {
+          addLog(`Could not save Kickstart ROM: ${err.message}`);
+        }
+      }
+
       forwardInputToEmulator({
         type: 'amiga_kickstart',
         fileName: file.name,
@@ -2750,6 +2858,7 @@ export default function RoomPage() {
                   ref={emulatorFrameRef}
                   title={emulatorTitle}
                   src={emulatorSrc}
+                  onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
                   style={{
                     position: 'absolute',
                     left: '0',

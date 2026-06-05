@@ -45,9 +45,15 @@
       let pendingGame = null;
       let pendingKickstart = null;
       let started = false;
+      let kickstartObjectUrl = "";
       let joystickMask = 0;
       let mouseX = window.innerWidth / 2;
       let mouseY = window.innerHeight / 2;
+      const PUAE_SYSTEM_DIRS = [
+        "/home/web_user/retroarch/userdata/system",
+        "/home/web_user/.config/retroarch/system",
+        "/system",
+      ];
 
       function setStatus(message) {
         statusElement.textContent = message;
@@ -67,6 +73,32 @@
         }
 
         return fileName || "kick.rom";
+      }
+
+      function clearKickstartObjectUrl() {
+        if (kickstartObjectUrl) {
+          URL.revokeObjectURL(kickstartObjectUrl);
+          kickstartObjectUrl = "";
+        }
+      }
+
+      function buildKickstartConfig() {
+        clearKickstartObjectUrl();
+
+        if (!pendingKickstart) {
+          return { biosFile: "", externalFiles: {} };
+        }
+
+        const biosFile = fileFromBytes(puaeKickstartName(pendingKickstart.fileName), pendingKickstart.bytes);
+        kickstartObjectUrl = URL.createObjectURL(biosFile);
+
+        return {
+          biosFile,
+          externalFiles: PUAE_SYSTEM_DIRS.reduce((files, dir) => {
+            files[`${dir}/${biosFile.name}`] = kickstartObjectUrl;
+            return files;
+          }, {}),
+        };
       }
 
       function simulateInput(player, button, value) {
@@ -247,15 +279,15 @@
         gameElement.innerHTML = "";
 
         const gameFile = fileFromBytes(pendingGame.fileName, pendingGame.bytes);
-        const biosFile = pendingKickstart
-          ? fileFromBytes(puaeKickstartName(pendingKickstart.fileName), pendingKickstart.bytes)
-          : "";
+        const kickstartConfig = buildKickstartConfig();
 
         window.EJS_player = "#game";
         window.EJS_core = "puae";
         window.EJS_gameName = pendingGame.fileName || "Amiga AGA";
         window.EJS_gameUrl = gameFile;
-        window.EJS_biosUrl = biosFile;
+        window.EJS_biosUrl = kickstartConfig.biosFile;
+        window.EJS_externalFiles = kickstartConfig.externalFiles;
+        window.EJS_dontExtractBIOS = true;
         window.EJS_pathtodata = "/emulatorjs/data/";
         window.EJS_DEBUG_XX = true;
         window.EJS_startOnLoaded = true;
