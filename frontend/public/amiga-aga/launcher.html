@@ -283,16 +283,20 @@
 
         currentDiskIndex = (currentDiskIndex + 1) % pendingDisks.length;
 
-        const nextDiskName = pendingDisks[currentDiskIndex]?.fileName || `Disk ${currentDiskIndex + 1}`;
+        const nextDiskName =
+          pendingDisks[currentDiskIndex]?.fileName || `Disk ${currentDiskIndex + 1}`;
 
         sessionStorage.setItem("amigaAgaCurrentDiskIndex", String(currentDiskIndex));
 
-        setStatus(`Switching to disk ${currentDiskIndex + 1}: ${nextDiskName}`);
-        window.EJS_emulator?.displayMessage?.(`Switching to disk ${currentDiskIndex + 1}`);
+        setStatus(`Requesting disk ${currentDiskIndex + 1}: ${nextDiskName}`);
 
-        window.setTimeout(() => {
-          window.location.reload();
-        }, 250);
+        window.parent.postMessage(
+          {
+            type: "amiga_aga_restart_with_disk",
+            diskIndex: currentDiskIndex,
+          },
+          window.location.origin
+        );
       }
 
       function simulateInput(player, button, value) {
