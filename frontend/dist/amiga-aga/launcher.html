@@ -45,24 +45,15 @@
       let pendingGame = null;
       let pendingKickstart = null;
       let started = false;
-      let gameUrl = "";
-      let biosUrl = "";
 
       function setStatus(message) {
         statusElement.textContent = message;
       }
 
-      function toBlobUrl(fileName, bytes, fallbackType = "application/octet-stream") {
+      function fileFromBytes(fileName, bytes, fallbackType = "application/octet-stream") {
         const lowerName = (fileName || "").toLowerCase();
         const type = lowerName.endsWith(".uae") ? "text/plain" : fallbackType;
-        return URL.createObjectURL(new Blob([bytes], { type }));
-      }
-
-      function destroyBlobUrls() {
-        if (gameUrl) URL.revokeObjectURL(gameUrl);
-        if (biosUrl) URL.revokeObjectURL(biosUrl);
-        gameUrl = "";
-        biosUrl = "";
+        return new File([bytes], fileName || "amiga-file.bin", { type });
       }
 
       function startEmulator() {
@@ -76,18 +67,17 @@
         started = true;
         statusElement.style.display = "none";
         gameElement.innerHTML = "";
-        destroyBlobUrls();
 
-        gameUrl = toBlobUrl(pendingGame.fileName, pendingGame.bytes);
-        if (pendingKickstart) {
-          biosUrl = toBlobUrl(pendingKickstart.fileName, pendingKickstart.bytes);
-        }
+        const gameFile = fileFromBytes(pendingGame.fileName, pendingGame.bytes);
+        const biosFile = pendingKickstart
+          ? fileFromBytes(pendingKickstart.fileName, pendingKickstart.bytes)
+          : "";
 
         window.EJS_player = "#game";
         window.EJS_core = "puae";
         window.EJS_gameName = pendingGame.fileName || "Amiga AGA";
-        window.EJS_gameUrl = gameUrl;
-        window.EJS_biosUrl = biosUrl || undefined;
+        window.EJS_gameUrl = gameFile;
+        window.EJS_biosUrl = biosFile;
         window.EJS_pathtodata = "/emulatorjs/data/";
         window.EJS_DEBUG_XX = true;
         window.EJS_startOnLoaded = true;

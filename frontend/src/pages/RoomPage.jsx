@@ -2841,7 +2841,7 @@ export default function RoomPage() {
                   </button>
 
                   {isAmigaFamily ? (
-                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted}>
+                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted && !isAmigaAga}>
                       {kickstartRomName ? 'Change Kickstart ROM' : 'Load Kickstart ROM'}
                     </button>
                   ) : null}
