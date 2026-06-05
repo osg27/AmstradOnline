@@ -46,6 +46,7 @@
       let pendingDisks = [];
       let pendingKickstart = null;
       let started = false;
+      let currentDiskIndex = 0;
       let fileObjectUrls = [];
       let crcTable = null;
       let joystickMask = 0;
@@ -183,12 +184,8 @@
       }
 
       function buildPuaeConfigFile(diskFileNames, kickstartFileName) {
-        const disks = Array.isArray(diskFileNames) ? diskFileNames.slice(0, 4) : [diskFileNames];
-
-        const floppyLines = disks.flatMap((diskFileName, index) => [
-          `floppy${index}=/${diskFileName}`,
-          `floppy${index}type=0`,
-        ]);
+        const disks = Array.isArray(diskFileNames) ? diskFileNames : [diskFileNames];
+        const selectedDisk = disks[currentDiskIndex] || disks[0];
 
         const config = [
           "config_description=OldStyleGaming Amiga AGA",
@@ -202,13 +199,16 @@
           "fastmem_size=8",
           "bogomem_size=0",
           "kickstart_rom_file=/" + kickstartFileName,
-          ...floppyLines,
-          `nr_floppies=${Math.max(1, disks.length)}`,
+          "floppy0=/" + selectedDisk,
+          "floppy0type=0",
           "floppy_speed=100",
+          "nr_floppies=1",
           "joyport0=mouse",
           "joyport1=joy1",
           "gfx_framerate=1",
         ].join("\n");
+
+        console.log("PUAE config:\n" + config);
 
         return fileFromBytes(
           "oldstylegaming-aga.uae",
@@ -275,25 +275,41 @@
       }
 
       function switchToNextDisk() {
-        const manager = window.EJS_emulator?.gameManager;
-
-        if (!manager || !window.EJS_emulator?.started) {
-          setStatus("Emulator is not ready for disk swapping yet");
-          return;
-        }
-
-        const diskCount = manager.getDiskCount?.() || 0;
-        if (diskCount < 2) {
+        if (!pendingDisks.length || pendingDisks.length < 2) {
           setStatus("Load all disks for the game together before starting");
           window.EJS_emulator?.displayMessage?.("No extra disks loaded");
           return;
         }
 
-        const currentDisk = manager.getCurrentDisk?.() || 0;
-        const nextDisk = (currentDisk + 1) % diskCount;
-        manager.setCurrentDisk(nextDisk);
-        setStatus(`Swapped to disk ${nextDisk + 1}`);
-        window.EJS_emulator?.displayMessage?.(`Disk ${nextDisk + 1}`);
+        currentDiskIndex = (currentDiskIndex + 1) % pendingDisks.length;
+
+        const nextDiskName = pendingDisks[currentDiskIndex]?.fileName || `Disk ${currentDiskIndex + 1}`;
+
+        setStatus(`Switching to disk ${currentDiskIndex + 1}: ${nextDiskName}`);
+        window.EJS_emulator?.displayMessage?.(`Switching to disk ${currentDiskIndex + 1}`);
+
+        started = false;
+
+        try {
+          window.EJS_emulator?.gameManager?.stop?.();
+        } catch (error) {
+          console.warn("Could not stop emulator cleanly:", error);
+        }
+
+        try {
+          window.EJS_emulator?.stop?.();
+        } catch (error) {
+          console.warn("Could not stop EJS emulator cleanly:", error);
+        }
+
+        window.EJS_emulator = null;
+
+        gameElement.innerHTML = "";
+        statusElement.style.display = "grid";
+
+        window.setTimeout(() => {
+          startEmulator();
+        }, 250);
       }
 
       function simulateInput(player, button, value) {
@@ -510,10 +526,19 @@
         }
 
         if (data.type === "amiga_aga_autoload") {
+          currentDiskIndex = 0;
+
+          const disks = Array.isArray(data.disks) ? data.disks : [];
+          pendingDisks = disks.map((disk, index) => ({
+            fileName: disk.fileName || `disk-${index + 1}.adf`,
+            bytes: new Uint8Array(disk.bytes || []),
+          })).filter((disk) => disk.bytes.length);
+
           pendingGame = {
-            fileName: data.fileName || "game.uae",
-            bytes: new Uint8Array(data.bytes || []),
+            fileName: pendingDisks[0]?.fileName || data.fileName || "game.uae",
+            bytes: pendingDisks[0]?.bytes || new Uint8Array(data.bytes || []),
           };
+
           setStatus(`Starting ${pendingGame.fileName} with PUAE...`);
           startEmulator();
         }
