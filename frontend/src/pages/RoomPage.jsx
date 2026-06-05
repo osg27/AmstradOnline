@@ -1930,8 +1930,9 @@ export default function RoomPage() {
 
   async function waitForEmulatorCanvas(iframe) {
     const startedAt = Date.now();
+    const canvasTimeout = isAmigaAga ? 30000 : 8000;
 
-    while (Date.now() - startedAt < 8000) {
+    while (Date.now() - startedAt < canvasTimeout) {
       const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
       const emulatorCanvas = findCanvasInDocument(iframeDocument);
 
@@ -2808,10 +2809,12 @@ export default function RoomPage() {
                     flexWrap: 'wrap',
                   }}
                 >
-                  <button type="button" onClick={startHostSession} disabled={hostStarted}>
-                    {isSoloMode
-                      ? hostStarted ? 'Emulator running' : 'Start emulator'
-                      : hostStarted ? 'Host session running' : 'Start host session'}
+                  <button type="button" onClick={startHostSession} disabled={hostStarted || (isAmigaAga && !loadedDiskName)}>
+                    {isAmigaAga && !loadedDiskName
+                      ? 'Load AGA file to start'
+                      : isSoloMode
+                        ? hostStarted ? 'Emulator running' : 'Start emulator'
+                        : hostStarted ? 'Host session running' : 'Start host session'}
                   </button>
 
                   <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isAmigaAga}>
