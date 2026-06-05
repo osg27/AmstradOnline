@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: list[str] | str = ["http://localhost:5173"]
     ADMIN_USERNAME: str | None = None
-    TESTER_USERNAMES: list[str] | str = ["Lucarse", "LesleyM", "Fenryr"]
+    TESTER_USERNAMES: list[str] | str = ["Lucarse", "LesleyM", "Fenryr", "MagicKnight"]
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
