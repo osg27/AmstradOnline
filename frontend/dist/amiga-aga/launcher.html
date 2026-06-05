@@ -48,6 +48,9 @@
       let joystickMask = 0;
       let mouseX = window.innerWidth / 2;
       let mouseY = window.innerHeight / 2;
+      const diskSlots = Array.from({ length: 4 }, () => null);
+      let diskSlotExtension = "adf";
+      let wrappedDiskSet = false;
 
       function setStatus(message) {
         statusElement.textContent = message;
@@ -57,6 +60,149 @@
         const lowerName = (fileName || "").toLowerCase();
         const type = lowerName.endsWith(".uae") ? "text/plain" : fallbackType;
         return new File([bytes], fileName || "amiga-file.bin", { type });
+      }
+
+      function fileExtension(fileName) {
+        const match = /\.([a-z0-9]+)$/i.exec(fileName || "");
+        return match ? match[1].toLowerCase() : "";
+      }
+
+      function isFloppyDiskFile(fileName) {
+        return ["adf", "adz", "dms"].includes(fileExtension(fileName));
+      }
+
+      function diskSlotFileName(index) {
+        return `osg-aga-disk-${index + 1}.${diskSlotExtension}`;
+      }
+
+      function diskLabel(index) {
+        return diskSlots[index]?.fileName || `Disk ${index + 1}`;
+      }
+
+      function buildDiskM3u() {
+        return diskSlots
+          .map((_, index) => `/${diskSlotFileName(index)}|${diskLabel(index)}`)
+          .join("\n");
+      }
+
+      function makeCrcTable() {
+        const table = [];
+
+        for (let i = 0; i < 256; i += 1) {
+          let crc = i;
+          for (let j = 0; j < 8; j += 1) {
+            crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+          }
+          table[i] = crc >>> 0;
+        }
+
+        return table;
+      }
+
+      const crcTable = makeCrcTable();
+
+      function crc32(bytes) {
+        let crc = 0xffffffff;
+
+        for (let i = 0; i < bytes.length; i += 1) {
+          crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+        }
+
+        return (crc ^ 0xffffffff) >>> 0;
+      }
+
+      function writeUint16(target, offset, value) {
+        target[offset] = value & 0xff;
+        target[offset + 1] = (value >>> 8) & 0xff;
+      }
+
+      function writeUint32(target, offset, value) {
+        target[offset] = value & 0xff;
+        target[offset + 1] = (value >>> 8) & 0xff;
+        target[offset + 2] = (value >>> 16) & 0xff;
+        target[offset + 3] = (value >>> 24) & 0xff;
+      }
+
+      function createStoredZip(entries) {
+        const encoder = new TextEncoder();
+        const localParts = [];
+        const centralParts = [];
+        let offset = 0;
+
+        entries.forEach((entry) => {
+          const nameBytes = encoder.encode(entry.name);
+          const dataBytes = entry.bytes instanceof Uint8Array ? entry.bytes : encoder.encode(entry.bytes || "");
+          const crc = crc32(dataBytes);
+          const local = new Uint8Array(30 + nameBytes.length);
+
+          writeUint32(local, 0, 0x04034b50);
+          writeUint16(local, 4, 20);
+          writeUint16(local, 6, 0);
+          writeUint16(local, 8, 0);
+          writeUint16(local, 10, 0);
+          writeUint16(local, 12, 0);
+          writeUint32(local, 14, crc);
+          writeUint32(local, 18, dataBytes.length);
+          writeUint32(local, 22, dataBytes.length);
+          writeUint16(local, 26, nameBytes.length);
+          writeUint16(local, 28, 0);
+          local.set(nameBytes, 30);
+          localParts.push(local, dataBytes);
+
+          const central = new Uint8Array(46 + nameBytes.length);
+          writeUint32(central, 0, 0x02014b50);
+          writeUint16(central, 4, 20);
+          writeUint16(central, 6, 20);
+          writeUint16(central, 8, 0);
+          writeUint16(central, 10, 0);
+          writeUint16(central, 12, 0);
+          writeUint16(central, 14, 0);
+          writeUint32(central, 16, crc);
+          writeUint32(central, 20, dataBytes.length);
+          writeUint32(central, 24, dataBytes.length);
+          writeUint16(central, 28, nameBytes.length);
+          writeUint16(central, 30, 0);
+          writeUint16(central, 32, 0);
+          writeUint16(central, 34, 0);
+          writeUint16(central, 36, 0);
+          writeUint32(central, 38, 0);
+          writeUint32(central, 42, offset);
+          central.set(nameBytes, 46);
+          centralParts.push(central);
+
+          offset += local.length + dataBytes.length;
+        });
+
+        const centralOffset = offset;
+        const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+        const eocd = new Uint8Array(22);
+        writeUint32(eocd, 0, 0x06054b50);
+        writeUint16(eocd, 8, entries.length);
+        writeUint16(eocd, 10, entries.length);
+        writeUint32(eocd, 12, centralSize);
+        writeUint32(eocd, 16, centralOffset);
+
+        return new Blob([...localParts, ...centralParts, eocd], { type: "application/zip" });
+      }
+
+      function createDiskSetFile(fileName, bytes) {
+        diskSlotExtension = fileExtension(fileName) || "adf";
+        diskSlots.fill(null);
+        diskSlots[0] = {
+          fileName: fileName || `Disk 1.${diskSlotExtension}`,
+          bytes,
+        };
+
+        const emptyDisk = new Uint8Array(0);
+        const entries = [
+          { name: "osg-aga-disks.m3u", bytes: buildDiskM3u() },
+          ...diskSlots.map((slot, index) => ({
+            name: diskSlotFileName(index),
+            bytes: slot?.bytes || emptyDisk,
+          })),
+        ];
+
+        return new File([createStoredZip(entries)], "osg-aga-disks.zip", { type: "application/zip" });
       }
 
       function puaeKickstartName(fileName) {
@@ -246,7 +392,10 @@
         statusElement.style.display = "none";
         gameElement.innerHTML = "";
 
-        const gameFile = fileFromBytes(pendingGame.fileName, pendingGame.bytes);
+        wrappedDiskSet = isFloppyDiskFile(pendingGame.fileName);
+        const gameFile = wrappedDiskSet
+          ? createDiskSetFile(pendingGame.fileName, pendingGame.bytes)
+          : fileFromBytes(pendingGame.fileName, pendingGame.bytes);
         const biosFile = pendingKickstart
           ? fileFromBytes(puaeKickstartName(pendingKickstart.fileName), pendingKickstart.bytes)
           : "";
@@ -274,6 +423,38 @@
         document.body.appendChild(script);
       }
 
+      function slotFromFileName(fileName) {
+        const match = /(?:disk|disc|side|df)\s*0?([1-4])|[\W_]0?([1-4])[\W_]/i.exec(fileName || "");
+        const diskNumber = Number(match?.[1] || match?.[2]);
+
+        if (diskNumber >= 1 && diskNumber <= diskSlots.length) {
+          return diskNumber - 1;
+        }
+
+        const emptySlot = diskSlots.findIndex((slot, index) => index > 0 && !slot);
+        return emptySlot === -1 ? 1 : emptySlot;
+      }
+
+      function swapRunningDisk(fileName, bytes) {
+        if (!wrappedDiskSet || !window.EJS_emulator?.started) {
+          setStatus("Start a floppy disk image before swapping disks");
+          return;
+        }
+
+        const slot = slotFromFileName(fileName);
+        const diskBytes = new Uint8Array(bytes || []);
+        diskSlots[slot] = {
+          fileName: fileName || `Disk ${slot + 1}.${diskSlotExtension}`,
+          bytes: diskBytes,
+        };
+
+        const manager = window.EJS_emulator.gameManager;
+        manager.FS.writeFile(`/${diskSlotFileName(slot)}`, diskBytes);
+        manager.FS.writeFile("/osg-aga-disks.m3u", new TextEncoder().encode(buildDiskM3u()));
+        manager.setCurrentDisk(slot);
+        window.EJS_emulator.displayMessage?.(`Inserted ${diskLabel(slot)}`, 2500);
+      }
+
       window.getAmigaAgaAudioStream = () => null;
 
       window.addEventListener("message", (event) => {
@@ -291,6 +472,10 @@
           };
           setStatus(`Starting ${pendingGame.fileName} with PUAE...`);
           startEmulator();
+        }
+
+        if (data.type === "amiga_swap_disk" || data.type === "amiga_aga_swap_disk") {
+          swapRunningDisk(data.fileName, data.bytes);
         }
 
         if (data.type === "amiga_kickstart") {
