@@ -81,7 +81,6 @@ export default function RoomPage() {
   const [loadedDiskName, setLoadedDiskName] = useState('');
   const [loadedAgaDiskCount, setLoadedAgaDiskCount] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
-  const [amigaFrameVersion, setAmigaFrameVersion] = useState(0);
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
@@ -104,8 +103,6 @@ export default function RoomPage() {
   const emulatorFrameRef = useRef(null);
   const mirrorCanvasRef = useRef(null);
   const mirrorLoopRef = useRef(null);
-  const loadedAgaFilesRef = useRef([]);
-  const loadedKickstartRef = useRef(null);
   const fileInputRef = useRef(null);
   const swapDiskInputRef = useRef(null);
   const kickstartInputRef = useRef(null);
@@ -173,7 +170,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
-    ? `/amiga-aga/launcher.html?v=2026-06-05-8-${amigaFrameVersion}`
+    ? '/amiga-aga/launcher.html?v=2026-06-05-8'
     : isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
@@ -561,76 +558,6 @@ export default function RoomPage() {
       window.removeEventListener('message', handleArcadeMessage);
     };
   }, [addLog]);
-
-  useEffect(() => {
-    function handleAmigaAgaMessage(event) {
-      if (event.origin !== window.location.origin) return;
-
-      const message = event.data || {};
-
-      if (message.type !== 'amiga_aga_restart_with_disk') return;
-
-      const nextDiskIndex = Number(message.diskIndex) || 0;
-
-      sessionStorage.setItem('amigaAgaCurrentDiskIndex', String(nextDiskIndex));
-      addLog(`Restarting Amiga AGA with disk ${nextDiskIndex + 1}`);
-      setStatus(`Restarting Amiga AGA with disk ${nextDiskIndex + 1}`);
-
-      if (mirrorLoopRef.current) {
-        cancelAnimationFrame(mirrorLoopRef.current);
-        mirrorLoopRef.current = null;
-      }
-
-      hostStartedRef.current = false;
-      hostStartingRef.current = false;
-      setHostStarted(false);
-
-      setAmigaFrameVersion((version) => version + 1);
-    }
-
-    window.addEventListener('message', handleAmigaAgaMessage);
-
-    return () => {
-      window.removeEventListener('message', handleAmigaAgaMessage);
-    };
-  }, [addLog]);
-
-  useEffect(() => {
-    if (!isAmigaAga || !isHost || !emulatorFrameLoadCount) return undefined;
-
-    const loadedAgaFiles = loadedAgaFilesRef.current;
-    if (!loadedAgaFiles.length) return undefined;
-
-    let cancelled = false;
-
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-
-      const kickstart = loadedKickstartRef.current;
-      if (kickstart) {
-        forwardInputToEmulator({
-          type: 'amiga_kickstart',
-          fileName: kickstart.fileName,
-          bytes: kickstart.bytes,
-        });
-      }
-
-      forwardInputToEmulator({
-        type: 'amiga_aga_autoload',
-        fileName: loadedAgaFiles[0].fileName,
-        bytes: loadedAgaFiles[0].bytes,
-        disks: loadedAgaFiles,
-      });
-
-      addLog('Re-sent Amiga AGA files after iframe reload');
-    }, 500);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAmigaAga, isHost]);
-
 
   useEffect(() => {
     if (!isHost || !emulatorFrameLoadCount || !kickstartStorageKey) return undefined;
@@ -2735,11 +2662,6 @@ export default function RoomPage() {
       })));
       const bytes = loadedFiles[0].bytes;
 
-      if (isAmigaAga && !isSwapDisk) {
-        loadedAgaFilesRef.current = loadedFiles;
-        sessionStorage.setItem('amigaAgaCurrentDiskIndex', '0');
-      }
-
       forwardInputToEmulator({
         type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: loadedFiles[0].fileName,
@@ -2793,11 +2715,6 @@ export default function RoomPage() {
 
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
-
-      loadedKickstartRef.current = {
-        fileName: file.name,
-        bytes,
-      };
 
       if (kickstartStorageKey) {
         try {
@@ -2965,10 +2882,9 @@ export default function RoomPage() {
             {isHost ? (
               <>
                 <iframe
-                  key={emulatorSrc}
                   ref={emulatorFrameRef}
-                  src={emulatorSrc}
                   title={emulatorTitle}
+                  src={emulatorSrc}
                   onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
                   style={{
                     position: 'absolute',
