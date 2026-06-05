@@ -630,13 +630,26 @@ export default function RoomPage() {
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
     setInputCaptured(false);
+    if (document.pointerLockElement && document.exitPointerLock) {
+      document.exitPointerLock();
+    }
   }, [sendLocalJoystickMask]);
 
-  const captureInput = useCallback(() => {
+  const captureInput = useCallback((event = null) => {
     setInputCaptured(true);
     forwardInputToEmulator({
       type: 'amstrad_audio_unlock',
     });
+
+    const captureTarget = event?.currentTarget;
+    if (
+      isAmigaFamily
+      && captureTarget
+      && ['CANVAS', 'VIDEO'].includes(captureTarget.tagName)
+      && document.pointerLockElement !== captureTarget
+    ) {
+      captureTarget.requestPointerLock?.();
+    }
 
     const channel = dataChannelRef.current;
     if (!isHost && channel?.readyState === 'open') {
@@ -648,7 +661,7 @@ export default function RoomPage() {
       remoteVideoRef.current.volume = 1;
       remoteVideoRef.current.play().catch(() => {});
     }
-  }, [forwardInputToEmulator, isHost]);
+  }, [forwardInputToEmulator, isAmigaFamily, isHost]);
 
   const forwardAmigaMouse = useCallback((payload) => {
     if (!isAmigaFamily) return;
@@ -706,6 +719,27 @@ export default function RoomPage() {
     });
   }, [forwardAmigaMouse, inputCaptured, isAmigaFamily]);
 
+  useEffect(() => {
+    if (!isAmigaFamily || !inputCaptured) return undefined;
+
+    function handleLockedMouseMove(event) {
+      if (!document.pointerLockElement) return;
+      if (!event.movementX && !event.movementY) return;
+
+      forwardAmigaMouse({
+        type: 'amiga_mouse_move',
+        movementX: event.movementX,
+        movementY: event.movementY,
+      });
+    }
+
+    window.addEventListener('mousemove', handleLockedMouseMove);
+
+    return () => {
+      window.removeEventListener('mousemove', handleLockedMouseMove);
+    };
+  }, [forwardAmigaMouse, inputCaptured, isAmigaFamily]);
+
   const sendAmigaMouseClick = useCallback((button) => {
     if (!isAmigaFamily) return;
 
@@ -716,6 +750,13 @@ export default function RoomPage() {
       button,
       action: 'down',
     });
+    window.setTimeout(() => {
+      forwardAmigaMouse({
+        type: 'amiga_mouse_button',
+        button,
+        action: 'up',
+      });
+    }, 140);
   }, [addInputDebug, captureInput, forwardAmigaMouse, isAmigaFamily, isHost]);
 
   const setPartyTurn = useCallback((playerNumber) => {
