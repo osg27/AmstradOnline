@@ -46,9 +46,13 @@
       let pendingKickstart = null;
       let started = false;
       let fileObjectUrls = [];
+      let diskSlots = [];
+      let nextSwapSlot = 1;
       let joystickMask = 0;
       let mouseX = window.innerWidth / 2;
       let mouseY = window.innerHeight / 2;
+      const MAX_DISK_SLOTS = 5;
+      const BLANK_ADF_SIZE = 901120;
       const PUAE_SYSTEM_DIRS = [
         "/home/web_user/retroarch/userdata/system",
         "/home/web_user/.config/retroarch/system",
@@ -61,7 +65,7 @@
 
       function fileFromBytes(fileName, bytes, fallbackType = "application/octet-stream") {
         const lowerName = (fileName || "").toLowerCase();
-        const type = lowerName.endsWith(".uae") ? "text/plain" : fallbackType;
+        const type = lowerName.endsWith(".uae") || lowerName.endsWith(".m3u") ? "text/plain" : fallbackType;
         return new File([bytes], fileName || "amiga-file.bin", { type });
       }
 
@@ -80,6 +84,11 @@
         return cleanedName || fallbackName;
       }
 
+      function extensionForFileName(fileName, fallbackExtension = "adf") {
+        const match = (fileName || "").toLowerCase().match(/\.([a-z0-9]+)$/);
+        return match ? match[1] : fallbackExtension;
+      }
+
       function createTrackedObjectUrl(file) {
         const objectUrl = URL.createObjectURL(file);
         fileObjectUrls.push(objectUrl);
@@ -91,29 +100,45 @@
         fileObjectUrls = [];
       }
 
-      function buildPuaeConfigFile(gameFileName, kickstartFileName) {
-        const config = [
-          "config_description=OldStyleGaming Amiga AGA",
-          "config_hardware=true",
-          "config_host=true",
-          "amiga_model=A1200",
-          "chipset=aga",
-          "cpu_type=68ec020",
-          "cpu_speed=real",
-          "chipmem_size=4",
-          "fastmem_size=8",
-          "bogomem_size=0",
-          "kickstart_rom_file=/" + kickstartFileName,
-          "floppy0=/" + gameFileName,
-          "floppy0type=0",
-          "floppy_speed=100",
-          "nr_floppies=1",
-          "joyport0=mouse",
-          "joyport1=joy1",
-          "gfx_framerate=1",
-        ].join("\n");
+      function buildDiskSlots(firstDiskFileName) {
+        const extension = extensionForFileName(firstDiskFileName);
+        diskSlots = Array.from({ length: MAX_DISK_SLOTS }, (_, index) => ({
+          fileName: `oldstylegaming-aga-disk-${index + 1}.${extension}`,
+          sourceName: index === 0 ? firstDiskFileName : "",
+        }));
+        nextSwapSlot = 1;
+      }
 
-        return fileFromBytes("oldstylegaming-aga.uae", new TextEncoder().encode(`${config}\n`), "text/plain");
+      function blankAdfBytes() {
+        return new Uint8Array(BLANK_ADF_SIZE);
+      }
+
+      function writeRuntimeFile(fileName, bytes) {
+        const manager = window.EJS_emulator?.gameManager;
+        const fs = manager?.FS;
+
+        if (!fs) return false;
+
+        fs.writeFile(`/${fileName}`, bytes);
+        return true;
+      }
+
+      function switchToDiskSlot(slotIndex) {
+        const manager = window.EJS_emulator?.gameManager;
+
+        if (!manager || !window.EJS_emulator?.started) return false;
+
+        manager.setCurrentDisk(slotIndex);
+        window.EJS_emulator?.displayMessage?.(`Disk ${slotIndex + 1}`);
+        return true;
+      }
+
+      function buildPuaePlaylistFile() {
+        const playlist = diskSlots
+          .map((slot, index) => `/${slot.fileName}|Disk ${index + 1}`)
+          .join("\n");
+
+        return fileFromBytes("oldstylegaming-aga.m3u", new TextEncoder().encode(`${playlist}\n`), "text/plain");
       }
 
       function buildEmulatorFiles() {
@@ -129,24 +154,67 @@
 
         const gameFileName = safeVirtualFileName(pendingGame.fileName, "game.adf");
         const kickstartFileName = safeVirtualFileName(puaeKickstartName(pendingKickstart.fileName), "kick40068.A1200");
-        const gameFile = fileFromBytes(gameFileName, pendingGame.bytes);
+        buildDiskSlots(gameFileName);
+
+        const gameFile = fileFromBytes(diskSlots[0].fileName, pendingGame.bytes);
         const biosFile = fileFromBytes(kickstartFileName, pendingKickstart.bytes);
         const gameObjectUrl = createTrackedObjectUrl(gameFile);
         const biosObjectUrl = createTrackedObjectUrl(biosFile);
         const externalFiles = {
-          [`/${gameFileName}`]: gameObjectUrl,
+          [`/${diskSlots[0].fileName}`]: gameObjectUrl,
           [`/${kickstartFileName}`]: biosObjectUrl,
         };
+
+        diskSlots.slice(1).forEach((slot) => {
+          const placeholderFile = fileFromBytes(slot.fileName, blankAdfBytes());
+          externalFiles[`/${slot.fileName}`] = createTrackedObjectUrl(placeholderFile);
+        });
 
         PUAE_SYSTEM_DIRS.forEach((dir) => {
           externalFiles[`${dir}/${kickstartFileName}`] = biosObjectUrl;
         });
 
         return {
-          gameFile: buildPuaeConfigFile(gameFileName, kickstartFileName),
+          gameFile: buildPuaePlaylistFile(),
           biosFile,
           externalFiles,
         };
+      }
+
+      function swapDisk(fileName, bytes) {
+        if (!started) {
+          pendingGame = {
+            fileName: fileName || "game.adf",
+            bytes: new Uint8Array(bytes || []),
+          };
+          setStatus(`Starting ${pendingGame.fileName} with PUAE...`);
+          startEmulator();
+          return;
+        }
+
+        const manager = window.EJS_emulator?.gameManager;
+        if (!manager || !window.EJS_emulator?.started) {
+          setStatus("Emulator is not ready for disk swapping yet");
+          return;
+        }
+
+        const incomingName = fileName || `Disk ${nextSwapSlot + 1}`;
+        const incomingKey = incomingName.toLowerCase();
+        let slotIndex = diskSlots.findIndex((slot) => slot.sourceName.toLowerCase() === incomingKey);
+
+        if (slotIndex < 1) {
+          slotIndex = nextSwapSlot;
+          diskSlots[slotIndex].sourceName = incomingName;
+          nextSwapSlot = Math.min(MAX_DISK_SLOTS - 1, nextSwapSlot + 1);
+        }
+
+        writeRuntimeFile(diskSlots[slotIndex].fileName, new Uint8Array(bytes || []));
+
+        if (switchToDiskSlot(slotIndex)) {
+          setStatus(`Swapped to ${incomingName}`);
+        } else {
+          setStatus(`Loaded ${incomingName}, but PUAE did not switch disks`);
+        }
       }
 
       function simulateInput(player, button, value) {
@@ -377,6 +445,10 @@
             bytes: new Uint8Array(data.bytes || []),
           };
           setStatus(`Kickstart ready: ${pendingKickstart.fileName}`);
+        }
+
+        if (data.type === "amiga_swap_disk") {
+          swapDisk(data.fileName, data.bytes);
         }
 
         if (data.type === "amiga_aga_reset") {
