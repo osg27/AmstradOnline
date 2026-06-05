@@ -46,7 +46,7 @@
       let pendingDisks = [];
       let pendingKickstart = null;
       let started = false;
-      let currentDiskIndex = 0;
+      let currentDiskIndex = Number(sessionStorage.getItem("amigaAgaCurrentDiskIndex") || "0") || 0;
       let fileObjectUrls = [];
       let crcTable = null;
       let joystickMask = 0;
@@ -285,30 +285,13 @@
 
         const nextDiskName = pendingDisks[currentDiskIndex]?.fileName || `Disk ${currentDiskIndex + 1}`;
 
+        sessionStorage.setItem("amigaAgaCurrentDiskIndex", String(currentDiskIndex));
+
         setStatus(`Switching to disk ${currentDiskIndex + 1}: ${nextDiskName}`);
         window.EJS_emulator?.displayMessage?.(`Switching to disk ${currentDiskIndex + 1}`);
 
-        started = false;
-
-        try {
-          window.EJS_emulator?.gameManager?.stop?.();
-        } catch (error) {
-          console.warn("Could not stop emulator cleanly:", error);
-        }
-
-        try {
-          window.EJS_emulator?.stop?.();
-        } catch (error) {
-          console.warn("Could not stop EJS emulator cleanly:", error);
-        }
-
-        window.EJS_emulator = null;
-
-        gameElement.innerHTML = "";
-        statusElement.style.display = "grid";
-
         window.setTimeout(() => {
-          startEmulator();
+          window.location.reload();
         }, 250);
       }
 
@@ -525,10 +508,13 @@
           startEmulator();
         }
 
-        if (data.type === "amiga_aga_autoload") {
-          currentDiskIndex = 0;
+        sessionStorage.removeItem("amigaAgaCurrentDiskIndex");
 
+        if (data.type === "amiga_aga_autoload") {
           const disks = Array.isArray(data.disks) ? data.disks : [];
+
+          const savedDiskIndex = Number(sessionStorage.getItem("amigaAgaCurrentDiskIndex") || "0") || 0;
+          currentDiskIndex = Math.max(0, Math.min(savedDiskIndex, Math.max(0, disks.length - 1)));
           pendingDisks = disks.map((disk, index) => ({
             fileName: disk.fileName || `disk-${index + 1}.adf`,
             bytes: new Uint8Array(disk.bytes || []),
@@ -556,6 +542,7 @@
         }
 
         if (data.type === "amiga_aga_reset") {
+          sessionStorage.removeItem("amigaAgaCurrentDiskIndex");
           window.location.reload();
         }
 
