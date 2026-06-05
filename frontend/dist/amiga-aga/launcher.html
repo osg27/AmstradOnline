@@ -56,6 +56,16 @@
         return new File([bytes], fileName || "amiga-file.bin", { type });
       }
 
+      function puaeKickstartName(fileName) {
+        const lowerName = (fileName || "").toLowerCase();
+
+        if (lowerName.includes("a1200") || lowerName.includes("40.68") || lowerName.includes("3.1")) {
+          return "kick40068.A1200";
+        }
+
+        return fileName || "kick.rom";
+      }
+
       function startEmulator() {
         if (started) return;
 
@@ -70,7 +80,7 @@
 
         const gameFile = fileFromBytes(pendingGame.fileName, pendingGame.bytes);
         const biosFile = pendingKickstart
-          ? fileFromBytes(pendingKickstart.fileName, pendingKickstart.bytes)
+          ? fileFromBytes(puaeKickstartName(pendingKickstart.fileName), pendingKickstart.bytes)
           : "";
 
         window.EJS_player = "#game";
