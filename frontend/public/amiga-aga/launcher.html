@@ -43,6 +43,7 @@
       const gameElement = document.getElementById("game");
 
       let pendingGame = null;
+      let pendingDisks = [];
       let pendingKickstart = null;
       let started = false;
       let fileObjectUrls = [];
@@ -80,6 +81,11 @@
         return cleanedName || fallbackName;
       }
 
+      function extensionForFileName(fileName, fallbackExtension = "adf") {
+        const match = (fileName || "").toLowerCase().match(/\.([a-z0-9]+)$/);
+        return match ? match[1] : fallbackExtension;
+      }
+
       function createTrackedObjectUrl(file) {
         const objectUrl = URL.createObjectURL(file);
         fileObjectUrls.push(objectUrl);
@@ -91,7 +97,10 @@
         fileObjectUrls = [];
       }
 
-      function buildPuaeConfigFile(gameFileName, kickstartFileName) {
+      function buildPuaeConfigFile(diskFileNames, kickstartFileName) {
+        const diskImageLines = diskFileNames.length > 1
+          ? diskFileNames.map((fileName, index) => `diskimage${index}=/${fileName}`)
+          : [];
         const config = [
           "config_description=OldStyleGaming Amiga AGA",
           "config_hardware=true",
@@ -104,13 +113,14 @@
           "fastmem_size=8",
           "bogomem_size=0",
           "kickstart_rom_file=/" + kickstartFileName,
-          "floppy0=/" + gameFileName,
+          "floppy0=/" + diskFileNames[0],
           "floppy0type=0",
           "floppy_speed=100",
           "nr_floppies=1",
           "joyport0=mouse",
           "joyport1=joy1",
           "gfx_framerate=1",
+          ...diskImageLines,
         ].join("\n");
 
         return fileFromBytes("oldstylegaming-aga.uae", new TextEncoder().encode(`${config}\n`), "text/plain");
@@ -127,26 +137,62 @@
           };
         }
 
-        const gameFileName = safeVirtualFileName(pendingGame.fileName, "game.adf");
+        const sourceDisks = pendingDisks.length ? pendingDisks : [pendingGame];
+        const diskFiles = sourceDisks.map((disk, index) => {
+          const extension = extensionForFileName(disk.fileName);
+          const fileName = sourceDisks.length > 1
+            ? `oldstylegaming-aga-disk-${index + 1}.${extension}`
+            : safeVirtualFileName(disk.fileName, "game.adf");
+
+          return {
+            fileName,
+            bytes: disk.bytes,
+          };
+        });
+        const diskFileNames = diskFiles.map((disk) => disk.fileName);
         const kickstartFileName = safeVirtualFileName(puaeKickstartName(pendingKickstart.fileName), "kick40068.A1200");
-        const gameFile = fileFromBytes(gameFileName, pendingGame.bytes);
         const biosFile = fileFromBytes(kickstartFileName, pendingKickstart.bytes);
-        const gameObjectUrl = createTrackedObjectUrl(gameFile);
         const biosObjectUrl = createTrackedObjectUrl(biosFile);
         const externalFiles = {
-          [`/${gameFileName}`]: gameObjectUrl,
           [`/${kickstartFileName}`]: biosObjectUrl,
         };
+
+        diskFiles.forEach((disk) => {
+          const diskFile = fileFromBytes(disk.fileName, disk.bytes);
+          externalFiles[`/${disk.fileName}`] = createTrackedObjectUrl(diskFile);
+        });
 
         PUAE_SYSTEM_DIRS.forEach((dir) => {
           externalFiles[`${dir}/${kickstartFileName}`] = biosObjectUrl;
         });
 
         return {
-          gameFile: buildPuaeConfigFile(gameFileName, kickstartFileName),
+          gameFile: buildPuaeConfigFile(diskFileNames, kickstartFileName),
           biosFile,
           externalFiles,
         };
+      }
+
+      function switchToNextDisk() {
+        const manager = window.EJS_emulator?.gameManager;
+
+        if (!manager || !window.EJS_emulator?.started) {
+          setStatus("Emulator is not ready for disk swapping yet");
+          return;
+        }
+
+        const diskCount = manager.getDiskCount?.() || 0;
+        if (diskCount < 2) {
+          setStatus("Load all disks for the game together before starting");
+          window.EJS_emulator?.displayMessage?.("No extra disks loaded");
+          return;
+        }
+
+        const currentDisk = manager.getCurrentDisk?.() || 0;
+        const nextDisk = (currentDisk + 1) % diskCount;
+        manager.setCurrentDisk(nextDisk);
+        setStatus(`Swapped to disk ${nextDisk + 1}`);
+        window.EJS_emulator?.displayMessage?.(`Disk ${nextDisk + 1}`);
       }
 
       function simulateInput(player, button, value) {
@@ -363,9 +409,14 @@
         }
 
         if (data.type === "amiga_aga_autoload") {
+          const disks = Array.isArray(data.disks) ? data.disks : [];
+          pendingDisks = disks.map((disk, index) => ({
+            fileName: disk.fileName || `disk-${index + 1}.adf`,
+            bytes: new Uint8Array(disk.bytes || []),
+          })).filter((disk) => disk.bytes.length);
           pendingGame = {
-            fileName: data.fileName || "game.uae",
-            bytes: new Uint8Array(data.bytes || []),
+            fileName: pendingDisks[0]?.fileName || data.fileName || "game.uae",
+            bytes: pendingDisks[0]?.bytes || new Uint8Array(data.bytes || []),
           };
           setStatus(`Starting ${pendingGame.fileName} with PUAE...`);
           startEmulator();
@@ -377,6 +428,10 @@
             bytes: new Uint8Array(data.bytes || []),
           };
           setStatus(`Kickstart ready: ${pendingKickstart.fileName}`);
+        }
+
+        if (data.type === "amiga_aga_next_disk") {
+          switchToNextDisk();
         }
 
         if (data.type === "amiga_aga_reset") {
