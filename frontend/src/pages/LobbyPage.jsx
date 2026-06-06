@@ -7,22 +7,22 @@ const PLAY_MODES = {
   solo: {
     label: '1 Player',
     kicker: 'Local',
-    description: 'Boot the emulator for a single-player session.',
+    description: 'Play on your own.',
   },
   hosted: {
-    label: 'Hosted',
-    kicker: 'Online',
-    description: 'Create a room and stream the host emulator to guests.',
+    label: 'Play Online',
+    kicker: 'Friends',
+    description: 'Start a room and share the code.',
   },
   party: {
     label: 'Party Mode',
     kicker: 'Turns',
-    description: 'Shared-room play for more than two players.',
+    description: 'Take turns with a group.',
   },
   link: {
     label: 'Link Play',
-    kicker: 'Twin emu',
-    description: 'Two emulator instances connected together.',
+    kicker: 'Linked',
+    description: 'Connect two machines.',
   },
 };
 
@@ -30,20 +30,20 @@ const SYSTEM_GROUPS = [
   {
     id: '8bit',
     label: '8-bit',
-    strapline: 'Home computers, tapes, disks, and proper living-room chaos.',
+    strapline: 'Amstrad and Spectrum games.',
     systems: [
       {
         id: 'cpc',
         name: 'Amstrad CPC',
         shortName: 'CPC',
         accent: 'green',
-        summary: 'Cursor keys, disks, party turns, and classic two-player sessions.',
+        summary: 'Load a disk and play. Party Mode is also available.',
         formats: '.dsk',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
           party: { enabled: true, system: 'cpc_party' },
-          link: { enabled: false, note: 'Not planned for CPC yet' },
+          link: { enabled: false, note: 'Not available yet' },
         },
       },
       {
@@ -51,13 +51,13 @@ const SYSTEM_GROUPS = [
         name: 'ZX Spectrum',
         shortName: 'ZX',
         accent: 'ruby',
-        summary: 'Tape snapshots and Sinclair joystick controls.',
+        summary: 'Load a Spectrum game and play.',
         formats: '.tap .tzx .z80 .sna .szx',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
-          party: { enabled: false, note: 'Party mode later' },
-          link: { enabled: false, note: 'No link mode yet' },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available yet' },
         },
       },
     ],
@@ -65,7 +65,7 @@ const SYSTEM_GROUPS = [
   {
     id: '16bit',
     label: '16-bit',
-    strapline: 'The big jump: disks, pads, mice, and richer multiplayer ideas.',
+    strapline: 'Amiga, Mega Drive and SNES games.',
     previewOnly: true,
     systems: [
       {
@@ -73,14 +73,14 @@ const SYSTEM_GROUPS = [
         name: 'Commodore Amiga',
         shortName: 'A500',
         accent: 'blue',
-        summary: 'ADF/LHA loading, mouse support, AROS fallback, and future serial link play.',
-        formats: '.adf .adz .dms .hdf .lha .zip',
-        badge: 'Preview',
+        summary: 'Amiga 500 games with joystick and mouse support.',
+        formats: '.adf .zip',
+        badge: 'Testing',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
-          party: { enabled: false, note: 'Design stage' },
-          link: { enabled: false, note: 'Needs serial bridge' },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available yet' },
         },
       },
       {
@@ -88,14 +88,14 @@ const SYSTEM_GROUPS = [
         name: 'Amiga AGA',
         shortName: 'A1200',
         accent: 'blue',
-        summary: 'A1200/AGA games through dedicated PUAE WASM with real Kickstart and multi-disk support.',
-        formats: '.uae .adf .adz .dms .hdf .lha .zip',
-        badge: 'Preview',
+        summary: 'Amiga 1200 and AGA games. Multi-disk games are supported.',
+        formats: '.adf .zip',
+        badge: 'Testing',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
-          party: { enabled: false, note: 'Not wired' },
-          link: { enabled: false, note: 'Serial bridge later' },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available yet' },
         },
       },
       {
@@ -103,14 +103,14 @@ const SYSTEM_GROUPS = [
         name: 'Mega Drive',
         shortName: 'MD',
         accent: 'violet',
-        summary: 'Fast pad play with A/B/C and Start mapped for guests.',
+        summary: 'Mega Drive games with two-player controls.',
         formats: '.bin .gen .md .smd',
-        badge: 'Preview',
+        badge: 'Testing',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
-          party: { enabled: false, note: 'Not wired' },
-          link: { enabled: false, note: 'Not applicable' },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available' },
         },
       },
       {
@@ -118,14 +118,14 @@ const SYSTEM_GROUPS = [
         name: 'SNES',
         shortName: 'SNES',
         accent: 'amber',
-        summary: 'Pad-first console rooms for couch co-op classics.',
+        summary: 'SNES games with two-player controls.',
         formats: '.sfc .smc',
-        badge: 'Preview',
+        badge: 'Testing',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
-          party: { enabled: false, note: 'Not wired' },
-          link: { enabled: false, note: 'Not applicable' },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available' },
         },
       },
     ],
@@ -133,7 +133,7 @@ const SYSTEM_GROUPS = [
   {
     id: 'arcade',
     label: 'Arcade',
-    strapline: 'Cabinet games, ROM zips, and experiments that need careful handling.',
+    strapline: 'MAME arcade games.',
     adminOnly: true,
     systems: [
       {
@@ -141,14 +141,14 @@ const SYSTEM_GROUPS = [
         name: 'MAME Arcade',
         shortName: 'MAME',
         accent: 'gold',
-        summary: 'Admin-only test bench for arcade ROMs and WASM runtimes.',
+        summary: 'Load a MAME ROM and play.',
         formats: '.zip',
         badge: 'Admin',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
-          party: { enabled: false, note: 'Cabinet party later' },
-          link: { enabled: false, note: 'Not wired' },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available' },
         },
       },
     ],
@@ -303,8 +303,8 @@ export default function LobbyPage() {
 
         <section className="lobby-hero">
           <div>
-            <p className="lobby-eyebrow">Retro Gaming is better with mates</p>
-            <h1>Choose a machine and play.</h1>
+            <p className="lobby-eyebrow">Old games, online with mates</p>
+            <h1>What do you fancy playing?</h1>
           </div>
           <form
             className="quick-join"
@@ -419,7 +419,7 @@ export default function LobbyPage() {
               onClick={() => createSession()}
               disabled={loadingCreate || !selectedModeConfig?.enabled}
             >
-              {loadingCreate ? 'Starting...' : selectedMode === 'solo' ? 'Start 1 Player' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start Hosted Room'}
+              {loadingCreate ? 'Starting...' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
             </button>
 
             {error ? <p className="error">{error}</p> : null}
