@@ -265,7 +265,7 @@
 
         if (diskFileNames.length > 1) {
           const m3uName = "oldstylegaming-aga.m3u";
-          const m3uBytes = new TextEncoder().encode(`${diskFileNames.map((diskFileName, index) => `${diskFileName}|Disk ${index + 1}`).join("\n")}\n`);
+          const m3uBytes = new TextEncoder().encode(`${diskFileNames.join("\n")}\n`);
           const zipFile = buildZipFile([
             { fileName: m3uName, bytes: m3uBytes },
             ...disksToLoad.map((disk, index) => ({
