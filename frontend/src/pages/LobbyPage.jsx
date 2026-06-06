@@ -379,7 +379,9 @@ export default function LobbyPage() {
             </div>
 
             <div className="mode-list">
-              {Object.entries(PLAY_MODES).map(([modeId, mode]) => {
+              {Object.entries(PLAY_MODES).filter(([modeId]) => (
+                modeId !== 'link' || selectedSystem?.id === 'amiga'
+              )).map(([modeId, mode]) => {
                 const modeConfig = selectedSystem?.modes[modeId];
                 const enabled = Boolean(modeConfig?.enabled);
                 const active = selectedMode === modeId;
