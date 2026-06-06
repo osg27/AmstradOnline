@@ -170,7 +170,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
-    ? '/amiga-aga/launcher.html?v=2026-06-06-5'
+    ? '/amiga-aga/launcher.html?v=2026-06-06-6'
     : isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';

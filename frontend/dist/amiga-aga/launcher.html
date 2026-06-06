@@ -172,7 +172,7 @@
 
         if (diskFileNames.length > 1) {
           const m3uName = "oldstylegaming-aga.m3u";
-          const m3uBytes = new TextEncoder().encode(`${diskFileNames.join("\n")}\n`);
+          const m3uBytes = new TextEncoder().encode(`${diskFileNames.map((diskFileName) => `/${diskFileName}`).join("\n")}\n`);
           const m3uFile = fileFromBytes(m3uName, m3uBytes, "text/plain");
 
           disksToLoad.forEach((disk, index) => {
