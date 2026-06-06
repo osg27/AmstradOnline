@@ -168,6 +168,7 @@ export default function LobbyPage() {
   const [selectedSystemId, setSelectedSystemId] = useState('cpc');
   const [selectedMode, setSelectedMode] = useState('hosted');
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
+  const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
   const canUsePreviewSystems = isAdmin || isTester;
 
   const visibleGroups = useMemo(() => SYSTEM_GROUPS.map((group) => ({
@@ -197,9 +198,14 @@ export default function LobbyPage() {
         if (!nextIsAdmin && !nextIsTester && selectedEra !== '8bit') {
           chooseGroup('8bit', SYSTEM_GROUPS[0]);
         }
+        if (nextIsAdmin || nextIsTester) {
+          const notifications = await apiFetch('/auth/feedback/notifications');
+          setFeedbackNotificationCount(notifications.filter((notification) => !notification.is_read).length);
+        }
       } catch {
         setIsAdmin(false);
         setIsTester(false);
+        setFeedbackNotificationCount(0);
         localStorage.removeItem('isAdmin');
         localStorage.removeItem('isTester');
         chooseGroup('8bit', SYSTEM_GROUPS[0]);
@@ -284,7 +290,9 @@ export default function LobbyPage() {
           <div className="account-strip">
             <span>{username}</span>
             {canUsePreviewSystems ? (
-              <button className="secondary" onClick={() => navigate('/feedback')}>Feedback</button>
+              <button className="secondary" onClick={() => navigate('/feedback')}>
+                Feedback{feedbackNotificationCount ? ` (${feedbackNotificationCount})` : ''}
+              </button>
             ) : null}
             {isAdmin ? (
               <button className="secondary" onClick={() => navigate('/admin')}>Admin</button>

@@ -84,6 +84,7 @@ export default function RoomPage() {
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
+  const [roomCodeCopied, setRoomCodeCopied] = useState(false);
   const [emulatorFrameLoadCount, setEmulatorFrameLoadCount] = useState(0);
   const [inputDebug, setInputDebug] = useState({
     mask: 0,
@@ -2745,13 +2746,30 @@ export default function RoomPage() {
     }
   }
 
+  async function copyRoomCode() {
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setRoomCodeCopied(true);
+      window.setTimeout(() => setRoomCodeCopied(false), 1800);
+    } catch {
+      setError('Could not copy the room code');
+    }
+  }
+
   return (
     <div className="page room-page">
       <div className="card room-card">
         <div className="room-topbar">
           <div className="room-title">
             <BrandMark compact />
-            <h1>{isSoloMode ? '1 Player' : `Room ${roomCode}`}</h1>
+            <div className="room-code-row">
+              <h1>{isSoloMode ? '1 Player' : `Room ${roomCode}`}</h1>
+              {!isSoloMode ? (
+                <button className="secondary" type="button" onClick={copyRoomCode}>
+                  {roomCodeCopied ? 'Copied' : 'Copy code'}
+                </button>
+              ) : null}
+            </div>
             <div className="room-identity">
               <span>You are</span>
               <strong>{username}</strong>

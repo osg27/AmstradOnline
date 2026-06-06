@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 VALID_CATEGORIES = {"bug", "suggestion"}
-VALID_STATUSES = {"open", "reviewing", "done"}
+VALID_STATUSES = {"unstarted", "in_review", "resolved", "archived"}
 
 
 class FeedbackCreateRequest(BaseModel):
@@ -39,6 +39,33 @@ class FeedbackStatusRequest(BaseModel):
         return normalized
 
 
+class FeedbackCommentCreateRequest(BaseModel):
+    details: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("details")
+    @classmethod
+    def validate_details(cls, value):
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Reply cannot be empty")
+        return normalized
+
+
+class FeedbackCommentResponse(BaseModel):
+    id: int
+    username: str
+    details: str
+    created_at: datetime
+
+
+class FeedbackNotificationResponse(BaseModel):
+    id: int
+    feedback_id: int
+    message: str
+    is_read: bool
+    created_at: datetime
+
+
 class FeedbackResponse(BaseModel):
     id: int
     username: str
@@ -48,3 +75,4 @@ class FeedbackResponse(BaseModel):
     details: str
     status: str
     created_at: datetime
+    comments: list[FeedbackCommentResponse] = Field(default_factory=list)

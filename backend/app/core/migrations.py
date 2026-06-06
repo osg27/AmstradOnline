@@ -5,6 +5,7 @@ def ensure_runtime_columns(engine):
     inspector = inspect(engine)
     user_columns = {column["name"] for column in inspector.get_columns("users")}
     room_columns = {column["name"] for column in inspector.get_columns("rooms")}
+    table_names = set(inspector.get_table_names())
 
     with engine.begin() as connection:
         dialect = connection.dialect.name
@@ -21,3 +22,8 @@ def ensure_runtime_columns(engine):
 
         if "party_max_players" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN party_max_players INTEGER NOT NULL DEFAULT 2"))
+
+        if "feedback_items" in table_names:
+            connection.execute(text("UPDATE feedback_items SET status = 'unstarted' WHERE status = 'open'"))
+            connection.execute(text("UPDATE feedback_items SET status = 'in_review' WHERE status = 'reviewing'"))
+            connection.execute(text("UPDATE feedback_items SET status = 'resolved' WHERE status = 'done'"))
