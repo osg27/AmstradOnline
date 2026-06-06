@@ -238,14 +238,13 @@
         );
 
         const biosFile = fileFromBytes(kickstartFileName, pendingKickstart.bytes);
-        const biosObjectUrl = createTrackedObjectUrl(biosFile);
 
         const externalFiles = {
-          [`/${kickstartFileName}`]: biosObjectUrl,
+          [`/${kickstartFileName}`]: createTrackedObjectUrl(biosFile),
         };
 
         PUAE_SYSTEM_DIRS.forEach((dir) => {
-          externalFiles[`${dir}/${kickstartFileName}`] = biosObjectUrl;
+          externalFiles[`${dir}/${kickstartFileName}`] = createTrackedObjectUrl(biosFile);
         });
 
         const disksToLoad = pendingDisks.length
