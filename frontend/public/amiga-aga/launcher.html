@@ -46,7 +46,6 @@
       let pendingDisks = [];
       let pendingKickstart = null;
       let started = false;
-      let currentDiskIndex = Number(sessionStorage.getItem("amigaAgaCurrentDiskIndex") || "0") || 0;
       let fileObjectUrls = [];
       let crcTable = null;
       let joystickMask = 0;
@@ -114,6 +113,12 @@
         output.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
       }
 
+      function appendBytes(output, bytes) {
+        for (let index = 0; index < bytes.length; index += 1) {
+          output.push(bytes[index]);
+        }
+      }
+
       function buildZipFile(entries, fileName) {
         const output = [];
         const centralDirectory = [];
@@ -136,7 +141,8 @@
           writeUint32(output, data.length);
           writeUint16(output, nameBytes.length);
           writeUint16(output, 0);
-          output.push(...nameBytes, ...data);
+          appendBytes(output, nameBytes);
+          appendBytes(output, data);
 
           writeUint32(centralDirectory, 0x02014b50);
           writeUint16(centralDirectory, 20);
@@ -155,7 +161,7 @@
           writeUint16(centralDirectory, 0);
           writeUint32(centralDirectory, 0);
           writeUint32(centralDirectory, offset);
-          centralDirectory.push(...nameBytes);
+          appendBytes(centralDirectory, nameBytes);
         });
 
         const centralDirectoryOffset = output.length;
@@ -183,10 +189,7 @@
         fileObjectUrls = [];
       }
 
-      function buildPuaeConfigFile(diskFileNames, kickstartFileName) {
-        const disks = Array.isArray(diskFileNames) ? diskFileNames : [diskFileNames];
-        const selectedDisk = disks[currentDiskIndex] || disks[0];
-
+      function buildPuaeConfigFile(gameFileName, kickstartFileName) {
         const config = [
           "config_description=OldStyleGaming Amiga AGA",
           "config_hardware=true",
@@ -199,7 +202,7 @@
           "fastmem_size=8",
           "bogomem_size=0",
           "kickstart_rom_file=/" + kickstartFileName,
-          "floppy0=/" + selectedDisk,
+          "floppy0=/" + gameFileName,
           "floppy0type=0",
           "floppy_speed=100",
           "nr_floppies=1",
@@ -207,8 +210,6 @@
           "joyport1=joy1",
           "gfx_framerate=1",
         ].join("\n");
-
-        console.log("PUAE config:\n" + config);
 
         return fileFromBytes(
           "oldstylegaming-aga.uae",
@@ -256,43 +257,61 @@
               },
             ];
 
-        const diskFileNames = disksToLoad.slice(0, 4).map((disk, index) => {
+        const diskFileNames = disksToLoad.map((disk, index) => {
           const extension = extensionForFileName(disk.fileName);
           const diskFileName = `oldstylegaming-aga-disk-${index + 1}.${extension}`;
-          const diskFile = fileFromBytes(diskFileName, disk.bytes);
-          const diskObjectUrl = createTrackedObjectUrl(diskFile);
-
-          externalFiles[`/${diskFileName}`] = diskObjectUrl;
-
           return diskFileName;
         });
 
+        if (diskFileNames.length > 1) {
+          const m3uName = "oldstylegaming-aga.m3u";
+          const m3uBytes = new TextEncoder().encode(`${diskFileNames.map((diskFileName, index) => `${diskFileName}|Disk ${index + 1}`).join("\n")}\n`);
+          const zipFile = buildZipFile([
+            { fileName: m3uName, bytes: m3uBytes },
+            ...disksToLoad.map((disk, index) => ({
+              fileName: diskFileNames[index],
+              bytes: disk.bytes,
+            })),
+          ], "oldstylegaming-aga-multidisk.zip");
+
+          return {
+            gameFile: zipFile,
+            biosFile,
+            externalFiles,
+          };
+        }
+
+        const diskFile = fileFromBytes(diskFileNames[0], disksToLoad[0].bytes);
+        const diskObjectUrl = createTrackedObjectUrl(diskFile);
+        externalFiles[`/${diskFileNames[0]}`] = diskObjectUrl;
+
         return {
-          gameFile: buildPuaeConfigFile(diskFileNames, kickstartFileName),
+          gameFile: buildPuaeConfigFile(diskFileNames[0], kickstartFileName),
           biosFile,
           externalFiles,
         };
       }
 
       function switchToNextDisk() {
-        if (!pendingDisks.length || pendingDisks.length < 2) {
+        const manager = window.EJS_emulator?.gameManager;
+
+        if (!manager || !window.EJS_emulator?.started) {
+          setStatus("Emulator is not ready for disk swapping yet");
+          return;
+        }
+
+        const diskCount = manager.getDiskCount?.() || 0;
+        if (diskCount < 2) {
           setStatus("Load all disks for the game together before starting");
           window.EJS_emulator?.displayMessage?.("No extra disks loaded");
           return;
         }
 
-        currentDiskIndex = (currentDiskIndex + 1) % pendingDisks.length;
-
-        const nextDiskName = pendingDisks[currentDiskIndex]?.fileName || `Disk ${currentDiskIndex + 1}`;
-
-        sessionStorage.setItem("amigaAgaCurrentDiskIndex", String(currentDiskIndex));
-
-        setStatus(`Switching to disk ${currentDiskIndex + 1}: ${nextDiskName}`);
-        window.EJS_emulator?.displayMessage?.(`Switching to disk ${currentDiskIndex + 1}`);
-
-        window.setTimeout(() => {
-          window.location.reload();
-        }, 250);
+        const currentDisk = manager.getCurrentDisk?.() || 0;
+        const nextDisk = (currentDisk + 1) % diskCount;
+        manager.setCurrentDisk(nextDisk);
+        setStatus(`Swapped to disk ${nextDisk + 1}`);
+        window.EJS_emulator?.displayMessage?.(`Disk ${nextDisk + 1}`);
       }
 
       function simulateInput(player, button, value) {
@@ -508,13 +527,9 @@
           startEmulator();
         }
 
-        sessionStorage.removeItem("amigaAgaCurrentDiskIndex");
-
         if (data.type === "amiga_aga_autoload") {
           const disks = Array.isArray(data.disks) ? data.disks : [];
 
-          const savedDiskIndex = Number(sessionStorage.getItem("amigaAgaCurrentDiskIndex") || "0") || 0;
-          currentDiskIndex = Math.max(0, Math.min(savedDiskIndex, Math.max(0, disks.length - 1)));
           pendingDisks = disks.map((disk, index) => ({
             fileName: disk.fileName || `disk-${index + 1}.adf`,
             bytes: new Uint8Array(disk.bytes || []),
@@ -542,7 +557,6 @@
         }
 
         if (data.type === "amiga_aga_reset") {
-          sessionStorage.removeItem("amigaAgaCurrentDiskIndex");
           window.location.reload();
         }
 

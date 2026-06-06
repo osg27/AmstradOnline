@@ -211,7 +211,11 @@
           "gfx_framerate=1",
         ].join("\n");
 
-        return fileFromBytes("oldstylegaming-aga.uae", new TextEncoder().encode(`${config}\n`), "text/plain");
+        return fileFromBytes(
+          "oldstylegaming-aga.uae",
+          new TextEncoder().encode(`${config}\n`),
+          "text/plain"
+        );
       }
 
       function buildEmulatorFiles() {
@@ -219,20 +223,24 @@
 
         if (!pendingKickstart) {
           return {
-            gameFile: fileFromBytes(safeVirtualFileName(pendingGame.fileName, "game.adf"), pendingGame.bytes),
+            gameFile: fileFromBytes(
+              safeVirtualFileName(pendingGame.fileName, "game.adf"),
+              pendingGame.bytes
+            ),
             biosFile: "",
             externalFiles: {},
           };
         }
 
-        const gameFileName = safeVirtualFileName(pendingGame.fileName, "game.adf");
-        const kickstartFileName = safeVirtualFileName(puaeKickstartName(pendingKickstart.fileName), "kick40068.A1200");
-        const gameFile = fileFromBytes(gameFileName, pendingGame.bytes);
+        const kickstartFileName = safeVirtualFileName(
+          puaeKickstartName(pendingKickstart.fileName),
+          "kick40068.A1200"
+        );
+
         const biosFile = fileFromBytes(kickstartFileName, pendingKickstart.bytes);
-        const gameObjectUrl = createTrackedObjectUrl(gameFile);
         const biosObjectUrl = createTrackedObjectUrl(biosFile);
+
         const externalFiles = {
-          [`/${gameFileName}`]: gameObjectUrl,
           [`/${kickstartFileName}`]: biosObjectUrl,
         };
 
@@ -240,29 +248,45 @@
           externalFiles[`${dir}/${kickstartFileName}`] = biosObjectUrl;
         });
 
-        if (pendingDisks.length > 1) {
-          const diskFiles = pendingDisks.map((disk, index) => {
-            const extension = extensionForFileName(disk.fileName);
-            return {
-              fileName: `oldstylegaming-aga-disk-${index + 1}.${extension}`,
-              bytes: disk.bytes,
-            };
-          });
+        const disksToLoad = pendingDisks.length
+          ? pendingDisks
+          : [
+              {
+                fileName: pendingGame.fileName || "game.adf",
+                bytes: pendingGame.bytes,
+              },
+            ];
+
+        const diskFileNames = disksToLoad.map((disk, index) => {
+          const extension = extensionForFileName(disk.fileName);
+          const diskFileName = `oldstylegaming-aga-disk-${index + 1}.${extension}`;
+          return diskFileName;
+        });
+
+        if (diskFileNames.length > 1) {
           const m3uName = "oldstylegaming-aga.m3u";
-          const m3uBytes = new TextEncoder().encode(`${diskFiles.map((disk, index) => `${disk.fileName}|Disk ${index + 1}`).join("\n")}\n`);
+          const m3uBytes = new TextEncoder().encode(`${diskFileNames.map((diskFileName, index) => `${diskFileName}|Disk ${index + 1}`).join("\n")}\n`);
+          const zipFile = buildZipFile([
+            { fileName: m3uName, bytes: m3uBytes },
+            ...disksToLoad.map((disk, index) => ({
+              fileName: diskFileNames[index],
+              bytes: disk.bytes,
+            })),
+          ], "oldstylegaming-aga-multidisk.zip");
 
           return {
-            gameFile: buildZipFile([
-              { fileName: m3uName, bytes: m3uBytes },
-              ...diskFiles,
-            ], "oldstylegaming-aga-multidisk.zip"),
+            gameFile: zipFile,
             biosFile,
             externalFiles,
           };
         }
 
+        const diskFile = fileFromBytes(diskFileNames[0], disksToLoad[0].bytes);
+        const diskObjectUrl = createTrackedObjectUrl(diskFile);
+        externalFiles[`/${diskFileNames[0]}`] = diskObjectUrl;
+
         return {
-          gameFile: buildPuaeConfigFile(gameFileName, kickstartFileName),
+          gameFile: buildPuaeConfigFile(diskFileNames[0], kickstartFileName),
           biosFile,
           externalFiles,
         };
@@ -505,14 +529,17 @@
 
         if (data.type === "amiga_aga_autoload") {
           const disks = Array.isArray(data.disks) ? data.disks : [];
+
           pendingDisks = disks.map((disk, index) => ({
             fileName: disk.fileName || `disk-${index + 1}.adf`,
             bytes: new Uint8Array(disk.bytes || []),
           })).filter((disk) => disk.bytes.length);
+
           pendingGame = {
             fileName: pendingDisks[0]?.fileName || data.fileName || "game.uae",
             bytes: pendingDisks[0]?.bytes || new Uint8Array(data.bytes || []),
           };
+
           setStatus(`Starting ${pendingGame.fileName} with PUAE...`);
           startEmulator();
         }
