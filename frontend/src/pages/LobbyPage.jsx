@@ -88,10 +88,9 @@ const SYSTEM_GROUPS = [
         name: 'Amiga AGA',
         shortName: 'A1200',
         accent: 'blue',
-        summary: 'Admin test bench for A1200/AGA games through dedicated PUAE WASM.',
+        summary: 'A1200/AGA games through dedicated PUAE WASM with real Kickstart and multi-disk support.',
         formats: '.uae .adf .adz .dms .hdf .lha .zip',
-        badge: 'Admin',
-        adminOnly: true,
+        badge: 'Preview',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
