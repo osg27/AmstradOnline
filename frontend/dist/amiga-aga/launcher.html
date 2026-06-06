@@ -265,16 +265,15 @@
         if (diskFileNames.length > 1) {
           const m3uName = "oldstylegaming-aga.m3u";
           const m3uBytes = new TextEncoder().encode(`${diskFileNames.join("\n")}\n`);
-          const zipFile = buildZipFile([
-            { fileName: m3uName, bytes: m3uBytes },
-            ...disksToLoad.map((disk, index) => ({
-              fileName: diskFileNames[index],
-              bytes: disk.bytes,
-            })),
-          ], "oldstylegaming-aga-multidisk.zip");
+
+          externalFiles[`/${m3uName}`] = createTrackedObjectUrl(fileFromBytes(m3uName, m3uBytes, "text/plain"));
+          disksToLoad.forEach((disk, index) => {
+            const diskFile = fileFromBytes(diskFileNames[index], disk.bytes);
+            externalFiles[`/${diskFileNames[index]}`] = createTrackedObjectUrl(diskFile);
+          });
 
           return {
-            gameFile: zipFile,
+            gameFile: buildPuaeConfigFile(m3uName, kickstartFileName),
             biosFile,
             externalFiles,
           };
@@ -505,6 +504,7 @@
         window.EJS_threads = false;
         window.EJS_defaultOptions = {
           "puae_model": "A1200",
+          "puae_kickstart": pendingKickstart ? puaeKickstartName(pendingKickstart.fileName) : "auto",
           "puae_chipset": "AGA",
           "puae_cpu_model": "68020",
           "puae_chipmem_size": "4",
