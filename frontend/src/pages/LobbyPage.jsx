@@ -88,7 +88,7 @@ const SYSTEM_GROUPS = [
         name: 'Amiga AGA',
         shortName: 'A1200',
         accent: 'blue',
-        summary: 'Admin test bench for A1200/AGA games through EmulatorJS and PUAE.',
+        summary: 'Admin test bench for A1200/AGA games through dedicated PUAE WASM.',
         formats: '.uae .adf .adz .dms .hdf .lha .zip',
         badge: 'Admin',
         adminOnly: true,

@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Amiga AGA Launcher</title>
     <style>
-      html,
-      body {
+      html, body {
         margin: 0;
         width: 100%;
         height: 100%;
@@ -15,13 +14,12 @@
         color: #efeae0;
         font-family: system-ui, sans-serif;
       }
-
       #game {
+        display: block;
         width: 100vw;
         height: 100vh;
         background: #000;
       }
-
       #status {
         position: absolute;
         inset: 0;
@@ -35,198 +33,124 @@
     </style>
   </head>
   <body>
-    <div id="game"></div>
+    <canvas id="game" width="768" height="576" tabindex="0"></canvas>
     <div id="status">Load an Amiga AGA file to start PUAE</div>
 
+    <script src="/puae-wasm/puae_libretro.js"></script>
     <script>
       const statusElement = document.getElementById("status");
       const gameElement = document.getElementById("game");
-
-      let pendingGame = null;
-      let pendingDisks = [];
-      let pendingKickstart = null;
-      let started = false;
-      let fileObjectUrls = [];
-      let joystickMask = 0;
-      let mouseX = window.innerWidth / 2;
-      let mouseY = window.innerHeight / 2;
+      const encoder = new TextEncoder();
       const PUAE_SYSTEM_DIRS = [
         "/home/web_user/retroarch/userdata/system",
         "/home/web_user/.config/retroarch/system",
         "/system",
       ];
+      const CORE_OPTIONS = [
+        'puae_model = "A1200"',
+        'puae_model_fd = "A1200"',
+        'puae_kickstart = "kick40068.A1200"',
+        'puae_chipset = "AGA"',
+        'puae_cpu_model = "68020"',
+        'puae_chipmem_size = "4"',
+        'puae_fastmem_size = "8"',
+      ].join("\n");
+
+      let pendingGame = null;
+      let pendingDisks = [];
+      let pendingKickstart = null;
+      let started = false;
+      let runtimeModule = null;
+      let getDiskCount = null;
+      let getCurrentDisk = null;
+      let setCurrentDisk = null;
+      let simulateRuntimeInput = null;
+      let joystickMask = 0;
+      let mouseX = window.innerWidth / 2;
+      let mouseY = window.innerHeight / 2;
 
       function setStatus(message) {
+        statusElement.style.display = "grid";
         statusElement.textContent = message;
       }
 
-      function fileFromBytes(fileName, bytes, fallbackType = "application/octet-stream") {
-        const lowerName = (fileName || "").toLowerCase();
-        const type = lowerName.endsWith(".uae") ? "text/plain" : fallbackType;
-        return new File([bytes], fileName || "amiga-file.bin", { type });
+      function safeExtension(fileName) {
+        return (fileName || "").toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || "adf";
       }
 
-      function puaeKickstartName(fileName) {
-        const lowerName = (fileName || "").toLowerCase();
-
-        if (lowerName.includes("a1200") || lowerName.includes("40.68") || lowerName.includes("3.1")) {
-          return "kick40068.A1200";
-        }
-
-        return fileName || "kick.rom";
+      function mkdirp(path) {
+        let current = "";
+        path.split("/").filter(Boolean).forEach((part) => {
+          current += `/${part}`;
+          try {
+            runtimeModule.FS.mkdir(current);
+          } catch {
+            // Directory already exists.
+          }
+        });
       }
 
-      function safeVirtualFileName(fileName, fallbackName) {
-        const cleanedName = (fileName || fallbackName).replace(/[\\/]/g, "_").trim();
-        return cleanedName || fallbackName;
+      function writeRuntimeFile(path, bytes) {
+        mkdirp(path.split("/").slice(0, -1).join("/"));
+        runtimeModule.FS.writeFile(path, bytes);
       }
 
-      function extensionForFileName(fileName, fallbackExtension = "adf") {
-        const match = (fileName || "").toLowerCase().match(/\.([a-z0-9]+)$/);
-        return match ? match[1] : fallbackExtension;
-      }
-
-      function createTrackedObjectUrl(file) {
-        const objectUrl = URL.createObjectURL(file);
-        fileObjectUrls.push(objectUrl);
-        return objectUrl;
-      }
-
-      function clearObjectUrls() {
-        fileObjectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
-        fileObjectUrls = [];
-      }
-
-      function buildPuaeConfigFile(gameFileNames, kickstartFileName) {
-        const diskFileNames = Array.isArray(gameFileNames) ? gameFileNames.slice(0, 4) : [gameFileNames];
-        const floppyLines = diskFileNames.flatMap((fileName, index) => [
-          `floppy${index}=/${fileName}`,
-          `floppy${index}type=0`,
-        ]);
-        const config = [
-          "config_description=OldStyleGaming Amiga AGA",
-          "config_hardware=true",
-          "config_host=true",
-          "amiga_model=A1200",
-          "chipset=aga",
-          "cpu_type=68ec020",
-          "cpu_speed=real",
-          "chipmem_size=4",
-          "fastmem_size=8",
-          "bogomem_size=0",
-          "kickstart_rom_file=/" + kickstartFileName,
-          ...floppyLines,
-          "floppy_speed=100",
-          `nr_floppies=${Math.max(1, diskFileNames.length)}`,
-          "joyport0=mouse",
-          "joyport1=joy1",
-          "gfx_framerate=1",
-        ].join("\n");
-
-        return fileFromBytes(
-          "oldstylegaming-aga.uae",
-          new TextEncoder().encode(`${config}\n`),
-          "text/plain"
-        );
-      }
-
-      function buildEmulatorFiles() {
-        clearObjectUrls();
-
-        if (!pendingKickstart) {
-          return {
-            gameFile: fileFromBytes(
-              safeVirtualFileName(pendingGame.fileName, "game.adf"),
-              pendingGame.bytes
-            ),
-            biosFile: "",
-            externalFiles: {},
-          };
-        }
-
-        const kickstartFileName = safeVirtualFileName(
-          puaeKickstartName(pendingKickstart.fileName),
-          "kick40068.A1200"
-        );
-
-        const biosFile = fileFromBytes(kickstartFileName, pendingKickstart.bytes);
-
-        const externalFiles = {
-          [`/${kickstartFileName}`]: createTrackedObjectUrl(biosFile),
-        };
-
+      function installRuntimeFiles() {
         PUAE_SYSTEM_DIRS.forEach((dir) => {
-          externalFiles[`${dir}/${kickstartFileName}`] = createTrackedObjectUrl(biosFile);
+          writeRuntimeFile(`${dir}/kick40068.A1200`, pendingKickstart.bytes);
         });
 
-        const disksToLoad = pendingDisks.length
+        const disks = pendingDisks.length
           ? pendingDisks
-          : [
-              {
-                fileName: pendingGame.fileName || "game.adf",
-                bytes: pendingGame.bytes,
-              },
-            ];
-
-        const diskFileNames = disksToLoad.slice(0, 4).map((disk, index) => {
-          const extension = extensionForFileName(disk.fileName);
-          const diskFileName = `oldstylegaming-aga-disk-${index + 1}.${extension}`;
-          const diskFile = fileFromBytes(diskFileName, disk.bytes);
-
-          externalFiles[`/${diskFileName}`] = createTrackedObjectUrl(diskFile);
-
-          return diskFileName;
+          : [{ fileName: pendingGame.fileName || "game.adf", bytes: pendingGame.bytes }];
+        const diskPaths = disks.map((disk, index) => {
+          const path = `/disks/disk-${index + 1}.${safeExtension(disk.fileName)}`;
+          writeRuntimeFile(path, disk.bytes);
+          return path;
         });
 
-        return {
-          gameFile: buildPuaeConfigFile(diskFileNames, kickstartFileName),
-          biosFile,
-          externalFiles,
-        };
+        writeRuntimeFile("/game.m3u", encoder.encode(`${diskPaths.join("\n")}\n`));
+        writeRuntimeFile(
+          "/home/web_user/.config/retroarch/retroarch.cfg",
+          encoder.encode([
+            'system_directory = "/home/web_user/retroarch/userdata/system"',
+            'core_options_path = "/home/web_user/retroarch/userdata/config/retroarch-core-options.cfg"',
+            "video_vsync = true",
+            "video_smooth = false",
+            "audio_latency = 64",
+          ].join("\n"))
+        );
+        writeRuntimeFile(
+          "/home/web_user/retroarch/userdata/config/retroarch-core-options.cfg",
+          encoder.encode(CORE_OPTIONS)
+        );
       }
 
       function switchToNextDisk() {
-        const manager = window.EJS_emulator?.gameManager;
-
-        if (!manager || !window.EJS_emulator?.started) {
+        if (!getDiskCount || !getCurrentDisk || !setCurrentDisk) {
           setStatus("Emulator is not ready for disk swapping yet");
           return;
         }
 
-        const diskCount = manager.getDiskCount?.() || 0;
-        if (diskCount < 2) {
+        const count = getDiskCount();
+        if (count < 2) {
           setStatus("Load all disks for the game together before starting");
-          window.EJS_emulator?.displayMessage?.("No extra disks loaded");
           return;
         }
 
-        const currentDisk = manager.getCurrentDisk?.() || 0;
-        const nextDisk = (currentDisk + 1) % diskCount;
-        manager.setCurrentDisk(nextDisk);
-        setStatus(`Swapped to disk ${nextDisk + 1}`);
-        window.EJS_emulator?.displayMessage?.(`Disk ${nextDisk + 1}`);
+        const next = (getCurrentDisk() + 1) % count;
+        setCurrentDisk(next);
+        setStatus(`Swapped to disk ${next + 1} of ${count}`);
+        window.setTimeout(() => {
+          statusElement.style.display = "none";
+        }, 1200);
       }
 
       function simulateInput(player, button, value) {
-        const manager = window.EJS_emulator?.gameManager;
-
-        if (!manager || !window.EJS_emulator?.started) return;
-
-        manager.simulateInput(player, button, value);
-      }
-
-      function getEmulatorTarget() {
-        return (
-          window.EJS_emulator?.canvas ||
-          window.EJS_emulator?.game ||
-          window.EJS_emulator?.elements?.parent ||
-          gameElement
-        );
+        simulateRuntimeInput?.(player, button, value);
       }
 
       function dispatchMouseEvent(type, button = 0, buttons = 0, movementX = 0, movementY = 0) {
-        const target = getEmulatorTarget();
-
         mouseX = Math.max(0, Math.min(window.innerWidth, mouseX + movementX));
         mouseY = Math.max(0, Math.min(window.innerHeight, mouseY + movementY));
 
@@ -235,24 +159,19 @@
           cancelable: true,
           button,
           buttons,
-          clientX: mouseX || window.innerWidth / 2,
-          clientY: mouseY || window.innerHeight / 2,
+          clientX: mouseX,
+          clientY: mouseY,
           movementX,
           movementY,
         });
-
         Object.defineProperty(event, "movementX", { get: () => movementX });
         Object.defineProperty(event, "movementY", { get: () => movementY });
-
-        target?.dispatchEvent(event);
-        if (target !== document) {
-          document.dispatchEvent(event);
-        }
+        gameElement.dispatchEvent(event);
+        document.dispatchEvent(event);
       }
 
       function applyJoystickMask(mask) {
         joystickMask = mask || 0;
-
         simulateInput(0, 4, joystickMask & 1 ? 1 : 0);
         simulateInput(0, 5, joystickMask & 2 ? 1 : 0);
         simulateInput(0, 6, joystickMask & 4 ? 1 : 0);
@@ -264,9 +183,7 @@
 
       function pulseInput(button) {
         simulateInput(0, button, 1);
-        window.setTimeout(() => {
-          simulateInput(0, button, 0);
-        }, 80);
+        window.setTimeout(() => simulateInput(0, button, 0), 80);
       }
 
       function applyMouseButton(button, action) {
@@ -278,142 +195,112 @@
         if (action === "down") {
           simulateInput(0, inputButton, 1);
           dispatchMouseEvent("mousedown", domButton, domButtons);
-          return;
-        }
-
-        if (action === "up") {
+        } else if (action === "up") {
           simulateInput(0, inputButton, 0);
           dispatchMouseEvent("mouseup", domButton, 0);
           dispatchMouseEvent("click", domButton, 0);
-          return;
+        } else {
+          pulseInput(inputButton);
+          dispatchMouseEvent("mousedown", domButton, domButtons);
+          window.setTimeout(() => {
+            dispatchMouseEvent("mouseup", domButton, 0);
+            dispatchMouseEvent("click", domButton, 0);
+          }, 80);
         }
-
-        pulseInput(inputButton);
-        dispatchMouseEvent("mousedown", domButton, domButtons);
-        window.setTimeout(() => {
-          dispatchMouseEvent("mouseup", domButton, 0);
-          dispatchMouseEvent("click", domButton, 0);
-        }, 80);
       }
 
       function applyMouseMove(dx, dy) {
         const movementX = Math.max(-80, Math.min(80, Number(dx) || 0));
         const movementY = Math.max(-80, Math.min(80, Number(dy) || 0));
-
         if (!movementX && !movementY) return;
 
         dispatchMouseEvent("mousemove", 0, 0, movementX, movementY);
-
-        const xIndex = movementX > 0 ? 16 : 17;
-        const yIndex = movementY > 0 ? 18 : 19;
-        const xValue = Math.min(0x7fff, Math.abs(movementX) * 1200);
-        const yValue = Math.min(0x7fff, Math.abs(movementY) * 1200);
-
         if (movementX) {
-          simulateInput(0, xIndex, xValue);
+          simulateInput(0, movementX > 0 ? 16 : 17, Math.min(0x7fff, Math.abs(movementX) * 1200));
           simulateInput(0, movementX > 0 ? 17 : 16, 0);
         }
-
         if (movementY) {
-          simulateInput(0, yIndex, yValue);
+          simulateInput(0, movementY > 0 ? 18 : 19, Math.min(0x7fff, Math.abs(movementY) * 1200));
           simulateInput(0, movementY > 0 ? 19 : 18, 0);
         }
-
         window.setTimeout(() => {
-          simulateInput(0, 16, 0);
-          simulateInput(0, 17, 0);
-          simulateInput(0, 18, 0);
-          simulateInput(0, 19, 0);
+          [16, 17, 18, 19].forEach((index) => simulateInput(0, index, 0));
         }, 16);
       }
 
-      function keyEventType(action) {
-        return action === "up" ? "keyup" : "keydown";
-      }
-
       function keyCodeFor(code, key) {
-        if (code === "ArrowUp") return 38;
-        if (code === "ArrowDown") return 40;
-        if (code === "ArrowLeft") return 37;
-        if (code === "ArrowRight") return 39;
-        if (code === "Enter") return 13;
-        if (code === "Space") return 32;
-        if (code === "Tab") return 9;
+        const known = { ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Enter: 13, Space: 32, Tab: 9 };
+        if (known[code]) return known[code];
         if (code?.startsWith("Key")) return code.charCodeAt(3);
         if (code?.startsWith("Digit")) return code.charCodeAt(5);
-        if (key && key.length === 1) return key.toUpperCase().charCodeAt(0);
-        return 0;
+        return key?.length === 1 ? key.toUpperCase().charCodeAt(0) : 0;
       }
 
       function dispatchKeyboardInput(code, key, action) {
         if (!code) return;
-
-        const type = keyEventType(action);
+        const type = action === "up" ? "keyup" : "keydown";
         const keyCode = keyCodeFor(code, key);
-        const eventInit = {
-          key: key || (code.startsWith("Key") ? code.slice(3).toLowerCase() : code),
-          code,
-          keyCode,
-          which: keyCode,
-          bubbles: true,
-          cancelable: true,
-        };
-        const target = window.EJS_emulator?.elements?.parent || gameElement;
-        const targetEvent = new KeyboardEvent(type, eventInit);
-        const documentEvent = new KeyboardEvent(type, eventInit);
-
-        Object.defineProperty(targetEvent, "keyCode", { get: () => keyCode });
-        Object.defineProperty(targetEvent, "which", { get: () => keyCode });
-        Object.defineProperty(documentEvent, "keyCode", { get: () => keyCode });
-        Object.defineProperty(documentEvent, "which", { get: () => keyCode });
-
-        target.focus?.();
-        target.dispatchEvent(targetEvent);
+        const init = { key: key || code, code, keyCode, which: keyCode, bubbles: true, cancelable: true };
+        const canvasEvent = new KeyboardEvent(type, init);
+        const documentEvent = new KeyboardEvent(type, init);
+        [canvasEvent, documentEvent].forEach((event) => {
+          Object.defineProperty(event, "keyCode", { get: () => keyCode });
+          Object.defineProperty(event, "which", { get: () => keyCode });
+        });
+        gameElement.focus();
+        gameElement.dispatchEvent(canvasEvent);
         document.dispatchEvent(documentEvent);
       }
 
-      function startEmulator() {
+      async function startEmulator() {
         if (started) return;
-
         if (!pendingGame) {
           setStatus("Choose an Amiga AGA file first");
           return;
         }
-
         if (!pendingKickstart?.bytes?.length) {
           setStatus("Waiting for your A1200 Kickstart ROM...");
           return;
         }
+        if (typeof window.EJS_Runtime !== "function") {
+          setStatus("Dedicated PUAE runtime did not load");
+          return;
+        }
 
         started = true;
-        statusElement.style.display = "none";
-        gameElement.innerHTML = "";
+        setStatus(`Starting ${pendingGame.fileName} with dedicated PUAE...`);
 
-        const emulatorFiles = buildEmulatorFiles();
+        try {
+          runtimeModule = await window.EJS_Runtime({
+            noInitialRun: true,
+            arguments: [],
+            preRun: [],
+            postRun: [],
+            canvas: gameElement,
+            callbacks: {
+              setupCoreSettingFile: (path) => writeRuntimeFile(path, encoder.encode(CORE_OPTIONS)),
+            },
+            parent: document.body,
+            print: (message) => console.log(message),
+            printErr: (message) => console.error(message),
+            locateFile: (fileName) => fileName.endsWith(".wasm") ? "/puae-wasm/puae_libretro.wasm" : fileName,
+            getSavExt: () => ".nvr",
+          });
 
-        window.EJS_player = "#game";
-        window.EJS_core = "puae";
-        window.EJS_gameName = pendingGame.fileName || "Amiga AGA";
-        window.EJS_gameUrl = emulatorFiles.gameFile;
-        window.EJS_biosUrl = emulatorFiles.biosFile;
-        window.EJS_externalFiles = emulatorFiles.externalFiles;
-        window.EJS_pathtodata = "/emulatorjs/data/";
-        window.EJS_DEBUG_XX = true;
-        window.EJS_startOnLoaded = true;
-        window.EJS_disableAutoLang = true;
-        window.EJS_threads = false;
-        window.EJS_defaultOptions = {
-          "puae_model": "A1200",
-          "puae_kickstart": pendingKickstart ? puaeKickstartName(pendingKickstart.fileName) : "auto",
-          "puae_chipset": "AGA",
-          "puae_cpu_model": "68020",
-          "puae_chipmem_size": "4",
-          "puae_fastmem_size": "8",
-        };
-
-        const script = document.createElement("script");
-        script.src = "/emulatorjs/data/loader.js";
-        document.body.appendChild(script);
+          installRuntimeFiles();
+          getDiskCount = runtimeModule.cwrap("get_disk_count", "number", []);
+          getCurrentDisk = runtimeModule.cwrap("get_current_disk", "number", []);
+          setCurrentDisk = runtimeModule.cwrap("set_current_disk", null, ["number"]);
+          simulateRuntimeInput = runtimeModule.cwrap("simulate_input", null, ["number", "number", "number"]);
+          runtimeModule.callMain(["/game.m3u"]);
+          runtimeModule.resumeMainLoop?.();
+          gameElement.focus();
+          statusElement.style.display = "none";
+        } catch (error) {
+          started = false;
+          console.error(error);
+          setStatus(`PUAE failed to start: ${error.message}`);
+        }
       }
 
       window.getAmigaAgaAudioStream = () => null;
@@ -422,24 +309,18 @@
         if (event.origin !== window.location.origin) return;
         const data = event.data || {};
 
-        if (data.type === "amiga_aga_start") {
-          startEmulator();
-        }
+        if (data.type === "amiga_aga_start") startEmulator();
 
         if (data.type === "amiga_aga_autoload") {
           const disks = Array.isArray(data.disks) ? data.disks : [];
-
           pendingDisks = disks.map((disk, index) => ({
             fileName: disk.fileName || `disk-${index + 1}.adf`,
             bytes: new Uint8Array(disk.bytes || []),
           })).filter((disk) => disk.bytes.length);
-
           pendingGame = {
-            fileName: pendingDisks[0]?.fileName || data.fileName || "game.uae",
+            fileName: pendingDisks[0]?.fileName || data.fileName || "game.adf",
             bytes: pendingDisks[0]?.bytes || new Uint8Array(data.bytes || []),
           };
-
-          setStatus(`Starting ${pendingGame.fileName} with PUAE...`);
           startEmulator();
         }
 
@@ -449,35 +330,15 @@
             bytes: new Uint8Array(data.bytes || []),
           };
           setStatus(`Kickstart ready: ${pendingKickstart.fileName}`);
-
-          if (pendingGame && !started) {
-            startEmulator();
-          }
+          if (pendingGame && !started) startEmulator();
         }
 
-        if (data.type === "amiga_aga_next_disk") {
-          switchToNextDisk();
-        }
-
-        if (data.type === "amiga_aga_reset") {
-          window.location.reload();
-        }
-
-        if (data.type === "amstrad_remote_joystick" || data.type === "joystick") {
-          applyJoystickMask(Number(data.mask) || 0);
-        }
-
-        if (data.type === "amiga_mouse_button") {
-          applyMouseButton(data.button, data.action);
-        }
-
-        if (data.type === "amiga_mouse_move") {
-          applyMouseMove(data.movementX, data.movementY);
-        }
-
-        if (data.type === "amiga_keyboard") {
-          dispatchKeyboardInput(data.code, data.key, data.action);
-        }
+        if (data.type === "amiga_aga_next_disk") switchToNextDisk();
+        if (data.type === "amiga_aga_reset") window.location.reload();
+        if (data.type === "amstrad_remote_joystick" || data.type === "joystick") applyJoystickMask(Number(data.mask) || 0);
+        if (data.type === "amiga_mouse_button") applyMouseButton(data.button, data.action);
+        if (data.type === "amiga_mouse_move") applyMouseMove(data.movementX, data.movementY);
+        if (data.type === "amiga_keyboard") dispatchKeyboardInput(data.code, data.key, data.action);
       });
     </script>
   </body>
