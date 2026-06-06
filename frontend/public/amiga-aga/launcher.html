@@ -47,7 +47,6 @@
       let pendingKickstart = null;
       let started = false;
       let fileObjectUrls = [];
-      let crcTable = null;
       let joystickMask = 0;
       let mouseX = window.innerWidth / 2;
       let mouseY = window.innerHeight / 2;
@@ -85,97 +84,6 @@
       function extensionForFileName(fileName, fallbackExtension = "adf") {
         const match = (fileName || "").toLowerCase().match(/\.([a-z0-9]+)$/);
         return match ? match[1] : fallbackExtension;
-      }
-
-      function crc32(bytes) {
-        if (!crcTable) {
-          crcTable = Array.from({ length: 256 }, (_, index) => {
-            let crc = index;
-            for (let bit = 0; bit < 8; bit += 1) {
-              crc = (crc & 1) ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
-            }
-            return crc >>> 0;
-          });
-        }
-
-        let crc = 0xffffffff;
-        for (let index = 0; index < bytes.length; index += 1) {
-          crc = crcTable[(crc ^ bytes[index]) & 0xff] ^ (crc >>> 8);
-        }
-        return (crc ^ 0xffffffff) >>> 0;
-      }
-
-      function writeUint16(output, value) {
-        output.push(value & 0xff, (value >>> 8) & 0xff);
-      }
-
-      function writeUint32(output, value) {
-        output.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
-      }
-
-      function appendBytes(output, bytes) {
-        for (let index = 0; index < bytes.length; index += 1) {
-          output.push(bytes[index]);
-        }
-      }
-
-      function buildZipFile(entries, fileName) {
-        const output = [];
-        const centralDirectory = [];
-        const encoder = new TextEncoder();
-
-        entries.forEach((entry) => {
-          const nameBytes = encoder.encode(entry.fileName);
-          const data = entry.bytes;
-          const checksum = crc32(data);
-          const offset = output.length;
-
-          writeUint32(output, 0x04034b50);
-          writeUint16(output, 20);
-          writeUint16(output, 0);
-          writeUint16(output, 0);
-          writeUint16(output, 0);
-          writeUint16(output, 0);
-          writeUint32(output, checksum);
-          writeUint32(output, data.length);
-          writeUint32(output, data.length);
-          writeUint16(output, nameBytes.length);
-          writeUint16(output, 0);
-          appendBytes(output, nameBytes);
-          appendBytes(output, data);
-
-          writeUint32(centralDirectory, 0x02014b50);
-          writeUint16(centralDirectory, 20);
-          writeUint16(centralDirectory, 20);
-          writeUint16(centralDirectory, 0);
-          writeUint16(centralDirectory, 0);
-          writeUint16(centralDirectory, 0);
-          writeUint16(centralDirectory, 0);
-          writeUint32(centralDirectory, checksum);
-          writeUint32(centralDirectory, data.length);
-          writeUint32(centralDirectory, data.length);
-          writeUint16(centralDirectory, nameBytes.length);
-          writeUint16(centralDirectory, 0);
-          writeUint16(centralDirectory, 0);
-          writeUint16(centralDirectory, 0);
-          writeUint16(centralDirectory, 0);
-          writeUint32(centralDirectory, 0);
-          writeUint32(centralDirectory, offset);
-          appendBytes(centralDirectory, nameBytes);
-        });
-
-        const centralDirectoryOffset = output.length;
-        output.push(...centralDirectory);
-        writeUint32(output, 0x06054b50);
-        writeUint16(output, 0);
-        writeUint16(output, 0);
-        writeUint16(output, entries.length);
-        writeUint16(output, entries.length);
-        writeUint32(output, centralDirectory.length);
-        writeUint32(output, centralDirectoryOffset);
-        writeUint16(output, 0);
-
-        return new File([new Uint8Array(output)], fileName, { type: "application/zip" });
       }
 
       function createTrackedObjectUrl(file) {
@@ -265,15 +173,15 @@
         if (diskFileNames.length > 1) {
           const m3uName = "oldstylegaming-aga.m3u";
           const m3uBytes = new TextEncoder().encode(`${diskFileNames.join("\n")}\n`);
+          const m3uFile = fileFromBytes(m3uName, m3uBytes, "text/plain");
 
-          externalFiles[`/${m3uName}`] = createTrackedObjectUrl(fileFromBytes(m3uName, m3uBytes, "text/plain"));
           disksToLoad.forEach((disk, index) => {
             const diskFile = fileFromBytes(diskFileNames[index], disk.bytes);
             externalFiles[`/${diskFileNames[index]}`] = createTrackedObjectUrl(diskFile);
           });
 
           return {
-            gameFile: buildPuaeConfigFile(m3uName, kickstartFileName),
+            gameFile: m3uFile,
             biosFile,
             externalFiles,
           };
