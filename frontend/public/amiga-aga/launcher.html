@@ -97,7 +97,12 @@
         fileObjectUrls = [];
       }
 
-      function buildPuaeConfigFile(gameFileName, kickstartFileName) {
+      function buildPuaeConfigFile(gameFileNames, kickstartFileName) {
+        const diskFileNames = Array.isArray(gameFileNames) ? gameFileNames.slice(0, 4) : [gameFileNames];
+        const floppyLines = diskFileNames.flatMap((fileName, index) => [
+          `floppy${index}=/${fileName}`,
+          `floppy${index}type=0`,
+        ]);
         const config = [
           "config_description=OldStyleGaming Amiga AGA",
           "config_hardware=true",
@@ -110,10 +115,9 @@
           "fastmem_size=8",
           "bogomem_size=0",
           "kickstart_rom_file=/" + kickstartFileName,
-          "floppy0=/" + gameFileName,
-          "floppy0type=0",
+          ...floppyLines,
           "floppy_speed=100",
-          "nr_floppies=1",
+          `nr_floppies=${Math.max(1, diskFileNames.length)}`,
           "joyport0=mouse",
           "joyport1=joy1",
           "gfx_framerate=1",
@@ -164,35 +168,18 @@
               },
             ];
 
-        const diskFileNames = disksToLoad.map((disk, index) => {
+        const diskFileNames = disksToLoad.slice(0, 4).map((disk, index) => {
           const extension = extensionForFileName(disk.fileName);
           const diskFileName = `oldstylegaming-aga-disk-${index + 1}.${extension}`;
+          const diskFile = fileFromBytes(diskFileName, disk.bytes);
+
+          externalFiles[`/${diskFileName}`] = createTrackedObjectUrl(diskFile);
+
           return diskFileName;
         });
 
-        if (diskFileNames.length > 1) {
-          const m3uName = "oldstylegaming-aga.m3u";
-          const m3uBytes = new TextEncoder().encode(`${diskFileNames.map((diskFileName) => `/${diskFileName}`).join("\n")}\n`);
-          const m3uFile = fileFromBytes(m3uName, m3uBytes, "text/plain");
-
-          disksToLoad.forEach((disk, index) => {
-            const diskFile = fileFromBytes(diskFileNames[index], disk.bytes);
-            externalFiles[`/${diskFileNames[index]}`] = createTrackedObjectUrl(diskFile);
-          });
-
-          return {
-            gameFile: m3uFile,
-            biosFile,
-            externalFiles,
-          };
-        }
-
-        const diskFile = fileFromBytes(diskFileNames[0], disksToLoad[0].bytes);
-        const diskObjectUrl = createTrackedObjectUrl(diskFile);
-        externalFiles[`/${diskFileNames[0]}`] = diskObjectUrl;
-
         return {
-          gameFile: buildPuaeConfigFile(diskFileNames[0], kickstartFileName),
+          gameFile: buildPuaeConfigFile(diskFileNames, kickstartFileName),
           biosFile,
           externalFiles,
         };

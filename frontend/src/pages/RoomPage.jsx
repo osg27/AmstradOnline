@@ -170,7 +170,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
-    ? '/amiga-aga/launcher.html?v=2026-06-06-6'
+    ? '/amiga-aga/launcher.html?v=2026-06-06-7'
     : isAmiga
     ? '/amiga/launcher.html?v=2026-06-01-1'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
@@ -2593,9 +2593,8 @@ export default function RoomPage() {
     if (!isHost || !isAmigaFamily || !hostStarted) return;
 
     if (isAmigaAga) {
-      forwardInputToEmulator({ type: 'amiga_aga_next_disk' });
-      addLog('Requested next AGA disk');
-      setStatus(loadedAgaDiskCount > 1 ? 'Requested next AGA disk' : 'Load all AGA disks together before starting');
+      addLog('AGA disks are mounted as DF0-DF3');
+      setStatus(loadedAgaDiskCount > 1 ? 'AGA disks are mounted as DF0-DF3' : 'Load all AGA disks together before starting');
       return;
     }
 
@@ -3001,7 +3000,7 @@ export default function RoomPage() {
 
                   {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={openSwapDiskPicker} disabled={!hostStarted}>
-                      {isAmigaAga ? 'Next disk' : 'Swap disk'}
+                      {isAmigaAga ? 'Disks mounted' : 'Swap disk'}
                     </button>
                   ) : null}
 
