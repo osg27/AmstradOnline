@@ -380,6 +380,11 @@
           return;
         }
 
+        if (!pendingKickstart?.bytes?.length) {
+          setStatus("Waiting for your A1200 Kickstart ROM...");
+          return;
+        }
+
         started = true;
         statusElement.style.display = "none";
         gameElement.innerHTML = "";
@@ -444,6 +449,10 @@
             bytes: new Uint8Array(data.bytes || []),
           };
           setStatus(`Kickstart ready: ${pendingKickstart.fileName}`);
+
+          if (pendingGame && !started) {
+            startEmulator();
+          }
         }
 
         if (data.type === "amiga_aga_next_disk") {
