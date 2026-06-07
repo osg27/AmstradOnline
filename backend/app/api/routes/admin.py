@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.api.routes.auth import is_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotification
@@ -12,6 +13,19 @@ from app.models.room import Room
 from app.models.user import AccountToken, User
 
 router = APIRouter(prefix="/auth/admin", tags=["admin"])
+VALID_ROLES = {"user", "tester", "admin"}
+
+
+class UserRoleRequest(BaseModel):
+    role: str
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value):
+        normalized = value.lower().strip()
+        if normalized not in VALID_ROLES:
+            raise ValueError("Unsupported role")
+        return normalized
 
 
 def get_current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
@@ -31,10 +45,7 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    if not settings.ADMIN_USERNAME:
-        raise HTTPException(status_code=403, detail="Admin access is not configured")
-
-    if user.username.lower() != settings.ADMIN_USERNAME.lower():
+    if not is_admin_user(user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     return user
@@ -79,10 +90,29 @@ def get_admin_stats(
                 "created_at": user.created_at,
                 "last_login_at": user.last_login_at,
                 "login_count": user.login_count or 0,
+                "role": user.role,
             }
             for user in recent_users
         ],
     }
+
+
+@router.patch("/users/{user_id}/role")
+def update_user_role(
+    user_id: int,
+    payload: UserRoleRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == admin_user.id:
+        raise HTTPException(status_code=400, detail="You cannot change your own admin role")
+
+    user.role = payload.role
+    db.commit()
+    return {"id": user.id, "username": user.username, "role": user.role}
 
 
 @router.delete("/users/{user_id}", status_code=204)

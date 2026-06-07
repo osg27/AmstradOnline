@@ -1,5 +1,7 @@
 from sqlalchemy import inspect, text
 
+from app.core.config import settings
+
 
 def ensure_runtime_columns(engine):
     inspector = inspect(engine)
@@ -22,6 +24,22 @@ def ensure_runtime_columns(engine):
             connection.execute(
                 text(f"ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT {verified_default}")
             )
+
+        if "role" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'user'"))
+            if settings.ADMIN_USERNAME:
+                connection.execute(
+                    text("UPDATE users SET role = 'admin' WHERE LOWER(username) = LOWER(:username)"),
+                    {"username": settings.ADMIN_USERNAME},
+                )
+            for username in settings.TESTER_USERNAMES:
+                connection.execute(
+                    text(
+                        "UPDATE users SET role = 'tester' "
+                        "WHERE LOWER(username) = LOWER(:username) AND role = 'user'"
+                    ),
+                    {"username": username},
+                )
 
         if "system" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN system VARCHAR(32) NOT NULL DEFAULT 'cpc'"))

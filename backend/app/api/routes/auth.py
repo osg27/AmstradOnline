@@ -29,12 +29,20 @@ RESET_PASSWORD = "reset_password"
 
 
 def is_admin_user(user: User) -> bool:
-    return bool(settings.ADMIN_USERNAME and user.username.lower() == settings.ADMIN_USERNAME.lower())
+    return user.role == "admin" or bool(
+        settings.ADMIN_USERNAME and user.username.lower() == settings.ADMIN_USERNAME.lower()
+    )
 
 
 def is_tester_user(user: User) -> bool:
-    tester_names = {username.lower() for username in settings.TESTER_USERNAMES}
-    return user.username.lower() in tester_names
+    return user.role == "tester"
+
+
+def initial_role_for_username(username: str) -> str:
+    normalized = username.lower()
+    if settings.ADMIN_USERNAME and normalized == settings.ADMIN_USERNAME.lower():
+        return "admin"
+    return "user"
 
 
 def can_use_preview_systems(user: User) -> bool:
@@ -137,6 +145,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         email=payload.email,
         password_hash=hash_password(payload.password),
         email_verified=False,
+        role=initial_role_for_username(payload.username),
     )
     db.add(user)
     db.flush()

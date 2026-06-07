@@ -14,6 +14,7 @@ export default function AdminPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [deletingUserId, setDeletingUserId] = useState(null);
+  const [savingRoleUserId, setSavingRoleUserId] = useState(null);
 
   useEffect(() => {
     async function loadStats() {
@@ -52,6 +53,27 @@ export default function AdminPage() {
       setError(err.message);
     } finally {
       setDeletingUserId(null);
+    }
+  }
+
+  async function updateRole(user, role) {
+    setError('');
+    setSavingRoleUserId(user.id);
+    try {
+      const updated = await apiFetch(`/auth/admin/users/${user.id}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      });
+      setStats((current) => ({
+        ...current,
+        recent_users: current.recent_users.map((item) => (
+          item.id === user.id ? { ...item, role: updated.role } : item
+        )),
+      }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingRoleUserId(null);
     }
   }
 
@@ -109,6 +131,7 @@ export default function AdminPage() {
                       <th>Joined</th>
                       <th>Last login</th>
                       <th>Logins</th>
+                      <th>Role</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -120,6 +143,18 @@ export default function AdminPage() {
                         <td>{formatDate(user.created_at)}</td>
                         <td>{formatDate(user.last_login_at)}</td>
                         <td>{user.login_count}</td>
+                        <td>
+                          <select
+                            aria-label={`${user.username} role`}
+                            value={user.role || 'user'}
+                            disabled={savingRoleUserId === user.id || user.username === stats.admin}
+                            onChange={(event) => updateRole(user, event.target.value)}
+                          >
+                            <option value="user">User</option>
+                            <option value="tester">Tester</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </td>
                         <td>
                           <button
                             className="danger"

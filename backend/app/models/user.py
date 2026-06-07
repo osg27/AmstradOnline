@@ -14,6 +14,7 @@ class User(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     login_count = Column(Integer, nullable=False, server_default="0")
     email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
+    role = Column(String(20), nullable=False, default="user", server_default="user")
 
 
 class AccountToken(Base):
