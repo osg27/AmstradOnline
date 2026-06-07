@@ -13,6 +13,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [deletingUserId, setDeletingUserId] = useState(null);
 
   useEffect(() => {
     async function loadStats() {
@@ -31,6 +32,28 @@ export default function AdminPage() {
 
     loadStats();
   }, []);
+
+  async function deleteUser(user) {
+    if (!window.confirm(`Delete ${user.username}? Their rooms and feedback will also be deleted.`)) return;
+
+    setError('');
+    setDeletingUserId(user.id);
+    try {
+      await apiFetch(`/auth/admin/users/${user.id}`, { method: 'DELETE' });
+      setStats((current) => ({
+        ...current,
+        totals: {
+          ...current.totals,
+          users: Math.max(0, current.totals.users - 1),
+        },
+        recent_users: current.recent_users.filter((item) => item.id !== user.id),
+      }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingUserId(null);
+    }
+  }
 
   return (
     <div className="page admin-page">
@@ -76,7 +99,7 @@ export default function AdminPage() {
             </div>
 
             <div className="panel admin-users-panel">
-              <h2>Recent users</h2>
+              <h2>Users</h2>
               <div className="admin-table-wrap">
                 <table className="admin-table">
                   <thead>
@@ -86,6 +109,7 @@ export default function AdminPage() {
                       <th>Joined</th>
                       <th>Last login</th>
                       <th>Logins</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -96,6 +120,16 @@ export default function AdminPage() {
                         <td>{formatDate(user.created_at)}</td>
                         <td>{formatDate(user.last_login_at)}</td>
                         <td>{user.login_count}</td>
+                        <td>
+                          <button
+                            className="danger"
+                            type="button"
+                            disabled={deletingUserId === user.id}
+                            onClick={() => deleteUser(user)}
+                          >
+                            {deletingUserId === user.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

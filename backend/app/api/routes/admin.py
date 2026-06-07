@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import decode_access_token
+from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotification
 from app.models.room import Room
 from app.models.user import User
 
@@ -57,7 +58,7 @@ def get_admin_stats(
     recent_users = (
         db.query(User)
         .order_by(User.last_login_at.desc(), User.created_at.desc())
-        .limit(25)
+        .limit(100)
         .all()
     )
 
@@ -82,3 +83,35 @@ def get_admin_stats(
             for user in recent_users
         ],
     }
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == admin_user.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own admin account")
+
+    feedback_ids = [
+        feedback_id
+        for (feedback_id,) in db.query(FeedbackItem.id).filter(FeedbackItem.user_id == user.id).all()
+    ]
+    if feedback_ids:
+        db.query(FeedbackComment).filter(FeedbackComment.feedback_id.in_(feedback_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(FeedbackNotification).filter(FeedbackNotification.feedback_id.in_(feedback_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(FeedbackItem).filter(FeedbackItem.id.in_(feedback_ids)).delete(synchronize_session=False)
+
+    db.query(FeedbackComment).filter(FeedbackComment.user_id == user.id).delete(synchronize_session=False)
+    db.query(FeedbackNotification).filter(FeedbackNotification.user_id == user.id).delete(synchronize_session=False)
+    db.query(Room).filter(Room.owner_user_id == user.id).delete(synchronize_session=False)
+    db.delete(user)
+    db.commit()
