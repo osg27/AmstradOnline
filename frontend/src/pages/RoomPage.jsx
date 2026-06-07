@@ -112,6 +112,8 @@ export default function RoomPage() {
   const kickstartInputRef = useRef(null);
   const pcRef = useRef(null);
   const dataChannelRef = useRef(null);
+  const serialChannelRef = useRef(null);
+  const serialOfferStartedRef = useRef(false);
   const handleGuestPayloadOnHostRef = useRef(null);
   const localOfferRef = useRef(null);
   const hostVideoStreamRef = useRef(null);
@@ -164,25 +166,27 @@ export default function RoomPage() {
   const isCpcParty = roomSystem === 'cpc_party';
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
+  const isAmigaLink = roomSystem === 'amiga_link';
   const isAmigaAga = roomSystem === 'amiga_aga';
-  const isAmigaFamily = isAmiga || isAmigaAga;
+  const isAmigaFamily = isAmiga || isAmigaLink || isAmigaAga;
+  const canControlLocalEmulator = isHost || isAmigaLink;
   const isMegaDrive = roomSystem === 'megadrive';
   const isSnes = roomSystem === 'snes';
   const isArcade = roomSystem === 'arcade';
   const kickstartStorageKey = isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
-  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
-    : isAmiga
-    ? '/amiga/launcher.html?v=2026-06-01-1'
+    : isAmiga || isAmigaLink
+    ? '/amiga/launcher.html?v=2026-06-07-1'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
     : isMegaDrive ? '.bin,.gen,.md,.smd' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2' : isArcade ? '.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
-  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
+  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
     : isSoloMode
@@ -545,6 +549,54 @@ export default function RoomPage() {
     targetWindow.postMessage(payload, window.location.origin);
   }, []);
 
+  const configureSerialChannel = useCallback((channel) => {
+    serialChannelRef.current = channel;
+    channel.binaryType = 'arraybuffer';
+
+    channel.onopen = () => {
+      addLog('Amiga serial link connected');
+      setStatus('Amiga serial link connected');
+    };
+    channel.onclose = () => {
+      addLog('Amiga serial link closed');
+      setStatus('Amiga serial link closed');
+    };
+    channel.onmessage = (event) => {
+      const bytes = event.data instanceof ArrayBuffer
+        ? new Uint8Array(event.data)
+        : event.data instanceof Blob
+          ? null
+          : new Uint8Array([Number(event.data) & 255]);
+
+      if (bytes) {
+        bytes.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
+        return;
+      }
+
+      event.data.arrayBuffer().then((buffer) => {
+        new Uint8Array(buffer).forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
+      });
+    };
+  }, [addLog, forwardInputToEmulator]);
+
+  useEffect(() => {
+    if (!isAmigaLink) return undefined;
+
+    function handleAmigaSerialOutput(event) {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== emulatorFrameRef.current?.contentWindow) return;
+      if (event.data?.type !== 'amiga_serial_out') return;
+
+      const channel = serialChannelRef.current;
+      if (channel?.readyState === 'open') {
+        channel.send(new Uint8Array([Number(event.data.value) & 255]));
+      }
+    }
+
+    window.addEventListener('message', handleAmigaSerialOutput);
+    return () => window.removeEventListener('message', handleAmigaSerialOutput);
+  }, [isAmigaLink]);
+
   useEffect(() => {
     function handleArcadeMessage(event) {
       if (event.origin !== window.location.origin) return;
@@ -678,6 +730,16 @@ export default function RoomPage() {
 
     addInputDebug(`local P${player} joystick mask ${mask}`, mask, isHost ? 'host local' : 'guest local');
 
+    if (isAmigaLink) {
+      forwardInputToEmulator({
+        type: 'amstrad_remote_joystick',
+        player: 1,
+        mask: joystickMask,
+      });
+      localJoystickMaskRef.current = mask;
+      return;
+    }
+
     if (isHost) {
       if (isCpcParty && activePartyPlayer !== 1) {
         if (previousMask) {
@@ -729,7 +791,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isArcade, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isAmigaLink, isArcade, isCpcParty, isHost, isMegaDrive, isSnes, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -770,7 +832,7 @@ export default function RoomPage() {
   const forwardAmigaMouse = useCallback((payload) => {
     if (!isAmigaFamily) return;
 
-    if (isHost) {
+    if (canControlLocalEmulator) {
       forwardInputToEmulator(payload);
       return;
     }
@@ -779,7 +841,7 @@ export default function RoomPage() {
     if (channel?.readyState === 'open') {
       channel.send(JSON.stringify(payload));
     }
-  }, [forwardInputToEmulator, isAmigaFamily, isHost]);
+  }, [canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily]);
 
   const handleAmigaPointerDown = useCallback((event) => {
     if (!isAmigaFamily) return;
@@ -1578,7 +1640,22 @@ export default function RoomPage() {
         connected: Boolean(guestDisplayName),
       },
     ];
-  const healthItems = isSoloMode
+  const healthItems = isAmigaLink
+    ? [
+      {
+        label: 'Signaling',
+        ok: signalingOpen,
+      },
+      {
+        label: 'Serial link',
+        ok: serialChannelRef.current?.readyState === 'open',
+      },
+      {
+        label: 'Local Amiga',
+        ok: hostStarted,
+      },
+    ]
+    : isSoloMode
     ? [
       {
         label: 'Local mode',
@@ -1730,6 +1807,11 @@ export default function RoomPage() {
 
     pc.ondatachannel = (event) => {
       const channel = event.channel;
+      if (isAmigaLink && channel.label === 'amiga-serial') {
+        configureSerialChannel(channel);
+        return;
+      }
+
       dataChannelRef.current = channel;
 
       channel.onopen = () => {
@@ -1761,12 +1843,48 @@ export default function RoomPage() {
       hostVideoStreamRef.current = null;
       hostAudioStreamRef.current = null;
       dataChannelRef.current?.close();
+      serialChannelRef.current?.close();
+      serialChannelRef.current = null;
+      serialOfferStartedRef.current = false;
       pc.close();
     };
-  }, [addLog, isSoloMode]);
+  }, [addLog, configureSerialChannel, isAmigaLink, isSoloMode]);
 
   useEffect(() => {
-    if (isHost !== true) return undefined;
+    if (!isAmigaLink || !isHost || !signalingOpen || !room || serialOfferStartedRef.current) return;
+
+    const pc = pcRef.current;
+    if (!pc) return;
+
+    serialOfferStartedRef.current = true;
+    const channel = pc.createDataChannel('amiga-serial');
+    configureSerialChannel(channel);
+
+    async function createSerialOffer() {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await waitForIceGatheringComplete(pc);
+        localOfferRef.current = pc.localDescription;
+        const sent = sendSignalRef.current({
+          type: 'offer',
+          to: activeGuestSignalIdRef.current || undefined,
+          offer: localOfferRef.current,
+        });
+        addLog(sent ? 'Amiga serial offer sent' : 'Amiga serial offer queued');
+        setStatus('Waiting for linked Amiga');
+      } catch (err) {
+        serialOfferStartedRef.current = false;
+        setError(err.message);
+        addLog(`Amiga serial link error: ${err.message}`);
+      }
+    }
+
+    createSerialOffer();
+  }, [addLog, configureSerialChannel, isAmigaLink, isHost, room, signalingOpen]);
+
+  useEffect(() => {
+    if (!canControlLocalEmulator) return undefined;
 
     function handleHostKeyDown(event) {
       if (!shouldHandleHostKey(event)) return;
@@ -1857,10 +1975,10 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown, true);
       window.removeEventListener('keyup', handleHostKeyUp, true);
     };
-  }, [activePartyPlayer, addInputDebug, forwardInputToEmulator, isAmigaFamily, isCpcParty, isHost]);
+  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isCpcParty, isHost]);
 
   useEffect(() => {
-    if (isHost !== false) return undefined;
+    if (isHost !== false || isAmigaLink) return undefined;
 
     let guestJoystickMask = 0;
 
@@ -1952,7 +2070,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleGuestKeyDown);
       window.removeEventListener('keyup', handleGuestKeyUp);
     };
-  }, [addInputDebug, isHost, inputCaptured, sendLocalJoystickMask]);
+  }, [addInputDebug, isAmigaLink, isHost, inputCaptured, sendLocalJoystickMask]);
 
   function startMirrorLoop(sourceCanvas) {
     const mirrorCanvas = mirrorCanvasRef.current;
@@ -2473,7 +2591,7 @@ export default function RoomPage() {
       setHostStarted(true);
       addLog('Waiting for emulator iframe');
 
-      if (isAmiga) {
+      if (isAmiga || isAmigaLink) {
         iframe.contentWindow?.postMessage({ type: 'amiga_start' }, window.location.origin);
       }
       if (isAmigaAga) {
@@ -2492,6 +2610,13 @@ export default function RoomPage() {
       const emulatorCanvas = await waitForEmulatorCanvas(iframe);
 
       startMirrorLoop(emulatorCanvas);
+
+      if (isAmigaLink) {
+        addLog('Local linked Amiga ready');
+        setStatus(serialChannelRef.current?.readyState === 'open' ? 'Amiga serial link connected' : 'Local Amiga ready, waiting for serial link');
+        hostStartedRef.current = true;
+        return;
+      }
 
       const mirrorCanvas = mirrorCanvasRef.current;
 
@@ -2600,25 +2725,25 @@ export default function RoomPage() {
   }, [isAmigaFamily, isArcade, isHost, isSoloMode, room, signalingOpen]);
 
   useEffect(() => {
-    if (!isSoloMode && room && !isHost) {
+    if (!isSoloMode && room && !isHost && !isAmigaLink) {
       connectGuest();
     }
-  }, [isHost, isSoloMode, room]);
+  }, [isAmigaLink, isHost, isSoloMode, room]);
 
   function openDiskPicker() {
-    if (!isHost) return;
+    if (!canControlLocalEmulator) return;
 
     fileInputRef.current?.click();
   }
 
   function openKickstartPicker() {
-    if (!isHost || !isAmigaFamily) return;
+    if (!canControlLocalEmulator || !isAmigaFamily) return;
 
     kickstartInputRef.current?.click();
   }
 
   function openSwapDiskPicker() {
-    if (!isHost || !isAmigaFamily || !hostStarted) return;
+    if (!canControlLocalEmulator || !isAmigaFamily || !hostStarted) return;
 
     if (isAmigaAga) {
       if (loadedAgaDiskCount < 2) {
@@ -2635,9 +2760,9 @@ export default function RoomPage() {
   }
 
   function resetHostEmulator() {
-    if (!isHost || !hostStarted) return;
+    if (!canControlLocalEmulator || !hostStarted) return;
 
-    const type = isAmiga
+    const type = isAmiga || isAmigaLink
       ? 'amiga_reset'
       : isAmigaAga
         ? 'amiga_aga_reset'
@@ -2695,7 +2820,7 @@ export default function RoomPage() {
       const bytes = loadedFiles[0].bytes;
 
       forwardInputToEmulator({
-        type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
+        type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga || isAmigaLink ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: loadedFiles[0].fileName,
         bytes,
         disks: isAmigaAga && !isSwapDisk ? loadedFiles : undefined,
@@ -2868,7 +2993,7 @@ export default function RoomPage() {
         <div className="room-layout">
           <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
             <div className="play-header">
-              <h2>{isSoloMode ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
+              <h2>{isSoloMode || isAmigaLink ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
               <div className="input-toolbar">
                 <div className="assigned-control" aria-label="Assigned control">
@@ -2929,7 +3054,7 @@ export default function RoomPage() {
               {inputCaptured ? `${controlLabel} active` : 'Click the screen or press Capture to play'}
             </div>
 
-            {isHost ? (
+            {canControlLocalEmulator ? (
               <>
                 <iframe
                   ref={emulatorFrameRef}
@@ -3042,7 +3167,9 @@ export default function RoomPage() {
                       ? 'Load AGA file to start'
                       : isSoloMode
                         ? hostStarted ? 'Emulator running' : 'Start emulator'
-                        : hostStarted ? 'Host session running' : 'Start host session'}
+                        : isAmigaLink
+                          ? hostStarted ? 'Local Amiga running' : 'Start local Amiga'
+                          : hostStarted ? 'Host session running' : 'Start host session'}
                   </button>
 
                   <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isAmigaAga}>

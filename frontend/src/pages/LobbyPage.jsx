@@ -79,7 +79,7 @@ const SYSTEM_GROUPS = [
           solo: { enabled: true },
           hosted: { enabled: true },
           party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available yet' },
+          link: { enabled: true, system: 'amiga_link', testing: true },
         },
       },
       {
@@ -238,7 +238,7 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (modeConfig.testing && !canUsePreviewSystems)) {
         throw new Error('That play mode is not ready yet.');
       }
 
@@ -387,7 +387,7 @@ export default function LobbyPage() {
                 modeId !== 'link' || selectedSystem?.id === 'amiga'
               )).map(([modeId, mode]) => {
                 const modeConfig = selectedSystem?.modes[modeId];
-                const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked);
+                const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked && (!modeConfig.testing || canUsePreviewSystems));
                 const active = selectedMode === modeId;
 
                 return (
@@ -400,7 +400,7 @@ export default function LobbyPage() {
                   >
                     <span>{mode.kicker}</span>
                     <strong>{mode.label}</strong>
-                    <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.testing ? 'Available to testers for now' : modeConfig?.note || 'Coming later'}</small>
+                    <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.testing || modeConfig?.testing ? 'Available to testers for now' : modeConfig?.note || 'Coming later'}</small>
                   </button>
                 );
               })}
@@ -423,7 +423,7 @@ export default function LobbyPage() {
             <button
               className="launch-button"
               onClick={() => createSession()}
-              disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled}
+              disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled || (selectedModeConfig?.testing && !canUsePreviewSystems)}
             >
               {loadingCreate ? 'Starting...' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Currently in testing' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
             </button>

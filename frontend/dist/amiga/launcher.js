@@ -454,6 +454,14 @@ window.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
 
+  if (data.msg === "serial_port_out") {
+    window.parent.postMessage({
+      type: "amiga_serial_out",
+      value: Number(data.value) & 255,
+    }, window.location.origin);
+    return;
+  }
+
   if (data.msg === "render_run_state") {
     if (customKickstartRom) {
       sendKickstartToEmulator();
@@ -466,6 +474,11 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amiga_start") {
     startEmulator();
+    return;
+  }
+
+  if (data.type === "amiga_serial_in") {
+    postToEmulator({ byte: Number(data.value) & 255 });
     return;
   }
 

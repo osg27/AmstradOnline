@@ -13,7 +13,7 @@ from app.models.user import User
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomJoinRequest, RoomResponse
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
-TESTING_SYSTEMS = {"amiga_aga", "snes"}
+TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "snes"}
 UNAVAILABLE_SYSTEMS = {"arcade"}
 
 
