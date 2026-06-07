@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import get_current_user
 from app.core.database import get_db
-from app.models.friendship import Friendship
+from app.models.friendship import Friendship, RoomInvite
+from app.models.room import Room
 from app.models.user import User
 
 router = APIRouter(prefix="/auth/social", tags=["social"])
@@ -115,6 +116,14 @@ def get_social_overview(
         .order_by(User.username)
         .all()
     )
+    room_invites = (
+        db.query(RoomInvite, User, Room)
+        .join(User, User.id == RoomInvite.sender_id)
+        .join(Room, Room.id == RoomInvite.room_id)
+        .filter(RoomInvite.recipient_id == current_user.id)
+        .order_by(RoomInvite.created_at.desc())
+        .all()
+    )
 
     db.commit()
     return {
@@ -129,6 +138,15 @@ def get_social_overview(
         "friends": sorted(friends, key=lambda item: (not item["is_online"], item["username"].lower())),
         "incoming_requests": sorted(incoming_requests, key=lambda item: item["username"].lower()),
         "outgoing_requests": sorted(outgoing_requests, key=lambda item: item["username"].lower()),
+        "room_invites": [
+            {
+                "id": invite.id,
+                "room_code": room.room_code,
+                "system": room.system,
+                "sender_username": sender.username,
+            }
+            for invite, sender, room in room_invites
+        ],
     }
 
 
@@ -207,4 +225,47 @@ def remove_friend(
     if not friendship or friendship.status != "accepted":
         raise HTTPException(status_code=404, detail="Friend not found")
     db.delete(friendship)
+    db.commit()
+
+
+@router.post("/friends/{user_id}/invite/{room_code}")
+def invite_friend_to_room(
+    user_id: int,
+    room_code: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    friendship = get_friendship(db, current_user.id, user_id)
+    if not friendship or friendship.status != "accepted":
+        raise HTTPException(status_code=404, detail="Friend not found")
+
+    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    existing = db.query(RoomInvite).filter(
+        RoomInvite.room_id == room.id,
+        RoomInvite.recipient_id == user_id,
+    ).first()
+    if existing:
+        existing.sender_id = current_user.id
+    else:
+        db.add(RoomInvite(room_id=room.id, sender_id=current_user.id, recipient_id=user_id))
+    db.commit()
+    return {"message": "Room invite sent"}
+
+
+@router.delete("/invites/{invite_id}", status_code=204)
+def dismiss_room_invite(
+    invite_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    invite = db.query(RoomInvite).filter(
+        RoomInvite.id == invite_id,
+        RoomInvite.recipient_id == current_user.id,
+    ).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Room invite not found")
+    db.delete(invite)
     db.commit()

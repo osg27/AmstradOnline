@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
+import SocialSidebar from '../components/SocialSidebar';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 
@@ -2758,7 +2759,8 @@ export default function RoomPage() {
 
   return (
     <div className="page room-page">
-      <div className="card room-card">
+      <div className="page-social-layout room-social-layout">
+        <div className="card room-card">
         <div className="room-topbar">
           <div className="room-title">
             <BrandMark compact />
@@ -3168,6 +3170,8 @@ export default function RoomPage() {
             </div>
           </>
         ) : null}
+        </div>
+        <SocialSidebar roomCode={roomCode} allowInvites={!isSoloMode} />
       </div>
     </div>
   );

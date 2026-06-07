@@ -8,6 +8,7 @@ from app.api.routes.auth import can_use_preview_systems, is_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.room import Room
+from app.models.friendship import RoomInvite
 from app.models.user import User
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomJoinRequest, RoomResponse
 
@@ -80,6 +81,12 @@ def join_room(
     room = db.query(Room).filter(Room.room_code == payload.room_code.upper()).first()
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
+
+    db.query(RoomInvite).filter(
+        RoomInvite.room_id == room.id,
+        RoomInvite.recipient_id == user_id,
+    ).delete(synchronize_session=False)
+    db.commit()
 
     return RoomResponse(
         room_code=room.room_code,

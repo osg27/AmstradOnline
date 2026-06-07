@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
+import SocialSidebar from '../components/SocialSidebar';
 
 const PLAY_MODES = {
   solo: {
@@ -169,16 +170,6 @@ export default function LobbyPage() {
   const [selectedMode, setSelectedMode] = useState('hosted');
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
-  const [social, setSocial] = useState({
-    online_users: [],
-    friends: [],
-    incoming_requests: [],
-    outgoing_requests: [],
-  });
-  const [friendUsername, setFriendUsername] = useState('');
-  const [socialMessage, setSocialMessage] = useState('');
-  const [socialError, setSocialError] = useState('');
-  const [socialBusy, setSocialBusy] = useState(false);
   const canUsePreviewSystems = isAdmin || isTester;
 
   const visibleGroups = useMemo(() => SYSTEM_GROUPS.map((group) => ({
@@ -224,62 +215,6 @@ export default function LobbyPage() {
 
     loadSession();
   }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadSocial() {
-      try {
-        const overview = await apiFetch('/auth/social');
-        if (active) setSocial(overview);
-      } catch (err) {
-        if (active) setSocialError(err.message);
-      }
-    }
-
-    loadSocial();
-    const socialTimer = window.setInterval(loadSocial, 20000);
-    return () => {
-      active = false;
-      window.clearInterval(socialTimer);
-    };
-  }, []);
-
-  async function refreshSocial() {
-    const overview = await apiFetch('/auth/social');
-    setSocial(overview);
-  }
-
-  async function runSocialAction(action, successMessage) {
-    setSocialBusy(true);
-    setSocialError('');
-    setSocialMessage('');
-    try {
-      await action();
-      await refreshSocial();
-      setSocialMessage(successMessage);
-      return true;
-    } catch (err) {
-      setSocialError(err.message);
-      return false;
-    } finally {
-      setSocialBusy(false);
-    }
-  }
-
-  async function sendFriendRequest(event) {
-    event.preventDefault();
-    const requestedUsername = friendUsername.trim();
-    if (!requestedUsername) return;
-    const sent = await runSocialAction(
-      () => apiFetch('/auth/social/requests', {
-        method: 'POST',
-        body: JSON.stringify({ username: requestedUsername }),
-      }),
-      `Friend request sent to ${requestedUsername}.`,
-    );
-    if (sent) setFriendUsername('');
-  }
 
   function chooseGroup(groupId, group = visibleGroups.find((item) => item.id === groupId)) {
     const firstSystem = group?.systems[0];
@@ -350,7 +285,8 @@ export default function LobbyPage() {
 
   return (
     <div className="page lobby-page">
-      <div className="lobby-shell">
+      <div className="page-social-layout lobby-social-layout">
+        <div className="lobby-shell">
         <header className="lobby-header">
           <BrandMark />
           <div className="account-strip">
@@ -392,150 +328,6 @@ export default function LobbyPage() {
               {loadingJoin ? 'Joining...' : 'Join'}
             </button>
           </form>
-        </section>
-
-        <section className="social-panel" aria-label="Friends and online players">
-          <div className="social-column">
-            <div className="social-heading">
-              <div>
-                <h2>Online now</h2>
-                <p>{social.online_users.length} other player{social.online_users.length === 1 ? '' : 's'} online</p>
-              </div>
-              <button
-                className="secondary social-refresh"
-                type="button"
-                onClick={() => runSocialAction(() => Promise.resolve(), 'Online list refreshed.')}
-                title="Refresh online players"
-              >
-                Refresh
-              </button>
-            </div>
-            <div className="social-list">
-              {social.online_users.length ? social.online_users.map((player) => (
-                <div className="social-player" key={player.id}>
-                  <span className="online-dot" aria-label="Online" />
-                  <strong>{player.username}</strong>
-                  {player.is_friend ? (
-                    <small>Friend</small>
-                  ) : player.request_pending ? (
-                    <small>Request pending</small>
-                  ) : (
-                    <button
-                      className="secondary social-action"
-                      type="button"
-                      disabled={socialBusy}
-                      onClick={() => runSocialAction(
-                        () => apiFetch('/auth/social/requests', {
-                          method: 'POST',
-                          body: JSON.stringify({ username: player.username }),
-                        }),
-                        `Friend request sent to ${player.username}.`,
-                      )}
-                    >
-                      Add
-                    </button>
-                  )}
-                </div>
-              )) : <p className="social-empty">Nobody else is online just now.</p>}
-            </div>
-          </div>
-
-          <div className="social-column">
-            <div className="social-heading">
-              <div>
-                <h2>Friends</h2>
-                <p>{social.friends.filter((friend) => friend.is_online).length} online</p>
-              </div>
-            </div>
-
-            {social.incoming_requests.length ? (
-              <div className="friend-requests">
-                <strong>Friend requests</strong>
-                {social.incoming_requests.map((request) => (
-                  <div className="social-player" key={request.friendship_id}>
-                    <strong>{request.username}</strong>
-                    <button
-                      className="social-action"
-                      type="button"
-                      disabled={socialBusy}
-                      onClick={() => runSocialAction(
-                        () => apiFetch(`/auth/social/requests/${request.friendship_id}/accept`, { method: 'POST' }),
-                        `${request.username} added as a friend.`,
-                      )}
-                    >
-                      Accept
-                    </button>
-                    <button
-                      className="secondary social-action"
-                      type="button"
-                      disabled={socialBusy}
-                      onClick={() => runSocialAction(
-                        () => apiFetch(`/auth/social/requests/${request.friendship_id}`, { method: 'DELETE' }),
-                        'Friend request declined.',
-                      )}
-                    >
-                      Decline
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <div className="social-list">
-              {social.friends.length ? social.friends.map((friend) => (
-                <div className="social-player" key={friend.id}>
-                  <span className={friend.is_online ? 'online-dot' : 'offline-dot'} aria-label={friend.is_online ? 'Online' : 'Offline'} />
-                  <strong>{friend.username}</strong>
-                  <small>{friend.is_online ? 'Online' : 'Offline'}</small>
-                  <button
-                    className="secondary social-action"
-                    type="button"
-                    disabled={socialBusy}
-                    onClick={() => runSocialAction(
-                      () => apiFetch(`/auth/social/friends/${friend.id}`, { method: 'DELETE' }),
-                      `${friend.username} removed from friends.`,
-                    )}
-                  >
-                    Remove
-                  </button>
-                </div>
-              )) : <p className="social-empty">Add a player by username to start your friends list.</p>}
-            </div>
-
-            <form className="friend-add" onSubmit={sendFriendRequest}>
-              <input
-                value={friendUsername}
-                onChange={(event) => setFriendUsername(event.target.value)}
-                placeholder="Player username"
-                maxLength={50}
-              />
-              <button type="submit" disabled={!friendUsername.trim() || socialBusy}>Add friend</button>
-            </form>
-
-            {social.outgoing_requests.length ? (
-              <div className="friend-requests outgoing-requests">
-                <strong>Sent requests</strong>
-                {social.outgoing_requests.map((request) => (
-                  <div className="social-player" key={request.friendship_id}>
-                    <strong>{request.username}</strong>
-                    <button
-                      className="secondary social-action"
-                      type="button"
-                      disabled={socialBusy}
-                      onClick={() => runSocialAction(
-                        () => apiFetch(`/auth/social/requests/${request.friendship_id}`, { method: 'DELETE' }),
-                        'Friend request cancelled.',
-                      )}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {socialMessage ? <p className="social-message">{socialMessage}</p> : null}
-            {socialError ? <p className="error social-message">{socialError}</p> : null}
-          </div>
         </section>
 
         <main className="library-layout">
@@ -637,6 +429,8 @@ export default function LobbyPage() {
             {error ? <p className="error">{error}</p> : null}
           </aside>
         </main>
+        </div>
+        <SocialSidebar />
       </div>
     </div>
   );
