@@ -47,7 +47,8 @@ Do **not** run two emulator instances and try to sync them.
 1. Copy `.env.example` to `.env`
 2. Change passwords and secrets
 3. Set `ADMIN_USERNAME` to the username that should be allowed to view `/admin`
-4. Run:
+4. Set `PUBLIC_APP_URL` and the `SMTP_*` values to send verification and password-reset emails
+5. Run:
 
 ```bash
 docker compose up --build

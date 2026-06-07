@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotification
 from app.models.room import Room
-from app.models.user import User
+from app.models.user import AccountToken, User
 
 router = APIRouter(prefix="/auth/admin", tags=["admin"])
 
@@ -113,5 +113,6 @@ def delete_user(
     db.query(FeedbackComment).filter(FeedbackComment.user_id == user.id).delete(synchronize_session=False)
     db.query(FeedbackNotification).filter(FeedbackNotification.user_id == user.id).delete(synchronize_session=False)
     db.query(Room).filter(Room.owner_user_id == user.id).delete(synchronize_session=False)
+    db.query(AccountToken).filter(AccountToken.user_id == user.id).delete(synchronize_session=False)
     db.delete(user)
     db.commit()

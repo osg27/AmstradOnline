@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] | str = ["http://localhost:5173"]
     ADMIN_USERNAME: str | None = None
     TESTER_USERNAMES: list[str] | str = DEFAULT_TESTER_USERNAMES
+    PUBLIC_APP_URL: str = "http://localhost:5173"
+    SMTP_HOST: str = "smtp.ionos.co.uk"
+    SMTP_PORT: int = 465
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "info@oldstylegaming.co.uk"
+    SMTP_FROM_NAME: str = "Old Style Gaming"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -8,6 +8,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -19,12 +20,7 @@ export default function RegisterPage() {
         method: 'POST',
         body: JSON.stringify(form),
       });
-
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('username', data.username);
-      localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
-      localStorage.setItem('isTester', data.is_tester ? 'true' : 'false');
-      navigate('/lobby');
+      setMessage(data.message);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,26 +36,39 @@ export default function RegisterPage() {
           <h1>Create account</h1>
           <p>Set up your player name and jump into a room.</p>
         </div>
-        <form onSubmit={handleSubmit}>
-          <input
-            placeholder="Username"
-            value={form.username}
-            onChange={(e) => setForm({ ...form, username: e.target.value })}
-          />
-          <input
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <input
-            placeholder="Password"
-            type="password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
-          {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={loading}>{loading ? 'Creating account...' : 'Register'}</button>
-        </form>
+        {message ? (
+          <>
+            <p className="success">{message}</p>
+            <button type="button" onClick={() => navigate('/login')}>Back to sign in</button>
+          </>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <input
+              placeholder="Username"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              minLength={3}
+              required
+            />
+            <input
+              placeholder="Email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              required
+            />
+            <input
+              placeholder="Password"
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              minLength={8}
+              required
+            />
+            {error ? <p className="error">{error}</p> : null}
+            <button type="submit" disabled={loading}>{loading ? 'Creating account...' : 'Register'}</button>
+          </form>
+        )}
         <p className="auth-switch">Already have an account? <Link to="/login">Sign in</Link></p>
       </div>
     </div>

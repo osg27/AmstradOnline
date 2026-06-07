@@ -17,6 +17,12 @@ def ensure_runtime_columns(engine):
         if "login_count" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN login_count INTEGER NOT NULL DEFAULT 0"))
 
+        if "email_verified" not in user_columns:
+            verified_default = "TRUE" if dialect == "postgresql" else "1"
+            connection.execute(
+                text(f"ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT {verified_default}")
+            )
+
         if "system" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN system VARCHAR(32) NOT NULL DEFAULT 'cpc'"))
 

@@ -55,6 +55,8 @@ export default function LoginPage() {
           {error ? <p className="error">{error}</p> : null}
           <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
         </form>
+        <p className="auth-switch"><Link to="/forgot-password">Forgot your password?</Link></p>
+        <p className="auth-switch"><Link to="/resend-verification">Resend verification email</Link></p>
         <p className="auth-switch">Need an account? <Link to="/register">Create one</Link></p>
       </div>
     </div>
