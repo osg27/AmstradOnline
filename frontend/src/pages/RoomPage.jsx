@@ -2866,7 +2866,7 @@ export default function RoomPage() {
         <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
 
         <div className="room-layout">
-          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isCpcParty ? 'party-fullscreen' : ''}`}>
+          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
             <div className="play-header">
               <h2>{isSoloMode ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
@@ -3139,6 +3139,16 @@ export default function RoomPage() {
                 </button>
               </>
             )}
+
+            {!isSoloMode ? (
+              <div className="fullscreen-room-chat">
+                <RoomChat
+                  messages={chatMessages}
+                  onSend={sendChatMessage}
+                  connected={signalingOpen}
+                />
+              </div>
+            ) : null}
 
           </div>
         </div>

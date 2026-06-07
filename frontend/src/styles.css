@@ -1580,6 +1580,32 @@ input:focus {
   background: #050606;
 }
 
+.fullscreen-room-chat {
+  display: none;
+}
+
+.video-panel.fullscreen-screen.fullscreen-with-chat {
+  --fullscreen-chat-width: clamp(270px, 20vw, 340px);
+  padding-right: calc(var(--fullscreen-chat-width) + 1.5rem);
+}
+
+.video-panel.fullscreen-screen .fullscreen-room-chat {
+  position: fixed;
+  z-index: 52;
+  top: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  display: block;
+  width: var(--fullscreen-chat-width);
+}
+
+.video-panel.fullscreen-screen .fullscreen-room-chat .room-chat {
+  height: 100%;
+  max-height: none;
+  border-color: #3c4844;
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.4);
+}
+
 .video-panel.fullscreen-screen .play-header {
   flex: 0 0 auto;
 }
