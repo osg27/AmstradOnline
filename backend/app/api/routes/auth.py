@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timezone
 from datetime import timedelta
@@ -22,6 +23,7 @@ from app.schemas.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 VERIFY_EMAIL = "verify_email"
 RESET_PASSWORD = "reset_password"
 
@@ -83,7 +85,8 @@ def use_account_token(db: Session, token: str, purpose: str) -> tuple[AccountTok
 
 
 def send_verification_email(user: User, token: str) -> None:
-    link = f"{settings.PUBLIC_APP_URL.rstrip('/')}/verify-email?token={token}"
+    app_url = settings.APP_BASE_URL or settings.PUBLIC_APP_URL
+    link = f"{app_url.rstrip('/')}/verify-email?token={token}"
     send_email(
         user.email,
         "Verify your Old Style Gaming account",
@@ -93,7 +96,8 @@ def send_verification_email(user: User, token: str) -> None:
 
 
 def send_password_reset_email(user: User, token: str) -> None:
-    link = f"{settings.PUBLIC_APP_URL.rstrip('/')}/reset-password?token={token}"
+    app_url = settings.APP_BASE_URL or settings.PUBLIC_APP_URL
+    link = f"{app_url.rstrip('/')}/reset-password?token={token}"
     send_email(
         user.email,
         "Reset your Old Style Gaming password",
@@ -140,6 +144,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     try:
         send_verification_email(user, verification_token)
     except Exception:
+        logger.exception("Could not send verification email")
         db.rollback()
         raise HTTPException(status_code=503, detail="Could not send verification email. Please try again.")
     db.commit()
@@ -186,6 +191,7 @@ def resend_verification(payload: EmailRequest, db: Session = Depends(get_db)):
             send_verification_email(user, token)
             db.commit()
         except Exception:
+            logger.exception("Could not resend verification email")
             db.rollback()
     return {"message": "If that account needs verification, a new email has been sent."}
 
@@ -199,6 +205,7 @@ def forgot_password(payload: EmailRequest, db: Session = Depends(get_db)):
             send_password_reset_email(user, token)
             db.commit()
         except Exception:
+            logger.exception("Could not send password reset email")
             db.rollback()
     return {"message": "If that email is registered, a password reset link has been sent."}
 

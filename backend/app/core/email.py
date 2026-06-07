@@ -7,7 +7,8 @@ from app.core.config import settings
 
 
 def send_email(to_email: str, subject: str, body: str) -> None:
-    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
+    smtp_username = settings.SMTP_USERNAME or settings.SMTP_USER
+    if not smtp_username or not settings.SMTP_PASSWORD:
         raise RuntimeError("Email sending is not configured")
 
     message = EmailMessage()
@@ -17,6 +18,15 @@ def send_email(to_email: str, subject: str, body: str) -> None:
     message.set_content(body)
 
     context = ssl.create_default_context()
-    with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, context=context, timeout=20) as smtp:
-        smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+    if settings.SMTP_PORT == 465:
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, context=context, timeout=20) as smtp:
+            smtp.login(smtp_username, settings.SMTP_PASSWORD)
+            smtp.send_message(message)
+        return
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as smtp:
+        smtp.ehlo()
+        smtp.starttls(context=context)
+        smtp.ehlo()
+        smtp.login(smtp_username, settings.SMTP_PASSWORD)
         smtp.send_message(message)
