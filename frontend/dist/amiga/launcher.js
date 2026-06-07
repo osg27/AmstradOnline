@@ -1,7 +1,7 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-06-07-serial-1";
+const runtimeVersion = "2026-06-07-serial-2";
 let runtimeReady = false;
 let emulatorStarted = false;
 let startRequested = false;
@@ -457,7 +457,7 @@ window.addEventListener("message", (event) => {
   if (data.msg === "serial_port_out") {
     window.parent.postMessage({
       type: "amiga_serial_out",
-      value: Number(data.value) & 255,
+      value: Number(data.value) & 1023,
     }, window.location.origin);
     return;
   }
@@ -478,7 +478,7 @@ window.addEventListener("message", (event) => {
   }
 
   if (data.type === "amiga_serial_in") {
-    postToEmulator({ byte: Number(data.value) & 255 });
+    postToEmulator({ byte: Number(data.value) & 1023 });
     return;
   }
 
