@@ -41,6 +41,7 @@
       const statusElement = document.getElementById("status");
       const gameElement = document.getElementById("game");
       const encoder = new TextEncoder();
+      const NativeAudioContext = window.AudioContext || window.webkitAudioContext;
       const PUAE_SYSTEM_DIRS = [
         "/home/web_user/retroarch/userdata/system",
         "/home/web_user/.config/retroarch/system",
@@ -65,9 +66,44 @@
       let getCurrentDisk = null;
       let setCurrentDisk = null;
       let simulateRuntimeInput = null;
-      let joystickMask = 0;
+      let audioCaptureStream = null;
+      let capturedAudioContext = null;
+      const joystickMasks = [0, 0];
       let mouseX = window.innerWidth / 2;
       let mouseY = window.innerHeight / 2;
+
+      if (NativeAudioContext) {
+        capturedAudioContext = new NativeAudioContext();
+        const captureDestination = capturedAudioContext.createMediaStreamDestination();
+        const nativeCreateBufferSource = capturedAudioContext.createBufferSource.bind(capturedAudioContext);
+        audioCaptureStream = captureDestination.stream;
+
+        capturedAudioContext.createBufferSource = () => {
+          const source = nativeCreateBufferSource();
+          const nativeConnect = source.connect.bind(source);
+          source.connect = (destination, ...connectArgs) => {
+            const result = nativeConnect(destination, ...connectArgs);
+            if (destination === capturedAudioContext.destination) {
+              try {
+                nativeConnect(captureDestination);
+              } catch {
+                // The source was already connected to the capture stream.
+              }
+            }
+            return result;
+          };
+          return source;
+        };
+
+        function CapturedAudioContext(...args) {
+          return capturedAudioContext;
+        }
+
+        CapturedAudioContext.prototype = NativeAudioContext.prototype;
+        window.AudioContext = CapturedAudioContext;
+        window.webkitAudioContext = CapturedAudioContext;
+        gameElement.addEventListener("click", () => capturedAudioContext.resume());
+      }
 
       function setStatus(message) {
         statusElement.style.display = "grid";
@@ -170,15 +206,17 @@
         document.dispatchEvent(event);
       }
 
-      function applyJoystickMask(mask) {
-        joystickMask = mask || 0;
-        simulateInput(0, 4, joystickMask & 1 ? 1 : 0);
-        simulateInput(0, 5, joystickMask & 2 ? 1 : 0);
-        simulateInput(0, 6, joystickMask & 4 ? 1 : 0);
-        simulateInput(0, 7, joystickMask & 8 ? 1 : 0);
-        simulateInput(0, 0, joystickMask & 16 ? 1 : 0);
-        simulateInput(0, 8, joystickMask & 32 ? 1 : 0);
-        simulateInput(0, 3, joystickMask & 64 ? 1 : 0);
+      function applyJoystickMask(player, mask) {
+        const runtimePlayer = Number(player) === 2 ? 1 : 0;
+        const joystickMask = Number(mask) || 0;
+        joystickMasks[runtimePlayer] = joystickMask;
+        simulateInput(runtimePlayer, 4, joystickMask & 1 ? 1 : 0);
+        simulateInput(runtimePlayer, 5, joystickMask & 2 ? 1 : 0);
+        simulateInput(runtimePlayer, 6, joystickMask & 4 ? 1 : 0);
+        simulateInput(runtimePlayer, 7, joystickMask & 8 ? 1 : 0);
+        simulateInput(runtimePlayer, 0, joystickMask & 16 ? 1 : 0);
+        simulateInput(runtimePlayer, 8, joystickMask & 32 ? 1 : 0);
+        simulateInput(runtimePlayer, 3, joystickMask & 64 ? 1 : 0);
       }
 
       function pulseInput(button) {
@@ -303,7 +341,7 @@
         }
       }
 
-      window.getAmigaAgaAudioStream = () => null;
+      window.getAmigaAgaAudioStream = () => audioCaptureStream;
 
       window.addEventListener("message", (event) => {
         if (event.origin !== window.location.origin) return;
@@ -335,7 +373,10 @@
 
         if (data.type === "amiga_aga_next_disk") switchToNextDisk();
         if (data.type === "amiga_aga_reset") window.location.reload();
-        if (data.type === "amstrad_remote_joystick" || data.type === "joystick") applyJoystickMask(Number(data.mask) || 0);
+        if (data.type === "amstrad_audio_unlock") capturedAudioContext?.resume();
+        if (data.type === "amstrad_remote_joystick" || data.type === "joystick") {
+          applyJoystickMask(data.player, data.mask);
+        }
         if (data.type === "amiga_mouse_button") applyMouseButton(data.button, data.action);
         if (data.type === "amiga_mouse_move") applyMouseMove(data.movementX, data.movementY);
         if (data.type === "amiga_keyboard") dispatchKeyboardInput(data.code, data.key, data.action);
