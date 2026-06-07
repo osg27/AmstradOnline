@@ -39,6 +39,7 @@ export default function RegisterPage() {
         {message ? (
           <>
             <p className="success">{message}</p>
+            <p className="muted">If it does not arrive within a few minutes, check your spam or junk folder.</p>
             <button type="button" onClick={() => navigate('/login')}>Back to sign in</button>
           </>
         ) : (

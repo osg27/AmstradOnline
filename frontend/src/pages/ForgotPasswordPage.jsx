@@ -44,6 +44,7 @@ export default function ForgotPasswordPage() {
           />
           {error ? <p className="error">{error}</p> : null}
           {message ? <p className="success">{message}</p> : null}
+          {message ? <p className="muted">If it does not arrive within a few minutes, check your spam or junk folder.</p> : null}
           <button type="submit" disabled={loading}>{loading ? 'Sending...' : 'Send reset link'}</button>
         </form>
         <p className="auth-switch"><Link to="/login">Back to sign in</Link></p>
