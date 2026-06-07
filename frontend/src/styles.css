@@ -267,6 +267,142 @@ input:focus {
   font-weight: 800;
 }
 
+.social-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #101313;
+}
+
+.social-column {
+  display: grid;
+  align-content: start;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.75rem;
+}
+
+.social-column + .social-column {
+  border-left: 1px solid var(--line);
+}
+
+.social-heading,
+.social-player,
+.friend-add {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.social-heading {
+  justify-content: space-between;
+}
+
+.social-heading h2,
+.social-heading p,
+.social-message {
+  margin: 0;
+}
+
+.social-heading h2 {
+  color: #fff7dd;
+  font-size: 1.05rem;
+}
+
+.social-heading p,
+.social-empty,
+.outgoing-requests,
+.social-player small {
+  color: var(--muted);
+}
+
+.social-refresh,
+.social-action {
+  min-height: 34px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.social-list,
+.friend-requests {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.friend-requests {
+  padding: 0.55rem;
+  border: 1px solid rgba(214, 164, 58, 0.4);
+  border-radius: 6px;
+  background: #181713;
+}
+
+.friend-requests > strong {
+  color: #f3c66b;
+  font-size: 0.82rem;
+}
+
+.social-player {
+  min-height: 38px;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #292f2d;
+  border-radius: 6px;
+  background: #151818;
+}
+
+.social-player strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.social-player small {
+  margin-left: auto;
+}
+
+.social-player > .social-action:first-of-type {
+  margin-left: auto;
+}
+
+.online-dot,
+.offline-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #75df9a;
+  box-shadow: 0 0 0 3px rgba(117, 223, 154, 0.12);
+}
+
+.offline-dot {
+  background: #69716e;
+  box-shadow: none;
+}
+
+.friend-add {
+  align-items: stretch;
+}
+
+.friend-add input {
+  min-width: 0;
+  padding-block: 0.6rem;
+}
+
+.friend-add button {
+  flex: 0 0 auto;
+}
+
+.social-empty {
+  margin: 0;
+  padding: 0.5rem 0;
+}
+
+.social-message {
+  color: #86e6bd;
+  font-size: 0.85rem;
+}
+
 .library-layout {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr) minmax(290px, 380px);
@@ -745,8 +881,14 @@ input:focus {
   }
 
   .lobby-hero,
-  .library-layout {
+  .library-layout,
+  .social-panel {
     grid-template-columns: 1fr;
+  }
+
+  .social-column + .social-column {
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
 
   .platform-tabs {

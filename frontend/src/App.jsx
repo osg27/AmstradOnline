@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { apiFetch } from './api/client';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import LobbyPage from './pages/LobbyPage';
@@ -13,6 +14,18 @@ import ResendVerificationPage from './pages/ResendVerificationPage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
+
+  useEffect(() => {
+    if (!token) return undefined;
+
+    const sendHeartbeat = () => {
+      apiFetch('/auth/social/heartbeat', { method: 'POST' }).catch(() => {});
+    };
+    sendHeartbeat();
+    const heartbeatTimer = window.setInterval(sendHeartbeat, 30000);
+    return () => window.clearInterval(heartbeatTimer);
+  }, [token]);
+
   return token ? children : <Navigate to="/login" replace />;
 }
 

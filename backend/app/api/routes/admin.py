@@ -9,6 +9,7 @@ from app.api.routes.auth import is_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotification
+from app.models.friendship import Friendship
 from app.models.room import Room
 from app.models.user import AccountToken, User
 
@@ -144,5 +145,8 @@ def delete_user(
     db.query(FeedbackNotification).filter(FeedbackNotification.user_id == user.id).delete(synchronize_session=False)
     db.query(Room).filter(Room.owner_user_id == user.id).delete(synchronize_session=False)
     db.query(AccountToken).filter(AccountToken.user_id == user.id).delete(synchronize_session=False)
+    db.query(Friendship).filter(
+        (Friendship.requester_id == user.id) | (Friendship.addressee_id == user.id)
+    ).delete(synchronize_session=False)
     db.delete(user)
     db.commit()
