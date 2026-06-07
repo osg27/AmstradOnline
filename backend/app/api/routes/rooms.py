@@ -4,7 +4,7 @@ import string
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import can_use_preview_systems, is_admin_user
+from app.api.routes.auth import can_use_preview_systems
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.room import Room
@@ -13,6 +13,8 @@ from app.models.user import User
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomJoinRequest, RoomResponse
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
+TESTING_SYSTEMS = {"amiga_aga", "snes"}
+UNAVAILABLE_SYSTEMS = {"arcade"}
 
 
 def get_current_user_id(authorization: str | None = Header(default=None)) -> int:
@@ -33,6 +35,15 @@ def generate_room_code(length: int = 6) -> str:
     return "".join(random.choice(chars) for _ in range(length))
 
 
+def require_system_access(db: Session, user_id: int, system: str) -> None:
+    if system in UNAVAILABLE_SYSTEMS:
+        raise HTTPException(status_code=403, detail="This system is still under construction")
+    if system in TESTING_SYSTEMS:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not can_use_preview_systems(user):
+            raise HTTPException(status_code=403, detail="This system is currently being tested")
+
+
 @router.post("/create", response_model=RoomCreateResponse)
 def create_room(
     payload: RoomCreateRequest | None = None,
@@ -40,14 +51,7 @@ def create_room(
     user_id: int = Depends(get_current_user_id),
 ):
     system = payload.system if payload else "cpc"
-    if system == "arcade":
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user or not is_admin_user(user):
-            raise HTTPException(status_code=403, detail="This room type is limited to admins for now")
-    elif system in {"cpc_party", "amiga", "amiga_aga", "megadrive", "snes"}:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user or not can_use_preview_systems(user):
-            raise HTTPException(status_code=403, detail="Preview rooms are limited to testers for now")
+    require_system_access(db, user_id, system)
 
     room_code = generate_room_code()
     while db.query(Room).filter(Room.room_code == room_code).first():
@@ -81,6 +85,7 @@ def join_room(
     room = db.query(Room).filter(Room.room_code == payload.room_code.upper()).first()
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
+    require_system_access(db, user_id, room.system or "cpc")
 
     db.query(RoomInvite).filter(
         RoomInvite.room_id == room.id,
@@ -106,6 +111,7 @@ def get_room(
     room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
+    require_system_access(db, user_id, room.system or "cpc")
 
     return RoomResponse(
         room_code=room.room_code,

@@ -67,7 +67,6 @@ const SYSTEM_GROUPS = [
     id: '16bit',
     label: '16-bit',
     strapline: 'Amiga, Mega Drive and SNES games.',
-    previewOnly: true,
     systems: [
       {
         id: 'amiga',
@@ -76,7 +75,6 @@ const SYSTEM_GROUPS = [
         accent: 'blue',
         summary: 'Amiga 500 games with joystick and mouse support.',
         formats: '.adf .zip',
-        badge: 'Testing',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
@@ -91,7 +89,7 @@ const SYSTEM_GROUPS = [
         accent: 'blue',
         summary: 'Amiga 1200 and AGA games. Multi-disk games are supported.',
         formats: '.adf .zip',
-        badge: 'Testing',
+        testing: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
@@ -106,7 +104,6 @@ const SYSTEM_GROUPS = [
         accent: 'violet',
         summary: 'Mega Drive games with two-player controls.',
         formats: '.bin .gen .md .smd',
-        badge: 'Testing',
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
@@ -121,7 +118,7 @@ const SYSTEM_GROUPS = [
         accent: 'amber',
         summary: 'SNES games with two-player controls.',
         formats: '.sfc .smc',
-        badge: 'Testing',
+        testing: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
@@ -135,16 +132,15 @@ const SYSTEM_GROUPS = [
     id: 'arcade',
     label: 'Arcade',
     strapline: 'MAME arcade games.',
-    adminOnly: true,
     systems: [
       {
         id: 'arcade',
         name: 'MAME Arcade',
         shortName: 'MAME',
         accent: 'gold',
-        summary: 'Load a MAME ROM and play.',
+        summary: 'Arcade rooms are being built and will be available later.',
         formats: '.zip',
-        badge: 'Admin',
+        underConstruction: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
@@ -174,12 +170,20 @@ export default function LobbyPage() {
 
   const visibleGroups = useMemo(() => SYSTEM_GROUPS.map((group) => ({
     ...group,
-    systems: group.systems.filter((system) => !system.adminOnly || isAdmin),
-  })).filter((group) => {
-    if (group.adminOnly) return isAdmin;
-    if (group.previewOnly) return canUsePreviewSystems;
-    return group.systems.length > 0;
-  }), [canUsePreviewSystems, isAdmin]);
+    systems: group.systems.map((system) => {
+      const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
+      const locked = lockedForTesting || Boolean(system.underConstruction);
+      return {
+        ...system,
+        locked,
+        badge: system.underConstruction
+          ? 'Under construction'
+          : system.testing
+            ? canUsePreviewSystems ? 'Testing' : 'Coming soon - in testing'
+            : null,
+      };
+    }),
+  })), [canUsePreviewSystems]);
 
   const selectedGroup = visibleGroups.find((group) => group.id === selectedEra) || visibleGroups[0];
   const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0];
@@ -196,9 +200,6 @@ export default function LobbyPage() {
         setIsTester(nextIsTester);
         localStorage.setItem('isAdmin', nextIsAdmin ? 'true' : 'false');
         localStorage.setItem('isTester', nextIsTester ? 'true' : 'false');
-        if (!nextIsAdmin && !nextIsTester && selectedEra !== '8bit') {
-          chooseGroup('8bit', SYSTEM_GROUPS[0]);
-        }
         if (nextIsAdmin || nextIsTester) {
           const notifications = await apiFetch('/auth/feedback/notifications');
           setFeedbackNotificationCount(notifications.filter((notification) => !notification.is_read).length);
@@ -209,7 +210,6 @@ export default function LobbyPage() {
         setFeedbackNotificationCount(0);
         localStorage.removeItem('isAdmin');
         localStorage.removeItem('isTester');
-        chooseGroup('8bit', SYSTEM_GROUPS[0]);
       }
     }
 
@@ -226,6 +226,7 @@ export default function LobbyPage() {
   }
 
   function chooseSystem(system) {
+    if (system.locked) return;
     setSelectedSystemId(system.id);
     if (!system.modes[selectedMode]?.enabled) {
       setSelectedMode(system.modes.hosted?.enabled ? 'hosted' : 'solo');
@@ -237,7 +238,7 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || !modeConfig?.enabled) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled) {
         throw new Error('That play mode is not ready yet.');
       }
 
@@ -358,8 +359,9 @@ export default function LobbyPage() {
                 <button
                   key={system.id}
                   type="button"
-                  className={`system-card system-card-${system.accent} ${selectedSystem?.id === system.id ? 'active' : ''}`}
+                  className={`system-card system-card-${system.accent} ${selectedSystem?.id === system.id ? 'active' : ''} ${system.locked ? 'locked' : ''}`}
                   onClick={() => chooseSystem(system)}
+                  aria-disabled={system.locked}
                 >
                   <span className="system-short">{system.shortName}</span>
                   <span className="system-name">{system.name}</span>
@@ -385,7 +387,7 @@ export default function LobbyPage() {
                 modeId !== 'link' || selectedSystem?.id === 'amiga'
               )).map(([modeId, mode]) => {
                 const modeConfig = selectedSystem?.modes[modeId];
-                const enabled = Boolean(modeConfig?.enabled);
+                const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked);
                 const active = selectedMode === modeId;
 
                 return (
@@ -398,7 +400,7 @@ export default function LobbyPage() {
                   >
                     <span>{mode.kicker}</span>
                     <strong>{mode.label}</strong>
-                    <small>{enabled ? mode.description : modeConfig?.note || 'Coming later'}</small>
+                    <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.testing ? 'Available to testers for now' : modeConfig?.note || 'Coming later'}</small>
                   </button>
                 );
               })}
@@ -421,9 +423,9 @@ export default function LobbyPage() {
             <button
               className="launch-button"
               onClick={() => createSession()}
-              disabled={loadingCreate || !selectedModeConfig?.enabled}
+              disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled}
             >
-              {loadingCreate ? 'Starting...' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
+              {loadingCreate ? 'Starting...' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Currently in testing' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
             </button>
 
             {error ? <p className="error">{error}</p> : null}

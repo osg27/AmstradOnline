@@ -687,6 +687,17 @@ input:focus {
   color: #fff;
 }
 
+.system-card.locked {
+  cursor: not-allowed;
+  background: #151818;
+  border-color: #343a38;
+  opacity: 0.72;
+}
+
+.system-card.locked:hover {
+  transform: none;
+}
+
 .system-short {
   width: fit-content;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -718,6 +729,7 @@ input:focus {
 }
 
 .system-foot em {
+  max-width: 150px;
   border: 1px solid rgba(214, 164, 58, 0.45);
   border-radius: 999px;
   padding: 0.2rem 0.45rem;
@@ -725,6 +737,8 @@ input:focus {
   font-size: 0.72rem;
   font-style: normal;
   font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .mode-panel {
