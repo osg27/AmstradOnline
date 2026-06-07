@@ -181,7 +181,7 @@ export default function RoomPage() {
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
-    ? '/amiga/launcher.html?v=2026-06-07-5'
+    ? '/amiga/launcher.html?v=2026-06-07-6'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
@@ -563,22 +563,22 @@ export default function RoomPage() {
       setStatus('Amiga serial link closed');
     };
     channel.onmessage = (event) => {
-      const words = event.data instanceof ArrayBuffer
-        ? new Uint16Array(event.data)
+      const bytes = event.data instanceof ArrayBuffer
+        ? new Uint8Array(event.data)
         : event.data instanceof Blob
           ? null
-          : new Uint16Array([Number(event.data) & 1023]);
+          : new Uint8Array([Number(event.data) & 255]);
 
-      if (words) {
-        setSerialActivity((activity) => ({ ...activity, received: activity.received + words.length }));
-        words.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
+      if (bytes) {
+        setSerialActivity((activity) => ({ ...activity, received: activity.received + bytes.length }));
+        bytes.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
         return;
       }
 
       event.data.arrayBuffer().then((buffer) => {
-        const wordsFromBlob = new Uint16Array(buffer);
-        setSerialActivity((activity) => ({ ...activity, received: activity.received + wordsFromBlob.length }));
-        wordsFromBlob.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
+        const bytesFromBlob = new Uint8Array(buffer);
+        setSerialActivity((activity) => ({ ...activity, received: activity.received + bytesFromBlob.length }));
+        bytesFromBlob.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
       });
     };
   }, [addLog, forwardInputToEmulator]);
@@ -593,7 +593,7 @@ export default function RoomPage() {
 
       const channel = serialChannelRef.current;
       if (channel?.readyState === 'open') {
-        channel.send(new Uint16Array([Number(event.data.value) & 1023]));
+        channel.send(new Uint8Array([Number(event.data.value) & 255]));
         setSerialActivity((activity) => ({ ...activity, sent: activity.sent + 1 }));
       }
     }
