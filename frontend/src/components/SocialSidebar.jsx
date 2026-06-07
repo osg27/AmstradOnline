@@ -10,7 +10,7 @@ const EMPTY_SOCIAL = {
   room_invites: [],
 };
 
-export default function SocialSidebar({ roomCode = '', allowInvites = false }) {
+export default function SocialSidebar({ roomCode = '', allowInvites = false, showOnline = true }) {
   const navigate = useNavigate();
   const [social, setSocial] = useState(EMPTY_SOCIAL);
   const [friendUsername, setFriendUsername] = useState('');
@@ -121,7 +121,7 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false }) {
         </section>
       ) : null}
 
-      <section className="social-sidebar-section">
+      {showOnline ? <section className="social-sidebar-section">
         <div className="social-heading">
           <div>
             <h2>Online now</h2>
@@ -160,7 +160,7 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false }) {
             </div>
           )) : <p className="social-empty">Nobody else is online just now.</p>}
         </div>
-      </section>
+      </section> : null}
 
       <section className="social-sidebar-section">
         <div className="social-heading">

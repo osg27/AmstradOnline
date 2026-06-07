@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
+import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
@@ -97,6 +98,7 @@ export default function RoomPage() {
   const [activePartyPlayer, setActivePartyPlayer] = useState(1);
   const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
   const [partyRoster, setPartyRoster] = useState([]);
+  const [chatMessages, setChatMessages] = useState([]);
 
   const remoteMediaStreamRef = useRef(null);
   const remoteVoiceStreamRef = useRef(null);
@@ -1315,6 +1317,17 @@ export default function RoomPage() {
       return;
     }
 
+    if (message.type === 'room-chat') {
+      setChatMessages((items) => [...items.slice(-99), {
+        id: message.id || `${Date.now()}-${Math.random()}`,
+        username: message.username || 'Player',
+        message: String(message.message || '').slice(0, 300),
+        time: message.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        mine: false,
+      }]);
+      return;
+    }
+
     if (message.type === 'party-room-full') {
       setStatus('Party room full');
       setError('This party room has no free live player slots.');
@@ -1527,6 +1540,19 @@ export default function RoomPage() {
   }, [addLog, isCpcParty, isHost, partyMaxPlayers]);
 
   const { send: sendSignal, isOpen: signalingOpen } = useSignaling(isSoloMode ? null : roomCode, onSignalMessage, signalingClientIdRef.current);
+
+  function sendChatMessage(message) {
+    if (!signalingOpen || isSoloMode) return;
+    const chatMessage = {
+      type: 'room-chat',
+      id: window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+      username: username || 'Player',
+      message,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    sendSignal(chatMessage);
+    setChatMessages((items) => [...items.slice(-99), { ...chatMessage, mine: true }]);
+  }
   const displayedPlayers = isSoloMode
     ? [
       {
@@ -3171,7 +3197,16 @@ export default function RoomPage() {
           </>
         ) : null}
         </div>
-        <SocialSidebar roomCode={roomCode} allowInvites={!isSoloMode} />
+        <div className="room-side-rail">
+          <SocialSidebar roomCode={roomCode} allowInvites={!isSoloMode} showOnline={false} />
+          {!isSoloMode ? (
+            <RoomChat
+              messages={chatMessages}
+              onSend={sendChatMessage}
+              connected={signalingOpen}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );
