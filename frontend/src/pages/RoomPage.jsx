@@ -181,7 +181,7 @@ export default function RoomPage() {
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
-    ? '/amiga/launcher.html?v=2026-06-07-2'
+    ? '/amiga/launcher.html?v=2026-06-07-3'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
@@ -2598,9 +2598,6 @@ export default function RoomPage() {
 
       if (isAmiga || isAmigaLink) {
         iframe.contentWindow?.postMessage({ type: 'amiga_start' }, window.location.origin);
-      }
-      if (isAmigaLink) {
-        iframe.contentWindow?.postMessage({ type: 'amiga_serial_connect' }, window.location.origin);
       }
       if (isAmigaAga) {
         iframe.contentWindow?.postMessage({ type: 'amiga_aga_start' }, window.location.origin);

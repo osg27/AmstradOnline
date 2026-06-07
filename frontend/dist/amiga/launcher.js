@@ -10,7 +10,6 @@ let pendingFileLoadId = 0;
 let sentFileLoadId = 0;
 let customKickstartRom = null;
 let sentKickstartRom = null;
-let serialLinkRequested = false;
 let audioContext = null;
 let audioDestination = null;
 let amigaAudioSource = null;
@@ -264,17 +263,6 @@ function runScript(script) {
   postToEmulator({ cmd: "script", script });
 }
 
-function connectSerialLink() {
-  serialLinkRequested = true;
-  if (!runtimeReady || !emulatorStarted) return;
-
-  runScript(`
-    if (typeof wasm_configure === 'function') {
-      wasm_configure('SER_DEVICE', 'NULLMODEM');
-    }
-  `);
-}
-
 function joystickPortForPlayer(player) {
   return player === 2 ? "1" : "2";
 }
@@ -475,9 +463,6 @@ window.addEventListener("message", (event) => {
   }
 
   if (data.msg === "render_run_state") {
-    if (serialLinkRequested) {
-      connectSerialLink();
-    }
     if (customKickstartRom) {
       sendKickstartToEmulator();
     } else {
@@ -494,11 +479,6 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amiga_serial_in") {
     postToEmulator({ byte: Number(data.value) & 255 });
-    return;
-  }
-
-  if (data.type === "amiga_serial_connect") {
-    connectSerialLink();
     return;
   }
 
