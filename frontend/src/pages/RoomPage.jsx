@@ -99,6 +99,7 @@ export default function RoomPage() {
   const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
   const [partyRoster, setPartyRoster] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
+  const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
 
   const remoteMediaStreamRef = useRef(null);
   const remoteVoiceStreamRef = useRef(null);
@@ -180,7 +181,7 @@ export default function RoomPage() {
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
-    ? '/amiga/launcher.html?v=2026-06-07-1'
+    ? '/amiga/launcher.html?v=2026-06-07-2'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
@@ -569,12 +570,15 @@ export default function RoomPage() {
           : new Uint8Array([Number(event.data) & 255]);
 
       if (bytes) {
+        setSerialActivity((activity) => ({ ...activity, received: activity.received + bytes.length }));
         bytes.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
         return;
       }
 
       event.data.arrayBuffer().then((buffer) => {
-        new Uint8Array(buffer).forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
+        const bytesFromBlob = new Uint8Array(buffer);
+        setSerialActivity((activity) => ({ ...activity, received: activity.received + bytesFromBlob.length }));
+        bytesFromBlob.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
       });
     };
   }, [addLog, forwardInputToEmulator]);
@@ -590,6 +594,7 @@ export default function RoomPage() {
       const channel = serialChannelRef.current;
       if (channel?.readyState === 'open') {
         channel.send(new Uint8Array([Number(event.data.value) & 255]));
+        setSerialActivity((activity) => ({ ...activity, sent: activity.sent + 1 }));
       }
     }
 
@@ -2594,6 +2599,9 @@ export default function RoomPage() {
       if (isAmiga || isAmigaLink) {
         iframe.contentWindow?.postMessage({ type: 'amiga_start' }, window.location.origin);
       }
+      if (isAmigaLink) {
+        iframe.contentWindow?.postMessage({ type: 'amiga_serial_connect' }, window.location.origin);
+      }
       if (isAmigaAga) {
         iframe.contentWindow?.postMessage({ type: 'amiga_aga_start' }, window.location.origin);
       }
@@ -2975,6 +2983,7 @@ export default function RoomPage() {
           <div className="session-strip">
             {loadedDiskName ? <span>{loadedDiskName}</span> : null}
             {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isAmigaAga ? 'ROM: A1200 Kickstart recommended' : 'ROM: AROS'}</span> : null}
+            {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
           </div>
         ) : null}
 
