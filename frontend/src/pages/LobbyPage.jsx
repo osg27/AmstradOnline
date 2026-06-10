@@ -61,6 +61,21 @@ const SYSTEM_GROUPS = [
           link: { enabled: false, note: 'Not available yet' },
         },
       },
+      {
+        id: 'c64',
+        name: 'Commodore 64',
+        shortName: 'C64',
+        accent: 'amber',
+        summary: 'Commodore 64 games powered by a local VICE WASM runtime.',
+        formats: '.d64 .t64 .tap .prg .crt .zip',
+        adminOnly: true,
+        modes: {
+          solo: { enabled: true },
+          hosted: { enabled: true },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available yet' },
+        },
+      },
     ],
   },
   {
@@ -170,7 +185,7 @@ export default function LobbyPage() {
 
   const visibleGroups = useMemo(() => SYSTEM_GROUPS.map((group) => ({
     ...group,
-    systems: group.systems.map((system) => {
+    systems: group.systems.filter((system) => !system.adminOnly || isAdmin).map((system) => {
       const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
       const locked = lockedForTesting || Boolean(system.underConstruction);
       return {
@@ -183,7 +198,7 @@ export default function LobbyPage() {
             : null,
       };
     }),
-  })), [canUsePreviewSystems]);
+  })).filter((group) => group.systems.length > 0), [canUsePreviewSystems, isAdmin]);
 
   const selectedGroup = visibleGroups.find((group) => group.id === selectedEra) || visibleGroups[0];
   const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0];
@@ -238,7 +253,7 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (modeConfig.testing && !canUsePreviewSystems)) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (modeConfig.testing && !canUsePreviewSystems)) {
         throw new Error('That play mode is not ready yet.');
       }
 
