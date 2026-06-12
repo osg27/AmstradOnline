@@ -257,6 +257,7 @@
       'utils.js': '/emulatorjs/data/src/utils.js',
       'nipplejs.js': '/emulatorjs/data/src/vendor/nipplejs.js',
       'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
+      'vice_x64sc-legacy-wasm.data': '/emulatorjs/data/cores/vice_x64sc-legacy-wasm.data?v=c64-2026-06-12-4',
     };
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
@@ -265,6 +266,13 @@
     window.EJS_forceLegacyCores = true;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
+    // C64 core packages changed while retaining the same URL. Avoid reusing an
+    // older extracted VICE runtime from IndexedDB, which lacks EJS_Runtime.
+    window.EJS_cacheConfig = {
+      enabled: false,
+      cacheMaxSizeMB: 50,
+      cacheMaxAgeMins: 60,
+    };
     window.EJS_volume = 1;
     window.EJS_backgroundColor = '#000';
     window.EJS_color = '#2f8f76';
