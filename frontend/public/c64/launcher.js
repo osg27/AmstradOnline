@@ -12,6 +12,7 @@
   let localMask = 0;
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
+  let joystickPortsSwapped = false;
   let statusText = 'C64 ready';
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
@@ -133,7 +134,7 @@
     const emulator = window.EJS_emulator;
     const manager = emulator?.gameManager;
 
-    if (!emulator?.started || !manager?.simulateInput) return;
+    if (!emulator?.started || !manager?.simulateInput) return false;
 
     const previous = lastSimulatedMasks[playerIndex] || 0;
     const mappings = [
@@ -156,16 +157,27 @@
     });
 
     lastSimulatedMasks[playerIndex] = nextMask;
+    return true;
   }
 
   function setMask(player, mask) {
     if (player === 1) {
       localMask = mask;
-      simulateMask(0, mask);
+      simulateMask(joystickPortsSwapped ? 1 : 0, mask);
     } else {
       remoteMask = mask;
-      simulateMask(1, mask);
+      simulateMask(joystickPortsSwapped ? 0 : 1, mask);
     }
+  }
+
+  function swapJoystickPorts() {
+    simulateMask(0, 0);
+    simulateMask(1, 0);
+    joystickPortsSwapped = !joystickPortsSwapped;
+    lastSimulatedMasks = [0, 0];
+    setMask(1, localMask);
+    setMask(2, remoteMask);
+    console.log(`Old Style Gaming C64: joystick ports ${joystickPortsSwapped ? 'swapped' : 'normal'}`);
   }
 
   function keyToMaskBit(key) {
@@ -208,11 +220,66 @@
 
   function handleKeyInput(player, key, action) {
     const bit = keyToMaskBit(key);
-    if (!bit) return;
+    const isDown = action === 'down' || action === 'keydown';
 
-    const current = player === 1 ? localMask : remoteMask;
-    const next = action === 'down' ? current | bit : current & ~bit;
-    setMask(player, next);
+    if (bit) {
+      const current = player === 1 ? localMask : remoteMask;
+      const next = isDown ? current | bit : current & ~bit;
+      setMask(player, next);
+    }
+
+    dispatchKeyboardInput(key, isDown);
+  }
+
+  function keyboardCodeFor(key) {
+    if (key === ' ') return 'Space';
+    if (key.length === 1 && /[a-z]/i.test(key)) return `Key${key.toUpperCase()}`;
+    if (key.length === 1 && /[0-9]/.test(key)) return `Digit${key}`;
+    return key;
+  }
+
+  function keyboardKeyCodeFor(key) {
+    const named = {
+      Backspace: 8,
+      Tab: 9,
+      Enter: 13,
+      Shift: 16,
+      Control: 17,
+      Alt: 18,
+      CapsLock: 20,
+      Escape: 27,
+      ' ': 32,
+      PageUp: 33,
+      PageDown: 34,
+      End: 35,
+      Home: 36,
+      ArrowLeft: 37,
+      ArrowUp: 38,
+      ArrowRight: 39,
+      ArrowDown: 40,
+      Delete: 46,
+    };
+
+    if (named[key]) return named[key];
+    if (/^F([1-9]|1[0-2])$/.test(key)) return 111 + Number(key.slice(1));
+    return key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0;
+  }
+
+  function dispatchKeyboardInput(key, isDown) {
+    const target = window.EJS_emulator?.elements?.parent || gameContainer;
+    const keyCode = keyboardKeyCodeFor(key);
+    const event = new KeyboardEvent(isDown ? 'keydown' : 'keyup', {
+      key,
+      code: keyboardCodeFor(key),
+      bubbles: true,
+      cancelable: true,
+    });
+
+    Object.defineProperties(event, {
+      keyCode: { get: () => keyCode },
+      which: { get: () => keyCode },
+    });
+    target.dispatchEvent(event);
   }
 
   function clearGameContainer() {
@@ -298,6 +365,10 @@
         7: { value: 'p', value2: 'DPAD_RIGHT' },
       },
     };
+    window.EJS_defaultOptions = {
+      keyboardInput: 'enabled',
+      altKeyboardInput: 'enabled',
+    };
     window.EJS_Buttons = {
       playPause: false,
       restart: false,
@@ -324,6 +395,11 @@
     window.EJS_onGameStart = () => {
       console.log('Old Style Gaming C64: game started');
       statusText = '';
+      window.EJS_emulator?.gameManager?.setKeyboardEnabled?.(true);
+      lastSimulatedMasks = [0, 0];
+      setMask(1, localMask);
+      setMask(2, remoteMask);
+      window.EJS_emulator?.elements?.parent?.focus?.();
     };
     window.EJS_onExit = () => {
       drawStatus('C64 stopped', fileName);
@@ -431,6 +507,11 @@
 
     if (message.type === 'c64_reset') {
       loadCurrentRom();
+      return;
+    }
+
+    if (message.type === 'c64_swap_joystick_ports') {
+      swapJoystickPorts();
       return;
     }
 

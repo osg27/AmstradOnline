@@ -183,7 +183,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-12-4' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-12-6' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -2783,6 +2783,14 @@ export default function RoomPage() {
     setStatus('Emulator reset');
   }
 
+  function swapC64JoystickPorts() {
+    if (!canControlLocalEmulator || !hostStarted || !isC64) return;
+
+    forwardInputToEmulator({ type: 'c64_swap_joystick_ports' });
+    addLog('Swapped C64 joystick ports');
+    setStatus('C64 joystick ports swapped');
+  }
+
   async function handleDiskSelected(event) {
     try {
       const selectedFiles = Array.from(event.target.files || []);
@@ -3208,6 +3216,12 @@ export default function RoomPage() {
                   <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>
                     Reset emulator
                   </button>
+
+                  {isC64 ? (
+                    <button type="button" className="secondary" onClick={swapC64JoystickPorts} disabled={!hostStarted}>
+                      Swap joystick ports
+                    </button>
+                  ) : null}
 
                   {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted && !isAmigaAga}>
