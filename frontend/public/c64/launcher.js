@@ -260,7 +260,9 @@
     };
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
-    window.EJS_forceLegacyCores = false;
+    // The current WebGL2 vice_x64sc package does not define EJS_Runtime.
+    // Keep C64 rooms on the verified WebGL1/legacy package.
+    window.EJS_forceLegacyCores = true;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
     window.EJS_volume = 1;
@@ -354,7 +356,7 @@
       '/emulatorjs/data/src/emulator.js',
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extractzip.js',
-      '/emulatorjs/data/cores/vice_x64sc-wasm.data',
+      '/emulatorjs/data/cores/vice_x64sc-legacy-wasm.data',
     ];
 
     for (const path of required) {
