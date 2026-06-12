@@ -19,16 +19,37 @@
       #c64-screen {
         position: absolute;
         inset: 0;
+        z-index: 2;
         display: block;
         width: 100vw;
         height: 100vh;
         background: #000;
         image-rendering: pixelated;
+        pointer-events: none;
+      }
+
+      #game {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: #000;
+      }
+
+      #game canvas,
+      #game .ejs_game,
+      #game .ejs_canvas,
+      #game .ejs_container {
+        max-width: 100% !important;
+        max-height: 100% !important;
       }
     </style>
   </head>
   <body>
     <canvas id="c64-screen" width="640" height="480"></canvas>
-    <script src="./launcher.js?v=2026-06-12-1"></script>
+    <div id="game"></div>
+    <script src="./launcher.js?v=2026-06-12-2"></script>
   </body>
 </html>
