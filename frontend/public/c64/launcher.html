@@ -1,134 +1,34 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"/>
-<title>Commodore 64</title>
-<style type="text/css">
-body {
-    margin: 0;
-    background-color: black;
-}
-.game {
-    position: absolute;
-    top: 0px;
-    left: 0px;
-    margin: 0px;
-    border: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    display: block;
-    image-rendering: optimizeSpeed;
-    image-rendering: -moz-crisp-edges;
-    image-rendering: -o-crisp-edges;
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: optimize-contrast;
-    image-rendering: crisp-edges;
-    image-rendering: pixelated;
-    -ms-interpolation-mode: nearest-neighbor;
-    outline: none;
-}
-</style>
-</head>
-<body>
-  <canvas class="game" id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
-
-  <script type="text/javascript">
-    const canvas = document.getElementById("canvas");
-
-    function focusC64() {
-      try {
-        window.focus();
-        canvas.focus();
-      } catch {}
-    }
-
-    window.addEventListener("click", focusC64);
-    window.addEventListener("pointerdown", focusC64);
-
-    var Module = {
-        preRun: [],
-        canvas: canvas,
-        print: (function() {
-            return function(text) {
-                text = Array.prototype.slice.call(arguments).join(' ');
-                console.log(text);
-            };
-        })(),
-        printErr: function(text) {
-            text = Array.prototype.slice.call(arguments).join(' ');
-            console.error(text);
-        },
-    };
-
-    window.onerror = function(event) {
-        console.log("onerror: " + event);
-    };
-
-    function sendKeyToTinyC64(key, code, action) {
-      focusC64();
-
-      const type = action === "up" ? "keyup" : "keydown";
-
-      const event = new KeyboardEvent(type, {
-        key: key || code || "",
-        code: code || key || "",
-        bubbles: true,
-        cancelable: true
-      });
-
-      try { window.dispatchEvent(event); } catch {}
-      try { document.dispatchEvent(event); } catch {}
-      try { canvas.dispatchEvent(event); } catch {}
-    }
-
-    window.addEventListener("message", function(event) {
-      if (event.origin !== window.location.origin) return;
-
-      const message = event.data || {};
-
-      if (message.type === "c64_start" || message.type === "amstrad_audio_unlock") {
-        focusC64();
-        return;
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Commodore 64 Launcher</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        color: #fff;
+        font-family: system-ui, sans-serif;
       }
 
-      if (message.type === "c64_reset") {
-        location.reload();
-        return;
+      #c64-screen {
+        position: absolute;
+        inset: 0;
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        background: #000;
+        image-rendering: pixelated;
       }
-
-      if (message.type === "amstrad_remote_input" || message.type === "amstrad_remote_control") {
-        sendKeyToTinyC64(message.key, message.code, message.action);
-        return;
-      }
-
-      if (message.type === "amstrad_remote_joystick") {
-        const mask = Number(message.mask || 0);
-
-        const keys = [
-          { bit: 1, key: "ArrowUp", code: "ArrowUp" },
-          { bit: 2, key: "ArrowDown", code: "ArrowDown" },
-          { bit: 4, key: "ArrowLeft", code: "ArrowLeft" },
-          { bit: 8, key: "ArrowRight", code: "ArrowRight" },
-          { bit: 16, key: " ", code: "Space" }
-        ];
-
-        for (const item of keys) {
-          sendKeyToTinyC64(
-            item.key,
-            item.code,
-            mask & item.bit ? "down" : "up"
-          );
-        }
-      }
-
-      if (message.type === "c64_autoload") {
-        console.warn("Tiny8Bit C64 is running, but file autoload is not wired yet.");
-      }
-    });
-  </script>
-
-  <script async type="text/javascript" src="c64.js"></script>
-</body>
+    </style>
+  </head>
+  <body>
+    <canvas id="c64-screen" width="640" height="480"></canvas>
+    <script src="./launcher.js?v=2026-06-12-1"></script>
+  </body>
 </html>
