@@ -68,7 +68,7 @@ const SYSTEM_GROUPS = [
         accent: 'amber',
         summary: 'Commodore 64 games powered by a local VICE WASM runtime.',
         formats: '.d64 .t64 .tap .prg .crt .zip',
-        adminOnly: true,
+        testing: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },

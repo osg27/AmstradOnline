@@ -150,6 +150,7 @@ export default function RoomPage() {
   const [arcadeRuntime, setArcadeRuntime] = useState('mamepacmantest.js');
   const [arcadeArgs, setArcadeArgs] = useState('');
   const [c64WarpEnabled, setC64WarpEnabled] = useState(false);
+  const [c64JoystickPort, setC64JoystickPort] = useState(2);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -184,7 +185,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-12-7' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-12-8' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -2612,7 +2613,7 @@ export default function RoomPage() {
         iframe.contentWindow?.postMessage({ type: 'snes_start' }, window.location.origin);
       }
       if (isC64) {
-        iframe.contentWindow?.postMessage({ type: 'c64_start' }, window.location.origin);
+        iframe.contentWindow?.postMessage({ type: 'c64_start', soloMode: isSoloMode }, window.location.origin);
       }
       if (isArcade) {
         iframe.contentWindow?.postMessage({ type: 'arcade_start' }, window.location.origin);
@@ -2787,9 +2788,11 @@ export default function RoomPage() {
   function swapC64JoystickPorts() {
     if (!canControlLocalEmulator || !hostStarted || !isC64) return;
 
-    forwardInputToEmulator({ type: 'c64_swap_joystick_ports' });
-    addLog('Swapped C64 joystick ports');
-    setStatus('C64 joystick ports swapped');
+    const nextPort = c64JoystickPort === 2 ? 1 : 2;
+    setC64JoystickPort(nextPort);
+    forwardInputToEmulator({ type: 'c64_swap_joystick_ports', soloMode: isSoloMode });
+    addLog(`P1 C64 joystick switched to port ${nextPort}`);
+    setStatus(`P1 C64 joystick using port ${nextPort}`);
   }
 
   function toggleC64Warp() {
@@ -3230,7 +3233,7 @@ export default function RoomPage() {
 
                   {isC64 ? (
                     <button type="button" className="secondary" onClick={swapC64JoystickPorts} disabled={!hostStarted}>
-                      Swap joystick ports
+                      P1 joystick: port {c64JoystickPort}
                     </button>
                   ) : null}
 

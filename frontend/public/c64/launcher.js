@@ -13,6 +13,7 @@
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
   let joystickPortsSwapped = false;
+  let soloMode = false;
   let warpEnabled = false;
   let statusText = 'C64 ready';
 
@@ -177,8 +178,8 @@
     joystickPortsSwapped = !joystickPortsSwapped;
     lastSimulatedMasks = [0, 0];
     setMask(1, localMask);
-    setMask(2, remoteMask);
-    console.log(`Old Style Gaming C64: joystick ports ${joystickPortsSwapped ? 'swapped' : 'normal'}`);
+    setMask(2, soloMode ? 0 : remoteMask);
+    console.log(`Old Style Gaming C64: P1 joystick using port ${joystickPortsSwapped ? '1' : '2'}`);
   }
 
   function setWarp(enabled) {
@@ -408,9 +409,10 @@
       console.log('Old Style Gaming C64: game started');
       statusText = '';
       window.EJS_emulator?.gameManager?.setKeyboardEnabled?.(true);
+      window.EJS_emulator?.gameManager?.setControllerPortDevice?.(0, 1);
       lastSimulatedMasks = [0, 0];
       setMask(1, localMask);
-      setMask(2, remoteMask);
+      setMask(2, soloMode ? 0 : remoteMask);
       setWarp(warpEnabled);
       window.EJS_emulator?.elements?.parent?.focus?.();
     };
@@ -505,6 +507,7 @@
 
     const message = event.data || {};
     if (message.type === 'c64_start') {
+      soloMode = Boolean(message.soloMode);
       window.getC64AudioStream();
       return;
     }
@@ -524,6 +527,7 @@
     }
 
     if (message.type === 'c64_swap_joystick_ports') {
+      soloMode = Boolean(message.soloMode);
       swapJoystickPorts();
       return;
     }
