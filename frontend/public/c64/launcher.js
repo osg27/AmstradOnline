@@ -13,6 +13,7 @@
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
   let joystickPortsSwapped = false;
+  let warpEnabled = false;
   let statusText = 'C64 ready';
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
@@ -178,6 +179,17 @@
     setMask(1, localMask);
     setMask(2, remoteMask);
     console.log(`Old Style Gaming C64: joystick ports ${joystickPortsSwapped ? 'swapped' : 'normal'}`);
+  }
+
+  function setWarp(enabled) {
+    warpEnabled = Boolean(enabled);
+    const manager = window.EJS_emulator?.gameManager;
+
+    if (manager) {
+      manager.setFastForwardRatio(0);
+      manager.toggleFastForward(warpEnabled);
+    }
+    console.log(`Old Style Gaming C64: warp ${warpEnabled ? 'enabled' : 'disabled'}`);
   }
 
   function keyToMaskBit(key) {
@@ -399,6 +411,7 @@
       lastSimulatedMasks = [0, 0];
       setMask(1, localMask);
       setMask(2, remoteMask);
+      setWarp(warpEnabled);
       window.EJS_emulator?.elements?.parent?.focus?.();
     };
     window.EJS_onExit = () => {
@@ -512,6 +525,11 @@
 
     if (message.type === 'c64_swap_joystick_ports') {
       swapJoystickPorts();
+      return;
+    }
+
+    if (message.type === 'c64_set_warp') {
+      setWarp(message.enabled);
       return;
     }
 

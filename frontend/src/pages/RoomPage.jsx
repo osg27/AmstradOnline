@@ -149,6 +149,7 @@ export default function RoomPage() {
   const [arcadeDriver, setArcadeDriver] = useState('');
   const [arcadeRuntime, setArcadeRuntime] = useState('mamepacmantest.js');
   const [arcadeArgs, setArcadeArgs] = useState('');
+  const [c64WarpEnabled, setC64WarpEnabled] = useState(false);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -183,7 +184,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-12-6' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-12-7' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -2791,6 +2792,16 @@ export default function RoomPage() {
     setStatus('C64 joystick ports swapped');
   }
 
+  function toggleC64Warp() {
+    if (!canControlLocalEmulator || !hostStarted || !isC64) return;
+
+    const enabled = !c64WarpEnabled;
+    setC64WarpEnabled(enabled);
+    forwardInputToEmulator({ type: 'c64_set_warp', enabled });
+    addLog(`C64 warp ${enabled ? 'enabled' : 'disabled'}`);
+    setStatus(enabled ? 'C64 warp enabled' : 'C64 normal speed');
+  }
+
   async function handleDiskSelected(event) {
     try {
       const selectedFiles = Array.from(event.target.files || []);
@@ -3220,6 +3231,12 @@ export default function RoomPage() {
                   {isC64 ? (
                     <button type="button" className="secondary" onClick={swapC64JoystickPorts} disabled={!hostStarted}>
                       Swap joystick ports
+                    </button>
+                  ) : null}
+
+                  {isC64 ? (
+                    <button type="button" className={c64WarpEnabled ? 'active' : 'secondary'} onClick={toggleC64Warp} disabled={!hostStarted}>
+                      {c64WarpEnabled ? 'Normal speed' : 'Warp loading'}
                     </button>
                   ) : null}
 
