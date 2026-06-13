@@ -187,7 +187,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-13-1' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -554,6 +554,28 @@ export default function RoomPage() {
 
     targetWindow.postMessage(payload, window.location.origin);
   }, []);
+
+  const reloadC64Frame = useCallback(async ({ start = false } = {}) => {
+    const frame = emulatorFrameRef.current;
+    if (!frame || !isC64) return;
+
+    if (mirrorLoopRef.current) {
+      cancelAnimationFrame(mirrorLoopRef.current);
+      mirrorLoopRef.current = null;
+    }
+
+    await new Promise((resolve) => {
+      frame.addEventListener('load', resolve, { once: true });
+      const separator = emulatorSrc.includes('?') ? '&' : '?';
+      frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
+    });
+
+    if (!start) return;
+
+    frame.contentWindow?.postMessage({ type: 'c64_start', soloMode: isSoloMode }, window.location.origin);
+    const emulatorCanvas = await waitForEmulatorCanvas(frame);
+    startMirrorLoop(emulatorCanvas);
+  }, [emulatorSrc, isC64, isSoloMode]);
 
   const configureSerialChannel = useCallback((channel) => {
     serialChannelRef.current = channel;
@@ -2804,8 +2826,31 @@ export default function RoomPage() {
     swapDiskInputRef.current?.click();
   }
 
-  function resetHostEmulator() {
+  async function resetHostEmulator() {
     if (!canControlLocalEmulator || !hostStarted) return;
+
+    if (isC64) {
+      setError('');
+      setLoadedDiskName('');
+      setC64MediaCount(0);
+      setC64MediaIndex(0);
+      setC64WarpEnabled(false);
+      setC64JoystickPortsSwapped(false);
+      setInputCaptured(false);
+      setHostStarted(false);
+      hostStartedRef.current = false;
+      hostStartingRef.current = false;
+      await reloadC64Frame();
+      const mirrorCanvas = mirrorCanvasRef.current;
+      const context = mirrorCanvas?.getContext('2d');
+      if (mirrorCanvas && context) {
+        context.fillStyle = '#000';
+        context.fillRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
+      }
+      addLog('C64 returned to start state');
+      setStatus('C64 ready. Press Start emulator, then load a game');
+      return;
+    }
 
     const type = isAmiga || isAmigaLink
       ? 'amiga_reset'
@@ -2884,7 +2929,7 @@ export default function RoomPage() {
       })));
       const bytes = loadedFiles[0].bytes;
 
-      forwardInputToEmulator({
+      const loadMessage = {
         type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga || isAmigaLink ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isC64 ? 'c64_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: loadedFiles[0].fileName,
         bytes,
@@ -2893,7 +2938,13 @@ export default function RoomPage() {
         driver: arcadeDriverName,
         runtime: arcadeRuntime.trim() || 'mamepacmantest.js',
         args: arcadeArgs.trim(),
-      });
+      };
+
+      if (isC64 && loadedDiskName) {
+        setStatus('Preparing a clean C64 runtime');
+        await reloadC64Frame({ start: true });
+      }
+      forwardInputToEmulator(loadMessage);
 
       if (isArcade || isAmigaAga) {
         if (isArcade) {

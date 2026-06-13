@@ -195,28 +195,6 @@
     }, window.location.origin);
   }
 
-  function resetC64() {
-    const manager = window.EJS_emulator?.gameManager;
-    if (!window.EJS_emulator?.started || !manager?.restart) {
-      drawStatus('C64 reset unavailable', 'Load a game first');
-      return;
-    }
-
-    simulateMask(0, 0);
-    simulateMask(1, 0);
-    lastSimulatedMasks = [0, 0];
-    manager.restart();
-    setTimeout(() => {
-      manager.setKeyboardEnabled?.(true);
-      manager.setControllerPortDevice?.(0, 1);
-      setMask(1, localMask);
-      setMask(2, soloMode ? 0 : remoteMask);
-      setWarp(warpEnabled);
-      window.EJS_emulator?.elements?.parent?.focus?.();
-    }, 100);
-    console.log('Old Style Gaming C64: core reset');
-  }
-
   function nextMedia() {
     const manager = window.EJS_emulator?.gameManager;
     const count = manager?.getDiskCount?.() || 0;
@@ -644,11 +622,6 @@
         bytes: new Uint8Array(item.bytes || []),
       }));
       loadCurrentRom();
-      return;
-    }
-
-    if (message.type === 'c64_reset') {
-      resetC64();
       return;
     }
 
