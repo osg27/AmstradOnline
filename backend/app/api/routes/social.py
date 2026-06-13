@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import get_current_user
 from app.core.database import get_db
-from app.models.friendship import Friendship, RoomInvite
+from app.models.friendship import Friendship, LobbyMessage, RoomInvite
 from app.models.room import Room
 from app.models.user import User
 
@@ -17,6 +17,10 @@ ONLINE_WINDOW = timedelta(seconds=90)
 
 class FriendRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
+
+
+class LobbyChatMessage(BaseModel):
+    message: str = Field(min_length=1, max_length=300)
 
 
 def is_online(user: User, now: datetime) -> bool:
@@ -43,6 +47,75 @@ def get_friendship(db: Session, first_user_id: int, second_user_id: int) -> Frie
             (Friendship.requester_id == second_user_id) & (Friendship.addressee_id == first_user_id),
         )
     ).first()
+
+
+def get_friend_ids(db: Session, user_id: int) -> set[int]:
+    friendships = db.query(Friendship).filter(
+        Friendship.status == "accepted",
+        or_(
+            Friendship.requester_id == user_id,
+            Friendship.addressee_id == user_id,
+        ),
+    ).all()
+    return {
+        friendship.addressee_id if friendship.requester_id == user_id else friendship.requester_id
+        for friendship in friendships
+    }
+
+
+@router.get("/chat")
+def get_lobby_chat(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    visible_sender_ids = get_friend_ids(db, current_user.id) | {current_user.id}
+    messages = (
+        db.query(LobbyMessage, User)
+        .join(User, User.id == LobbyMessage.sender_id)
+        .filter(
+            LobbyMessage.sender_id.in_(visible_sender_ids),
+            LobbyMessage.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
+        )
+        .order_by(LobbyMessage.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return [
+        {
+            "id": message.id,
+            "username": sender.username,
+            "message": message.message,
+            "created_at": message.created_at,
+            "mine": sender.id == current_user.id,
+        }
+        for message, sender in reversed(messages)
+    ]
+
+
+@router.post("/chat")
+def send_lobby_chat_message(
+    payload: LobbyChatMessage,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    message_text = payload.message.strip()
+    if not message_text:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    message = LobbyMessage(sender_id=current_user.id, message=message_text)
+    db.add(message)
+    db.query(LobbyMessage).filter(
+        LobbyMessage.created_at < datetime.now(timezone.utc) - timedelta(days=30)
+    ).delete(synchronize_session=False)
+    db.commit()
+    db.refresh(message)
+    return {
+        "id": message.id,
+        "username": current_user.username,
+        "message": message.message,
+        "created_at": message.created_at,
+        "mine": True,
+    }
 
 
 @router.post("/heartbeat", status_code=204)

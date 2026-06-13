@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
+import LobbyChat from '../components/LobbyChat';
 import SocialSidebar from '../components/SocialSidebar';
 
 const PLAY_MODES = {
@@ -454,7 +455,10 @@ export default function LobbyPage() {
           </aside>
         </main>
         </div>
-        <SocialSidebar />
+        <div className="lobby-side-rail">
+          <LobbyChat />
+          <SocialSidebar />
+        </div>
       </div>
     </div>
   );
