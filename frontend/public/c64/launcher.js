@@ -3,7 +3,7 @@
   const gameContainer = document.getElementById('game');
   const context = screen.getContext('2d', { alpha: false });
 
-  let currentRom = null;
+  let currentMedia = [];
   let loaderScript = null;
   let gameUrl = null;
   let sharedAudioContext = null;
@@ -180,6 +180,55 @@
     setMask(1, localMask);
     setMask(2, soloMode ? 0 : remoteMask);
     console.log(`Old Style Gaming C64: P1 joystick using port ${joystickPortsSwapped ? '1' : '2'}`);
+  }
+
+  function postMediaStatus(message = '') {
+    const manager = window.EJS_emulator?.gameManager;
+    const count = manager ? (manager.getDiskCount?.() || 0) : currentMedia.length;
+    const current = count ? (manager?.getCurrentDisk?.() || 0) : 0;
+    window.parent.postMessage({
+      type: 'c64_media_status',
+      count,
+      current,
+      fileName: currentMedia[current]?.fileName || currentMedia[0]?.fileName || '',
+      message,
+    }, window.location.origin);
+  }
+
+  function resetC64() {
+    const manager = window.EJS_emulator?.gameManager;
+    if (!window.EJS_emulator?.started || !manager?.restart) {
+      drawStatus('C64 reset unavailable', 'Load a game first');
+      return;
+    }
+
+    simulateMask(0, 0);
+    simulateMask(1, 0);
+    lastSimulatedMasks = [0, 0];
+    manager.restart();
+    setTimeout(() => {
+      manager.setKeyboardEnabled?.(true);
+      manager.setControllerPortDevice?.(0, 1);
+      setMask(1, localMask);
+      setMask(2, soloMode ? 0 : remoteMask);
+      setWarp(warpEnabled);
+      window.EJS_emulator?.elements?.parent?.focus?.();
+    }, 100);
+    console.log('Old Style Gaming C64: core reset');
+  }
+
+  function nextMedia() {
+    const manager = window.EJS_emulator?.gameManager;
+    const count = manager?.getDiskCount?.() || 0;
+
+    if (count < 2) {
+      postMediaStatus('Only one C64 disk or tape is mounted');
+      return;
+    }
+
+    const next = ((manager.getCurrentDisk?.() || 0) + 1) % count;
+    manager.setCurrentDisk(next);
+    setTimeout(() => postMediaStatus(`Switched to C64 media ${next + 1} of ${count}`), 50);
   }
 
   function setWarp(enabled) {
@@ -414,6 +463,7 @@
       setMask(1, localMask);
       setMask(2, soloMode ? 0 : remoteMask);
       setWarp(warpEnabled);
+      postMediaStatus(currentMedia.length > 1 ? `${currentMedia.length} C64 media files mounted` : '');
       window.EJS_emulator?.elements?.parent?.focus?.();
     };
     window.EJS_onExit = () => {
@@ -422,13 +472,13 @@
   }
 
   async function loadCurrentRom() {
-    if (!currentRom) {
+    if (!currentMedia.length) {
       drawStatus('C64 ready', 'Load a C64 ROM from the room');
       return;
     }
 
     ensureAudio()?.resume?.().catch(() => {});
-    drawStatus('Checking C64 runtime', currentRom.fileName);
+    drawStatus('Checking C64 runtime', currentMedia[0].fileName);
     try {
       await preflightEmulatorJs();
     } catch (error) {
@@ -437,16 +487,92 @@
     }
 
     clearGameContainer();
-    const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
+    const gameBlob = currentMedia.length > 1
+      ? createMediaBundle(currentMedia)
+      : new Blob([currentMedia[0].bytes], { type: 'application/octet-stream' });
     gameUrl = URL.createObjectURL(gameBlob);
-    configureEmulator(currentRom.fileName, gameUrl);
-    drawStatus('Loading C64', currentRom.fileName);
+    const gameName = currentMedia.length > 1 ? 'old-style-c64-media.zip' : currentMedia[0].fileName;
+    configureEmulator(gameName, gameUrl);
+    drawStatus('Loading C64', currentMedia.length > 1 ? `${currentMedia.length} media files` : currentMedia[0].fileName);
 
     loaderScript = document.createElement('script');
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
     loaderScript.async = true;
     loaderScript.onerror = () => drawStatus('C64 failed to load', 'Could not load EmulatorJS');
     document.body.appendChild(loaderScript);
+  }
+
+  function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) {
+        crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+      }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function createMediaBundle(media) {
+    const encoder = new TextEncoder();
+    const usedNames = new Set();
+    const entries = media.map((item, index) => {
+      let name = item.fileName.replace(/[\\/:*?"<>|]/g, '_') || `disk-${index + 1}.d64`;
+      while (usedNames.has(name.toLowerCase())) name = `${index + 1}-${name}`;
+      usedNames.add(name.toLowerCase());
+      return { name, bytes: item.bytes };
+    });
+    entries.push({
+      name: 'old-style-c64.m3u',
+      bytes: encoder.encode(entries.map((entry) => entry.name).join('\n')),
+    });
+
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    const write16 = (view, position, value) => view.setUint16(position, value, true);
+    const write32 = (view, position, value) => view.setUint32(position, value, true);
+
+    entries.forEach((entry) => {
+      const name = encoder.encode(entry.name);
+      const checksum = crc32(entry.bytes);
+      const local = new Uint8Array(30 + name.length);
+      const localView = new DataView(local.buffer);
+      write32(localView, 0, 0x04034b50);
+      write16(localView, 4, 20);
+      write16(localView, 6, 0x0800);
+      write32(localView, 14, checksum);
+      write32(localView, 18, entry.bytes.length);
+      write32(localView, 22, entry.bytes.length);
+      write16(localView, 26, name.length);
+      local.set(name, 30);
+      localParts.push(local, entry.bytes);
+
+      const central = new Uint8Array(46 + name.length);
+      const centralView = new DataView(central.buffer);
+      write32(centralView, 0, 0x02014b50);
+      write16(centralView, 4, 20);
+      write16(centralView, 6, 20);
+      write16(centralView, 8, 0x0800);
+      write32(centralView, 16, checksum);
+      write32(centralView, 20, entry.bytes.length);
+      write32(centralView, 24, entry.bytes.length);
+      write16(centralView, 28, name.length);
+      write32(centralView, 42, offset);
+      central.set(name, 46);
+      centralParts.push(central);
+      offset += local.length + entry.bytes.length;
+    });
+
+    const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+    const end = new Uint8Array(22);
+    const endView = new DataView(end.buffer);
+    write32(endView, 0, 0x06054b50);
+    write16(endView, 8, entries.length);
+    write16(endView, 10, entries.length);
+    write32(endView, 12, centralSize);
+    write32(endView, 16, offset);
+    return new Blob([...localParts, ...centralParts, end], { type: 'application/zip' });
   }
 
   async function preflightEmulatorJs() {
@@ -513,16 +639,21 @@
     }
 
     if (message.type === 'c64_autoload') {
-      currentRom = {
-        fileName: message.fileName || 'game.d64',
-        bytes: new Uint8Array(message.bytes || []),
-      };
+      currentMedia = (message.media?.length ? message.media : [message]).map((item) => ({
+        fileName: item.fileName || 'game.d64',
+        bytes: new Uint8Array(item.bytes || []),
+      }));
       loadCurrentRom();
       return;
     }
 
     if (message.type === 'c64_reset') {
-      loadCurrentRom();
+      resetC64();
+      return;
+    }
+
+    if (message.type === 'c64_next_media') {
+      nextMedia();
       return;
     }
 

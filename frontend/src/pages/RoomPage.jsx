@@ -150,7 +150,9 @@ export default function RoomPage() {
   const [arcadeRuntime, setArcadeRuntime] = useState('mamepacmantest.js');
   const [arcadeArgs, setArcadeArgs] = useState('');
   const [c64WarpEnabled, setC64WarpEnabled] = useState(false);
-  const [c64JoystickPort, setC64JoystickPort] = useState(2);
+  const [c64JoystickPortsSwapped, setC64JoystickPortsSwapped] = useState(false);
+  const [c64MediaCount, setC64MediaCount] = useState(0);
+  const [c64MediaIndex, setC64MediaIndex] = useState(0);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -185,7 +187,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-12-8' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-13-1' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -622,6 +624,28 @@ export default function RoomPage() {
       window.removeEventListener('message', handleArcadeMessage);
     };
   }, [addLog]);
+
+  useEffect(() => {
+    if (!isC64) return undefined;
+
+    function handleC64Message(event) {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== emulatorFrameRef.current?.contentWindow) return;
+
+      const message = event.data || {};
+      if (message.type !== 'c64_media_status') return;
+
+      setC64MediaCount(Number(message.count) || 0);
+      setC64MediaIndex(Number(message.current) || 0);
+      if (message.message) {
+        addLog(message.message);
+        setStatus(message.message);
+      }
+    }
+
+    window.addEventListener('message', handleC64Message);
+    return () => window.removeEventListener('message', handleC64Message);
+  }, [addLog, isC64]);
 
   useEffect(() => {
     if (!isHost || !emulatorFrameLoadCount || !kickstartStorageKey) return undefined;
@@ -2755,7 +2779,16 @@ export default function RoomPage() {
   }
 
   function openSwapDiskPicker() {
-    if (!canControlLocalEmulator || !isAmigaFamily || !hostStarted) return;
+    if (!canControlLocalEmulator || (!isAmigaFamily && !isC64) || !hostStarted) return;
+
+    if (isC64) {
+      if (c64MediaCount < 2) {
+        setStatus('Load all C64 disks or tapes together first');
+        return;
+      }
+      forwardInputToEmulator({ type: 'c64_next_media' });
+      return;
+    }
 
     if (isAmigaAga) {
       if (loadedAgaDiskCount < 2) {
@@ -2788,11 +2821,11 @@ export default function RoomPage() {
   function swapC64JoystickPorts() {
     if (!canControlLocalEmulator || !hostStarted || !isC64) return;
 
-    const nextPort = c64JoystickPort === 2 ? 1 : 2;
-    setC64JoystickPort(nextPort);
+    const nextSwapped = !c64JoystickPortsSwapped;
+    setC64JoystickPortsSwapped(nextSwapped);
     forwardInputToEmulator({ type: 'c64_swap_joystick_ports', soloMode: isSoloMode });
-    addLog(`P1 C64 joystick switched to port ${nextPort}`);
-    setStatus(`P1 C64 joystick using port ${nextPort}`);
+    addLog(`C64 joysticks switched: P1 port ${nextSwapped ? 1 : 2}, P2 port ${nextSwapped ? 2 : 1}`);
+    setStatus(`P1 port ${nextSwapped ? 1 : 2}, P2 port ${nextSwapped ? 2 : 1}`);
   }
 
   function toggleC64Warp() {
@@ -2842,7 +2875,7 @@ export default function RoomPage() {
         return;
       }
 
-      const filesToLoad = isAmigaAga && !isSwapDisk && selectedFiles.length > 1
+      const filesToLoad = (isAmigaAga || isC64) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
       const loadedFiles = await Promise.all(filesToLoad.map(async (selectedFile) => ({
@@ -2856,6 +2889,7 @@ export default function RoomPage() {
         fileName: loadedFiles[0].fileName,
         bytes,
         disks: isAmigaAga && !isSwapDisk ? loadedFiles : undefined,
+        media: isC64 ? loadedFiles : undefined,
         driver: arcadeDriverName,
         runtime: arcadeRuntime.trim() || 'mamepacmantest.js',
         args: arcadeArgs.trim(),
@@ -2871,6 +2905,10 @@ export default function RoomPage() {
       }
       if (isAmigaAga && !isSwapDisk) {
         setLoadedAgaDiskCount(loadedFiles.length);
+      }
+      if (isC64) {
+        setC64MediaCount(loadedFiles.length);
+        setC64MediaIndex(0);
       }
 
       const loadedLabel = loadedFiles.length > 1
@@ -3131,7 +3169,7 @@ export default function RoomPage() {
                   ref={fileInputRef}
                   type="file"
                   accept={acceptedMedia}
-                  multiple={isAmigaAga}
+                  multiple={isAmigaAga || isC64}
                   data-mode="load"
                   onChange={handleDiskSelected}
                   style={{ display: 'none' }}
@@ -3209,9 +3247,9 @@ export default function RoomPage() {
                     {mediaLabel}
                   </button>
 
-                  {isAmigaFamily ? (
+                  {isAmigaFamily || isC64 ? (
                     <button type="button" className="secondary" onClick={openSwapDiskPicker} disabled={!hostStarted}>
-                      {isAmigaAga ? 'Next disk' : 'Swap disk'}
+                      {isC64 ? `Next C64 media${c64MediaCount > 1 ? ` (${c64MediaIndex + 1}/${c64MediaCount})` : ''}` : isAmigaAga ? 'Next disk' : 'Swap disk'}
                     </button>
                   ) : null}
 
@@ -3233,7 +3271,7 @@ export default function RoomPage() {
 
                   {isC64 ? (
                     <button type="button" className="secondary" onClick={swapC64JoystickPorts} disabled={!hostStarted}>
-                      P1 joystick: port {c64JoystickPort}
+                      P1 port {c64JoystickPortsSwapped ? 1 : 2} / P2 port {c64JoystickPortsSwapped ? 2 : 1}
                     </button>
                   ) : null}
 
