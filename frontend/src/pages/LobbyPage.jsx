@@ -81,7 +81,7 @@ const SYSTEM_GROUPS = [
   {
     id: '16bit',
     label: '16-bit',
-    strapline: 'Amiga, Mega Drive and SNES games.',
+    strapline: 'Amiga 500, Mega Drive and SNES games.',
     systems: [
       {
         id: 'amiga',
@@ -95,21 +95,6 @@ const SYSTEM_GROUPS = [
           hosted: { enabled: true },
           party: { enabled: false, note: 'Not available yet' },
           link: { enabled: true, system: 'amiga_link', testing: true },
-        },
-      },
-      {
-        id: 'amiga_aga',
-        name: 'Amiga AGA',
-        shortName: 'A1200',
-        accent: 'blue',
-        summary: 'Amiga 1200 and AGA games. Multi-disk games are supported.',
-        formats: '.adf .zip',
-        testing: true,
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available yet' },
         },
       },
       {
@@ -139,6 +124,28 @@ const SYSTEM_GROUPS = [
           hosted: { enabled: true },
           party: { enabled: false, note: 'Not available yet' },
           link: { enabled: false, note: 'Not available' },
+        },
+      },
+    ],
+  },
+  {
+    id: '32bit',
+    label: '32-bit',
+    strapline: 'Amiga 1200 and AGA games.',
+    systems: [
+      {
+        id: 'amiga_aga',
+        name: 'Amiga AGA',
+        shortName: 'A1200',
+        accent: 'blue',
+        summary: 'Amiga 1200 and AGA games. Multi-disk games are supported.',
+        formats: '.adf .zip',
+        testing: true,
+        modes: {
+          solo: { enabled: true },
+          hosted: { enabled: true },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available yet' },
         },
       },
     ],
