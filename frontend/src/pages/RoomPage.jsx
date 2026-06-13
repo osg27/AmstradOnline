@@ -184,7 +184,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isC64 ? 'Commodore 64' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
-    ? '/amiga-aga/launcher.html?v=2026-06-07-10'
+    ? '/amiga-aga/launcher.html?v=2026-06-13-1'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
@@ -576,6 +576,34 @@ export default function RoomPage() {
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
     startMirrorLoop(emulatorCanvas);
   }, [emulatorSrc, isC64, isSoloMode]);
+
+  const reloadAmigaAgaFrame = useCallback(async () => {
+    const frame = emulatorFrameRef.current;
+    if (!frame || !isAmigaAga) return;
+
+    if (mirrorLoopRef.current) {
+      cancelAnimationFrame(mirrorLoopRef.current);
+      mirrorLoopRef.current = null;
+    }
+
+    await new Promise((resolve) => {
+      frame.addEventListener('load', resolve, { once: true });
+      const separator = emulatorSrc.includes('?') ? '&' : '?';
+      frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
+    });
+
+    const storedKickstart = await loadStoredKickstart(AMIGA_AGA_KICKSTART_KEY);
+    if (storedKickstart) {
+      frame.contentWindow?.postMessage({
+        type: 'amiga_kickstart',
+        fileName: storedKickstart.fileName,
+        bytes: storedKickstart.bytes,
+      }, window.location.origin);
+    }
+
+    const emulatorCanvas = await waitForEmulatorCanvas(frame);
+    startMirrorLoop(emulatorCanvas);
+  }, [emulatorSrc, isAmigaAga]);
 
   const configureSerialChannel = useCallback((channel) => {
     serialChannelRef.current = channel;
@@ -2943,6 +2971,10 @@ export default function RoomPage() {
       if (isC64 && loadedDiskName) {
         setStatus('Preparing a clean C64 runtime');
         await reloadC64Frame({ start: true });
+      }
+      if (isAmigaAga && loadedDiskName) {
+        setStatus('Preparing a clean Amiga AGA runtime');
+        await reloadAmigaAgaFrame();
       }
       forwardInputToEmulator(loadMessage);
 

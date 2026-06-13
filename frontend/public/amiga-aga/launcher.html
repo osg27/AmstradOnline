@@ -55,6 +55,8 @@
         'puae_cpu_model = "68020"',
         'puae_chipmem_size = "4"',
         'puae_fastmem_size = "8"',
+        'puae_floppy_multidrive = "disabled"',
+        'puae_physical_keyboard_pass_through = "enabled"',
       ].join("\n");
 
       let pendingGame = null;
@@ -66,6 +68,7 @@
       let getCurrentDisk = null;
       let setCurrentDisk = null;
       let simulateRuntimeInput = null;
+      let setKeyboardEnabled = null;
       let audioCaptureStream = null;
       let capturedAudioContext = null;
       const joystickMasks = [0, 0];
@@ -281,13 +284,15 @@
         const init = { key: key || code, code, keyCode, which: keyCode, bubbles: true, cancelable: true };
         const canvasEvent = new KeyboardEvent(type, init);
         const documentEvent = new KeyboardEvent(type, init);
-        [canvasEvent, documentEvent].forEach((event) => {
+        const windowEvent = new KeyboardEvent(type, init);
+        [canvasEvent, documentEvent, windowEvent].forEach((event) => {
           Object.defineProperty(event, "keyCode", { get: () => keyCode });
           Object.defineProperty(event, "which", { get: () => keyCode });
         });
         gameElement.focus();
         gameElement.dispatchEvent(canvasEvent);
         document.dispatchEvent(documentEvent);
+        window.dispatchEvent(windowEvent);
       }
 
       async function startEmulator() {
@@ -330,6 +335,8 @@
           getCurrentDisk = runtimeModule.cwrap("get_current_disk", "number", []);
           setCurrentDisk = runtimeModule.cwrap("set_current_disk", null, ["number"]);
           simulateRuntimeInput = runtimeModule.cwrap("simulate_input", null, ["number", "number", "number"]);
+          setKeyboardEnabled = runtimeModule.cwrap("ejs_set_keyboard_enabled", null, ["number"]);
+          setKeyboardEnabled(1);
           runtimeModule.callMain(["/game.m3u"]);
           runtimeModule.resumeMainLoop?.();
           gameElement.focus();
