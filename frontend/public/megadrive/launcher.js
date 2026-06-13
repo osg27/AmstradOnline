@@ -5,8 +5,7 @@
   const SAMPLING_PER_FPS = 736;
   const GAMEPAD_API_INDEX = 64;
   const GAMEPAD_API_STRIDE = 32;
-  const FPS = 60;
-  const INTERVAL = 1000 / FPS;
+  const NTSC_FPS = 60;
   const SOUND_DELAY_FRAME = 8;
 
   const canvas = document.getElementById('screen');
@@ -30,8 +29,10 @@
   let audioKeepAliveGain = null;
   let soundShedTime = 0;
   let then = Date.now();
-  let fps = FPS;
-  let frame = FPS;
+  let targetFps = NTSC_FPS;
+  let interval = 1000 / targetFps;
+  let fps = targetFps;
+  let frame = targetFps;
   let fpsStartedAt = Date.now();
   let localMask = 0;
   let remoteMask = 0;
@@ -165,6 +166,8 @@
     }
 
     gens._start();
+    targetFps = gens._is_pal() ? 50 : NTSC_FPS;
+    interval = 1000 / targetFps;
     bindViews();
     started = true;
     pendingStart = false;
@@ -188,6 +191,8 @@
     }
 
     gens._start();
+    targetFps = gens._is_pal() ? 50 : NTSC_FPS;
+    interval = 1000 / targetFps;
     bindViews();
     started = true;
     pendingStart = false;
@@ -226,11 +231,11 @@
 
     const now = Date.now();
     const delta = now - then;
-    if (delta <= INTERVAL) return;
+    if (delta <= interval) return;
 
     updateInput();
     gens._tick();
-    then = now - (delta % INTERVAL);
+    then = now - (delta % interval);
 
     imageData.data.set(vram);
     for (let index = 3; index < imageData.data.length; index += 4) {
@@ -249,7 +254,7 @@
     const sampleCount = gens._sound();
     if (!audioContext || sampleCount <= 0) return;
 
-    if (fps < FPS) {
+    if (fps < targetFps) {
       soundShedTime = 0;
       return;
     }

@@ -187,7 +187,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-07-10'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-01-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
