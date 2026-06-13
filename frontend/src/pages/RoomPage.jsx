@@ -82,6 +82,7 @@ export default function RoomPage() {
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
   const [loadedAgaDiskCount, setLoadedAgaDiskCount] = useState(0);
+  const [currentAgaDiskIndex, setCurrentAgaDiskIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -184,7 +185,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isC64 ? 'Commodore 64' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
-    ? '/amiga-aga/launcher.html?v=2026-06-13-1'
+    ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
     : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
@@ -696,6 +697,28 @@ export default function RoomPage() {
     window.addEventListener('message', handleC64Message);
     return () => window.removeEventListener('message', handleC64Message);
   }, [addLog, isC64]);
+
+  useEffect(() => {
+    if (!isAmigaAga) return undefined;
+
+    function handleAmigaAgaMessage(event) {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== emulatorFrameRef.current?.contentWindow) return;
+
+      const message = event.data || {};
+      if (message.type !== 'amiga_aga_disk_status') return;
+
+      setLoadedAgaDiskCount(Number(message.count) || 0);
+      setCurrentAgaDiskIndex(Number(message.current) || 0);
+      if (message.message) {
+        addLog(message.message);
+        setStatus(message.message);
+      }
+    }
+
+    window.addEventListener('message', handleAmigaAgaMessage);
+    return () => window.removeEventListener('message', handleAmigaAgaMessage);
+  }, [addLog, isAmigaAga]);
 
   useEffect(() => {
     if (!isHost || !emulatorFrameLoadCount || !kickstartStorageKey) return undefined;
@@ -2840,18 +2863,14 @@ export default function RoomPage() {
       return;
     }
 
-    if (isAmigaAga) {
-      if (loadedAgaDiskCount < 2) {
-        setStatus('Load all AGA disks together before starting');
-        return;
-      }
-      forwardInputToEmulator({ type: 'amiga_aga_next_disk' });
-      addLog('Requested next AGA disk');
-      setStatus('Switching to next AGA disk');
-      return;
-    }
-
     swapDiskInputRef.current?.click();
+  }
+
+  function selectAgaDisk(index) {
+    if (!canControlLocalEmulator || !hostStarted || !isAmigaAga) return;
+
+    forwardInputToEmulator({ type: 'amiga_aga_select_disk', index });
+    setStatus(`Inserting AGA disk ${index + 1}`);
   }
 
   async function resetHostEmulator() {
@@ -2988,6 +3007,7 @@ export default function RoomPage() {
       }
       if (isAmigaAga && !isSwapDisk) {
         setLoadedAgaDiskCount(loadedFiles.length);
+        setCurrentAgaDiskIndex(0);
       }
       if (isC64) {
         setC64MediaCount(loadedFiles.length);
@@ -3330,11 +3350,25 @@ export default function RoomPage() {
                     {mediaLabel}
                   </button>
 
-                  {isAmigaFamily || isC64 ? (
+                  {(isAmiga || isAmigaLink || isC64) ? (
                     <button type="button" className="secondary" onClick={openSwapDiskPicker} disabled={!hostStarted}>
-                      {isC64 ? `Next C64 media${c64MediaCount > 1 ? ` (${c64MediaIndex + 1}/${c64MediaCount})` : ''}` : isAmigaAga ? 'Next disk' : 'Swap disk'}
+                      {isC64 ? `Next C64 media${c64MediaCount > 1 ? ` (${c64MediaIndex + 1}/${c64MediaCount})` : ''}` : 'Swap disk'}
                     </button>
                   ) : null}
+
+                  {isAmigaAga && loadedAgaDiskCount > 0
+                    ? Array.from({ length: loadedAgaDiskCount }, (_, index) => (
+                      <button
+                        key={`aga-disk-${index + 1}`}
+                        type="button"
+                        className={currentAgaDiskIndex === index ? 'active' : 'secondary'}
+                        onClick={() => selectAgaDisk(index)}
+                        disabled={!hostStarted}
+                      >
+                        Disk {index + 1}
+                      </button>
+                    ))
+                    : null}
 
                   {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>
