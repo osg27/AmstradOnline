@@ -189,12 +189,12 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-1' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
     : isMegaDrive ? '.bin,.gen,.md,.smd' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2' : isPcEngine ? '.pce,.sgx,.zip' : isC64 ? '.d64,.t64,.tap,.prg,.crt' : isArcade ? '.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
-  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? 'Load PC Engine ROM' : isC64 ? 'Load C64 file' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
+  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isC64 ? 'Load C64 file' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
     : isSoloMode
@@ -606,6 +606,36 @@ export default function RoomPage() {
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
     startMirrorLoop(emulatorCanvas);
   }, [emulatorSrc, isAmigaAga]);
+
+  const reloadPcEngineFrame = useCallback(async () => {
+    const frame = emulatorFrameRef.current;
+    if (!frame || !isPcEngine) return;
+
+    if (mirrorLoopRef.current) {
+      cancelAnimationFrame(mirrorLoopRef.current);
+      mirrorLoopRef.current = null;
+    }
+
+    await new Promise((resolve) => {
+      frame.addEventListener('load', resolve, { once: true });
+      const separator = emulatorSrc.includes('?') ? '&' : '?';
+      frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
+    });
+
+    const emulatorCanvas = await waitForEmulatorCanvas(frame);
+    startMirrorLoop(emulatorCanvas);
+
+    const previousAudioTrack = hostAudioStreamRef.current?.getAudioTracks?.()[0] || null;
+    const nextAudioStream = await waitForHostAudioStream(frame);
+    const nextAudioTrack = nextAudioStream?.getAudioTracks?.()[0] || null;
+
+    if (!isSoloMode && previousAudioTrack && nextAudioTrack) {
+      const audioSender = pcRef.current?.getSenders?.().find((sender) => sender.track === previousAudioTrack);
+      await audioSender?.replaceTrack(nextAudioTrack);
+    }
+
+    hostAudioStreamRef.current = nextAudioStream || null;
+  }, [emulatorSrc, isPcEngine, isSoloMode]);
 
   const configureSerialChannel = useCallback((channel) => {
     serialChannelRef.current = channel;
@@ -2904,6 +2934,16 @@ export default function RoomPage() {
       return;
     }
 
+    if (isPcEngine) {
+      setError('');
+      setLoadedDiskName('');
+      setInputCaptured(false);
+      await reloadPcEngineFrame();
+      addLog('PC Engine returned to start state');
+      setStatus('PC Engine ready. Load a game');
+      return;
+    }
+
     const type = isAmiga || isAmigaLink
       ? 'amiga_reset'
       : isAmigaAga
@@ -2999,6 +3039,10 @@ export default function RoomPage() {
       if (isAmigaAga && loadedDiskName) {
         setStatus('Preparing a clean Amiga AGA runtime');
         await reloadAmigaAgaFrame();
+      }
+      if (isPcEngine && loadedDiskName) {
+        setStatus('Preparing a clean PC Engine runtime');
+        await reloadPcEngineFrame();
       }
       forwardInputToEmulator(loadMessage);
 

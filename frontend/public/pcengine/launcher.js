@@ -234,6 +234,14 @@
     }
   }
 
+  function resetToReady() {
+    currentRom = null;
+    localMask = 0;
+    remoteMask = 0;
+    clearGameContainer();
+    drawStatus('PC Engine ready', 'Load a PC Engine / TurboGrafx ROM from the room');
+  }
+
   function configureEmulator(fileName, romUrl) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
@@ -421,7 +429,7 @@
     }
 
     if (message.type === 'pcengine_reset') {
-      loadCurrentRom();
+      resetToReady();
       return;
     }
 
