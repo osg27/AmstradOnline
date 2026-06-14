@@ -37,10 +37,10 @@ def generate_room_code(length: int = 6) -> str:
     return "".join(random.choice(chars) for _ in range(length))
 
 
-def require_system_access(db: Session, user_id: int, system: str) -> None:
+def require_system_access(db: Session, user_id: int, system: str, *, creating: bool = False) -> None:
     if system in UNAVAILABLE_SYSTEMS:
         raise HTTPException(status_code=403, detail="This system is still under construction")
-    if system in SUPER_ADMIN_ONLY_SYSTEMS:
+    if creating and system in SUPER_ADMIN_ONLY_SYSTEMS:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not is_super_admin_user(user):
             raise HTTPException(status_code=403, detail="This system is only available to the super admin")
@@ -63,7 +63,7 @@ def create_room(
     user_id: int = Depends(get_current_user_id),
 ):
     system = payload.system if payload else "cpc"
-    require_system_access(db, user_id, system)
+    require_system_access(db, user_id, system, creating=True)
 
     room_code = generate_room_code()
     while db.query(Room).filter(Room.room_code == room_code).first():
