@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: list[str] | str = ["http://localhost:5173"]
     ADMIN_USERNAME: str | None = None
+    SUPER_ADMIN_USERNAME: str = "OldStyleGaming"
     TESTER_USERNAMES: list[str] | str = DEFAULT_TESTER_USERNAMES
     PUBLIC_APP_URL: str = "http://localhost:5173"
     APP_BASE_URL: str = ""

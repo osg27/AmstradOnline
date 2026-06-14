@@ -4,7 +4,7 @@ import string
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import can_use_preview_systems, is_admin_user
+from app.api.routes.auth import can_use_preview_systems, is_admin_user, is_super_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.room import Room
@@ -14,8 +14,9 @@ from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomJoinRequ
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "snes", "c64"}
-UNAVAILABLE_SYSTEMS = {"arcade"}
+UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
+SUPER_ADMIN_ONLY_SYSTEMS = {"arcade"}
 
 
 def get_current_user_id(authorization: str | None = Header(default=None)) -> int:
@@ -39,6 +40,11 @@ def generate_room_code(length: int = 6) -> str:
 def require_system_access(db: Session, user_id: int, system: str) -> None:
     if system in UNAVAILABLE_SYSTEMS:
         raise HTTPException(status_code=403, detail="This system is still under construction")
+    if system in SUPER_ADMIN_ONLY_SYSTEMS:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not is_super_admin_user(user):
+            raise HTTPException(status_code=403, detail="This system is only available to the super admin")
+        return
     if system in ADMIN_ONLY_SYSTEMS:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not is_admin_user(user):

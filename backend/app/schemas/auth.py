@@ -29,4 +29,5 @@ class AuthResponse(BaseModel):
     token_type: str = "bearer"
     username: str
     is_admin: bool = False
+    is_super_admin: bool = False
     is_tester: bool = False

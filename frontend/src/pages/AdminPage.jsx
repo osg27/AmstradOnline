@@ -144,22 +144,24 @@ export default function AdminPage() {
                         <td>{formatDate(user.last_login_at)}</td>
                         <td>{user.login_count}</td>
                         <td>
-                          <select
-                            aria-label={`${user.username} role`}
-                            value={user.role || 'user'}
-                            disabled={savingRoleUserId === user.id || user.username === stats.admin}
-                            onChange={(event) => updateRole(user, event.target.value)}
-                          >
-                            <option value="user">User</option>
-                            <option value="tester">Tester</option>
-                            <option value="admin">Admin</option>
-                          </select>
+                          {user.is_super_admin ? <strong>Super admin</strong> : (
+                            <select
+                              aria-label={`${user.username} role`}
+                              value={user.role || 'user'}
+                              disabled={savingRoleUserId === user.id || user.username === stats.admin}
+                              onChange={(event) => updateRole(user, event.target.value)}
+                            >
+                              <option value="user">User</option>
+                              <option value="tester">Tester</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          )}
                         </td>
                         <td>
                           <button
                             className="danger"
                             type="button"
-                            disabled={deletingUserId === user.id}
+                            disabled={deletingUserId === user.id || user.is_super_admin}
                             onClick={() => deleteUser(user)}
                           >
                             {deletingUserId === user.id ? 'Deleting...' : 'Delete'}

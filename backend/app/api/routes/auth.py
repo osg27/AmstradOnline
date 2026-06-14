@@ -28,8 +28,12 @@ VERIFY_EMAIL = "verify_email"
 RESET_PASSWORD = "reset_password"
 
 
+def is_super_admin_user(user: User) -> bool:
+    return user.username.lower() == settings.SUPER_ADMIN_USERNAME.lower()
+
+
 def is_admin_user(user: User) -> bool:
-    return user.role == "admin" or bool(
+    return user.role == "admin" or is_super_admin_user(user) or bool(
         settings.ADMIN_USERNAME and user.username.lower() == settings.ADMIN_USERNAME.lower()
     )
 
@@ -40,7 +44,9 @@ def is_tester_user(user: User) -> bool:
 
 def initial_role_for_username(username: str) -> str:
     normalized = username.lower()
-    if settings.ADMIN_USERNAME and normalized == settings.ADMIN_USERNAME.lower():
+    if normalized == settings.SUPER_ADMIN_USERNAME.lower() or (
+        settings.ADMIN_USERNAME and normalized == settings.ADMIN_USERNAME.lower()
+    ):
         return "admin"
     return "user"
 
@@ -178,6 +184,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         access_token=token,
         username=user.username,
         is_admin=is_admin_user(user),
+        is_super_admin=is_super_admin_user(user),
         is_tester=is_tester_user(user),
     )
 
@@ -234,5 +241,6 @@ def get_me(user: User = Depends(get_current_user)):
         "id": user.id,
         "username": user.username,
         "is_admin": is_admin_user(user),
+        "is_super_admin": is_super_admin_user(user),
         "is_tester": is_tester_user(user),
     }

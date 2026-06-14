@@ -161,9 +161,9 @@ const SYSTEM_GROUPS = [
         name: 'MAME Arcade',
         shortName: 'MAME',
         accent: 'gold',
-        summary: 'Arcade rooms are being built and will be available later.',
+        summary: 'MAME arcade games with configurable drivers and runtimes.',
         formats: '.zip',
-        underConstruction: true,
+        superAdminOnly: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
@@ -183,6 +183,7 @@ export default function LobbyPage() {
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(localStorage.getItem('isSuperAdmin') === 'true');
   const [isTester, setIsTester] = useState(localStorage.getItem('isTester') === 'true');
   const [selectedEra, setSelectedEra] = useState('8bit');
   const [selectedSystemId, setSelectedSystemId] = useState('cpc');
@@ -193,7 +194,9 @@ export default function LobbyPage() {
 
   const visibleGroups = useMemo(() => SYSTEM_GROUPS.map((group) => ({
     ...group,
-    systems: group.systems.filter((system) => !system.adminOnly || isAdmin).map((system) => {
+    systems: group.systems.filter((system) => (
+      (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin)
+    )).map((system) => {
       const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
       const locked = lockedForTesting || Boolean(system.underConstruction);
       return {
@@ -206,7 +209,7 @@ export default function LobbyPage() {
             : null,
       };
     }),
-  })).filter((group) => group.systems.length > 0), [canUsePreviewSystems, isAdmin]);
+  })).filter((group) => group.systems.length > 0), [canUsePreviewSystems, isAdmin, isSuperAdmin]);
 
   const selectedGroup = visibleGroups.find((group) => group.id === selectedEra) || visibleGroups[0];
   const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0];
@@ -217,11 +220,14 @@ export default function LobbyPage() {
       try {
         const session = await apiFetch('/auth/me');
         const nextIsAdmin = Boolean(session.is_admin);
+        const nextIsSuperAdmin = Boolean(session.is_super_admin);
         const nextIsTester = Boolean(session.is_tester);
 
         setIsAdmin(nextIsAdmin);
+        setIsSuperAdmin(nextIsSuperAdmin);
         setIsTester(nextIsTester);
         localStorage.setItem('isAdmin', nextIsAdmin ? 'true' : 'false');
+        localStorage.setItem('isSuperAdmin', nextIsSuperAdmin ? 'true' : 'false');
         localStorage.setItem('isTester', nextIsTester ? 'true' : 'false');
         if (nextIsAdmin || nextIsTester) {
           const notifications = await apiFetch('/auth/feedback/notifications');
@@ -229,9 +235,11 @@ export default function LobbyPage() {
         }
       } catch {
         setIsAdmin(false);
+        setIsSuperAdmin(false);
         setIsTester(false);
         setFeedbackNotificationCount(0);
         localStorage.removeItem('isAdmin');
+        localStorage.removeItem('isSuperAdmin');
         localStorage.removeItem('isTester');
       }
     }
@@ -261,7 +269,7 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (modeConfig.testing && !canUsePreviewSystems)) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin) || (modeConfig.testing && !canUsePreviewSystems)) {
         throw new Error('That play mode is not ready yet.');
       }
 
@@ -303,6 +311,7 @@ export default function LobbyPage() {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     localStorage.removeItem('isAdmin');
+    localStorage.removeItem('isSuperAdmin');
     localStorage.removeItem('isTester');
     navigate('/login');
   }

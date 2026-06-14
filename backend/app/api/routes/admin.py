@@ -5,11 +5,11 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import is_admin_user
+from app.api.routes.auth import is_admin_user, is_super_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotification
-from app.models.friendship import Friendship, RoomInvite
+from app.models.friendship import Friendship, LobbyMessage, RoomInvite
 from app.models.room import Room
 from app.models.user import AccountToken, User
 
@@ -76,6 +76,7 @@ def get_admin_stats(
 
     return {
         "admin": admin_user.username,
+        "is_super_admin": is_super_admin_user(admin_user),
         "totals": {
             "users": total_users,
             "rooms": total_rooms,
@@ -92,6 +93,7 @@ def get_admin_stats(
                 "last_login_at": user.last_login_at,
                 "login_count": user.login_count or 0,
                 "role": user.role,
+                "is_super_admin": is_super_admin_user(user),
             }
             for user in recent_users
         ],
@@ -108,6 +110,8 @@ def update_user_role(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if is_super_admin_user(user):
+        raise HTTPException(status_code=403, detail="The super admin role is protected")
     if user.id == admin_user.id:
         raise HTTPException(status_code=400, detail="You cannot change your own admin role")
 
@@ -125,6 +129,8 @@ def delete_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if is_super_admin_user(user):
+        raise HTTPException(status_code=403, detail="The super admin account is protected")
     if user.id == admin_user.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own admin account")
 
@@ -151,6 +157,7 @@ def delete_user(
         | (RoomInvite.recipient_id == user.id)
         | RoomInvite.room_id.in_(db.query(Room.id).filter(Room.owner_user_id == user.id))
     ).delete(synchronize_session=False)
+    db.query(LobbyMessage).filter(LobbyMessage.sender_id == user.id).delete(synchronize_session=False)
     db.query(Room).filter(Room.owner_user_id == user.id).delete(synchronize_session=False)
     db.query(AccountToken).filter(AccountToken.user_id == user.id).delete(synchronize_session=False)
     db.delete(user)

@@ -41,6 +41,11 @@ def ensure_runtime_columns(engine):
                     {"username": username},
                 )
 
+        connection.execute(
+            text("UPDATE users SET role = 'admin' WHERE LOWER(username) = LOWER(:username)"),
+            {"username": settings.SUPER_ADMIN_USERNAME},
+        )
+
         if "last_seen_at" not in user_columns:
             connection.execute(text(f"ALTER TABLE users ADD COLUMN last_seen_at {timestamp_type}"))
 
