@@ -12,6 +12,7 @@ const SYSTEM_OPTIONS = [
   ['amiga_aga', 'Amiga AGA'],
   ['megadrive', 'Mega Drive'],
   ['snes', 'SNES'],
+  ['pcengine', 'PC Engine / TurboGrafx-16'],
   ['arcade', 'Arcade / MAME'],
 ];
 

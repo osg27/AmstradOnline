@@ -82,7 +82,7 @@ const SYSTEM_GROUPS = [
   {
     id: '16bit',
     label: '16-bit',
-    strapline: 'Amiga 500, Mega Drive and SNES games.',
+    strapline: 'Amiga 500, Mega Drive, SNES and PC Engine games.',
     systems: [
       {
         id: 'amiga',
@@ -120,6 +120,21 @@ const SYSTEM_GROUPS = [
         summary: 'SNES games with two-player controls.',
         formats: '.sfc .smc',
         testing: true,
+        modes: {
+          solo: { enabled: true },
+          hosted: { enabled: true },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available' },
+        },
+      },
+      {
+        id: 'pcengine',
+        name: 'PC Engine / TurboGrafx-16',
+        shortName: 'PCE',
+        accent: 'gold',
+        summary: 'PC Engine and TurboGrafx-16 HuCard games.',
+        formats: '.pce .sgx .zip',
+        superAdminOnly: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
