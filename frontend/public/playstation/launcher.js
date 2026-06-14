@@ -6,6 +6,7 @@
   let currentRom = null;
   let loaderScript = null;
   let gameUrl = null;
+  let externalGameUrls = [];
   let sharedAudioContext = null;
   let audioDestination = null;
   let keepAlive = null;
@@ -249,10 +250,12 @@
       loaderScript.remove();
       loaderScript = null;
     }
-    if (gameUrl) {
+    if (typeof gameUrl === 'string') {
       URL.revokeObjectURL(gameUrl);
-      gameUrl = null;
     }
+    gameUrl = null;
+    externalGameUrls.forEach((url) => URL.revokeObjectURL(url));
+    externalGameUrls = [];
   }
 
   function resetToReady() {
@@ -263,13 +266,14 @@
     drawStatus('PlayStation ready', 'Load a PlayStation game from the room');
   }
 
-  function configureEmulator(fileName, romUrl) {
+  function configureEmulator(fileName, romUrl, externalFiles = {}) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
     window.EJS_core = 'psx';
     window.EJS_biosUrl = biosUrl;
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
+    window.EJS_externalFiles = externalFiles;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
       'emulator.js': '/emulatorjs/data/src/emulator.js',
@@ -373,12 +377,25 @@
     }
 
     clearGameContainer();
-    const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
-    gameUrl = URL.createObjectURL(gameBlob);
-    if (biosUrl) URL.revokeObjectURL(biosUrl);
-    biosUrl = bios ? URL.createObjectURL(new Blob([bios.bytes], { type: 'application/octet-stream' })) : null;
-    configureEmulator(currentRom.fileName, gameUrl);
-    drawStatus('Loading PlayStation', currentRom.fileName);
+    const gameFiles = currentRom.files?.length
+      ? currentRom.files
+      : [{ fileName: currentRom.fileName, bytes: currentRom.bytes }];
+    const primaryGame = gameFiles.find((file) => file.fileName.toLowerCase().endsWith('.cue')) || gameFiles[0];
+    const externalFiles = {};
+
+    gameFiles.forEach((file) => {
+      if (file === primaryGame) return;
+      const url = URL.createObjectURL(new Blob([file.bytes], { type: 'application/octet-stream' }));
+      externalGameUrls.push(url);
+      externalFiles[file.fileName] = url;
+    });
+
+    // EmulatorJS uses the File name to detect and extract archives. An anonymous
+    // blob URL can make a ZIP reach PCSX as an unknown file with no content.
+    gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
+    biosUrl = bios ? new File([bios.bytes], bios.fileName, { type: 'application/octet-stream' }) : null;
+    configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
+    drawStatus('Loading PlayStation', primaryGame.fileName);
 
     loaderScript = document.createElement('script');
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
@@ -392,6 +409,7 @@
       '/emulatorjs/data/loader.js',
       '/emulatorjs/data/src/emulator.js',
       '/emulatorjs/data/src/compression.js',
+      '/emulatorjs/data/compression/extract7z.js',
       '/emulatorjs/data/compression/extractzip.js',
       '/emulatorjs/data/cores/pcsx_rearmed-wasm.data',
     ];
@@ -453,6 +471,10 @@
       currentRom = {
         fileName: message.fileName || 'game.chd',
         bytes: new Uint8Array(message.bytes || []),
+        files: (message.files || []).map((file) => ({
+          fileName: file.fileName,
+          bytes: new Uint8Array(file.bytes || []),
+        })),
       };
       loadCurrentRom();
       return;

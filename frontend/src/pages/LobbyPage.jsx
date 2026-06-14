@@ -170,7 +170,7 @@ const SYSTEM_GROUPS = [
         shortName: 'PS1',
         accent: 'violet',
         summary: 'Original PlayStation games using a locally supplied BIOS.',
-        formats: '.chd .pbp .iso .zip',
+        formats: '.cue/.bin .chd .pbp .iso .zip .7z',
         superAdminOnly: true,
         modes: {
           solo: { enabled: true },
