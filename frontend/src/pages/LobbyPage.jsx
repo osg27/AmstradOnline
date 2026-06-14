@@ -134,7 +134,7 @@ const SYSTEM_GROUPS = [
         accent: 'gold',
         summary: 'PC Engine and TurboGrafx-16 HuCard games.',
         formats: '.pce .sgx .zip',
-        superAdminOnly: true,
+        testing: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
@@ -171,7 +171,7 @@ const SYSTEM_GROUPS = [
         accent: 'violet',
         summary: 'Original PlayStation games using a locally supplied BIOS.',
         formats: '.cue/.bin .chd .pbp .iso .zip .7z',
-        superAdminOnly: true,
+        testing: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
