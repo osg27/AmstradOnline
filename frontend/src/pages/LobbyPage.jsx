@@ -147,7 +147,7 @@ const SYSTEM_GROUPS = [
   {
     id: '32bit',
     label: '32-bit',
-    strapline: 'Amiga 1200 and AGA games.',
+    strapline: 'Amiga 1200, AGA and PlayStation games.',
     systems: [
       {
         id: 'amiga_aga',
@@ -162,6 +162,21 @@ const SYSTEM_GROUPS = [
           hosted: { enabled: true },
           party: { enabled: false, note: 'Not available yet' },
           link: { enabled: false, note: 'Not available yet' },
+        },
+      },
+      {
+        id: 'playstation',
+        name: 'Sony PlayStation',
+        shortName: 'PS1',
+        accent: 'violet',
+        summary: 'Original PlayStation games using a locally supplied BIOS.',
+        formats: '.chd .pbp .iso .zip',
+        superAdminOnly: true,
+        modes: {
+          solo: { enabled: true },
+          hosted: { enabled: true },
+          party: { enabled: false, note: 'Not available yet' },
+          link: { enabled: false, note: 'Not available' },
         },
       },
     ],

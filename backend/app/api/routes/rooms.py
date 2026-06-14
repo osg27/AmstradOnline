@@ -16,7 +16,7 @@ router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "snes", "c64"}
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
-SUPER_ADMIN_ONLY_SYSTEMS = {"arcade", "pcengine"}
+SUPER_ADMIN_ONLY_SYSTEMS = {"arcade", "pcengine", "playstation"}
 
 
 def get_current_user_id(authorization: str | None = Header(default=None)) -> int:

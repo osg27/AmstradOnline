@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PlayStation Launcher</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        color: #fff;
+        font-family: system-ui, sans-serif;
+      }
+
+      #playstation-screen {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        background: #000;
+        image-rendering: pixelated;
+        pointer-events: none;
+      }
+
+      #game {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: #000;
+      }
+
+      #game canvas,
+      #game .ejs_game,
+      #game .ejs_canvas,
+      #game .ejs_container {
+        max-width: 100% !important;
+        max-height: 100% !important;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="playstation-screen" width="640" height="480"></canvas>
+    <div id="game"></div>
+    <script src="./launcher.js?v=2026-06-14-1"></script>
+  </body>
+</html>
