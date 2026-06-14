@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 
 from app.core.database import Base
 
@@ -12,4 +12,15 @@ class Room(Base):
     status = Column(String(32), nullable=False, default="waiting")
     system = Column(String(32), nullable=False, default="cpc", server_default="cpc")
     party_max_players = Column(Integer, nullable=False, default=2, server_default="2")
+    current_game = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class RoomActivity(Base):
+    __tablename__ = "room_activity"
+    __table_args__ = (UniqueConstraint("room_id", "user_id", name="uq_room_activity_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False, index=True)

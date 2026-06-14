@@ -17,21 +17,32 @@ export default function AdminPage() {
   const [savingRoleUserId, setSavingRoleUserId] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadStats() {
       try {
         const data = await apiFetch('/auth/admin/stats');
         if (!data?.totals) {
           throw new Error('Admin stats endpoint did not return stats');
         }
-        setStats(data);
+        if (!cancelled) {
+          setStats(data);
+          setError('');
+        }
       } catch (err) {
-        setError(err.message);
+        if (!cancelled) setError(err.message);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     loadStats();
+    const timer = window.setInterval(loadStats, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, []);
 
   async function deleteUser(user) {
@@ -119,6 +130,40 @@ export default function AdminPage() {
                 <strong>{stats.totals.rooms}</strong>
               </div>
             </div>
+
+            {stats.is_super_admin ? (
+              <div className="panel admin-users-panel">
+                <h2>Live rooms</h2>
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Room</th>
+                        <th>System</th>
+                        <th>Players</th>
+                        <th>Game</th>
+                        <th>Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.active_rooms?.length ? stats.active_rooms.map((room) => (
+                        <tr key={room.room_code}>
+                          <td>{room.room_code}</td>
+                          <td>{room.system}</td>
+                          <td>{room.players.map((player) => `${player.username} (${player.role})`).join(', ')}</td>
+                          <td>{room.game_name || 'No game loaded'}</td>
+                          <td>{formatDate(room.created_at)}</td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan="5">No active rooms</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
 
             <div className="panel admin-users-panel">
               <h2>Users</h2>

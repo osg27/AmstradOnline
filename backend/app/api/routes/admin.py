@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotification
 from app.models.friendship import Friendship, LobbyMessage, RoomInvite
-from app.models.room import Room
+from app.models.room import Room, RoomActivity
 from app.models.user import AccountToken, User
 
 router = APIRouter(prefix="/auth/admin", tags=["admin"])
@@ -73,6 +73,32 @@ def get_admin_stats(
         .limit(100)
         .all()
     )
+    active_rooms = []
+    if is_super_admin_user(admin_user):
+        active_cutoff = now - timedelta(seconds=60)
+        activity_rows = (
+            db.query(RoomActivity, Room, User)
+            .join(Room, Room.id == RoomActivity.room_id)
+            .join(User, User.id == RoomActivity.user_id)
+            .filter(RoomActivity.last_seen_at >= active_cutoff)
+            .order_by(Room.created_at.desc(), RoomActivity.last_seen_at.desc())
+            .all()
+        )
+        room_activity = {}
+        for activity, room, user in activity_rows:
+            entry = room_activity.setdefault(room.id, {
+                "room_code": room.room_code,
+                "system": room.system or "cpc",
+                "game_name": room.current_game,
+                "created_at": room.created_at,
+                "players": [],
+            })
+            entry["players"].append({
+                "username": user.username,
+                "role": "Host" if user.id == room.owner_user_id else "Guest",
+                "last_seen_at": activity.last_seen_at,
+            })
+        active_rooms = list(room_activity.values())
 
     return {
         "admin": admin_user.username,
@@ -97,6 +123,7 @@ def get_admin_stats(
             }
             for user in recent_users
         ],
+        "active_rooms": active_rooms,
     }
 
 
@@ -152,10 +179,14 @@ def delete_user(
     db.query(Friendship).filter(
         (Friendship.requester_id == user.id) | (Friendship.addressee_id == user.id)
     ).delete(synchronize_session=False)
+    owned_room_ids = db.query(Room.id).filter(Room.owner_user_id == user.id)
     db.query(RoomInvite).filter(
         (RoomInvite.sender_id == user.id)
         | (RoomInvite.recipient_id == user.id)
-        | RoomInvite.room_id.in_(db.query(Room.id).filter(Room.owner_user_id == user.id))
+        | RoomInvite.room_id.in_(owned_room_ids)
+    ).delete(synchronize_session=False)
+    db.query(RoomActivity).filter(
+        (RoomActivity.user_id == user.id) | RoomActivity.room_id.in_(owned_room_ids)
     ).delete(synchronize_session=False)
     db.query(LobbyMessage).filter(LobbyMessage.sender_id == user.id).delete(synchronize_session=False)
     db.query(Room).filter(Room.owner_user_id == user.id).delete(synchronize_session=False)

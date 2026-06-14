@@ -28,6 +28,10 @@ class RoomJoinRequest(BaseModel):
     room_code: str
 
 
+class RoomHeartbeatRequest(BaseModel):
+    game_name: str | None = Field(default=None, max_length=512)
+
+
 class RoomResponse(BaseModel):
     room_code: str
     status: str

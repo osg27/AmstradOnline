@@ -1,5 +1,6 @@
 import random
 import string
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
@@ -7,10 +8,10 @@ from sqlalchemy.orm import Session
 from app.api.routes.auth import can_use_preview_systems, is_admin_user, is_super_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.room import Room
+from app.models.room import Room, RoomActivity
 from app.models.friendship import RoomInvite
 from app.models.user import User
-from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomJoinRequest, RoomResponse
+from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomHeartbeatRequest, RoomJoinRequest, RoomResponse
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "snes", "c64", "pcengine", "playstation"}
@@ -112,6 +113,53 @@ def join_room(
         system=room.system or "cpc",
         party_max_players=room.party_max_players or 2,
     )
+
+
+@router.post("/{room_code}/heartbeat", status_code=204)
+def room_heartbeat(
+    room_code: str,
+    payload: RoomHeartbeatRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_system_access(db, user_id, room.system or "cpc")
+
+    activity = db.query(RoomActivity).filter(
+        RoomActivity.room_id == room.id,
+        RoomActivity.user_id == user_id,
+    ).first()
+    now = datetime.now(timezone.utc)
+    if activity:
+        activity.last_seen_at = now
+    else:
+        db.add(RoomActivity(room_id=room.id, user_id=user_id, last_seen_at=now))
+
+    if room.owner_user_id == user_id:
+        room.current_game = payload.game_name.strip() if payload.game_name else None
+
+    db.commit()
+
+
+@router.delete("/{room_code}/heartbeat", status_code=204)
+def leave_room_activity(
+    room_code: str,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
+    if not room:
+        return
+
+    db.query(RoomActivity).filter(
+        RoomActivity.room_id == room.id,
+        RoomActivity.user_id == user_id,
+    ).delete(synchronize_session=False)
+    if room.owner_user_id == user_id:
+        room.current_game = None
+    db.commit()
 
 
 @router.get("/{room_code}", response_model=RoomResponse)

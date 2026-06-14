@@ -127,6 +127,7 @@ export default function RoomPage() {
   const pendingPartyGuestsRef = useRef(new Map());
   const hostStartingRef = useRef(false);
   const hostStartedRef = useRef(false);
+  const loadedDiskNameRef = useRef('');
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
   const inputSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -1876,6 +1877,16 @@ export default function RoomPage() {
   }, [sendSignal]);
 
   useEffect(() => {
+    loadedDiskNameRef.current = loadedDiskName;
+    if (!room || !isHost) return;
+
+    apiFetch(`/rooms/${roomCode}/heartbeat`, {
+      method: 'POST',
+      body: JSON.stringify({ game_name: loadedDiskName || null }),
+    }).catch(() => {});
+  }, [isHost, loadedDiskName, room, roomCode]);
+
+  useEffect(() => {
     async function loadRoom() {
       try {
         const data = await apiFetch(`/rooms/${roomCode}`);
@@ -1888,6 +1899,35 @@ export default function RoomPage() {
 
     loadRoom();
   }, [roomCode]);
+
+  useEffect(() => {
+    if (!room) return undefined;
+
+    let cancelled = false;
+    const sendHeartbeat = async () => {
+      try {
+        await apiFetch(`/rooms/${roomCode}/heartbeat`, {
+          method: 'POST',
+          body: JSON.stringify({
+            game_name: isHost ? loadedDiskNameRef.current || null : null,
+          }),
+        });
+      } catch (err) {
+        if (!cancelled) {
+          addLog(`Room activity update failed: ${err.message}`);
+        }
+      }
+    };
+
+    sendHeartbeat();
+    const timer = window.setInterval(sendHeartbeat, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      apiFetch(`/rooms/${roomCode}/heartbeat`, { method: 'DELETE' }).catch(() => {});
+    };
+  }, [addLog, isHost, room, roomCode]);
 
   useEffect(() => {
     if (!isSoloMode && signalingOpen) {

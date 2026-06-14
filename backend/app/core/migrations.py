@@ -55,6 +55,9 @@ def ensure_runtime_columns(engine):
         if "party_max_players" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN party_max_players INTEGER NOT NULL DEFAULT 2"))
 
+        if "current_game" not in room_columns:
+            connection.execute(text("ALTER TABLE rooms ADD COLUMN current_game VARCHAR(512)"))
+
         if "feedback_items" in table_names:
             connection.execute(text("UPDATE feedback_items SET status = 'unstarted' WHERE status = 'open'"))
             connection.execute(text("UPDATE feedback_items SET status = 'in_review' WHERE status = 'reviewing'"))
