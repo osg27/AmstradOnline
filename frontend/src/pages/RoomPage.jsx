@@ -194,7 +194,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-04-8' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-15-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -2309,8 +2309,13 @@ export default function RoomPage() {
       throw new Error('Mirror canvas not found');
     }
 
-    mirrorCanvas.width = sourceCanvas.width || 768;
-    mirrorCanvas.height = sourceCanvas.height || 544;
+    if (isArcade) {
+      mirrorCanvas.width = 768;
+      mirrorCanvas.height = 576;
+    } else {
+      mirrorCanvas.width = sourceCanvas.width || 768;
+      mirrorCanvas.height = sourceCanvas.height || 544;
+    }
 
     const ctx = mirrorCanvas.getContext('2d');
 
@@ -2319,51 +2324,6 @@ export default function RoomPage() {
     }
 
     ctx.imageSmoothingEnabled = false;
-
-    let arcadeCrop = null;
-    let cropFrame = 0;
-
-    function detectArcadeCrop(sourceWidth, sourceHeight) {
-      if (!isArcade) return null;
-
-      const sourceContext = sourceCanvas.getContext('2d', { willReadFrequently: true });
-      if (!sourceContext) return null;
-
-      const sampleStep = 4;
-      const image = sourceContext.getImageData(0, 0, sourceWidth, sourceHeight).data;
-      let minX = sourceWidth;
-      let minY = sourceHeight;
-      let maxX = -1;
-      let maxY = -1;
-
-      for (let y = 0; y < sourceHeight; y += sampleStep) {
-        for (let x = 0; x < sourceWidth; x += sampleStep) {
-          const index = (y * sourceWidth + x) * 4;
-          const red = image[index];
-          const green = image[index + 1];
-          const blue = image[index + 2];
-
-          if (red > 18 || green > 18 || blue > 18) {
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
-          }
-        }
-      }
-
-      const width = maxX - minX + sampleStep;
-      const height = maxY - minY + sampleStep;
-      if (width < 48 || height < 48) return arcadeCrop;
-
-      const pad = 10;
-      return {
-        x: Math.max(0, minX - pad),
-        y: Math.max(0, minY - pad),
-        width: Math.min(sourceWidth - Math.max(0, minX - pad), width + pad * 2),
-        height: Math.min(sourceHeight - Math.max(0, minY - pad), height + pad * 2),
-      };
-    }
 
     function drawContained(sourceX, sourceY, sourceWidth, sourceHeight) {
       const scale = Math.min(mirrorCanvas.width / sourceWidth, mirrorCanvas.height / sourceHeight);
@@ -2395,14 +2355,7 @@ export default function RoomPage() {
           return;
         }
 
-        if (isArcade && cropFrame % 12 === 0) {
-          arcadeCrop = detectArcadeCrop(sourceWidth, sourceHeight);
-        }
-        cropFrame += 1;
-
-        if (isArcade && arcadeCrop) {
-          drawContained(arcadeCrop.x, arcadeCrop.y, arcadeCrop.width, arcadeCrop.height);
-        } else if (isArcade) {
+        if (isArcade) {
           drawContained(0, 0, sourceWidth, sourceHeight);
         } else {
           ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
