@@ -194,7 +194,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-15-5' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-15-6' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -3399,14 +3399,16 @@ export default function RoomPage() {
                   src={emulatorSrc}
                   onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
                   style={{
-                    position: 'absolute',
-                    left: '0',
-                    top: '0',
-                    width: '768px',
-                    height: '544px',
+                    position: isArcade ? 'relative' : 'absolute',
+                    left: isArcade ? 'auto' : '0',
+                    top: isArcade ? 'auto' : '0',
+                    width: isArcade ? '100%' : '768px',
+                    height: isArcade ? 'min(52vh, 470px)' : '544px',
                     border: '0',
-                    opacity: 0,
-                    pointerEvents: 'none',
+                    borderRadius: isArcade ? '8px' : '0',
+                    background: '#000',
+                    opacity: isArcade ? 1 : 0,
+                    pointerEvents: isArcade ? 'auto' : 'none',
                   }}
                 />
 
@@ -3426,6 +3428,7 @@ export default function RoomPage() {
                     border: '1px solid #1f2f4a',
                     borderRadius: '8px',
                     background: '#000',
+                    display: isArcade ? 'none' : 'block',
                   }}
                   width={768}
                   height={544}
