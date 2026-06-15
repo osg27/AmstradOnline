@@ -181,6 +181,43 @@
     MAME_STORAGE_DIRS.forEach((dir) => ensureDir(`${MAME_DATA_ROOT}/${dir}`));
   }
 
+  function mameConfigXml(systemName) {
+    return [
+      '<?xml version="1.0"?>',
+      '<mameconfig version="10">',
+      `  <system name="${String(systemName || 'default').replace(/[<>&"]/g, '')}" />`,
+      '</mameconfig>',
+      '',
+    ].join('\n');
+  }
+
+  function fileExists(path) {
+    try {
+      return Boolean(FS.analyzePath(path).exists);
+    } catch {
+      return false;
+    }
+  }
+
+  function seedMameConfig(driver) {
+    const cfgDir = `${MAME_DATA_ROOT}/cfg`;
+    const configs = [
+      ['default.cfg', 'default'],
+      [`${String(driver || 'game').trim().toLowerCase()}.cfg`, String(driver || 'game').trim().toLowerCase()],
+    ];
+
+    configs.forEach(([fileName, systemName]) => {
+      const path = `${cfgDir}/${fileName}`;
+      if (fileExists(path)) return;
+      try {
+        FS.writeFile(path, mameConfigXml(systemName));
+        postArcadeLog(`Created MAME config ${fileName}`);
+      } catch (error) {
+        postArcadeLog(`MAME config seed warning: ${error.message || error}`, 'error');
+      }
+    });
+  }
+
   function syncMameStorage(populate) {
     if (typeof FS === 'undefined' || !FS.syncfs) return;
     try {
@@ -229,15 +266,18 @@
                   postArcadeLog(`MAME storage load warning: ${error.message || error}`, 'error');
                 }
                 ensureMameStorage();
+                seedMameConfig(run.driver);
                 window.Module.removeRunDependency('oldstyle-mame-storage');
               });
               return;
             }
 
             ensureMameStorage();
+            seedMameConfig(run.driver);
           } catch (error) {
             postArcadeLog(`MAME storage setup warning: ${error.message || error}`, 'error');
             ensureMameStorage();
+            seedMameConfig(run.driver);
           }
 
           window.Module.removeRunDependency('oldstyle-mame-storage');
