@@ -13,6 +13,9 @@
   let audioDestination = null;
   let keepAlive = null;
 
+  const MAME_DATA_ROOT = '/mame-data';
+  const MAME_STORAGE_DIRS = ['cfg', 'nvram', 'inp', 'sta', 'snap', 'diff'];
+
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
   function postArcadeLog(message, level = 'info') {
@@ -139,6 +142,18 @@
       '640x480',
       '-rompath',
       '/roms',
+      '-cfg_directory',
+      `${MAME_DATA_ROOT}/cfg`,
+      '-nvram_directory',
+      `${MAME_DATA_ROOT}/nvram`,
+      '-input_directory',
+      `${MAME_DATA_ROOT}/inp`,
+      '-state_directory',
+      `${MAME_DATA_ROOT}/sta`,
+      '-snapshot_directory',
+      `${MAME_DATA_ROOT}/snap`,
+      '-diff_directory',
+      `${MAME_DATA_ROOT}/diff`,
     ];
 
     splitArgs(run.args).forEach((arg) => args.push(arg));
@@ -146,11 +161,37 @@
   }
 
   function clearPreviousRuntime() {
+    syncMameStorage(false);
+
     if (scriptElement) {
       scriptElement.remove();
       scriptElement = null;
     }
     delete window.Module;
+  }
+
+  function ensureDir(path) {
+    try {
+      FS.mkdir(path);
+    } catch {}
+  }
+
+  function ensureMameStorage() {
+    ensureDir(MAME_DATA_ROOT);
+    MAME_STORAGE_DIRS.forEach((dir) => ensureDir(`${MAME_DATA_ROOT}/${dir}`));
+  }
+
+  function syncMameStorage(populate) {
+    if (typeof FS === 'undefined' || !FS.syncfs) return;
+    try {
+      FS.syncfs(populate, (error) => {
+        if (error) {
+          postArcadeLog(`MAME storage sync warning: ${error.message || error}`, 'error');
+        }
+      });
+    } catch (error) {
+      postArcadeLog(`MAME storage sync warning: ${error.message || error}`, 'error');
+    }
   }
 
   function configureModule(run) {
@@ -171,10 +212,40 @@
         return `/arcade/mame/${path}`;
       },
       preRun: [
+        function mountMameStorage() {
+          window.Module.addRunDependency('oldstyle-mame-storage');
+
+          try {
+            ensureDir(MAME_DATA_ROOT);
+            if (typeof IDBFS !== 'undefined') {
+              try {
+                FS.mount(IDBFS, {}, MAME_DATA_ROOT);
+              } catch {}
+            }
+
+            if (FS?.syncfs && typeof IDBFS !== 'undefined') {
+              FS.syncfs(true, (error) => {
+                if (error) {
+                  postArcadeLog(`MAME storage load warning: ${error.message || error}`, 'error');
+                }
+                ensureMameStorage();
+                window.Module.removeRunDependency('oldstyle-mame-storage');
+              });
+              return;
+            }
+
+            ensureMameStorage();
+          } catch (error) {
+            postArcadeLog(`MAME storage setup warning: ${error.message || error}`, 'error');
+            ensureMameStorage();
+          }
+
+          window.Module.removeRunDependency('oldstyle-mame-storage');
+        },
         function mountLocalRoms() {
           window.Module.addRunDependency('oldstyle-roms');
           try {
-            FS.mkdir('/roms');
+            ensureDir('/roms');
           } catch {}
 
           try {
@@ -188,7 +259,11 @@
           }
         },
       ],
-      postRun: [],
+      postRun: [
+        function flushMameStorage() {
+          syncMameStorage(false);
+        },
+      ],
       print(text) {
         postArcadeLog(text);
         console.log(text);
