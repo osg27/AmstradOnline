@@ -139,6 +139,8 @@
       '-verbose',
       '-window',
       '-skip_gameinfo',
+      '-video',
+      'soft',
       '-resolution',
       '640x480',
       '-rompath',
