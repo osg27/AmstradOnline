@@ -194,7 +194,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-15-6' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-16-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -3402,10 +3402,13 @@ export default function RoomPage() {
                     position: isArcade ? 'relative' : 'absolute',
                     left: isArcade ? 'auto' : '0',
                     top: isArcade ? 'auto' : '0',
-                    width: isArcade ? '100%' : '768px',
-                    height: isArcade ? 'min(52vh, 470px)' : '544px',
-                    border: '0',
-                    borderRadius: isArcade ? '8px' : '0',
+                    display: isArcade ? 'block' : 'inline',
+                    width: isArcade ? '640px' : '768px',
+                    height: isArcade ? '480px' : '544px',
+                    maxWidth: isArcade ? '100%' : undefined,
+                    margin: isArcade ? '0 auto' : undefined,
+                    border: isArcade ? '1px solid #1f2f4a' : '0',
+                    borderRadius: isArcade ? '6px' : '0',
                     background: '#000',
                     opacity: isArcade ? 1 : 0,
                     pointerEvents: isArcade ? 'auto' : 'none',

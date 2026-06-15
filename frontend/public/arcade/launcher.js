@@ -138,6 +138,7 @@
       run.driver,
       '-verbose',
       '-window',
+      '-skip_gameinfo',
       '-resolution',
       '640x480',
       '-rompath',
@@ -328,6 +329,24 @@
     };
   }
 
+  function startCanvasDiagnostics() {
+    let ticks = 0;
+    const timer = window.setInterval(() => {
+      ticks += 1;
+      const rect = screen.getBoundingClientRect();
+      const style = window.getComputedStyle(screen);
+      const contextType = screen.__oldStyleContextType || 'unknown';
+
+      postArcadeLog(
+        `Canvas diagnostic ${ticks}: attr ${screen.width}x${screen.height}, css ${Math.round(rect.width)}x${Math.round(rect.height)}, display ${style.display}, visibility ${style.visibility}, opacity ${style.opacity}, context ${contextType}`,
+      );
+
+      if (ticks >= 5) {
+        window.clearInterval(timer);
+      }
+    }, 1000);
+  }
+
   function loadScript(runtime) {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -372,6 +391,7 @@
     drawStatus('Starting MAME', `${driver} (${runtime})`);
     postArcadeLog(`Starting driver ${driver} with ${currentRun.files.length} file(s)`);
     postArcadeLog(`MAME args: ${buildArguments(currentRun).join(' ')}`);
+    startCanvasDiagnostics();
     await loadScript(runtime);
     hideStatus();
     statusText = '';
