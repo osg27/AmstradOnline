@@ -6,12 +6,104 @@ import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
+import amstradControlProfiles from '../data/amstradControlProfiles.json';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
 const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart';
 const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
+const CONTROL_MATCH_LIMIT = 6;
+
+const CONTROL_ACTION_LABELS = {
+  up: 'Up',
+  down: 'Down',
+  left: 'Left',
+  right: 'Right',
+  upLeft: 'Up left',
+  upRight: 'Up right',
+  downLeft: 'Down left',
+  downRight: 'Down right',
+  fire1: 'Fire 1',
+  fire2: 'Fire 2',
+  pause: 'Pause',
+  start: 'Start',
+  quit: 'Quit',
+};
+
+function normaliseSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/\b(side|disk|disc|tape|part|set)\s*[a-z0-9]+\b/g, ' ')
+    .replace(/\b(europe|uk|usa|france|germany|spain|italy|amstrad|cpc|dsk|cracked|crack|trainer|budget|re-release)\b/g, ' ')
+    .replace(/\b(the|of|and|a|an)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function searchTokens(value) {
+  return normaliseSearchText(value)
+    .split(' ')
+    .filter((token) => token.length > 1);
+}
+
+function tokenSimilarity(leftTokens, rightTokens) {
+  if (!leftTokens.length || !rightTokens.length) return 0;
+
+  const left = new Set(leftTokens);
+  const right = new Set(rightTokens);
+  const shared = Array.from(left).filter((token) => right.has(token)).length;
+  const coverage = shared / Math.max(left.size, right.size);
+  const precision = shared / Math.min(left.size, right.size);
+
+  return Math.round((coverage * 70) + (precision * 30));
+}
+
+function scoreControlProfile(fileName, profile) {
+  const queryText = normaliseSearchText(fileName);
+  const queryTokens = searchTokens(fileName);
+  const candidates = [profile.gameSlug, profile.title, profile.source?.manualFile];
+
+  return Math.max(...candidates.map((candidate) => {
+    const candidateText = normaliseSearchText(candidate);
+    const candidateTokens = searchTokens(candidate);
+    let score = tokenSimilarity(queryTokens, candidateTokens);
+
+    if (candidateText && queryText === candidateText) {
+      score = Math.max(score, 120);
+    } else if (candidateText && (queryText.includes(candidateText) || candidateText.includes(queryText))) {
+      score = Math.max(score, 96);
+    }
+
+    return score;
+  }));
+}
+
+function findControlProfileMatches(fileName) {
+  if (!fileName) return [];
+
+  return amstradControlProfiles
+    .map((profile) => ({
+      profile,
+      score: scoreControlProfile(fileName, profile),
+    }))
+    .filter((match) => match.score >= 45)
+    .sort((left, right) => right.score - left.score || left.profile.title.localeCompare(right.profile.title))
+    .slice(0, CONTROL_MATCH_LIMIT);
+}
+
+function shouldAutoSelectControlMatch(matches) {
+  if (!matches.length) return false;
+
+  const [best, next] = matches;
+  return best.score >= 110 || (best.score >= 92 && (!next || best.score - next.score >= 12));
+}
+
+function formatControlAction(action) {
+  return CONTROL_ACTION_LABELS[action] || action.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
+}
 
 function openKickstartDb() {
   return new Promise((resolve, reject) => {
@@ -159,6 +251,9 @@ export default function RoomPage() {
   const [c64JoystickPortsSwapped, setC64JoystickPortsSwapped] = useState(false);
   const [c64MediaCount, setC64MediaCount] = useState(0);
   const [c64MediaIndex, setC64MediaIndex] = useState(0);
+  const [controlProfileMatches, setControlProfileMatches] = useState([]);
+  const [selectedControlProfile, setSelectedControlProfile] = useState(null);
+  const [controlProfileDrawerOpen, setControlProfileDrawerOpen] = useState(false);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -175,6 +270,7 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const roomSystem = room?.system || 'cpc';
   const isCpcParty = roomSystem === 'cpc_party';
+  const isCpcSystem = roomSystem === 'cpc' || roomSystem === 'cpc_party';
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const isAmigaLink = roomSystem === 'amiga_link';
@@ -1872,6 +1968,20 @@ export default function RoomPage() {
         ok: isHost ? hostStarted : guestPrepared,
       },
     ];
+  const selectedControlPlayers = useMemo(() => {
+    if (!selectedControlProfile?.players) return [];
+
+    return Object.entries(selectedControlProfile.players).map(([playerKey, player]) => ({
+      key: playerKey,
+      label: playerKey.replace('player', 'Player '),
+      emulatorEntries: Object.entries(player?.emulatorInput || {})
+        .filter(([, value]) => value)
+        .map(([action, value]) => [formatControlAction(action), value]),
+      overlayEntries: Object.entries(player?.displayOverlay || {})
+        .filter(([, value]) => value)
+        .map(([action, value]) => [formatControlAction(action), value]),
+    }));
+  }, [selectedControlProfile]);
 
   useEffect(() => {
     sendSignalRef.current = sendSignal;
@@ -3076,6 +3186,26 @@ export default function RoomPage() {
 
       setError('');
 
+      if (isCpcSystem && !isSwapDisk) {
+        const nextMatches = findControlProfileMatches(file.name);
+        setControlProfileMatches(nextMatches);
+
+        if (shouldAutoSelectControlMatch(nextMatches)) {
+          const nextProfile = nextMatches[0].profile;
+          setSelectedControlProfile(nextProfile);
+          setControlProfileDrawerOpen(true);
+          addLog(`Matched Amstrad instructions: ${nextProfile.title}`);
+        } else if (nextMatches.length > 0) {
+          setSelectedControlProfile(null);
+          setControlProfileDrawerOpen(true);
+          addLog(`Choose Amstrad instructions: ${nextMatches.map((match) => match.profile.title).join(', ')}`);
+        } else {
+          setSelectedControlProfile(null);
+          setControlProfileDrawerOpen(false);
+          addLog(`No Amstrad instructions matched ${file.name}; default controls remain active`);
+        }
+      }
+
       if (
         isPlayStation
         && selectedFiles.some((selectedFile) => selectedFile.name.toLowerCase().endsWith('.cue'))
@@ -3244,6 +3374,12 @@ export default function RoomPage() {
     }
   }
 
+  function chooseControlProfile(profile) {
+    setSelectedControlProfile(profile);
+    setControlProfileDrawerOpen(true);
+    addLog(`Selected Amstrad instructions: ${profile.title}`);
+  }
+
   return (
     <div className="page room-page">
       <div className="page-social-layout room-social-layout">
@@ -3310,6 +3446,16 @@ export default function RoomPage() {
         {(loadedDiskName || isAmigaFamily || isPlayStation) ? (
           <div className="session-strip">
             {loadedDiskName ? <span>{loadedDiskName}</span> : null}
+            {isCpcSystem && selectedControlProfile ? (
+              <button type="button" className="secondary control-profile-pill" onClick={() => setControlProfileDrawerOpen(true)}>
+                Instructions: {selectedControlProfile.title}
+              </button>
+            ) : null}
+            {isCpcSystem && !selectedControlProfile && controlProfileMatches.length > 0 ? (
+              <button type="button" className="secondary control-profile-pill" onClick={() => setControlProfileDrawerOpen(true)}>
+                Choose instructions ({controlProfileMatches.length})
+              </button>
+            ) : null}
             {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isAmigaAga ? 'ROM: A1200 Kickstart recommended' : 'ROM: AROS'}</span> : null}
             {isPlayStation ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : 'BIOS: HLE fallback / load your own locally'}</span> : null}
             {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
@@ -3665,6 +3811,100 @@ export default function RoomPage() {
 
           </div>
         </div>
+
+        {controlProfileDrawerOpen && isCpcSystem ? (
+          <aside className="control-profile-drawer" aria-label="Amstrad instructions">
+            <div className="control-profile-header">
+              <div>
+                <span>Amstrad instructions</span>
+                <h2>{selectedControlProfile ? selectedControlProfile.title : 'Choose profile'}</h2>
+              </div>
+              <button type="button" className="secondary" onClick={() => setControlProfileDrawerOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            {controlProfileMatches.length > 1 ? (
+              <div className="control-match-list">
+                {controlProfileMatches.map((match) => (
+                  <button
+                    key={match.profile.gameSlug}
+                    type="button"
+                    className={selectedControlProfile?.gameSlug === match.profile.gameSlug ? 'active' : 'secondary'}
+                    onClick={() => chooseControlProfile(match.profile)}
+                  >
+                    <span>{match.profile.title}</span>
+                    <small>{match.score}% match</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {selectedControlProfile ? (
+              <>
+                <div className="control-profile-meta">
+                  <span>{selectedControlProfile.supportsJoystick ? 'Joystick supported' : 'Keyboard'}</span>
+                  <span>{selectedControlProfile.redefinableKeys ? 'Redefinable keys' : 'Fixed keys'}</span>
+                  {selectedControlProfile.confidence ? <span>{Math.round(selectedControlProfile.confidence * 100)}% confidence</span> : null}
+                </div>
+
+                <div className="control-profile-sections">
+                  {selectedControlPlayers.map((player) => (
+                    <section key={player.key} className="control-profile-section">
+                      <h3>{player.label}</h3>
+
+                      {player.emulatorEntries.length ? (
+                        <div className="control-map-grid">
+                          {player.emulatorEntries.map(([action, value]) => (
+                            <div key={`${player.key}-${action}`} className="control-map-row">
+                              <span>{action}</span>
+                              <strong>{value}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="muted">No fixed key mapping in this profile.</p>
+                      )}
+
+                      {player.overlayEntries.length ? (
+                        <div className="control-overlay-list">
+                          {player.overlayEntries.map(([action, value]) => (
+                            <div key={`${player.key}-overlay-${action}`}>
+                              <strong>{action}</strong>
+                              <span>{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </section>
+                  ))}
+                </div>
+
+                {selectedControlProfile.notes?.length ? (
+                  <section className="control-profile-section">
+                    <h3>Notes</h3>
+                    <ul className="control-notes-list">
+                      {selectedControlProfile.notes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {selectedControlProfile.source ? (
+                  <div className="control-profile-source">
+                    <span>{selectedControlProfile.source.manualFile}</span>
+                    {selectedControlProfile.source.pages?.length ? (
+                      <small>Pages {selectedControlProfile.source.pages.join(', ')}</small>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="muted">Default controls remain active until a profile is selected.</p>
+            )}
+          </aside>
+        ) : null}
 
         {showDiagnostics ? (
           <>

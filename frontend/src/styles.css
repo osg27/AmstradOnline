@@ -1397,6 +1397,137 @@ input:focus {
   font-size: 0.92rem;
 }
 
+.control-profile-pill {
+  max-width: min(380px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-profile-drawer {
+  position: fixed;
+  z-index: 80;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(430px, 100vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+  overflow: auto;
+  border-left: 1px solid var(--line-strong);
+  background: #101312;
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.42);
+}
+
+.control-profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.control-profile-header span,
+.control-profile-source small,
+.control-match-list small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.control-profile-header h2 {
+  margin: 0.1rem 0 0;
+  color: #fff7dd;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.control-match-list,
+.control-profile-sections,
+.control-map-grid,
+.control-overlay-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.control-match-list button {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: start;
+  text-align: left;
+}
+
+.control-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.control-profile-meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.3rem 0.5rem;
+  color: #d9e7dc;
+  font-size: 0.82rem;
+}
+
+.control-profile-section {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #17191a;
+}
+
+.control-profile-section h3 {
+  margin: 0;
+  color: var(--gold);
+  font-size: 0.98rem;
+}
+
+.control-map-row,
+.control-overlay-list div {
+  display: grid;
+  grid-template-columns: minmax(78px, 0.8fr) minmax(0, 1.2fr);
+  gap: 0.55rem;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #2c2f31;
+  border-radius: 6px;
+  background: #111414;
+}
+
+.control-map-row span,
+.control-overlay-list strong {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.control-map-row strong,
+.control-overlay-list span {
+  min-width: 0;
+  color: #efeae0;
+  overflow-wrap: anywhere;
+}
+
+.control-notes-list {
+  display: grid;
+  gap: 0.45rem;
+  color: #d8d8d4;
+  font-size: 0.9rem;
+}
+
+.control-profile-source {
+  display: grid;
+  gap: 0.15rem;
+  color: #efeae0;
+  font-size: 0.86rem;
+}
+
 .session-strip {
   gap: 0.45rem;
   margin-top: 0.5rem;
