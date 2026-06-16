@@ -259,7 +259,6 @@ export default function RoomPage() {
   const [controlProfileMatches, setControlProfileMatches] = useState([]);
   const [selectedControlProfile, setSelectedControlProfile] = useState(null);
   const [controlProfileDrawerOpen, setControlProfileDrawerOpen] = useState(false);
-  const [controlProfileLookupName, setControlProfileLookupName] = useState('');
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -385,33 +384,6 @@ export default function RoomPage() {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${message}`, ...prev].slice(0, 80));
   }, []);
 
-  const applyControlProfileMatch = useCallback((fileName) => {
-    if (!fileName || !amstradControlProfiles.length) return false;
-
-    const nextMatches = findControlProfileMatches(fileName, amstradControlProfiles);
-    setControlProfileMatches(nextMatches);
-
-    if (shouldAutoSelectControlMatch(nextMatches)) {
-      const nextProfile = nextMatches[0].profile;
-      setSelectedControlProfile(nextProfile);
-      setControlProfileDrawerOpen(true);
-      addLog(`Matched Amstrad controls: ${nextProfile.title}`);
-      return true;
-    }
-
-    if (nextMatches.length > 0) {
-      setSelectedControlProfile(null);
-      setControlProfileDrawerOpen(true);
-      addLog(`Amstrad controls need a choice: ${nextMatches.map((match) => match.profile.title).join(', ')}`);
-      return true;
-    }
-
-    setSelectedControlProfile(null);
-    setControlProfileDrawerOpen(false);
-    addLog(`No Amstrad control profile matched ${fileName}; using default controls`);
-    return false;
-  }, [addLog, amstradControlProfiles]);
-
   useEffect(() => {
     if (!isCpcSystem || controlProfileStatus !== 'idle') return undefined;
 
@@ -440,12 +412,6 @@ export default function RoomPage() {
       cancelled = true;
     };
   }, [addLog, controlProfileStatus, isCpcSystem]);
-
-  useEffect(() => {
-    if (!isCpcSystem || controlProfileStatus !== 'ready' || !controlProfileLookupName) return;
-
-    applyControlProfileMatch(controlProfileLookupName);
-  }, [applyControlProfileMatch, controlProfileLookupName, controlProfileStatus, isCpcSystem]);
 
   const sendSignalRef = useRef(() => false);
 
@@ -3255,14 +3221,22 @@ export default function RoomPage() {
       setError('');
 
       if (isCpcSystem && !isSwapDisk) {
-        setControlProfileLookupName(file.name);
-        if (controlProfileStatus === 'ready' && amstradControlProfiles.length) {
-          applyControlProfileMatch(file.name);
+        const nextMatches = findControlProfileMatches(file.name, amstradControlProfiles);
+        setControlProfileMatches(nextMatches);
+
+        if (shouldAutoSelectControlMatch(nextMatches)) {
+          const nextProfile = nextMatches[0].profile;
+          setSelectedControlProfile(nextProfile);
+          setControlProfileDrawerOpen(true);
+          addLog(`Matched Amstrad controls: ${nextProfile.title}`);
+        } else if (nextMatches.length > 0) {
+          setSelectedControlProfile(null);
+          setControlProfileDrawerOpen(true);
+          addLog(`Amstrad controls need a choice: ${nextMatches.map((match) => match.profile.title).join(', ')}`);
         } else {
-          setControlProfileMatches([]);
           setSelectedControlProfile(null);
           setControlProfileDrawerOpen(false);
-          addLog(`Amstrad controls still loading; will check ${file.name} when ready`);
+          addLog(`No Amstrad control profile matched ${file.name}; using default controls`);
         }
       }
 
@@ -3506,9 +3480,6 @@ export default function RoomPage() {
         {(loadedDiskName || isAmigaFamily || isPlayStation) ? (
           <div className="session-strip">
             {loadedDiskName ? <span>{loadedDiskName}</span> : null}
-            {isCpcSystem && !selectedControlProfile && !controlProfileMatches.length && controlProfileLookupName && controlProfileStatus !== 'ready' ? (
-              <span>Controls loading</span>
-            ) : null}
             {isCpcSystem && selectedControlProfile ? (
               <button type="button" className="secondary control-profile-pill" onClick={() => setControlProfileDrawerOpen(true)}>
                 Controls: {selectedControlProfile.title}
