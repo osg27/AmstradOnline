@@ -418,7 +418,7 @@ export default function RoomPage() {
     let cancelled = false;
     setControlProfileStatus('loading');
 
-    fetch('/amstrad-controls/index.json')
+    fetch('/amstrad-controls/index.json?v=2026-06-16-1')
       .then((response) => {
         if (!response.ok) {
           throw new Error(`Control profiles unavailable (${response.status})`);
@@ -2050,6 +2050,11 @@ export default function RoomPage() {
         .map(([action, value]) => [formatControlAction(action), value]),
     }));
   }, [selectedControlProfile]);
+  const controlProfilePillLabel = controlProfileStatus === 'error'
+    ? 'Controls unavailable'
+    : controlProfileStatus === 'ready'
+      ? 'No controls match'
+      : 'Controls loading';
 
   useEffect(() => {
     sendSignalRef.current = sendSignal;
@@ -3507,7 +3512,7 @@ export default function RoomPage() {
           <div className="session-strip">
             {loadedDiskName ? <span>{loadedDiskName}</span> : null}
             {isCpcSystem && !selectedControlProfile && !controlProfileMatches.length && controlProfileLookupName && controlProfileStatus !== 'ready' ? (
-              <span>Controls loading</span>
+              <span>{controlProfilePillLabel}</span>
             ) : null}
             {isCpcSystem && selectedControlProfile ? (
               <button type="button" className="secondary control-profile-pill" onClick={() => setControlProfileDrawerOpen(true)}>
