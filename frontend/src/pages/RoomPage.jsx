@@ -9,6 +9,7 @@ import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
+const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart';
 const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 
@@ -186,7 +187,7 @@ export default function RoomPage() {
   const isPlayStation = roomSystem === 'playstation';
   const isC64 = roomSystem === 'c64';
   const isArcade = roomSystem === 'arcade';
-  const kickstartStorageKey = isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : '';
+  const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
