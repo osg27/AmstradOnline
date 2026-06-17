@@ -100,6 +100,10 @@
     }
   }
 
+  function sendHostStatus(message) {
+    window.parent?.postMessage({ type: 'dreamcast_status', message }, window.location.origin);
+  }
+
   function ensureAudio() {
     if (!OriginalAudioContext) return null;
     if (!sharedAudioContext) {
@@ -446,6 +450,7 @@
 
     if (!dreamcastBios.boot || !dreamcastBios.flash) {
       drawStatus('Dreamcast BIOS needed', 'Load dc_boot.bin and dc_flash.bin');
+      sendHostStatus('Dreamcast BIOS needed: load dc_boot.bin and dc_flash.bin');
       return;
     }
 
@@ -482,6 +487,7 @@
     installFlycastWebGlPatches();
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
     drawStatus('Loading Dreamcast', primaryGame.fileName);
+    sendHostStatus(`Starting Dreamcast game: ${primaryGame.fileName}`);
 
     loaderScript = document.createElement('script');
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
@@ -577,11 +583,13 @@
 
       if (!boot || !flash) {
         drawStatus('Dreamcast BIOS incomplete', 'Need dc_boot.bin and dc_flash.bin');
+        sendHostStatus('Dreamcast BIOS incomplete');
         return;
       }
 
       dreamcastBios = { boot, flash };
       drawStatus('Dreamcast BIOS ready', currentRom?.fileName || 'Load a Dreamcast game');
+      sendHostStatus('Dreamcast BIOS received');
       if (currentRom) {
         loadCurrentRom();
       }

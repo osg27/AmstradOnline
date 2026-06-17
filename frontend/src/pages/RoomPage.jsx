@@ -672,6 +672,46 @@ export default function RoomPage() {
     targetWindow.postMessage(payload, window.location.origin);
   }, []);
 
+  function createDreamcastBiosMessage(bootBytes, flashBytes) {
+    return {
+      type: 'dreamcast_bios',
+      files: [
+        { fileName: 'dc_boot.bin', bytes: bootBytes },
+        { fileName: 'dc_flash.bin', bytes: flashBytes },
+      ],
+    };
+  }
+
+  async function loadSavedDreamcastBiosFiles() {
+    const [bootBios, flashBios] = await Promise.all([
+      loadStoredKickstart(DREAMCAST_BOOT_BIOS_KEY),
+      loadStoredKickstart(DREAMCAST_FLASH_BIOS_KEY),
+    ]);
+
+    if (!bootBios || !flashBios) return null;
+    if (bootBios.bytes.length !== 2097152 || flashBios.bytes.length !== 131072) {
+      addLog(`Saved Dreamcast BIOS sizes look wrong: dc_boot.bin ${bootBios.bytes.length} bytes, dc_flash.bin ${flashBios.bytes.length} bytes`);
+      return null;
+    }
+
+    return {
+      bootBytes: bootBios.bytes,
+      flashBytes: flashBios.bytes,
+    };
+  }
+
+  async function sendStoredDreamcastBiosToEmulator(targetWindow = emulatorFrameRef.current?.contentWindow) {
+    if (!targetWindow) return false;
+
+    const bios = await loadSavedDreamcastBiosFiles();
+    if (!bios) return false;
+
+    targetWindow.postMessage(createDreamcastBiosMessage(bios.bootBytes, bios.flashBytes), window.location.origin);
+    setDreamcastBiosName('dc_boot.bin + dc_flash.bin (saved locally)');
+    addLog('Loaded saved Dreamcast BIOS files');
+    return true;
+  }
+
   const reloadC64Frame = useCallback(async ({ start = false } = {}) => {
     const frame = emulatorFrameRef.current;
     if (!frame || !isC64) return;
@@ -806,6 +846,8 @@ export default function RoomPage() {
       frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
     });
 
+    await sendStoredDreamcastBiosToEmulator(frame.contentWindow);
+
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
     startMirrorLoop(emulatorCanvas);
 
@@ -936,6 +978,26 @@ export default function RoomPage() {
   }, [addLog, isAmigaAga]);
 
   useEffect(() => {
+    if (!isDreamcast) return undefined;
+
+    function handleDreamcastMessage(event) {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== emulatorFrameRef.current?.contentWindow) return;
+
+      const message = event.data || {};
+      if (message.type !== 'dreamcast_status') return;
+
+      if (message.message) {
+        addLog(`Dreamcast: ${message.message}`);
+        setStatus(message.message);
+      }
+    }
+
+    window.addEventListener('message', handleDreamcastMessage);
+    return () => window.removeEventListener('message', handleDreamcastMessage);
+  }, [addLog, isDreamcast]);
+
+  useEffect(() => {
     if (!isHost || !emulatorFrameLoadCount || !kickstartStorageKey) return undefined;
     if (sentStoredKickstartFrameRef.current === emulatorFrameLoadCount) return undefined;
 
@@ -980,22 +1042,8 @@ export default function RoomPage() {
     sentStoredDreamcastBiosFrameRef.current = emulatorFrameLoadCount;
     const timer = window.setTimeout(async () => {
       try {
-        const [bootBios, flashBios] = await Promise.all([
-          loadStoredKickstart(DREAMCAST_BOOT_BIOS_KEY),
-          loadStoredKickstart(DREAMCAST_FLASH_BIOS_KEY),
-        ]);
-
-        if (cancelled || !bootBios || !flashBios) return;
-
-        forwardInputToEmulator({
-          type: 'dreamcast_bios',
-          files: [
-            { fileName: 'dc_boot.bin', bytes: bootBios.bytes },
-            { fileName: 'dc_flash.bin', bytes: flashBios.bytes },
-          ],
-        });
-        setDreamcastBiosName('dc_boot.bin + dc_flash.bin (saved locally)');
-        addLog('Loaded saved Dreamcast BIOS files');
+        if (cancelled) return;
+        await sendStoredDreamcastBiosToEmulator();
       } catch (err) {
         if (!cancelled) {
           addLog(`Saved Dreamcast BIOS unavailable: ${err.message}`);
@@ -1007,7 +1055,7 @@ export default function RoomPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isDreamcast, isHost]);
+  }, [emulatorFrameLoadCount, isDreamcast, isHost]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -2959,6 +3007,7 @@ export default function RoomPage() {
       }
       if (isDreamcast) {
         iframe.contentWindow?.postMessage({ type: 'dreamcast_start' }, window.location.origin);
+        await sendStoredDreamcastBiosToEmulator(iframe.contentWindow);
       }
       if (isC64) {
         iframe.contentWindow?.postMessage({ type: 'c64_start', soloMode: isSoloMode }, window.location.origin);
@@ -3343,6 +3392,13 @@ export default function RoomPage() {
         setStatus('Preparing a clean Dreamcast runtime');
         await reloadDreamcastFrame();
       }
+      if (isDreamcast) {
+        const biosSent = await sendStoredDreamcastBiosToEmulator();
+        if (!biosSent) {
+          setStatus('Load Dreamcast BIOS before starting the game');
+          addLog('Dreamcast BIOS missing: load dc_boot.bin and dc_flash.bin');
+        }
+      }
       forwardInputToEmulator(loadMessage);
 
       if (isArcade || isAmigaAga) {
@@ -3478,18 +3534,19 @@ export default function RoomPage() {
         flashFile.arrayBuffer().then((buffer) => new Uint8Array(buffer)),
       ]);
 
+      if (bootBytes.length !== 2097152 || flashBytes.length !== 131072) {
+        setError(`Dreamcast BIOS sizes look wrong: dc_boot.bin ${bootBytes.length} bytes, dc_flash.bin ${flashBytes.length} bytes`);
+        addLog('Rejected Dreamcast BIOS files: expected dc_boot.bin 2 MiB and dc_flash.bin 128 KiB');
+        event.target.value = '';
+        return;
+      }
+
       await Promise.all([
         saveStoredKickstart(DREAMCAST_BOOT_BIOS_KEY, 'dc_boot.bin', bootBytes),
         saveStoredKickstart(DREAMCAST_FLASH_BIOS_KEY, 'dc_flash.bin', flashBytes),
       ]);
 
-      forwardInputToEmulator({
-        type: 'dreamcast_bios',
-        files: [
-          { fileName: 'dc_boot.bin', bytes: bootBytes },
-          { fileName: 'dc_flash.bin', bytes: flashBytes },
-        ],
-      });
+      forwardInputToEmulator(createDreamcastBiosMessage(bootBytes, flashBytes));
 
       setDreamcastBiosName('dc_boot.bin + dc_flash.bin (saved locally)');
       addLog('Saved Dreamcast BIOS files locally');
