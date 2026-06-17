@@ -41,7 +41,7 @@
 
       if (!text) return;
       if (
-        !/flycast|retroarch|reicast|shader|webgl|gl_|bios|chd|failed|error|warn|trace|callMain|exception/i.test(text)
+        !/flycast|retroarch|reicast|shader|webgl|gl_|bios|chd|gdrom|disc|load|failed|error|warn|trace|callMain|exception/i.test(text)
         && level === 'log'
       ) {
         return;
@@ -383,6 +383,7 @@
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
     window.EJS_defaultOptions = {
+      reicast_cpu_mode: 'generic_recompiler',
       reicast_boot_to_bios: 'disabled',
       reicast_hle_bios: 'disabled',
       reicast_threaded_rendering: 'disabled',
