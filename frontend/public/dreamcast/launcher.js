@@ -407,7 +407,7 @@
   function configureEmulator(fileName, romUrl, externalFiles = {}, options = {}) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
-    window.EJS_core = 'dreamcast';
+    window.EJS_core = 'flycast';
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
@@ -528,15 +528,12 @@
 
             if (this.Module?.callbacks) {
               const coreOptions = serialiseCoreOptions(buildFlycastCoreOptions(bootBiosOnly));
-              const originalSetupCoreSettingFile = this.Module.callbacks.setupCoreSettingFile;
               this.Module.callbacks.setupCoreSettingFile = (filePath) => {
                 try {
                   this.gameManager.writeFile(filePath, coreOptions);
+                  console.log('[Old Style Dreamcast] Wrote Flycast core options', coreOptions.replace(/\n/g, '; '));
                 } catch (error) {
                   console.warn('[Old Style Dreamcast] Core option write failed', error);
-                }
-                if (originalSetupCoreSettingFile) {
-                  originalSetupCoreSettingFile(filePath);
                 }
               };
             }
