@@ -864,12 +864,12 @@ class EmulatorJS {
 
                 // check cache
                 let key = this.storageCache.generateCacheKey(inData);
-                let cachedItem = dontCache ? null : await this.storageCache.get(key);
+                let cachedItem = type.dontCache ? null : await this.storageCache.get(key);
                 if (cachedItem) {
                     if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Using cached content for " + url.name);
                     returnData = cachedItem;
                 } else {
-                    if (dontCache && this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Cache bypassed for " + url.name);
+                    if (type.dontCache && this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Cache bypassed for " + url.name);
                     // Not in cache - decompress
                     let files = [];
                     if (dontExtract === false) {
@@ -913,7 +913,7 @@ class EmulatorJS {
                         Date.now() + 5 * 24 * 60 * 60 * 1000 // 5 days expiration
                     );
 
-                    if (!dontCache) {
+                    if (!type.dontCache) {
                         this.storageCache.put(data);
                     }
 
