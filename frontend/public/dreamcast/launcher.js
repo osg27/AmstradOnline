@@ -155,6 +155,7 @@
 
   function drawStatus(main, sub = '') {
     statusText = main;
+    screen.style.display = 'block';
     context.fillStyle = '#000';
     context.fillRect(0, 0, screen.width, screen.height);
     context.fillStyle = '#fff';
@@ -491,6 +492,8 @@
     window.EJS_onGameStart = () => {
       console.log('Old Style Gaming Dreamcast: game started');
       statusText = '';
+      screen.style.display = 'none';
+      sendHostStatus('Flycast game started; showing native WebGL canvas');
     };
     window.EJS_onExit = () => {
       drawStatus('Dreamcast stopped', fileName);
