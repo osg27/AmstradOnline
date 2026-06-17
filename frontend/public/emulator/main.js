@@ -439,7 +439,13 @@ async function main() {
   }
 
   function rememberHeldKey(key, code) {
-    heldKeyboardCodes.set(normaliseInputKey(key), code);
+    key = normaliseInputKey(key);
+    const existing = heldKeyboardCodes.get(key);
+    heldKeyboardCodes.set(key, {
+      code,
+      key,
+      lastCharacterAt: existing?.lastCharacterAt || 0,
+    });
   }
 
   function forgetHeldKey(key) {
@@ -447,8 +453,8 @@ async function main() {
   }
 
   function releaseAllHeldKeys() {
-    heldKeyboardCodes.forEach((code) => {
-      keyup(code);
+    heldKeyboardCodes.forEach((entry) => {
+      keyup(entry.code);
     });
     heldKeyboardCodes.clear();
   }
@@ -466,6 +472,9 @@ async function main() {
       }
 
       rememberHeldKey(key, code);
+      if (key.length === 1) {
+        heldKeyboardCodes.get(key).lastCharacterAt = performance.now();
+      }
       keydown(code);
       return true;
     }
@@ -492,6 +501,9 @@ async function main() {
       }
 
       rememberHeldKey(key, code);
+      if (key.length === 1) {
+        heldKeyboardCodes.get(key).lastCharacterAt = performance.now();
+      }
       keydown(code);
       return true;
     }
@@ -650,8 +662,12 @@ async function main() {
 
     while (frameAccumulator >= frame_time) {
       frameCounter += 1;
-      heldKeyboardCodes.forEach((code) => {
-        keydown(code);
+      heldKeyboardCodes.forEach((entry) => {
+        keydown(entry.code);
+        if (entry.key.length === 1 && now - entry.lastCharacterAt >= 45) {
+          input_char(entry.key.charCodeAt(0));
+          entry.lastCharacterAt = now;
+        }
       });
       tick(emulator, frame_time);
       frameAccumulator -= frame_time;
