@@ -44,4 +44,4 @@ export const cores = {
 
 export const requiresThreads = ["ppsspp", "dosbox_pure", "azahar"];
 
-export const requiresWebGL2 = ["ppsspp", "azahar"];
+export const requiresWebGL2 = ["ppsspp", "azahar", "flycast"];

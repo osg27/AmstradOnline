@@ -17,6 +17,69 @@
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
+  function installFlycastWebGlPatches() {
+    if (window.__oldStyleFlycastWebGlPatched) return;
+    window.__oldStyleFlycastWebGlPatched = true;
+
+    const originalWarn = console.warn;
+    console.warn = function patchedWarn(...args) {
+      const message = typeof args[0] === 'string' ? args[0] : '';
+      if (message.includes('__syscall_mprotect') || message.includes('is not a valid value')) return;
+      originalWarn.apply(console, args);
+    };
+
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function patchedGetContext(type, attrs) {
+      const context = originalGetContext.call(this, type, attrs);
+      if (!context || (type !== 'webgl2' && type !== 'experimental-webgl2') || context.__flycastPatched) {
+        return context;
+      }
+
+      context.__flycastPatched = true;
+      const originalGetParameter = context.getParameter.bind(context);
+      context.getParameter = function patchedGetParameter(parameterName) {
+        if (parameterName === 0x1f02 || parameterName === context.VERSION) {
+          return 'OpenGL ES 3.0 WebGL 2.0';
+        }
+        if (parameterName === 0x8b8c || parameterName === context.SHADING_LANGUAGE_VERSION) {
+          return 'OpenGL ES GLSL ES 3.00';
+        }
+        return originalGetParameter(parameterName);
+      };
+
+      const originalGetError = context.getError.bind(context);
+      context.getError = function patchedGetError() {
+        let error = originalGetError();
+        while (error === 0x500) {
+          error = originalGetError();
+        }
+        return error;
+      };
+
+      const textureBindings = {
+        [context.TEXTURE_2D]: context.TEXTURE_BINDING_2D,
+        [context.TEXTURE_CUBE_MAP]: context.TEXTURE_BINDING_CUBE_MAP,
+        [context.TEXTURE_3D]: context.TEXTURE_BINDING_3D,
+        [context.TEXTURE_2D_ARRAY]: context.TEXTURE_BINDING_2D_ARRAY,
+      };
+      const originalTexParameteri = context.texParameteri.bind(context);
+      context.texParameteri = function patchedTexParameteri(target, parameterName, parameter) {
+        const binding = textureBindings[target];
+        if (binding && !originalGetParameter(binding)) return undefined;
+        return originalTexParameteri(target, parameterName, parameter);
+      };
+      const originalTexParameterf = context.texParameterf.bind(context);
+      context.texParameterf = function patchedTexParameterf(target, parameterName, parameter) {
+        const binding = textureBindings[target];
+        if (binding && !originalGetParameter(binding)) return undefined;
+        return originalTexParameterf(target, parameterName, parameter);
+      };
+
+      console.log('[flycast-wasm] Patched WebGL2 context');
+      return context;
+    };
+  }
+
   function drawStatus(main, sub = '') {
     statusText = main;
     context.fillStyle = '#000';
@@ -385,6 +448,7 @@
     });
 
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
+    installFlycastWebGlPatches();
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
     drawStatus('Loading Dreamcast', primaryGame.fileName);
 
