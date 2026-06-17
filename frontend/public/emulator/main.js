@@ -487,6 +487,10 @@ async function main() {
     if (code === null) return false;
 
     if (action === "down") {
+      if (!heldKeyboardCodes.has(key) && key.length === 1) {
+        input_char(key.charCodeAt(0));
+      }
+
       rememberHeldKey(key, code);
       keydown(code);
       return true;
