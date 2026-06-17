@@ -946,15 +946,6 @@ export default function RoomPage() {
     const action = active ? 'down' : 'up';
 
     addInputDebug(`forward P${player} extra key ${key} ${action}`, mask, player === 1 ? 'host local' : 'guest remote');
-    if (active) {
-      forwardInputToEmulator({
-        type: 'amstrad_remote_input',
-        player,
-        key,
-        action,
-      });
-    }
-
     forwardInputToEmulator({
       type: 'amstrad_remote_control',
       player,
@@ -972,15 +963,6 @@ export default function RoomPage() {
       const action = active ? 'down' : 'up';
 
       addInputDebug(`forward held P${player} key ${key} ${action}`, mask, 'shared joystick');
-      if (active && key.length === 1) {
-        forwardInputToEmulator({
-          type: 'amstrad_remote_input',
-          player,
-          key,
-          action,
-        });
-      }
-
       forwardInputToEmulator({
         type: 'amstrad_remote_control',
         player,
@@ -1418,12 +1400,6 @@ export default function RoomPage() {
         if (!active) return;
 
         forwardInputToEmulator({
-          type: 'amstrad_remote_input',
-          player: 2,
-          key,
-          action: 'down',
-        });
-        forwardInputToEmulator({
           type: 'amstrad_remote_control',
           player: 2,
           key,
@@ -1508,7 +1484,7 @@ export default function RoomPage() {
 
         addInputDebug(`forward to emulator ${formatInputPayload(parsed)}`);
         forwardInputToEmulator({
-          type: 'amstrad_remote_input',
+          type: 'amstrad_remote_control',
           key: parsed.key,
           action: parsed.action,
           player: isCpcParty ? 1 : player,
@@ -2261,7 +2237,7 @@ export default function RoomPage() {
 
         addInputDebug(`host key ${key} down -> ${mappedKey || key}`, null, 'host keyboard');
         forwardInputToEmulator({
-          type: 'amstrad_remote_input',
+          type: 'amstrad_remote_control',
           player: 1,
           key: mappedKey || key,
           action: 'down',
@@ -2299,7 +2275,7 @@ export default function RoomPage() {
 
         addInputDebug(`host key ${key} up -> ${mappedKey || key}`, null, 'host keyboard');
         forwardInputToEmulator({
-          type: 'amstrad_remote_input',
+          type: 'amstrad_remote_control',
           player: 1,
           key: mappedKey || key,
           action: 'up',

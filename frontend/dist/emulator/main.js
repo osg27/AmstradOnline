@@ -318,6 +318,7 @@ async function main() {
 
   let selectedGamepadIndex = null;
   let lastJoystickMask = -1;
+  const heldKeyboardCodes = new Map();
   const remoteJoystickMasks = {
     1: 0,
     2: 0,
@@ -328,6 +329,7 @@ async function main() {
     enable_digital_joystick(emulator);
     remoteJoystickMasks[1] = 0;
     remoteJoystickMasks[2] = 0;
+    heldKeyboardCodes.clear();
     lastJoystickMask = -1;
     set_joystick_mask(emulator, 0);
   }
@@ -420,46 +422,58 @@ async function main() {
     );
   }
 
+  function codeForInputKey(key) {
+    if (typeof key !== "string") return null;
+
+    key = normaliseInputKey(key);
+
+    if (key === " ") {
+      return 32;
+    }
+
+    if (key.length === 1) {
+      return key.toUpperCase().charCodeAt(0);
+    }
+
+    return keyNameToCode(key);
+  }
+
+  function rememberHeldKey(key, code) {
+    heldKeyboardCodes.set(normaliseInputKey(key), code);
+  }
+
+  function forgetHeldKey(key) {
+    heldKeyboardCodes.delete(normaliseInputKey(key));
+  }
+
+  function releaseAllHeldKeys() {
+    heldKeyboardCodes.forEach((code) => {
+      keyup(code);
+    });
+    heldKeyboardCodes.clear();
+  }
+
   function applyInput(key, action) {
     if (typeof key !== "string") return false;
 
     key = normaliseInputKey(key);
+    const code = codeForInputKey(key);
+    if (code === null) return false;
 
     if (action === "down") {
-      if (key === " ") {
-        keydown(32);
-        return true;
-      }
-
-      if (key.length === 1) {
+      if (!heldKeyboardCodes.has(key) && key.length === 1) {
         input_char(key.charCodeAt(0));
-        keydown(key.toUpperCase().charCodeAt(0));
-        return true;
       }
 
-      const code = keyNameToCode(key);
-      if (code !== null) {
-        keydown(code);
-        return true;
-      }
+      rememberHeldKey(key, code);
+      keydown(code);
+      return true;
     }
 
     if (action === "up") {
-      if (key === " ") {
-        keyup(32);
-        return true;
-      }
-
-      if (key.length === 1) {
-        keyup(key.toUpperCase().charCodeAt(0));
-        return true;
-      }
-
-      const code = keyNameToCode(key);
-      if (code !== null) {
-        keyup(code);
-        return true;
-      }
+      forgetHeldKey(key);
+      keyup(code);
+      return true;
     }
 
     return false;
@@ -468,20 +482,18 @@ async function main() {
   function applyControlInput(key, action) {
     if (typeof key !== "string") return false;
 
-    const code = keyNameToCode(key) ?? (
-      key.length === 1 ? key.toUpperCase().charCodeAt(0) : null
-    );
-
-    if (code === null) {
-      return false;
-    }
+    key = normaliseInputKey(key);
+    const code = codeForInputKey(key);
+    if (code === null) return false;
 
     if (action === "down") {
+      rememberHeldKey(key, code);
       keydown(code);
       return true;
     }
 
     if (action === "up") {
+      forgetHeldKey(key);
       keyup(code);
       return true;
     }
@@ -610,6 +622,13 @@ async function main() {
     }
   });
 
+  window.addEventListener("blur", releaseAllHeldKeys);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      releaseAllHeldKeys();
+    }
+  });
+
   const frame_time = 20;
   const maxFrameCatchup = frame_time * 5;
   let lastFrameAt = 0;
@@ -627,6 +646,9 @@ async function main() {
 
     while (frameAccumulator >= frame_time) {
       frameCounter += 1;
+      heldKeyboardCodes.forEach((code) => {
+        keydown(code);
+      });
       tick(emulator, frame_time);
       frameAccumulator -= frame_time;
     }
