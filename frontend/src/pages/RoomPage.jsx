@@ -13,6 +13,8 @@ const KICKSTART_STORE_NAME = 'roms';
 const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart';
 const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
+const DREAMCAST_BOOT_BIOS_KEY = 'dreamcast-dc-boot';
+const DREAMCAST_FLASH_BIOS_KEY = 'dreamcast-dc-flash';
 const CONTROL_MATCH_LIMIT = 6;
 
 const CONTROL_ACTION_LABELS = {
@@ -179,6 +181,7 @@ export default function RoomPage() {
   const [currentAgaDiskIndex, setCurrentAgaDiskIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
   const [playstationBiosName, setPlaystationBiosName] = useState('');
+  const [dreamcastBiosName, setDreamcastBiosName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
@@ -208,6 +211,7 @@ export default function RoomPage() {
   const swapDiskInputRef = useRef(null);
   const kickstartInputRef = useRef(null);
   const playstationBiosInputRef = useRef(null);
+  const dreamcastBiosInputRef = useRef(null);
   const pcRef = useRef(null);
   const dataChannelRef = useRef(null);
   const serialChannelRef = useRef(null);
@@ -239,6 +243,7 @@ export default function RoomPage() {
   const activeGuestSignalIdRef = useRef('');
   const activePeerSignalIdRef = useRef('');
   const sentStoredKickstartFrameRef = useRef(0);
+  const sentStoredDreamcastBiosFrameRef = useRef(0);
   const [micEnabled, setMicEnabled] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
   const [micStatus, setMicStatus] = useState('Mic off');
@@ -338,6 +343,7 @@ export default function RoomPage() {
   useEffect(() => {
     setEmulatorFrameLoadCount(0);
     sentStoredKickstartFrameRef.current = 0;
+    sentStoredDreamcastBiosFrameRef.current = 0;
   }, [emulatorSrc]);
 
   useEffect(() => {
@@ -965,6 +971,43 @@ export default function RoomPage() {
       window.clearTimeout(timer);
     };
   }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isHost, isPlayStation, kickstartStorageKey]);
+
+  useEffect(() => {
+    if (!isHost || !isDreamcast || !emulatorFrameLoadCount) return undefined;
+    if (sentStoredDreamcastBiosFrameRef.current === emulatorFrameLoadCount) return undefined;
+
+    let cancelled = false;
+    sentStoredDreamcastBiosFrameRef.current = emulatorFrameLoadCount;
+    const timer = window.setTimeout(async () => {
+      try {
+        const [bootBios, flashBios] = await Promise.all([
+          loadStoredKickstart(DREAMCAST_BOOT_BIOS_KEY),
+          loadStoredKickstart(DREAMCAST_FLASH_BIOS_KEY),
+        ]);
+
+        if (cancelled || !bootBios || !flashBios) return;
+
+        forwardInputToEmulator({
+          type: 'dreamcast_bios',
+          files: [
+            { fileName: 'dc_boot.bin', bytes: bootBios.bytes },
+            { fileName: 'dc_flash.bin', bytes: flashBios.bytes },
+          ],
+        });
+        setDreamcastBiosName('dc_boot.bin + dc_flash.bin (saved locally)');
+        addLog('Loaded saved Dreamcast BIOS files');
+      } catch (err) {
+        if (!cancelled) {
+          addLog(`Saved Dreamcast BIOS unavailable: ${err.message}`);
+        }
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isDreamcast, isHost]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -3065,6 +3108,12 @@ export default function RoomPage() {
     playstationBiosInputRef.current?.click();
   }
 
+  function openDreamcastBiosPicker() {
+    if (!canControlLocalEmulator || !isDreamcast) return;
+
+    dreamcastBiosInputRef.current?.click();
+  }
+
   function openSwapDiskPicker() {
     if (!canControlLocalEmulator || (!isAmigaFamily && !isC64) || !hostStarted) return;
 
@@ -3409,6 +3458,49 @@ export default function RoomPage() {
     }
   }
 
+  async function handleDreamcastBiosSelected(event) {
+    try {
+      const files = Array.from(event.target.files || []);
+      if (!files.length) return;
+
+      const bootFile = files.find((file) => file.name.toLowerCase() === 'dc_boot.bin');
+      const flashFile = files.find((file) => file.name.toLowerCase() === 'dc_flash.bin');
+
+      if (!bootFile || !flashFile) {
+        setError('Select both Dreamcast BIOS files: dc_boot.bin and dc_flash.bin');
+        addLog('Dreamcast BIOS needs dc_boot.bin and dc_flash.bin selected together');
+        event.target.value = '';
+        return;
+      }
+
+      const [bootBytes, flashBytes] = await Promise.all([
+        bootFile.arrayBuffer().then((buffer) => new Uint8Array(buffer)),
+        flashFile.arrayBuffer().then((buffer) => new Uint8Array(buffer)),
+      ]);
+
+      await Promise.all([
+        saveStoredKickstart(DREAMCAST_BOOT_BIOS_KEY, 'dc_boot.bin', bootBytes),
+        saveStoredKickstart(DREAMCAST_FLASH_BIOS_KEY, 'dc_flash.bin', flashBytes),
+      ]);
+
+      forwardInputToEmulator({
+        type: 'dreamcast_bios',
+        files: [
+          { fileName: 'dc_boot.bin', bytes: bootBytes },
+          { fileName: 'dc_flash.bin', bytes: flashBytes },
+        ],
+      });
+
+      setDreamcastBiosName('dc_boot.bin + dc_flash.bin (saved locally)');
+      addLog('Saved Dreamcast BIOS files locally');
+      setStatus('Dreamcast BIOS ready');
+      event.target.value = '';
+    } catch (err) {
+      setError(err.message);
+      addLog(`Dreamcast BIOS error: ${err.message}`);
+    }
+  }
+
   function chooseControlProfile(profile) {
     setSelectedControlProfile(profile);
     setControlProfileDrawerOpen(true);
@@ -3478,7 +3570,7 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {(loadedDiskName || isAmigaFamily || isPlayStation) ? (
+        {(loadedDiskName || isAmigaFamily || isPlayStation || isDreamcast) ? (
           <div className="session-strip">
             {loadedDiskName ? <span>{loadedDiskName}</span> : null}
             {isCpcSystem && selectedControlProfile ? (
@@ -3493,6 +3585,7 @@ export default function RoomPage() {
             ) : null}
             {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isAmigaAga ? 'ROM: A1200 Kickstart recommended' : 'ROM: AROS'}</span> : null}
             {isPlayStation ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : 'BIOS: HLE fallback / load your own locally'}</span> : null}
+            {isDreamcast ? <span>{dreamcastBiosName ? `BIOS: ${dreamcastBiosName}` : 'BIOS: dc_boot.bin + dc_flash.bin required'}</span> : null}
             {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
           </div>
         ) : null}
@@ -3650,6 +3743,17 @@ export default function RoomPage() {
                   />
                 ) : null}
 
+                {isDreamcast ? (
+                  <input
+                    ref={dreamcastBiosInputRef}
+                    type="file"
+                    accept=".bin"
+                    multiple
+                    onChange={handleDreamcastBiosSelected}
+                    style={{ display: 'none' }}
+                  />
+                ) : null}
+
                 {isAmigaFamily ? (
                   <input
                     ref={kickstartInputRef}
@@ -3768,6 +3872,12 @@ export default function RoomPage() {
                   {isPlayStation ? (
                     <button type="button" className="secondary" onClick={openPlayStationBiosPicker}>
                       {playstationBiosName ? 'Change local PlayStation BIOS' : 'Load local PlayStation BIOS'}
+                    </button>
+                  ) : null}
+
+                  {isDreamcast ? (
+                    <button type="button" className="secondary" onClick={openDreamcastBiosPicker}>
+                      {dreamcastBiosName ? 'Change local Dreamcast BIOS' : 'Load local Dreamcast BIOS'}
                     </button>
                   ) : null}
                 </div>

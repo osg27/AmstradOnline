@@ -7,6 +7,10 @@
   let loaderScript = null;
   let gameUrl = null;
   let externalGameUrls = [];
+  let dreamcastBios = {
+    boot: null,
+    flash: null,
+  };
   let sharedAudioContext = null;
   let audioDestination = null;
   let keepAlive = null;
@@ -334,6 +338,22 @@
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
+    window.EJS_defaultOptions = {
+      reicast_boot_to_bios: 'disabled',
+      reicast_hle_bios: 'disabled',
+      reicast_threaded_rendering: 'disabled',
+      reicast_synchronous_rendering: 'disabled',
+      reicast_internal_resolution: '640x480',
+      reicast_mipmapping: 'disabled',
+      reicast_anisotropic_filtering: '1',
+      reicast_texupscale: 'disabled',
+      reicast_enable_rttb: 'disabled',
+      reicast_enable_purupuru: 'disabled',
+      reicast_alpha_sorting: 'per-strip (fast, least accurate)',
+      reicast_delay_frame_swapping: 'disabled',
+      reicast_frame_skipping: 'enabled',
+      reicast_framerate: 'normal',
+    };
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
       'emulator.js': '/emulatorjs/data/src/emulator.js',
@@ -424,6 +444,11 @@
       return;
     }
 
+    if (!dreamcastBios.boot || !dreamcastBios.flash) {
+      drawStatus('Dreamcast BIOS needed', 'Load dc_boot.bin and dc_flash.bin');
+      return;
+    }
+
     ensureAudio()?.resume?.().catch(() => {});
     drawStatus('Checking Dreamcast runtime', currentRom.fileName);
     try {
@@ -446,6 +471,12 @@
       externalGameUrls.push(url);
       externalFiles[file.fileName] = url;
     });
+
+    const bootUrl = URL.createObjectURL(new Blob([dreamcastBios.boot.bytes], { type: 'application/octet-stream' }));
+    const flashUrl = URL.createObjectURL(new Blob([dreamcastBios.flash.bytes], { type: 'application/octet-stream' }));
+    externalGameUrls.push(bootUrl, flashUrl);
+    externalFiles['/dc/dc_boot.bin'] = bootUrl;
+    externalFiles['/dc/dc_flash.bin'] = flashUrl;
 
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
     installFlycastWebGlPatches();
@@ -533,6 +564,27 @@
         })),
       };
       loadCurrentRom();
+      return;
+    }
+
+    if (message.type === 'dreamcast_bios') {
+      const files = (message.files || []).map((file) => ({
+        fileName: String(file.fileName || '').toLowerCase(),
+        bytes: new Uint8Array(file.bytes || []),
+      }));
+      const boot = files.find((file) => file.fileName === 'dc_boot.bin');
+      const flash = files.find((file) => file.fileName === 'dc_flash.bin');
+
+      if (!boot || !flash) {
+        drawStatus('Dreamcast BIOS incomplete', 'Need dc_boot.bin and dc_flash.bin');
+        return;
+      }
+
+      dreamcastBios = { boot, flash };
+      drawStatus('Dreamcast BIOS ready', currentRom?.fileName || 'Load a Dreamcast game');
+      if (currentRom) {
+        loadCurrentRom();
+      }
       return;
     }
 
