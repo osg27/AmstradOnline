@@ -158,6 +158,10 @@ class EJS_GameManager {
             (this.EJS.rewindEnabled ? "rewind_granularity = 6\n" : "") +
             "savefile_directory = \"/data/saves\"\n";
 
+        if (this.EJS.getCore() === "flycast") {
+            cfg += "system_directory = \"/\"\n";
+        }
+
         if (this.EJS.retroarchOpts && Array.isArray(this.EJS.retroarchOpts)) {
             this.EJS.retroarchOpts.forEach(option => {
                 let selected = this.EJS.preGetSetting(option.name);

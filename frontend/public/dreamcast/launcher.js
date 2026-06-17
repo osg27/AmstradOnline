@@ -381,6 +381,7 @@
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
+    window.EJS_dontExtractRom = true;
     window.EJS_volume = 1;
     window.EJS_backgroundColor = '#000';
     window.EJS_color = '#2f8f76';
@@ -442,6 +443,50 @@
     };
   }
 
+  function installFlycastStartGamePatch() {
+    if (window.__oldStyleFlycastStartGamePatchInstalled) return;
+    window.__oldStyleFlycastStartGamePatchInstalled = true;
+
+    const timer = window.setInterval(() => {
+      const emulator = window.EJS_emulator;
+      if (!emulator || emulator.__oldStyleFlycastStartGamePatched || typeof emulator.startGame !== 'function') return;
+
+      emulator.__oldStyleFlycastStartGamePatched = true;
+      window.clearInterval(timer);
+
+      const originalStartGame = emulator.startGame;
+      emulator.startGame = function patchedStartGame(...args) {
+        try {
+          const fs = this.gameManager?.FS;
+          if (fs) {
+            try {
+              if (!fs.analyzePath('/dc').exists) fs.mkdir('/dc');
+            } catch {}
+
+            const cfgPath = '/home/web_user/.config/retroarch/retroarch.cfg';
+            try {
+              const cfg = new TextDecoder().decode(fs.readFile(cfgPath));
+              if (!cfg.includes('system_directory')) {
+                fs.writeFile(cfgPath, `${cfg}system_directory = "/"\n`);
+              }
+            } catch {}
+
+            const hasBoot = fs.analyzePath('/dc/dc_boot.bin').exists;
+            const hasFlash = fs.analyzePath('/dc/dc_flash.bin').exists;
+            const bootMessage = `Flycast booting ${this.fileName || 'game'} / BIOS ${hasBoot && hasFlash ? 'ok' : 'missing'}`;
+            console.log(`[Old Style Dreamcast] ${bootMessage}`);
+            sendHostStatus(bootMessage);
+          }
+        } catch (error) {
+          console.warn('[Old Style Dreamcast] startGame patch failed', error);
+          sendHostStatus(`Flycast preboot check failed: ${error.message || error}`);
+        }
+
+        return originalStartGame.apply(this, args);
+      };
+    }, 50);
+  }
+
   async function loadCurrentRom() {
     if (!currentRom) {
       drawStatus('Dreamcast ready', 'Load a Dreamcast game from the room');
@@ -485,6 +530,7 @@
 
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
     installFlycastWebGlPatches();
+    installFlycastStartGamePatch();
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
     drawStatus('Loading Dreamcast', primaryGame.fileName);
     sendHostStatus(`Starting Dreamcast game: ${primaryGame.fileName}`);
