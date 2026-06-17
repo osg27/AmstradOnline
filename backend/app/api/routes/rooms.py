@@ -17,7 +17,8 @@ router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "snes", "c64", "pcengine", "playstation"}
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
-SUPER_ADMIN_ONLY_SYSTEMS = {"arcade"}
+SUPER_ADMIN_ONLY_SYSTEMS = {"arcade", "dreamcast"}
+PRIVATE_SUPER_ADMIN_SYSTEMS = {"dreamcast"}
 
 
 def get_current_user_id(authorization: str | None = Header(default=None)) -> int:
@@ -41,6 +42,11 @@ def generate_room_code(length: int = 6) -> str:
 def require_system_access(db: Session, user_id: int, system: str, *, creating: bool = False) -> None:
     if system in UNAVAILABLE_SYSTEMS:
         raise HTTPException(status_code=403, detail="This system is still under construction")
+    if system in PRIVATE_SUPER_ADMIN_SYSTEMS:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not is_super_admin_user(user):
+            raise HTTPException(status_code=403, detail="This system is only available to the super admin")
+        return
     if creating and system in SUPER_ADMIN_ONLY_SYSTEMS:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not is_super_admin_user(user):

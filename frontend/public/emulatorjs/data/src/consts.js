@@ -20,6 +20,7 @@ export const cores = {
     "pce": ["mednafen_pce"],
     "pcfx": ["mednafen_pcfx"],
     "psx": ["pcsx_rearmed", "mednafen_psx_hw"],
+    "dreamcast": ["flycast"],
     "ws": ["mednafen_wswan"],
     "gba": ["mgba"],
     "n64": ["mupen64plus_next", "parallel_n64"],

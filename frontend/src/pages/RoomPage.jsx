@@ -281,31 +281,32 @@ export default function RoomPage() {
   const isSnes = roomSystem === 'snes';
   const isPcEngine = roomSystem === 'pcengine';
   const isPlayStation = roomSystem === 'playstation';
+  const isDreamcast = roomSystem === 'dreamcast';
   const isC64 = roomSystem === 'c64';
   const isArcade = roomSystem === 'arcade';
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
-  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isDreamcast ? 'Sega Dreamcast' : isC64 ? 'Commodore 64' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-16-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isDreamcast ? '/dreamcast/launcher.html?v=2026-06-17-1' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-16-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
-    : isMegaDrive ? '.bin,.gen,.md,.smd' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2' : isPcEngine ? '.pce,.sgx,.zip' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt' : isArcade ? '.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
-  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isPlayStation ? loadedDiskName ? 'Change PlayStation game' : 'Load PlayStation game' : isC64 ? 'Load C64 file' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
+    : isMegaDrive ? '.bin,.gen,.md,.smd' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2' : isPcEngine ? '.pce,.sgx,.zip' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isDreamcast ? '.gdi,.cdi,.chd,.cue,.bin,.raw,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt' : isArcade ? '.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
+  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMegaDrive ? 'Load Mega Drive ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isPlayStation ? loadedDiskName ? 'Change PlayStation game' : 'Load PlayStation game' : isDreamcast ? loadedDiskName ? 'Change Dreamcast game' : 'Load Dreamcast game' : isC64 ? 'Load C64 file' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
     : isSoloMode
       ? isAmigaFamily
         ? 'P1 Amiga controls + keyboard/mouse'
-        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
+        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isDreamcast ? 'P1 Dreamcast controller' : isC64 ? 'P1 C64 joystick + keyboard' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
       : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
-      : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+      : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isDreamcast ? (isHost ? 'P1 Dreamcast controller' : 'P2 Dreamcast controller') : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isSoloMode ? 'Solo' : isHost ? 'Host' : 'Guest';
@@ -316,7 +317,7 @@ export default function RoomPage() {
     ? `P1: ${username || playerOneName}`
     : isCpcParty
     ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}`
-    : isMegaDrive || isSnes || isPcEngine || isPlayStation || isC64 || isArcade
+    : isMegaDrive || isSnes || isPcEngine || isPlayStation || isDreamcast || isC64 || isArcade
       ? `${isHost ? `P1: ${playerOneName}` : `P2: ${playerTwoName}`} / controller ${isHost ? '1' : '2'}`
       : isHost
         ? `P1: ${playerOneName}`
@@ -456,7 +457,7 @@ export default function RoomPage() {
     const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone;
     const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
-    const isMultiButtonSystem = system === 'megadrive' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'arcade';
+    const isMultiButtonSystem = system === 'megadrive' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'dreamcast' || system === 'arcade';
     const fire = isMultiButtonSystem
       ? pad.buttons[0]?.pressed
       : [0, 1].some((index) => pad.buttons[index]?.pressed);
@@ -474,7 +475,7 @@ export default function RoomPage() {
     if (extra) mask |= 32;
     if (start) mask |= 64;
     if (third) mask |= 128;
-    if (system === 'playstation') {
+    if (system === 'playstation' || system === 'dreamcast') {
       if (pad.buttons[3]?.pressed) mask |= 256;
       if (pad.buttons[8]?.pressed) mask |= 512;
       if (pad.buttons[4]?.pressed) mask |= 1024;
@@ -784,6 +785,36 @@ export default function RoomPage() {
     hostAudioStreamRef.current = nextAudioStream || null;
   }, [emulatorSrc, isPlayStation, isSoloMode]);
 
+  const reloadDreamcastFrame = useCallback(async () => {
+    const frame = emulatorFrameRef.current;
+    if (!frame || !isDreamcast) return;
+
+    if (mirrorLoopRef.current) {
+      cancelAnimationFrame(mirrorLoopRef.current);
+      mirrorLoopRef.current = null;
+    }
+
+    await new Promise((resolve) => {
+      frame.addEventListener('load', resolve, { once: true });
+      const separator = emulatorSrc.includes('?') ? '&' : '?';
+      frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
+    });
+
+    const emulatorCanvas = await waitForEmulatorCanvas(frame);
+    startMirrorLoop(emulatorCanvas);
+
+    const previousAudioTrack = hostAudioStreamRef.current?.getAudioTracks?.()[0] || null;
+    const nextAudioStream = await waitForHostAudioStream(frame);
+    const nextAudioTrack = nextAudioStream?.getAudioTracks?.()[0] || null;
+
+    if (!isSoloMode && previousAudioTrack && nextAudioTrack) {
+      const audioSender = pcRef.current?.getSenders?.().find((sender) => sender.track === previousAudioTrack);
+      await audioSender?.replaceTrack(nextAudioTrack);
+    }
+
+    hostAudioStreamRef.current = nextAudioStream || null;
+  }, [emulatorSrc, isDreamcast, isSoloMode]);
+
   const configureSerialChannel = useCallback((channel) => {
     serialChannelRef.current = channel;
     channel.binaryType = 'arraybuffer';
@@ -990,7 +1021,7 @@ export default function RoomPage() {
 
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : 2;
-    const joystickMask = isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isC64 || isArcade ? mask : mask & 31;
+    const joystickMask = isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isDreamcast || isC64 || isArcade ? mask : mask & 31;
     const previousMask = localJoystickMaskRef.current;
     const payload = {
       type: 'joystick',
@@ -1036,7 +1067,7 @@ export default function RoomPage() {
         player,
         mask: joystickMask,
       });
-      if (!isAmigaFamily && !isMegaDrive && !isSnes && !isPcEngine && !isPlayStation && !isC64 && !isArcade) {
+      if (!isAmigaFamily && !isMegaDrive && !isSnes && !isPcEngine && !isPlayStation && !isDreamcast && !isC64 && !isArcade) {
         forwardExtraButtonAsKey(mask, player, previousMask);
       }
       localJoystickMaskRef.current = mask;
@@ -1061,7 +1092,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isAmigaLink, isArcade, isC64, isCpcParty, isHost, isMegaDrive, isPcEngine, isPlayStation, isSnes, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isAmigaLink, isArcade, isC64, isCpcParty, isDreamcast, isHost, isMegaDrive, isPcEngine, isPlayStation, isSnes, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -1355,7 +1386,7 @@ export default function RoomPage() {
       const previousMask = remoteJoystickMaskRef.current;
 
       addInputDebug('guest input timed out, releasing held input', 0, 'guest remote');
-      if (isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isC64 || isArcade) {
+      if (isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isDreamcast || isC64 || isArcade) {
         forwardInputToEmulator({
           type: 'amstrad_remote_joystick',
           player: 2,
@@ -1370,10 +1401,10 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(staleRemoteInputTimer);
     };
-  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmigaFamily, isArcade, isC64, isCpcParty, isHost, isMegaDrive, isPcEngine, isPlayStation, isSnes, releaseCpcPartySharedInput]);
+  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmigaFamily, isArcade, isC64, isCpcParty, isDreamcast, isHost, isMegaDrive, isPcEngine, isPlayStation, isSnes, releaseCpcPartySharedInput]);
 
   useEffect(() => {
-    if (isHost !== true || isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isC64 || isArcade) {
+    if (isHost !== true || isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isDreamcast || isC64 || isArcade) {
       return undefined;
     }
 
@@ -1411,7 +1442,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
     };
-  }, [activePartyPlayer, forwardInputToEmulator, isAmigaFamily, isArcade, isC64, isCpcParty, isHost, isMegaDrive, isPcEngine, isPlayStation, isSnes]);
+  }, [activePartyPlayer, forwardInputToEmulator, isAmigaFamily, isArcade, isC64, isCpcParty, isDreamcast, isHost, isMegaDrive, isPcEngine, isPlayStation, isSnes]);
 
   useEffect(() => {
     if (isHost !== false) {
@@ -1532,7 +1563,7 @@ export default function RoomPage() {
           if (previousMask) {
             if (isCpcParty) {
               releaseCpcPartySharedInput(previousMask);
-            } else if (isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isC64 || isArcade) {
+            } else if (isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isDreamcast || isC64 || isArcade) {
               forwardInputToEmulator({
                 type: 'amstrad_remote_joystick',
                 player,
@@ -1577,7 +1608,7 @@ export default function RoomPage() {
             mask: mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
-        } else if (isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isC64 || isArcade) {
+        } else if (isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isDreamcast || isC64 || isArcade) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player,
@@ -1612,7 +1643,7 @@ export default function RoomPage() {
             mask: mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
-        } else if (isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isC64 || isArcade) {
+        } else if (isAmigaFamily || isMegaDrive || isSnes || isPcEngine || isPlayStation || isDreamcast || isC64 || isArcade) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player,
@@ -1627,7 +1658,7 @@ export default function RoomPage() {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
-  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmigaFamily, isArcade, isC64, isCpcParty, isMegaDrive, isPcEngine, isPlayStation, isSnes, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmigaFamily, isArcade, isC64, isCpcParty, isDreamcast, isMegaDrive, isPcEngine, isPlayStation, isSnes, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     handleGuestPayloadOnHostRef.current = handleGuestPayloadOnHost;
@@ -2512,6 +2543,7 @@ export default function RoomPage() {
     if (isSnes) return iframe.contentWindow?.getSnesAudioStream?.() || null;
     if (isPcEngine) return iframe.contentWindow?.getPcEngineAudioStream?.() || null;
     if (isPlayStation) return iframe.contentWindow?.getPlayStationAudioStream?.() || null;
+    if (isDreamcast) return iframe.contentWindow?.getDreamcastAudioStream?.() || null;
     if (isC64) return iframe.contentWindow?.getC64AudioStream?.() || null;
     if (isArcade) return iframe.contentWindow?.getArcadeAudioStream?.() || null;
     if (isSpectrum) return iframe.contentWindow?.getSpectrumAudioStream?.() || null;
@@ -2882,6 +2914,9 @@ export default function RoomPage() {
       if (isPlayStation) {
         iframe.contentWindow?.postMessage({ type: 'playstation_start' }, window.location.origin);
       }
+      if (isDreamcast) {
+        iframe.contentWindow?.postMessage({ type: 'dreamcast_start' }, window.location.origin);
+      }
       if (isC64) {
         iframe.contentWindow?.postMessage({ type: 'c64_start', soloMode: isSoloMode }, window.location.origin);
       }
@@ -3098,11 +3133,21 @@ export default function RoomPage() {
       return;
     }
 
+    if (isDreamcast) {
+      setError('');
+      setLoadedDiskName('');
+      setInputCaptured(false);
+      await reloadDreamcastFrame();
+      addLog('Dreamcast returned to start state');
+      setStatus('Dreamcast ready. Load a game');
+      return;
+    }
+
     const type = isAmiga || isAmigaLink
       ? 'amiga_reset'
       : isAmigaAga
         ? 'amiga_aga_reset'
-      : isMegaDrive ? 'megadrive_reset' : isSnes ? 'snes_reset' : isPcEngine ? 'pcengine_reset' : isPlayStation ? 'playstation_reset' : isC64 ? 'c64_reset' : isArcade ? 'arcade_reset' : isSpectrum ? 'spectrum_reset' : 'amstrad_reset';
+      : isMegaDrive ? 'megadrive_reset' : isSnes ? 'snes_reset' : isPcEngine ? 'pcengine_reset' : isPlayStation ? 'playstation_reset' : isDreamcast ? 'dreamcast_reset' : isC64 ? 'c64_reset' : isArcade ? 'arcade_reset' : isSpectrum ? 'spectrum_reset' : 'amstrad_reset';
 
     forwardInputToEmulator({ type });
     addLog('Reset emulator');
@@ -3140,7 +3185,7 @@ export default function RoomPage() {
       const arcadeDriverName = arcadeDriver.trim() || file.name.replace(/\.(zip|7z|rar|chd)$/i, '').toLowerCase();
       const allowedExtensions = isAmigaFamily
         ? ['.adf', '.zip']
-        : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isPcEngine ? ['.pce', '.sgx', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt'] : isArcade ? ['.zip'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
+        : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isPcEngine ? ['.pce', '.sgx', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isDreamcast ? ['.gdi', '.cdi', '.chd', '.cue', '.bin', '.raw', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt'] : isArcade ? ['.zip'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
 
       const invalidFile = selectedFiles.find((selectedFile) => {
         const selectedLowerName = selectedFile.name.toLowerCase();
@@ -3154,7 +3199,7 @@ export default function RoomPage() {
           event.target.value = '';
           return;
         }
-        setError(isAmigaFamily ? 'Amiga rooms currently support .adf and .zip files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, and .dx2 ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, and .zip ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, and .crt files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
+        setError(isAmigaFamily ? 'Amiga rooms currently support .adf and .zip files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, and .dx2 ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, and .zip ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isDreamcast ? 'Dreamcast rooms support .gdi, .cdi, .chd, .cue/.bin, .raw, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, and .crt files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${invalidFile.name}`);
         event.target.value = '';
         return;
@@ -3183,11 +3228,21 @@ export default function RoomPage() {
       }
 
       if (
-        isPlayStation
+        (isPlayStation || isDreamcast)
         && selectedFiles.some((selectedFile) => selectedFile.name.toLowerCase().endsWith('.cue'))
         && !selectedFiles.some((selectedFile) => selectedFile.name.toLowerCase().endsWith('.bin'))
       ) {
-        setError('Select the PlayStation .cue file and all of its .bin track files together');
+        setError(`Select the ${isDreamcast ? 'Dreamcast' : 'PlayStation'} .cue file and all of its .bin track files together`);
+        event.target.value = '';
+        return;
+      }
+
+      if (
+        isDreamcast
+        && selectedFiles.some((selectedFile) => selectedFile.name.toLowerCase().endsWith('.gdi'))
+        && !selectedFiles.some((selectedFile) => /\.(bin|raw)$/i.test(selectedFile.name))
+      ) {
+        setError('Select the Dreamcast .gdi file and all of its .bin/.raw track files together');
         event.target.value = '';
         return;
       }
@@ -3198,7 +3253,7 @@ export default function RoomPage() {
         return;
       }
 
-      const filesToLoad = (isAmigaAga || isPlayStation || isC64) && !isSwapDisk && selectedFiles.length > 1
+      const filesToLoad = (isAmigaAga || isPlayStation || isDreamcast || isC64) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
       const loadedFiles = await Promise.all(filesToLoad.map(async (selectedFile) => ({
@@ -3208,10 +3263,10 @@ export default function RoomPage() {
       const bytes = loadedFiles[0].bytes;
 
       const loadMessage = {
-        type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga || isAmigaLink ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isPcEngine ? 'pcengine_autoload' : isPlayStation ? 'playstation_autoload' : isC64 ? 'c64_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
+        type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga || isAmigaLink ? 'amiga_autoload' : isMegaDrive ? 'megadrive_autoload' : isSnes ? 'snes_autoload' : isPcEngine ? 'pcengine_autoload' : isPlayStation ? 'playstation_autoload' : isDreamcast ? 'dreamcast_autoload' : isC64 ? 'c64_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: loadedFiles[0].fileName,
-        bytes: isPlayStation ? undefined : bytes,
-        files: isPlayStation ? loadedFiles : undefined,
+        bytes: isPlayStation || isDreamcast ? undefined : bytes,
+        files: isPlayStation || isDreamcast ? loadedFiles : undefined,
         disks: isAmigaAga && !isSwapDisk ? loadedFiles : undefined,
         media: isC64 ? loadedFiles : undefined,
         driver: arcadeDriverName,
@@ -3234,6 +3289,10 @@ export default function RoomPage() {
       if (isPlayStation && loadedDiskName) {
         setStatus('Preparing a clean PlayStation runtime');
         await reloadPlayStationFrame();
+      }
+      if (isDreamcast && loadedDiskName) {
+        setStatus('Preparing a clean Dreamcast runtime');
+        await reloadDreamcastFrame();
       }
       forwardInputToEmulator(loadMessage);
 
@@ -3564,7 +3623,7 @@ export default function RoomPage() {
                   ref={fileInputRef}
                   type="file"
                   accept={acceptedMedia}
-                  multiple={isAmigaAga || isPlayStation || isC64}
+                  multiple={isAmigaAga || isPlayStation || isDreamcast || isC64}
                   data-mode="load"
                   onChange={handleDiskSelected}
                   style={{ display: 'none' }}
