@@ -3416,7 +3416,7 @@ export default function RoomPage() {
         setStatus('Preparing a clean PlayStation runtime');
         await reloadPlayStationFrame();
       }
-      if (isDreamcast && loadedDiskName) {
+      if (isDreamcast && hostStartedRef.current) {
         setStatus('Preparing a clean Dreamcast runtime');
         await reloadDreamcastFrame();
       }

@@ -518,10 +518,10 @@
             } catch {}
 
             try {
-              fs.writeFile('/dc_boot.bin', dreamcastBios.boot.bytes);
-              fs.writeFile('/dc_flash.bin', dreamcastBios.flash.bytes);
-              fs.writeFile('/dc/dc_boot.bin', dreamcastBios.boot.bytes);
-              fs.writeFile('/dc/dc_flash.bin', dreamcastBios.flash.bytes);
+              this.gameManager.writeFile('/dc_boot.bin', dreamcastBios.boot.bytes);
+              this.gameManager.writeFile('/dc_flash.bin', dreamcastBios.flash.bytes);
+              this.gameManager.writeFile('/dc/dc_boot.bin', dreamcastBios.boot.bytes);
+              this.gameManager.writeFile('/dc/dc_flash.bin', dreamcastBios.flash.bytes);
             } catch (error) {
               console.warn('[Old Style Dreamcast] BIOS FS write failed', error);
             }
@@ -531,7 +531,7 @@
               const originalSetupCoreSettingFile = this.Module.callbacks.setupCoreSettingFile;
               this.Module.callbacks.setupCoreSettingFile = (filePath) => {
                 try {
-                  fs.writeFile(filePath, coreOptions);
+                  this.gameManager.writeFile(filePath, coreOptions);
                 } catch (error) {
                   console.warn('[Old Style Dreamcast] Core option write failed', error);
                 }
