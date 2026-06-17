@@ -4,6 +4,7 @@
   const context = screen.getContext('2d', { alpha: false });
 
   let currentRom = null;
+  let bootBiosOnly = false;
   let loaderScript = null;
   let gameUrl = null;
   let externalGameUrls = [];
@@ -375,7 +376,7 @@
     drawStatus('Dreamcast ready', 'Load a Dreamcast game from the room');
   }
 
-  function configureEmulator(fileName, romUrl, externalFiles = {}) {
+  function configureEmulator(fileName, romUrl, externalFiles = {}, options = {}) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
     window.EJS_core = 'dreamcast';
@@ -383,8 +384,7 @@
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
     window.EJS_defaultOptions = {
-      reicast_cpu_mode: 'generic_recompiler',
-      reicast_boot_to_bios: 'disabled',
+      reicast_boot_to_bios: options.bootToBios ? 'enabled' : 'disabled',
       reicast_hle_bios: 'disabled',
       reicast_threaded_rendering: 'disabled',
       reicast_synchronous_rendering: 'disabled',
@@ -498,6 +498,19 @@
       const originalStartGame = emulator.startGame;
       emulator.startGame = function patchedStartGame(...args) {
         try {
+          if (bootBiosOnly) {
+            this.fileName = '';
+            const originalCallMain = this.Module?.callMain?.bind(this.Module);
+            if (originalCallMain && !this.Module.__oldStyleDreamcastBiosCallMainPatched) {
+              this.Module.__oldStyleDreamcastBiosCallMainPatched = true;
+              this.Module.callMain = (callArgs) => {
+                if (bootBiosOnly && Array.isArray(callArgs) && callArgs[callArgs.length - 1] === '/') {
+                  callArgs[callArgs.length - 1] = '';
+                }
+                return originalCallMain(callArgs);
+              };
+            }
+          }
           const fs = this.gameManager?.FS;
           if (fs) {
             try {
@@ -514,7 +527,7 @@
 
             const hasBoot = fs.analyzePath('/dc/dc_boot.bin').exists;
             const hasFlash = fs.analyzePath('/dc/dc_flash.bin').exists;
-            const bootMessage = `Flycast booting ${this.fileName || 'game'} / BIOS ${hasBoot && hasFlash ? 'ok' : 'missing'}`;
+            const bootMessage = `Flycast booting ${this.fileName || 'Dreamcast BIOS'} / BIOS ${hasBoot && hasFlash ? 'ok' : 'missing'}`;
             console.log(`[Old Style Dreamcast] ${bootMessage}`);
             sendHostStatus(bootMessage);
           }
@@ -529,7 +542,7 @@
   }
 
   async function loadCurrentRom() {
-    if (!currentRom) {
+    if (!currentRom && !bootBiosOnly) {
       drawStatus('Dreamcast ready', 'Load a Dreamcast game from the room');
       return;
     }
@@ -541,7 +554,7 @@
     }
 
     ensureAudio()?.resume?.().catch(() => {});
-    drawStatus('Checking Dreamcast runtime', currentRom.fileName);
+    drawStatus('Checking Dreamcast runtime', bootBiosOnly ? 'Dreamcast BIOS' : currentRom.fileName);
     try {
       await preflightEmulatorJs();
     } catch (error) {
@@ -550,7 +563,9 @@
     }
 
     clearGameContainer();
-    const gameFiles = currentRom.files?.length
+    const gameFiles = bootBiosOnly
+      ? [{ fileName: '__dreamcast_bios_boot.bin', bytes: new Uint8Array([0]) }]
+      : currentRom.files?.length
       ? currentRom.files
       : [{ fileName: currentRom.fileName, bytes: currentRom.bytes }];
     const primaryGame = gameFiles.find((file) => /\.(gdi|cue)$/i.test(file.fileName)) || gameFiles[0];
@@ -573,9 +588,9 @@
     installConsoleForwarding();
     installFlycastWebGlPatches();
     installFlycastStartGamePatch();
-    configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
-    drawStatus('Loading Dreamcast', primaryGame.fileName);
-    sendHostStatus(`Starting Dreamcast game: ${primaryGame.fileName}`);
+    configureEmulator(primaryGame.fileName, gameUrl, externalFiles, { bootToBios: bootBiosOnly });
+    drawStatus(bootBiosOnly ? 'Booting Dreamcast BIOS' : 'Loading Dreamcast', bootBiosOnly ? 'No disc inserted' : primaryGame.fileName);
+    sendHostStatus(bootBiosOnly ? 'Starting Dreamcast BIOS' : `Starting Dreamcast game: ${primaryGame.fileName}`);
 
     loaderScript = document.createElement('script');
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
@@ -681,6 +696,7 @@
     }
 
     if (message.type === 'dreamcast_autoload') {
+      bootBiosOnly = false;
       currentRom = {
         fileName: message.fileName || 'game.chd',
         bytes: new Uint8Array(message.bytes || []),
@@ -689,6 +705,13 @@
           bytes: new Uint8Array(file.bytes || []),
         })),
       };
+      loadCurrentRom();
+      return;
+    }
+
+    if (message.type === 'dreamcast_boot_bios') {
+      bootBiosOnly = true;
+      currentRom = null;
       loadCurrentRom();
       return;
     }
@@ -710,7 +733,7 @@
       dreamcastBios = { boot, flash };
       drawStatus('Dreamcast BIOS ready', currentRom?.fileName || 'Load a Dreamcast game');
       sendHostStatus('Dreamcast BIOS received');
-      if (currentRom) {
+      if (currentRom || bootBiosOnly) {
         loadCurrentRom();
       }
       return;

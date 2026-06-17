@@ -3252,6 +3252,34 @@ export default function RoomPage() {
     setStatus('Emulator reset');
   }
 
+  async function bootDreamcastBios() {
+    if (!canControlLocalEmulator || !isDreamcast) return;
+
+    try {
+      setError('');
+      if (!hostStartedRef.current && !hostStartingRef.current) {
+        await startHostSession();
+      } else {
+        await reloadDreamcastFrame();
+      }
+
+      const biosSent = await sendStoredDreamcastBiosToEmulator();
+      if (!biosSent) {
+        setStatus('Load Dreamcast BIOS before booting BIOS screen');
+        addLog('Dreamcast BIOS missing: load dc_boot.bin and dc_flash.bin');
+        return;
+      }
+
+      setLoadedDiskName('');
+      forwardInputToEmulator({ type: 'dreamcast_boot_bios' });
+      addLog('Booting Dreamcast BIOS screen');
+      setStatus('Booting Dreamcast BIOS');
+    } catch (err) {
+      setError(err.message);
+      addLog(`Dreamcast BIOS boot error: ${err.message}`);
+    }
+  }
+
   function swapC64JoystickPorts() {
     if (!canControlLocalEmulator || !hostStarted || !isC64) return;
 
@@ -3935,6 +3963,12 @@ export default function RoomPage() {
                   {isDreamcast ? (
                     <button type="button" className="secondary" onClick={openDreamcastBiosPicker}>
                       {dreamcastBiosName ? 'Change local Dreamcast BIOS' : 'Load local Dreamcast BIOS'}
+                    </button>
+                  ) : null}
+
+                  {isDreamcast ? (
+                    <button type="button" className="secondary" onClick={bootDreamcastBios}>
+                      Boot Dreamcast BIOS
                     </button>
                   ) : null}
                 </div>
