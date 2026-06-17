@@ -21,6 +21,46 @@
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
+  function installConsoleForwarding() {
+    if (window.__oldStyleDreamcastConsoleForwarded) return;
+    window.__oldStyleDreamcastConsoleForwarded = true;
+
+    let forwardedCount = 0;
+    const forward = (level, args) => {
+      if (forwardedCount >= 80) return;
+
+      const text = args.map((arg) => {
+        if (typeof arg === 'string') return arg;
+        if (arg instanceof Error) return arg.stack || arg.message;
+        try {
+          return JSON.stringify(arg);
+        } catch {
+          return String(arg);
+        }
+      }).join(' ');
+
+      if (!text) return;
+      if (
+        !/flycast|retroarch|reicast|shader|webgl|gl_|bios|chd|failed|error|warn|trace|callMain|exception/i.test(text)
+        && level === 'log'
+      ) {
+        return;
+      }
+
+      forwardedCount += 1;
+      sendHostStatus(`${level}: ${text.slice(0, 240)}`);
+    };
+
+    ['log', 'warn', 'error'].forEach((level) => {
+      const original = console[level]?.bind(console);
+      if (!original) return;
+      console[level] = (...args) => {
+        original(...args);
+        forward(level, args);
+      };
+    });
+  }
+
   function installFlycastWebGlPatches() {
     if (window.__oldStyleFlycastWebGlPatched) return;
     window.__oldStyleFlycastWebGlPatched = true;
@@ -529,6 +569,7 @@
     externalFiles['/dc/dc_flash.bin'] = flashUrl;
 
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
+    installConsoleForwarding();
     installFlycastWebGlPatches();
     installFlycastStartGamePatch();
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
@@ -579,6 +620,38 @@
     const gameCanvas = gameContainer.querySelector('canvas');
 
     if (gameCanvas && gameCanvas.width && gameCanvas.height) {
+      if (!gameCanvas.__oldStyleDreamcastProbeStarted) {
+        gameCanvas.__oldStyleDreamcastProbeStarted = true;
+        let probes = 0;
+        const probeCanvas = document.createElement('canvas');
+        probeCanvas.width = 8;
+        probeCanvas.height = 8;
+        const probeContext = probeCanvas.getContext('2d', { willReadFrequently: true });
+        const probe = () => {
+          probes += 1;
+          try {
+            probeContext.drawImage(gameCanvas, 0, 0, 8, 8);
+            const pixels = probeContext.getImageData(0, 0, 8, 8).data;
+            let lit = false;
+            for (let i = 0; i < pixels.length; i += 4) {
+              if (pixels[i] || pixels[i + 1] || pixels[i + 2]) {
+                lit = true;
+                break;
+              }
+            }
+            if (lit) {
+              sendHostStatus('Flycast canvas is rendering video');
+              return;
+            }
+          } catch (error) {
+            sendHostStatus(`Flycast canvas probe failed: ${error.message || error}`);
+            return;
+          }
+          if (probes < 12) window.setTimeout(probe, 1000);
+        };
+        window.setTimeout(probe, 1000);
+      }
+
       context.fillStyle = '#000';
       context.fillRect(0, 0, screen.width, screen.height);
 

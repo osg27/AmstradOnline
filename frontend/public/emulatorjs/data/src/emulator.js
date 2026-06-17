@@ -353,7 +353,7 @@ class EmulatorJS {
         
         // Populate downloadTypes
         this.downloadType = {
-            "rom": { "name": "ROM", "dontCache": false, "dontExtractIfCore": ["arcade", "fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2", "same_cdi", "mame", "mame2003_plus", "mame2003", "flycast"] },
+            "rom": { "name": "ROM", "dontCache": this.getCore() === "flycast", "dontExtractIfCore": ["arcade", "fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2", "same_cdi", "mame", "mame2003_plus", "mame2003", "flycast"] },
             "core": { "name": "Core", "dontCache": false },
             "bios": { "name": "BIOS", "dontCache": false, "dontExtractIfCore": ["arcade", "fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2", "same_cdi", "mame", "mame2003_plus", "mame2003"] },
             "parent": { "name": "Parent", "dontCache": false },
