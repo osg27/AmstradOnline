@@ -21,6 +21,34 @@
   let statusText = 'Dreamcast ready';
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+  const FLYCAST_CORE_OPTIONS = {
+    reicast_hle_bios: 'disabled',
+    reicast_threaded_rendering: 'disabled',
+    reicast_synchronous_rendering: 'disabled',
+    reicast_internal_resolution: '640x480',
+    reicast_mipmapping: 'disabled',
+    reicast_anisotropic_filtering: '1',
+    reicast_texupscale: 'disabled',
+    reicast_enable_rttb: 'disabled',
+    reicast_enable_purupuru: 'disabled',
+    reicast_alpha_sorting: 'per-strip (fast, least accurate)',
+    reicast_delay_frame_swapping: 'disabled',
+    reicast_frame_skipping: 'enabled',
+    reicast_framerate: 'normal',
+  };
+
+  function buildFlycastCoreOptions(bootToBios = false) {
+    return {
+      reicast_boot_to_bios: bootToBios ? 'enabled' : 'disabled',
+      ...FLYCAST_CORE_OPTIONS,
+    };
+  }
+
+  function serialiseCoreOptions(options) {
+    return Object.entries(options)
+      .map(([key, value]) => `${key} = "${value}"`)
+      .join('\n') + '\n';
+  }
 
   function installConsoleForwarding() {
     if (window.__oldStyleDreamcastConsoleForwarded) return;
@@ -383,22 +411,7 @@
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
-    window.EJS_defaultOptions = {
-      reicast_boot_to_bios: options.bootToBios ? 'enabled' : 'disabled',
-      reicast_hle_bios: 'disabled',
-      reicast_threaded_rendering: 'disabled',
-      reicast_synchronous_rendering: 'disabled',
-      reicast_internal_resolution: '640x480',
-      reicast_mipmapping: 'disabled',
-      reicast_anisotropic_filtering: '1',
-      reicast_texupscale: 'disabled',
-      reicast_enable_rttb: 'disabled',
-      reicast_enable_purupuru: 'disabled',
-      reicast_alpha_sorting: 'per-strip (fast, least accurate)',
-      reicast_delay_frame_swapping: 'disabled',
-      reicast_frame_skipping: 'enabled',
-      reicast_framerate: 'normal',
-    };
+    window.EJS_defaultOptions = buildFlycastCoreOptions(Boolean(options.bootToBios));
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
       'emulator.js': '/emulatorjs/data/src/emulator.js',
@@ -504,6 +517,30 @@
               if (!fs.analyzePath('/dc').exists) fs.mkdir('/dc');
             } catch {}
 
+            try {
+              fs.writeFile('/dc_boot.bin', dreamcastBios.boot.bytes);
+              fs.writeFile('/dc_flash.bin', dreamcastBios.flash.bytes);
+              fs.writeFile('/dc/dc_boot.bin', dreamcastBios.boot.bytes);
+              fs.writeFile('/dc/dc_flash.bin', dreamcastBios.flash.bytes);
+            } catch (error) {
+              console.warn('[Old Style Dreamcast] BIOS FS write failed', error);
+            }
+
+            if (this.Module?.callbacks) {
+              const coreOptions = serialiseCoreOptions(buildFlycastCoreOptions(bootBiosOnly));
+              const originalSetupCoreSettingFile = this.Module.callbacks.setupCoreSettingFile;
+              this.Module.callbacks.setupCoreSettingFile = (filePath) => {
+                try {
+                  fs.writeFile(filePath, coreOptions);
+                } catch (error) {
+                  console.warn('[Old Style Dreamcast] Core option write failed', error);
+                }
+                if (originalSetupCoreSettingFile) {
+                  originalSetupCoreSettingFile(filePath);
+                }
+              };
+            }
+
             const cfgPath = '/home/web_user/.config/retroarch/retroarch.cfg';
             try {
               const cfg = new TextDecoder().decode(fs.readFile(cfgPath));
@@ -564,12 +601,6 @@
       externalGameUrls.push(url);
       externalFiles[file.fileName] = url;
     });
-
-    const bootUrl = URL.createObjectURL(new Blob([dreamcastBios.boot.bytes], { type: 'application/octet-stream' }));
-    const flashUrl = URL.createObjectURL(new Blob([dreamcastBios.flash.bytes], { type: 'application/octet-stream' }));
-    externalGameUrls.push(bootUrl, flashUrl);
-    externalFiles['/dc/dc_boot.bin'] = bootUrl;
-    externalFiles['/dc/dc_flash.bin'] = flashUrl;
 
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
     installConsoleForwarding();
