@@ -498,19 +498,6 @@
       const originalStartGame = emulator.startGame;
       emulator.startGame = function patchedStartGame(...args) {
         try {
-          if (bootBiosOnly) {
-            this.fileName = '';
-            const originalCallMain = this.Module?.callMain?.bind(this.Module);
-            if (originalCallMain && !this.Module.__oldStyleDreamcastBiosCallMainPatched) {
-              this.Module.__oldStyleDreamcastBiosCallMainPatched = true;
-              this.Module.callMain = (callArgs) => {
-                if (bootBiosOnly && Array.isArray(callArgs) && callArgs[callArgs.length - 1] === '/') {
-                  callArgs[callArgs.length - 1] = '';
-                }
-                return originalCallMain(callArgs);
-              };
-            }
-          }
           const fs = this.gameManager?.FS;
           if (fs) {
             try {
@@ -564,7 +551,7 @@
 
     clearGameContainer();
     const gameFiles = bootBiosOnly
-      ? [{ fileName: '__dreamcast_bios_boot.bin', bytes: new Uint8Array([0]) }]
+      ? [{ fileName: '__dreamcast_bios_boot.chd', bytes: new Uint8Array([0]) }]
       : currentRom.files?.length
       ? currentRom.files
       : [{ fileName: currentRom.fileName, bytes: currentRom.bytes }];
