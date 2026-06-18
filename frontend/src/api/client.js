@@ -19,6 +19,25 @@ function getDefaultWsBaseUrl() {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || getDefaultApiBaseUrl();
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || getDefaultWsBaseUrl();
 
+function formatApiErrorDetail(detail) {
+  if (!detail) return 'Request failed';
+  if (typeof detail === 'string') return detail;
+
+  if (Array.isArray(detail)) {
+    return detail.map((item) => {
+      if (typeof item === 'string') return item;
+      if (item?.msg) {
+        const location = Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '';
+        return location ? `${location}: ${item.msg}` : item.msg;
+      }
+      return JSON.stringify(item);
+    }).join('; ');
+  }
+
+  if (detail.message) return String(detail.message);
+  return JSON.stringify(detail);
+}
+
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('token');
 
@@ -45,7 +64,7 @@ export async function apiFetch(path, options = {}) {
       window.location.assign('/login');
     }
 
-    throw new Error(data?.detail || 'Request failed');
+    throw new Error(formatApiErrorDetail(data?.detail));
   }
 
   return data;

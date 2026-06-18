@@ -14,11 +14,11 @@ from app.models.user import User
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomHeartbeatRequest, RoomJoinRequest, RoomResponse
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
-TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "snes", "c64", "pcengine", "playstation"}
+TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", "playstation"}
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
-SUPER_ADMIN_ONLY_SYSTEMS = {"arcade", "dreamcast"}
-PRIVATE_SUPER_ADMIN_SYSTEMS = {"dreamcast"}
+SUPER_ADMIN_ONLY_SYSTEMS = {"arcade"}
+PRIVATE_SUPER_ADMIN_SYSTEMS = set()
 
 
 def get_current_user_id(authorization: str | None = Header(default=None)) -> int:
