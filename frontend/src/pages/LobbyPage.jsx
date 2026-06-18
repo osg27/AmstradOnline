@@ -139,8 +139,24 @@ const PLATFORM_SHELVES = [
       {
         id: '8bit',
         label: '8-bit',
-        strapline: 'Reserved for the first console shelf.',
-        systems: [],
+        strapline: 'The first console shelf.',
+        systems: [
+          {
+            id: 'nes',
+            name: 'Nintendo Entertainment System',
+            shortName: 'NES',
+            accent: 'ruby',
+            summary: 'NES games using a standalone wasm-nes runtime.',
+            formats: '.nes',
+            testing: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available' },
+            },
+          },
+        ],
       },
       {
         id: '16bit',
