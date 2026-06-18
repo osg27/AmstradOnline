@@ -39,6 +39,10 @@
   let audioCount = 0;
   let fpsFrames = 0;
   let fpsStartedAt = performance.now();
+  let accumulator = 0;
+  let lastTimestamp = 0;
+  let fpsFrames = 0;
+  let fpsStartedAt = performance.now();
   const audioLeft = new Float32Array(AUDIO_BUFFER_SIZE);
   const audioRight = new Float32Array(AUDIO_BUFFER_SIZE);
 
@@ -247,15 +251,32 @@ function clampSample(value) {
     }
   }
 
-  function loop() {
+  function loop(timestamp) {
     if (!running || !nes) return;
 
+    if (!lastTimestamp) {
+      lastTimestamp = timestamp;
+    }
+
+    let delta = timestamp - lastTimestamp;
+    lastTimestamp = timestamp;
+
+    // Stop the emulator trying to catch up massively after tab switches/stutters.
+    if (delta > 100) {
+      delta = FRAME_INTERVAL;
+    }
+
+    accumulator += delta;
+
     try {
-      nes.frame();
+      while (accumulator >= FRAME_INTERVAL) {
+        nes.frame();
+        accumulator -= FRAME_INTERVAL;
 
-      fpsFrames += 1;
+        fpsFrames += 1;
+      }
+
       const now = performance.now();
-
       if (now - fpsStartedAt >= 1000) {
         console.log(`NES FPS: ${fpsFrames}`);
         fpsFrames = 0;
@@ -273,9 +294,13 @@ function clampSample(value) {
 
   function startLoop() {
     if (running) return;
+
     running = true;
+    accumulator = 0;
+    lastTimestamp = 0;
     fpsFrames = 0;
     fpsStartedAt = performance.now();
+
     rafHandle = requestAnimationFrame(loop);
   }
 
