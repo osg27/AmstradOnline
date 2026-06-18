@@ -146,7 +146,7 @@ const PLATFORM_SHELVES = [
             name: 'Nintendo Entertainment System',
             shortName: 'NES',
             accent: 'ruby',
-            summary: 'NES games using a standalone wasm-nes runtime.',
+            summary: 'NES games using a standalone jsnes runtime with MMC3 support.',
             formats: '.nes',
             testing: true,
             modes: {
