@@ -112,13 +112,15 @@
       audioContext = new AudioCtor();
       audioDestination = audioContext.createMediaStreamDestination();
 
-      audioNode = audioContext.createScriptProcessor(4096, 0, 2);
+      // Smaller block than 4096 to reduce audio delay.
+      audioNode = audioContext.createScriptProcessor(2048, 0, 2);
 
       audioNode.onaudioprocess = (event) => {
         const outputLeft = event.outputBuffer.getChannelData(0);
         const outputRight = event.outputBuffer.getChannelData(1);
 
-        const minimumBufferedSamples = outputLeft.length * 2;
+        // Lower buffer threshold to reduce perceived audio lag.
+        const minimumBufferedSamples = outputLeft.length;
 
         if (audioCount < minimumBufferedSamples) {
           for (let index = 0; index < outputLeft.length; index += 1) {
