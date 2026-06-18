@@ -3,15 +3,24 @@
   const SCREEN_HEIGHT = 240;
   const TARGET_FPS = 60.0988;
   const FRAME_INTERVAL = 1000 / TARGET_FPS;
+
+  // Audio buffer is still here, but audio output is disabled in new jsnes.NES()
+  // while we test emulator speed.
   const AUDIO_BUFFER_SIZE = 32768;
   const BUTTONS = window.jsnes?.Controller;
 
   const canvas = document.getElementById("screen");
   const context = canvas.getContext("2d", { alpha: false });
+
+  canvas.width = SCREEN_WIDTH;
+  canvas.height = SCREEN_HEIGHT;
+  context.imageSmoothingEnabled = false;
+
   const imageData = context.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
   const frameBuffer = new ArrayBuffer(imageData.data.length);
   const frameBuffer8 = new Uint8ClampedArray(frameBuffer);
   const frameBuffer32 = new Uint32Array(frameBuffer);
+
   const buttonMap = [
     [1, BUTTONS?.BUTTON_UP],
     [2, BUTTONS?.BUTTON_DOWN],
@@ -27,9 +36,10 @@
   let currentRom = null;
   let running = false;
   let rafHandle = null;
-  let lastFrameAt = 0;
+
   let localMask = 0;
   let remoteMask = 0;
+
   let audioContext = null;
   let audioNode = null;
   let audioDestination = null;
@@ -37,23 +47,25 @@
   let audioReadIndex = 0;
   let audioWriteIndex = 0;
   let audioCount = 0;
-  let fpsFrames = 0;
-  let fpsStartedAt = performance.now();
+
   let accumulator = 0;
   let lastTimestamp = 0;
   let fpsFrames = 0;
   let fpsStartedAt = performance.now();
+
   const audioLeft = new Float32Array(AUDIO_BUFFER_SIZE);
   const audioRight = new Float32Array(AUDIO_BUFFER_SIZE);
 
   function drawStatus(main, sub = "") {
     context.fillStyle = "#000";
     context.fillRect(0, 0, canvas.width, canvas.height);
+
     context.fillStyle = "#fff";
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.font = "700 18px system-ui, sans-serif";
     context.fillText(main, canvas.width / 2, canvas.height / 2 - 10);
+
     if (sub) {
       context.fillStyle = "#b8c2d0";
       context.font = "12px system-ui, sans-serif";
@@ -62,7 +74,7 @@
         canvas.width / 2,
         canvas.height / 2 + 16,
         canvas.width - 28,
-        16,
+        16
       );
     }
   }
@@ -73,6 +85,7 @@
 
     words.forEach((word) => {
       const testLine = line ? `${line} ${word}` : word;
+
       if (context.measureText(testLine).width > maxWidth && line) {
         context.fillText(line, x, y);
         line = word;
@@ -82,7 +95,9 @@
       }
     });
 
-    if (line) context.fillText(line, x, y);
+    if (line) {
+      context.fillText(line, x, y);
+    }
   }
 
   function resetAudioBuffer() {
@@ -98,6 +113,7 @@
     if (!audioContext) {
       audioContext = new AudioCtor();
       audioDestination = audioContext.createMediaStreamDestination();
+
       audioNode = audioContext.createScriptProcessor(4096, 0, 2);
       audioNode.onaudioprocess = (event) => {
         const outputLeft = event.outputBuffer.getChannelData(0);
@@ -117,6 +133,7 @@
           if (audioCount > 0) {
             outputLeft[index] = audioLeft[audioReadIndex];
             outputRight[index] = audioRight[audioReadIndex];
+
             audioReadIndex = (audioReadIndex + 1) % AUDIO_BUFFER_SIZE;
             audioCount -= 1;
           } else {
@@ -125,6 +142,7 @@
           }
         }
       };
+
       audioNode.connect(audioContext.destination);
       audioNode.connect(audioDestination);
 
@@ -142,12 +160,12 @@
     return audioContext;
   }
 
-function clampSample(value) {
-  if (!Number.isFinite(value)) return 0;
-  if (value > 1) return 1;
-  if (value < -1) return -1;
-  return value;
-}
+  function clampSample(value) {
+    if (!Number.isFinite(value)) return 0;
+    if (value > 1) return 1;
+    if (value < -1) return -1;
+    return value;
+  }
 
   function queueAudioSample(left, right) {
     if (audioCount >= AUDIO_BUFFER_SIZE) {
@@ -157,6 +175,7 @@ function clampSample(value) {
 
     audioLeft[audioWriteIndex] = clampSample(left);
     audioRight[audioWriteIndex] = clampSample(right);
+
     audioWriteIndex = (audioWriteIndex + 1) % AUDIO_BUFFER_SIZE;
     audioCount += 1;
   }
@@ -170,6 +189,7 @@ function clampSample(value) {
     for (let index = 0; index < buffer.length; index += 1) {
       frameBuffer32[index] = 0xff000000 | buffer[index];
     }
+
     imageData.data.set(frameBuffer8);
     context.putImageData(imageData, 0, 0);
   }
@@ -179,6 +199,7 @@ function clampSample(value) {
 
     buttonMap.forEach(([bit, button]) => {
       if (button === undefined) return;
+
       if (mask & bit) {
         nes.buttonDown(player, button);
       } else {
@@ -189,11 +210,13 @@ function clampSample(value) {
 
   function setMask(player, mask) {
     const cleanMask = Number(mask) || 0;
+
     if (player === 2) {
       remoteMask = cleanMask;
     } else {
       localMask = cleanMask;
     }
+
     applyMask(player === 2 ? 2 : 1, cleanMask);
   }
 
@@ -203,33 +226,41 @@ function clampSample(value) {
       case "q":
       case "Q":
         return 1;
+
       case "ArrowDown":
       case "a":
       case "A":
         return 2;
+
       case "ArrowLeft":
       case "o":
       case "O":
         return 4;
+
       case "ArrowRight":
       case "p":
       case "P":
         return 8;
+
       case "z":
       case "Z":
       case "f":
       case "F":
         return 16;
+
       case "x":
       case "X":
       case "g":
       case "G":
         return 32;
+
       case "Enter":
         return 64;
+
       case "c":
       case "C":
         return 128;
+
       default:
         return 0;
     }
@@ -238,13 +269,16 @@ function clampSample(value) {
   function handleKeyInput(player, key, action) {
     const bit = keyToMaskBit(key);
     if (!bit) return;
+
     const current = player === 2 ? remoteMask : localMask;
     const next = action === "down" ? current | bit : current & ~bit;
+
     setMask(player, next);
   }
 
   function stopLoop() {
     running = false;
+
     if (rafHandle) {
       cancelAnimationFrame(rafHandle);
       rafHandle = null;
@@ -261,7 +295,7 @@ function clampSample(value) {
     let delta = timestamp - lastTimestamp;
     lastTimestamp = timestamp;
 
-    // Stop the emulator trying to catch up massively after tab switches/stutters.
+    // Avoid a massive catch-up after tab switching or browser stutter.
     if (delta > 100) {
       delta = FRAME_INTERVAL;
     }
@@ -272,7 +306,6 @@ function clampSample(value) {
       while (accumulator >= FRAME_INTERVAL) {
         nes.frame();
         accumulator -= FRAME_INTERVAL;
-
         fpsFrames += 1;
       }
 
@@ -283,9 +316,9 @@ function clampSample(value) {
         fpsStartedAt = now;
       }
     } catch (error) {
-      console.error('Old Style Gaming NES error:', error);
+      console.error("Old Style Gaming NES error:", error);
       stopLoop();
-      drawStatus('NES failed', error?.message || 'Check browser console');
+      drawStatus("NES failed", error?.message || "Check browser console");
       return;
     }
 
@@ -321,11 +354,18 @@ function clampSample(value) {
       nes = new window.jsnes.NES({
         sampleRate: ensureAudio()?.sampleRate || 44100,
         onFrame: renderFrame,
-        onAudioSample: queueAudioSample,
+
+        // TEMPORARILY DISABLED:
+        // This proves whether audio is slowing the emulator down.
+        // Once SMB1 runs at proper speed, we can turn this back on and fix sound.
+        // onAudioSample: queueAudioSample,
       });
+
       nes.loadROM(currentRom.bytes);
+
       applyMask(1, localMask);
       applyMask(2, remoteMask);
+
       startLoop();
     } catch (error) {
       console.error("Old Style Gaming NES error:", error);
@@ -337,9 +377,14 @@ function clampSample(value) {
     if (event.origin !== window.location.origin) return;
 
     const message = event.data || {};
+
     if (message.type === "nes_start") {
       ensureAudio();
-      if (currentRom && !running) loadCurrentRom();
+
+      if (currentRom && !running) {
+        loadCurrentRom();
+      }
+
       return;
     }
 
@@ -348,6 +393,7 @@ function clampSample(value) {
         fileName: message.fileName || "game.nes",
         bytes: new Uint8Array(message.bytes || []),
       };
+
       loadCurrentRom();
       return;
     }
@@ -356,12 +402,15 @@ function clampSample(value) {
       if (nes) {
         resetAudioBuffer();
         nes.reset();
+
         applyMask(1, localMask);
         applyMask(2, remoteMask);
+
         startLoop();
       } else {
         loadCurrentRom();
       }
+
       return;
     }
 
@@ -394,7 +443,10 @@ function clampSample(value) {
   canvas.addEventListener("pointerdown", () => {
     window.getNesAudioStream();
     window.focus();
-    if (currentRom && !running) loadCurrentRom();
+
+    if (currentRom && !running) {
+      loadCurrentRom();
+    }
   });
 
   drawStatus("NES ready", "Load a .nes ROM from the room");
