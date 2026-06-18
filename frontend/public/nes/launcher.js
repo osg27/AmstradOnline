@@ -4,7 +4,14 @@
   const TARGET_FPS = 60.0988;
   const FRAME_INTERVAL = 1000 / TARGET_FPS;
 
-  const AUDIO_BUFFER_SIZE = 32768;
+  // Lower latency audio settings.
+  // If it crackles, raise MIN_AUDIO_BUFFERED_SAMPLES to 1024
+  // and MAX_AUDIO_BUFFERED_SAMPLES to 6144.
+  const AUDIO_BUFFER_SIZE = 8192;
+  const AUDIO_PROCESSOR_SIZE = 1024;
+  const MIN_AUDIO_BUFFERED_SAMPLES = 512;
+  const MAX_AUDIO_BUFFERED_SAMPLES = 4096;
+
   const BUTTONS = window.jsnes?.Controller;
 
   const canvas = document.getElementById("screen");
@@ -104,6 +111,13 @@
     audioCount = 0;
   }
 
+  function dropOldAudioSamples(samplesToDrop) {
+    const amount = Math.min(samplesToDrop, audioCount);
+
+    audioReadIndex = (audioReadIndex + amount) % AUDIO_BUFFER_SIZE;
+    audioCount -= amount;
+  }
+
   function ensureAudio() {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return null;
@@ -112,22 +126,28 @@
       audioContext = new AudioCtor();
       audioDestination = audioContext.createMediaStreamDestination();
 
-      // Smaller block than 4096 to reduce audio delay.
-      audioNode = audioContext.createScriptProcessor(2048, 0, 2);
+      audioNode = audioContext.createScriptProcessor(
+        AUDIO_PROCESSOR_SIZE,
+        0,
+        2
+      );
 
       audioNode.onaudioprocess = (event) => {
         const outputLeft = event.outputBuffer.getChannelData(0);
         const outputRight = event.outputBuffer.getChannelData(1);
 
-        // Lower buffer threshold to reduce perceived audio lag.
-        const minimumBufferedSamples = outputLeft.length;
-
-        if (audioCount < minimumBufferedSamples) {
+        if (audioCount < MIN_AUDIO_BUFFERED_SAMPLES) {
           for (let index = 0; index < outputLeft.length; index += 1) {
             outputLeft[index] = 0;
             outputRight[index] = 0;
           }
           return;
+        }
+
+        // If the buffer has grown too large, drop old sound.
+        // This keeps audio close to the video instead of drifting behind.
+        if (audioCount > MAX_AUDIO_BUFFERED_SAMPLES) {
+          dropOldAudioSamples(audioCount - MAX_AUDIO_BUFFERED_SAMPLES);
         }
 
         for (let index = 0; index < outputLeft.length; index += 1) {
@@ -170,8 +190,7 @@
 
   function queueAudioSample(left, right) {
     if (audioCount >= AUDIO_BUFFER_SIZE) {
-      audioReadIndex = (audioReadIndex + 1) % AUDIO_BUFFER_SIZE;
-      audioCount -= 1;
+      dropOldAudioSamples(1);
     }
 
     audioLeft[audioWriteIndex] = clampSample(left);
@@ -179,6 +198,12 @@
 
     audioWriteIndex = (audioWriteIndex + 1) % AUDIO_BUFFER_SIZE;
     audioCount += 1;
+
+    // Hard latency cap. If JSNES produces audio slightly faster than
+    // the browser consumes it, do not let the queue become late.
+    if (audioCount > MAX_AUDIO_BUFFERED_SAMPLES) {
+      dropOldAudioSamples(audioCount - MAX_AUDIO_BUFFERED_SAMPLES);
+    }
   }
 
   window.getNesAudioStream = function getNesAudioStream() {
@@ -311,7 +336,7 @@
 
       const now = performance.now();
       if (now - fpsStartedAt >= 1000) {
-        console.log(`NES FPS: ${fpsFrames}`);
+        console.log(`NES FPS: ${fpsFrames} audio buffered: ${audioCount}`);
         fpsFrames = 0;
         fpsStartedAt = now;
       }
