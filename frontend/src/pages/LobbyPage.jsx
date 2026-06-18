@@ -146,7 +146,7 @@ const SYSTEM_GROUPS = [
   },
   {
     id: '32bit',
-    label: '32',
+    label: '32bit',
     strapline: 'Amiga 1200 and PlayStation games.',
     systems: [
       {
