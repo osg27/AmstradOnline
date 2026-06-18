@@ -33,6 +33,20 @@ const CONTROL_ACTION_LABELS = {
   quit: 'Quit',
 };
 
+const CONTROL_DIRECTIONS = [
+  ['upLeft', 'Up left'],
+  ['up', 'Up'],
+  ['upRight', 'Up right'],
+  ['left', 'Left'],
+  ['fire1', 'Fire'],
+  ['right', 'Right'],
+  ['downLeft', 'Down left'],
+  ['down', 'Down'],
+  ['downRight', 'Down right'],
+];
+
+const CONTROL_UTILITY_ACTIONS = ['fire2', 'pause', 'start', 'quit'];
+
 function normaliseSearchText(value) {
   return String(value || '')
     .toLowerCase()
@@ -105,6 +119,13 @@ function shouldAutoSelectControlMatch(matches) {
 
 function formatControlAction(action) {
   return CONTROL_ACTION_LABELS[action] || action.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
+}
+
+function formatControlValue(value) {
+  return String(value || '')
+    .replace(/CURSOR_/g, '')
+    .replace(/_/g, ' ')
+    .trim();
 }
 
 function openKickstartDb() {
@@ -2069,16 +2090,36 @@ export default function RoomPage() {
   const selectedControlPlayers = useMemo(() => {
     if (!selectedControlProfile?.players) return [];
 
-    return Object.entries(selectedControlProfile.players).map(([playerKey, player]) => ({
-      key: playerKey,
-      label: playerKey.replace('player', 'Player '),
-      emulatorEntries: Object.entries(player?.emulatorInput || {})
-        .filter(([, value]) => value)
-        .map(([action, value]) => [formatControlAction(action), value]),
-      overlayEntries: Object.entries(player?.displayOverlay || {})
-        .filter(([, value]) => value)
-        .map(([action, value]) => [formatControlAction(action), value]),
-    }));
+    return Object.entries(selectedControlProfile.players).map(([playerKey, player]) => {
+      const emulatorInput = player?.emulatorInput || {};
+      const displayOverlay = player?.displayOverlay || {};
+      const directionEntries = CONTROL_DIRECTIONS.map(([action, label]) => ({
+        action,
+        label,
+        key: formatControlValue(emulatorInput[action]),
+        detail: displayOverlay[action] || '',
+      }));
+      const utilityEntries = CONTROL_UTILITY_ACTIONS
+        .filter((action) => emulatorInput[action] || displayOverlay[action])
+        .map((action) => ({
+          action,
+          label: formatControlAction(action),
+          key: formatControlValue(emulatorInput[action]),
+          detail: displayOverlay[action] || '',
+        }));
+      const overlayEntries = Object.entries(displayOverlay)
+        .filter(([action, value]) => value && !CONTROL_DIRECTIONS.some(([direction]) => direction === action) && !CONTROL_UTILITY_ACTIONS.includes(action))
+        .map(([action, value]) => [formatControlAction(action), value]);
+
+      return {
+        key: playerKey,
+        label: playerKey.replace('player', 'Player '),
+        directionEntries,
+        utilityEntries,
+        overlayEntries,
+        hasInput: directionEntries.some((entry) => entry.key || entry.detail) || utilityEntries.length || overlayEntries.length,
+      };
+    });
   }, [selectedControlProfile]);
 
   useEffect(() => {
@@ -4087,16 +4128,37 @@ export default function RoomPage() {
                 <div className="control-profile-sections">
                   {selectedControlPlayers.map((player) => (
                     <section key={player.key} className="control-profile-section">
-                      <h3>{player.label}</h3>
+                      <div className="control-player-heading">
+                        <h3>{player.label}</h3>
+                        <span>{player.hasInput ? 'Game profile' : 'No mapping'}</span>
+                      </div>
 
-                      {player.emulatorEntries.length ? (
-                        <div className="control-map-grid">
-                          {player.emulatorEntries.map(([action, value]) => (
-                            <div key={`${player.key}-${action}`} className="control-map-row">
-                              <span>{action}</span>
-                              <strong>{value}</strong>
+                      {player.hasInput ? (
+                        <div className="control-visual-panel">
+                          <div className="control-stick" aria-label={`${player.label} joystick directions`}>
+                            {player.directionEntries.map((entry) => (
+                              <div
+                                key={`${player.key}-${entry.action}`}
+                                className={`control-stick-zone ${entry.action === 'fire1' ? 'fire' : ''} ${entry.key || entry.detail ? 'mapped' : 'empty'}`}
+                              >
+                                <span>{entry.label}</span>
+                                <strong>{entry.key || '-'}</strong>
+                                {entry.detail ? <small>{entry.detail}</small> : null}
+                              </div>
+                            ))}
+                          </div>
+
+                          {player.utilityEntries.length ? (
+                            <div className="control-key-row" aria-label={`${player.label} utility keys`}>
+                              {player.utilityEntries.map((entry) => (
+                                <div key={`${player.key}-${entry.action}`} className="control-keycap">
+                                  <span>{entry.label}</span>
+                                  <strong>{entry.key || '-'}</strong>
+                                  {entry.detail ? <small>{entry.detail}</small> : null}
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          ) : null}
                         </div>
                       ) : (
                         <p className="muted">No fixed key mapping in this profile.</p>
