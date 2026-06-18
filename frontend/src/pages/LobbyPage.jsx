@@ -147,7 +147,7 @@ const SYSTEM_GROUPS = [
   {
     id: '32bit',
     label: '32/128-bit',
-    strapline: 'Amiga 1200, PlayStation and Dreamcast games.',
+    strapline: 'Amiga 1200 and PlayStation games.',
     systems: [
       {
         id: 'amiga_aga',
@@ -172,21 +172,6 @@ const SYSTEM_GROUPS = [
         summary: 'Original PlayStation games using a locally supplied BIOS.',
         formats: '.cue/.bin .chd .pbp .iso .zip .7z',
         testing: true,
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available' },
-        },
-      },
-      {
-        id: 'dreamcast',
-        name: 'Sega Dreamcast',
-        shortName: 'DC',
-        accent: 'blue',
-        summary: 'Dreamcast games through a private Flycast runtime.',
-        formats: '.gdi .cdi .chd .cue/.bin .raw .zip .7z',
-        superAdminOnly: true,
         modes: {
           solo: { enabled: true },
           hosted: { enabled: true },
