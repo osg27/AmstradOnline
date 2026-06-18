@@ -8,9 +8,6 @@
 
   const canvas = document.getElementById('screen');
   const context = canvas.getContext('2d', { alpha: false });
-  context.imageSmoothingEnabled = false;
-  canvas.width = SCREEN_WIDTH;
-  canvas.height = SCREEN_HEIGHT;
   const imageData = context.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
   const frameBuffer = new ArrayBuffer(imageData.data.length);
   const frameBuffer8 = new Uint8ClampedArray(frameBuffer);
@@ -141,16 +138,10 @@
   };
 
   function renderFrame(buffer) {
-    for (let i = 0; i < buffer.length; i += 1) {
-      const pixel = buffer[i];
-
-      const offset = i * 4;
-      imageData.data[offset] = pixel & 0xff;              // red
-      imageData.data[offset + 1] = (pixel >> 8) & 0xff;   // green
-      imageData.data[offset + 2] = (pixel >> 16) & 0xff;  // blue
-      imageData.data[offset + 3] = 0xff;                  // alpha
+    for (let index = 0; index < buffer.length; index += 1) {
+      frameBuffer32[index] = 0xff000000 | buffer[index];
     }
-
+    imageData.data.set(frameBuffer8);
     context.putImageData(imageData, 0, 0);
   }
 
@@ -231,8 +222,16 @@
     }
   }
 
-  function loop() {
+  function loop(timestamp) {
     if (!running || !nes) return;
+
+    rafHandle = requestAnimationFrame(loop);
+    if (!lastFrameAt) {
+      lastFrameAt = timestamp;
+    }
+
+    if (timestamp - lastFrameAt < FRAME_INTERVAL) return;
+    lastFrameAt = timestamp;
 
     try {
       nes.frame();
@@ -240,15 +239,13 @@
       console.error('Old Style Gaming NES error:', error);
       stopLoop();
       drawStatus('NES failed', error?.message || 'Check browser console');
-      return;
     }
-
-    rafHandle = requestAnimationFrame(loop);
   }
 
   function startLoop() {
     if (running) return;
     running = true;
+    lastFrameAt = 0;
     rafHandle = requestAnimationFrame(loop);
   }
 
@@ -260,16 +257,16 @@
       return;
     }
 
-    // ensureAudio();
-    // resetAudioBuffer();
+    ensureAudio();
+    resetAudioBuffer();
     stopLoop();
     drawStatus('Loading NES', currentRom.fileName);
 
     try {
       nes = new window.jsnes.NES({
         sampleRate: ensureAudio()?.sampleRate || 44100,
-        // onFrame: renderFrame,
-        // onAudioSample: queueAudioSample,
+        onFrame: renderFrame,
+        onAudioSample: queueAudioSample,
       });
       nes.loadROM(currentRom.bytes);
       applyMask(1, localMask);
