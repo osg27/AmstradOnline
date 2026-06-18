@@ -1,6 +1,16 @@
 const canvas = document.getElementById('screen');
 const context = canvas.getContext('2d', { alpha: false });
 const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+const SUPPORTED_MAPPERS = new Set([0, 1, 2, 3, 7, 66]);
+const MAPPER_NAMES = {
+  0: 'NROM',
+  1: 'MMC1',
+  2: 'UxROM',
+  3: 'CNROM / mapper 003',
+  4: 'MMC3',
+  7: 'AxROM',
+  66: 'GxROM',
+};
 
 let Nes = null;
 let Button = null;
@@ -24,8 +34,44 @@ function drawStatus(main, sub = '') {
   if (sub) {
     context.fillStyle = '#b8c2d0';
     context.font = '12px system-ui, sans-serif';
-    context.fillText(sub, canvas.width / 2, canvas.height / 2 + 16);
+    wrapText(sub, canvas.width / 2, canvas.height / 2 + 16, canvas.width - 28, 16);
   }
+}
+
+function wrapText(text, x, y, maxWidth, lineHeight) {
+  const words = String(text).split(/\s+/);
+  let line = '';
+
+  words.forEach((word) => {
+    const testLine = line ? `${line} ${word}` : word;
+    if (context.measureText(testLine).width > maxWidth && line) {
+      context.fillText(line, x, y);
+      line = word;
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  });
+
+  if (line) {
+    context.fillText(line, x, y);
+  }
+}
+
+function getRomMapper(bytes) {
+  if (!bytes || bytes.length < 16) {
+    throw new Error('Not a valid .nes file');
+  }
+
+  if (bytes[0] !== 0x4e || bytes[1] !== 0x45 || bytes[2] !== 0x53 || bytes[3] !== 0x1a) {
+    throw new Error('Not an iNES ROM');
+  }
+
+  return ((bytes[6] >> 4) | (bytes[7] & 0xf0)) & 0xff;
+}
+
+function describeMapper(mapper) {
+  return MAPPER_NAMES[mapper] ? `${mapper} (${MAPPER_NAMES[mapper]})` : String(mapper);
 }
 
 function ensureAudio() {
@@ -170,6 +216,12 @@ async function loadCurrentRom() {
   drawStatus('Loading NES', currentRom.fileName);
 
   try {
+    const mapper = getRomMapper(currentRom.bytes);
+    if (!SUPPORTED_MAPPERS.has(mapper)) {
+      drawStatus('NES mapper not supported', `${currentRom.fileName} uses mapper ${describeMapper(mapper)}. This wasm-nes build supports 0, 1, 2, 3, 7 and 66.`);
+      return;
+    }
+
     await ensureRuntime();
     if (emulator) {
       emulator.stop();
