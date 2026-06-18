@@ -148,7 +148,7 @@ const PLATFORM_SHELVES = [
             accent: 'ruby',
             summary: 'NES games using a standalone jsnes runtime with MMC3 support.',
             formats: '.nes',
-            testing: true,
+            superAdminOnly: true,
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
