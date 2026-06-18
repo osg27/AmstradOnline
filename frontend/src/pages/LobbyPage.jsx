@@ -28,182 +28,222 @@ const PLAY_MODES = {
   },
 };
 
-const SYSTEM_GROUPS = [
+const PLATFORM_SHELVES = [
   {
-    id: '8bit',
-    label: '8-bit',
-    strapline: 'Amstrad and Spectrum games.',
-    systems: [
+    id: 'micros',
+    label: 'Micros',
+    kicker: 'Keyboards, disks, tapes',
+    strapline: 'Home computers with all their lovely awkward keys.',
+    eras: [
       {
-        id: 'cpc',
-        name: 'Amstrad CPC',
-        shortName: 'CPC',
-        accent: 'green',
-        summary: 'Load a disk and play. Party Mode is also available.',
-        formats: '.dsk',
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: true, system: 'cpc_party' },
-          link: { enabled: false, note: 'Not available yet' },
-        },
+        id: '8bit',
+        label: '8-bit',
+        strapline: 'The classic home micro shelf.',
+        systems: [
+          {
+            id: 'cpc',
+            name: 'Amstrad CPC',
+            shortName: 'CPC',
+            accent: 'green',
+            summary: 'Load a disk and play. Party Mode is also available.',
+            formats: '.dsk',
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: true, system: 'cpc_party' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
+          {
+            id: 'spectrum',
+            name: 'ZX Spectrum',
+            shortName: 'ZX',
+            accent: 'ruby',
+            summary: 'Load a Spectrum game and play.',
+            formats: '.tap .tzx .z80 .sna .szx',
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
+          {
+            id: 'c64',
+            name: 'Commodore 64',
+            shortName: 'C64',
+            accent: 'amber',
+            summary: 'Commodore 64 games powered by a local VICE WASM runtime.',
+            formats: '.d64 .t64 .tap .prg .crt .zip',
+            testing: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
+        ],
       },
       {
-        id: 'spectrum',
-        name: 'ZX Spectrum',
-        shortName: 'ZX',
-        accent: 'ruby',
-        summary: 'Load a Spectrum game and play.',
-        formats: '.tap .tzx .z80 .sna .szx',
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available yet' },
-        },
+        id: '16bit',
+        label: '16-bit',
+        strapline: 'The bigger home machines.',
+        systems: [
+          {
+            id: 'amiga',
+            name: 'Commodore Amiga',
+            shortName: 'A500',
+            accent: 'blue',
+            summary: 'Amiga 500 games with joystick and mouse support.',
+            formats: '.adf .zip',
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: true, system: 'amiga_link', testing: true },
+            },
+          },
+        ],
       },
       {
-        id: 'c64',
-        name: 'Commodore 64',
-        shortName: 'C64',
-        accent: 'amber',
-        summary: 'Commodore 64 games powered by a local VICE WASM runtime.',
-        formats: '.d64 .t64 .tap .prg .crt .zip',
-        testing: true,
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available yet' },
-        },
+        id: '32bit',
+        label: '32-bit',
+        strapline: 'Later home-computer experiments.',
+        systems: [
+          {
+            id: 'amiga_aga',
+            name: 'Amiga AGA',
+            shortName: 'A1200',
+            accent: 'blue',
+            summary: 'Amiga 1200 and AGA games. Multi-disk games are supported.',
+            formats: '.adf .zip',
+            testing: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
+        ],
       },
     ],
   },
   {
-    id: '16bit',
-    label: '16-bit',
-    strapline: 'Amiga 500, Mega Drive, SNES and PC Engine games.',
-    systems: [
+    id: 'consoles',
+    label: 'Consoles',
+    kicker: 'Pads, ports, living rooms',
+    strapline: 'Console nights, with two-player rooms ready to go.',
+    eras: [
       {
-        id: 'amiga',
-        name: 'Commodore Amiga',
-        shortName: 'A500',
-        accent: 'blue',
-        summary: 'Amiga 500 games with joystick and mouse support.',
-        formats: '.adf .zip',
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: true, system: 'amiga_link', testing: true },
-        },
+        id: '8bit',
+        label: '8-bit',
+        strapline: 'Reserved for the first console shelf.',
+        systems: [],
       },
       {
-        id: 'megadrive',
-        name: 'Mega Drive',
-        shortName: 'MD',
-        accent: 'violet',
-        summary: 'Mega Drive games with two-player controls.',
-        formats: '.bin .gen .md .smd',
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available' },
-        },
+        id: '16bit',
+        label: '16-bit',
+        strapline: 'Cartridges, pads and fast restarts.',
+        systems: [
+          {
+            id: 'megadrive',
+            name: 'Mega Drive',
+            shortName: 'MD',
+            accent: 'violet',
+            summary: 'Mega Drive games with two-player controls.',
+            formats: '.bin .gen .md .smd',
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available' },
+            },
+          },
+          {
+            id: 'snes',
+            name: 'SNES',
+            shortName: 'SNES',
+            accent: 'amber',
+            summary: 'SNES games with two-player controls.',
+            formats: '.sfc .smc',
+            testing: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available' },
+            },
+          },
+          {
+            id: 'pcengine',
+            name: 'PC Engine / TurboGrafx-16',
+            shortName: 'PCE',
+            accent: 'gold',
+            summary: 'PC Engine and TurboGrafx-16 HuCard games.',
+            formats: '.pce .sgx .zip',
+            testing: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available' },
+            },
+          },
+        ],
       },
       {
-        id: 'snes',
-        name: 'SNES',
-        shortName: 'SNES',
-        accent: 'amber',
-        summary: 'SNES games with two-player controls.',
-        formats: '.sfc .smc',
-        testing: true,
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available' },
-        },
-      },
-      {
-        id: 'pcengine',
-        name: 'PC Engine / TurboGrafx-16',
-        shortName: 'PCE',
-        accent: 'gold',
-        summary: 'PC Engine and TurboGrafx-16 HuCard games.',
-        formats: '.pce .sgx .zip',
-        testing: true,
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available' },
-        },
-      },
-    ],
-  },
-  {
-    id: '32bit',
-    label: '32bit',
-    strapline: 'Amiga 1200 and PlayStation games.',
-    systems: [
-      {
-        id: 'amiga_aga',
-        name: 'Amiga AGA',
-        shortName: 'A1200',
-        accent: 'blue',
-        summary: 'Amiga 1200 and AGA games. Multi-disk games are supported.',
-        formats: '.adf .zip',
-        testing: true,
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available yet' },
-        },
-      },
-      {
-        id: 'playstation',
-        name: 'Sony PlayStation',
-        shortName: 'PS1',
-        accent: 'violet',
-        summary: 'Original PlayStation games using a locally supplied BIOS.',
-        formats: '.cue/.bin .chd .pbp .iso .zip .7z',
-        testing: true,
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available' },
-        },
-      },
-    ],
-  },
-  {
-    id: 'arcade',
-    label: 'Arcade',
-    strapline: 'MAME arcade games.',
-    systems: [
-      {
-        id: 'arcade',
-        name: 'MAME Arcade',
-        shortName: 'MAME',
-        accent: 'gold',
-        summary: 'MAME arcade games with configurable drivers and runtimes.',
-        formats: '.zip',
-        superAdminOnly: true,
-        modes: {
-          solo: { enabled: true },
-          hosted: { enabled: true },
-          party: { enabled: false, note: 'Not available yet' },
-          link: { enabled: false, note: 'Not available' },
-        },
+        id: '32bit',
+        label: '32-bit',
+        strapline: 'Disc-era console rooms.',
+        systems: [
+          {
+            id: 'playstation',
+            name: 'Sony PlayStation',
+            shortName: 'PS1',
+            accent: 'violet',
+            summary: 'Original PlayStation games using a locally supplied BIOS.',
+            formats: '.cue/.bin .chd .pbp .iso .zip .7z',
+            testing: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available' },
+            },
+          },
+          {
+            id: 'arcade',
+            name: 'MAME Arcade',
+            shortName: 'MAME',
+            accent: 'gold',
+            summary: 'MAME arcade games with configurable drivers and runtimes.',
+            formats: '.zip',
+            superAdminOnly: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
+        ],
       },
     ],
   },
 ];
+
+const EMPTY_ERA_COPY = {
+  micros: {
+    title: 'Nothing wired in here yet',
+    detail: 'This shelf is ready for the next batch of home machines.',
+  },
+  consoles: {
+    title: 'Console shelf coming later',
+    detail: 'The 8-bit console row is reserved so the library can grow without another redesign.',
+  },
+};
 
 export default function LobbyPage() {
   const navigate = useNavigate();
@@ -215,6 +255,7 @@ export default function LobbyPage() {
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
   const [isSuperAdmin, setIsSuperAdmin] = useState(localStorage.getItem('isSuperAdmin') === 'true');
   const [isTester, setIsTester] = useState(localStorage.getItem('isTester') === 'true');
+  const [selectedPlatformId, setSelectedPlatformId] = useState('micros');
   const [selectedEra, setSelectedEra] = useState('8bit');
   const [selectedSystemId, setSelectedSystemId] = useState('cpc');
   const [selectedMode, setSelectedMode] = useState('hosted');
@@ -222,28 +263,33 @@ export default function LobbyPage() {
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
   const canUsePreviewSystems = isAdmin || isTester;
 
-  const visibleGroups = useMemo(() => SYSTEM_GROUPS.map((group) => ({
-    ...group,
-    systems: group.systems.filter((system) => (
-      (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin)
-    )).map((system) => {
-      const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
-      const locked = lockedForTesting || Boolean(system.underConstruction);
-      return {
-        ...system,
-        locked,
-        badge: system.underConstruction
-          ? 'Under construction'
-          : system.testing
-            ? canUsePreviewSystems ? 'Testing' : 'Coming soon - in testing'
-            : null,
-      };
-    }),
-  })).filter((group) => group.systems.length > 0), [canUsePreviewSystems, isAdmin, isSuperAdmin]);
+  const visibleShelves = useMemo(() => PLATFORM_SHELVES.map((platform) => ({
+    ...platform,
+    eras: platform.eras.map((era) => ({
+      ...era,
+      systems: era.systems.filter((system) => (
+        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin)
+      )).map((system) => {
+        const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
+        const locked = lockedForTesting || Boolean(system.underConstruction);
+        return {
+          ...system,
+          locked,
+          badge: system.underConstruction
+            ? 'Under construction'
+            : system.testing
+              ? canUsePreviewSystems ? 'Testing' : 'Coming soon - in testing'
+              : null,
+        };
+      }),
+    })),
+  })), [canUsePreviewSystems, isAdmin, isSuperAdmin]);
 
-  const selectedGroup = visibleGroups.find((group) => group.id === selectedEra) || visibleGroups[0];
-  const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0];
+  const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
+  const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];
+  const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0] || null;
   const selectedModeConfig = selectedSystem?.modes[selectedMode];
+  const emptyEraCopy = EMPTY_ERA_COPY[selectedPlatform?.id] || EMPTY_ERA_COPY.micros;
 
   useEffect(() => {
     async function loadSession() {
@@ -277,8 +323,25 @@ export default function LobbyPage() {
     loadSession();
   }, []);
 
-  function chooseGroup(groupId, group = visibleGroups.find((item) => item.id === groupId)) {
-    const firstSystem = group?.systems[0];
+  function pickFirstSystem(era) {
+    return era?.systems.find((system) => !system.locked) || era?.systems[0] || null;
+  }
+
+  function choosePlatform(platformId) {
+    const platform = visibleShelves.find((item) => item.id === platformId);
+    const nextEra = platform?.eras.find((era) => era.systems.length > 0) || platform?.eras[0];
+    const firstSystem = pickFirstSystem(nextEra);
+
+    setSelectedPlatformId(platformId);
+    setSelectedEra(nextEra?.id || '8bit');
+    if (firstSystem) {
+      setSelectedSystemId(firstSystem.id);
+      setSelectedMode(firstSystem.modes.hosted?.enabled ? 'hosted' : 'solo');
+    }
+  }
+
+  function chooseGroup(groupId, group = selectedPlatform?.eras.find((item) => item.id === groupId)) {
+    const firstSystem = pickFirstSystem(group);
     setSelectedEra(groupId);
     if (firstSystem) {
       setSelectedSystemId(firstSystem.id);
@@ -395,78 +458,102 @@ export default function LobbyPage() {
 
         <main className="library-layout">
           <nav className="platform-tabs" aria-label="Platform category">
-            {visibleGroups.map((group) => (
+            {visibleShelves.map((platform) => (
               <button
-                key={group.id}
+                key={platform.id}
                 type="button"
-                className={selectedGroup.id === group.id ? 'active' : 'secondary'}
-                onClick={() => chooseGroup(group.id, group)}
+                className={selectedPlatform?.id === platform.id ? 'active' : 'secondary'}
+                onClick={() => choosePlatform(platform.id)}
               >
-                <span>{group.label}</span>
-                <small>{group.systems.length} system{group.systems.length === 1 ? '' : 's'}</small>
+                <span>{platform.label}</span>
+                <small>{platform.kicker}</small>
               </button>
             ))}
           </nav>
 
-          <section className="system-library" aria-label={`${selectedGroup.label} systems`}>
+          <section className="system-library" aria-label={`${selectedPlatform?.label} ${selectedGroup?.label} systems`}>
             <div className="library-head">
               <div>
-                <h2>{selectedGroup.label}</h2>
-                <p>{selectedGroup.strapline}</p>
+                <span>{selectedPlatform?.label}</span>
+                <h2>{selectedGroup?.label}</h2>
+                <p>{selectedGroup?.strapline}</p>
               </div>
             </div>
 
-            <div className="system-grid">
-              {selectedGroup.systems.map((system) => (
+            <nav className="era-tabs" aria-label={`${selectedPlatform?.label} era`}>
+              {selectedPlatform?.eras.map((era) => (
                 <button
-                  key={system.id}
+                  key={era.id}
                   type="button"
-                  className={`system-card system-card-${system.accent} ${selectedSystem?.id === system.id ? 'active' : ''} ${system.locked ? 'locked' : ''}`}
-                  onClick={() => chooseSystem(system)}
-                  aria-disabled={system.locked}
+                  className={selectedGroup?.id === era.id ? 'active' : 'secondary'}
+                  onClick={() => chooseGroup(era.id, era)}
                 >
-                  <span className="system-short">{system.shortName}</span>
-                  <span className="system-name">{system.name}</span>
-                  <span className="system-summary">{system.summary}</span>
-                  <span className="system-foot">
-                    <small>{system.formats}</small>
-                    {system.badge ? <em>{system.badge}</em> : null}
-                  </span>
+                  <span>{era.label}</span>
+                  <small>{era.systems.length ? `${era.systems.length} ready` : 'empty'}</small>
                 </button>
               ))}
-            </div>
+            </nav>
+
+            {selectedGroup?.systems.length ? (
+              <div className="system-grid">
+                {selectedGroup.systems.map((system) => (
+                  <button
+                    key={system.id}
+                    type="button"
+                    className={`system-card system-card-${system.accent} ${selectedSystem?.id === system.id ? 'active' : ''} ${system.locked ? 'locked' : ''}`}
+                    onClick={() => chooseSystem(system)}
+                    aria-disabled={system.locked}
+                  >
+                    <span className="system-short">{system.shortName}</span>
+                    <span className="system-name">{system.name}</span>
+                    <span className="system-summary">{system.summary}</span>
+                    <span className="system-foot">
+                      <small>{system.formats}</small>
+                      {system.badge ? <em>{system.badge}</em> : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-system-shelf">
+                <strong>{emptyEraCopy.title}</strong>
+                <span>{emptyEraCopy.detail}</span>
+              </div>
+            )}
           </section>
 
           <aside className="mode-panel" aria-label="Play modes">
             <div className="mode-head">
-              <span>{selectedSystem?.shortName}</span>
-              <h2>{selectedSystem?.name}</h2>
-              <p>{selectedSystem?.summary}</p>
+              <span>{selectedSystem?.shortName || selectedGroup?.label}</span>
+              <h2>{selectedSystem?.name || 'Choose a system'}</h2>
+              <p>{selectedSystem?.summary || 'Pick a shelf with available systems to start a room.'}</p>
             </div>
 
-            <div className="mode-list">
-              {Object.entries(PLAY_MODES).filter(([modeId]) => (
-                modeId !== 'link' || selectedSystem?.id === 'amiga'
-              )).map(([modeId, mode]) => {
-                const modeConfig = selectedSystem?.modes[modeId];
-                const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked && (!modeConfig.testing || canUsePreviewSystems));
-                const active = selectedMode === modeId;
+            {selectedSystem ? (
+              <div className="mode-list">
+                {Object.entries(PLAY_MODES).filter(([modeId]) => (
+                  modeId !== 'link' || selectedSystem?.id === 'amiga'
+                )).map(([modeId, mode]) => {
+                  const modeConfig = selectedSystem?.modes[modeId];
+                  const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked && (!modeConfig.testing || canUsePreviewSystems));
+                  const active = selectedMode === modeId;
 
-                return (
-                  <button
-                    key={modeId}
-                    type="button"
-                    className={`mode-card ${active ? 'active' : ''}`}
-                    disabled={!enabled}
-                    onClick={() => setSelectedMode(modeId)}
-                  >
-                    <span>{mode.kicker}</span>
-                    <strong>{mode.label}</strong>
-                    <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.testing || modeConfig?.testing ? 'Available to testers for now' : modeConfig?.note || 'Coming later'}</small>
-                  </button>
-                );
-              })}
-            </div>
+                  return (
+                    <button
+                      key={modeId}
+                      type="button"
+                      className={`mode-card ${active ? 'active' : ''}`}
+                      disabled={!enabled}
+                      onClick={() => setSelectedMode(modeId)}
+                    >
+                      <span>{mode.kicker}</span>
+                      <strong>{mode.label}</strong>
+                      <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.testing || modeConfig?.testing ? 'Available to testers for now' : modeConfig?.note || 'Coming later'}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
 
             {selectedMode === 'party' && selectedSystem?.modes.party?.system === 'cpc_party' ? (
               <label className="party-player-select mode-party-select">
@@ -487,7 +574,7 @@ export default function LobbyPage() {
               onClick={() => createSession()}
               disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled || (selectedModeConfig?.testing && !canUsePreviewSystems)}
             >
-              {loadingCreate ? 'Starting...' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Currently in testing' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
+              {loadingCreate ? 'Starting...' : !selectedSystem ? 'Choose a system' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Currently in testing' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
             </button>
 
             {error ? <p className="error">{error}</p> : null}
