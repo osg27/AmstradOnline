@@ -4,8 +4,6 @@
   const TARGET_FPS = 60.0988;
   const FRAME_INTERVAL = 1000 / TARGET_FPS;
 
-  // Audio buffer is still here, but audio output is disabled in new jsnes.NES()
-  // while we test emulator speed.
   const AUDIO_BUFFER_SIZE = 32768;
   const BUTTONS = window.jsnes?.Controller;
 
@@ -115,11 +113,12 @@
       audioDestination = audioContext.createMediaStreamDestination();
 
       audioNode = audioContext.createScriptProcessor(4096, 0, 2);
+
       audioNode.onaudioprocess = (event) => {
         const outputLeft = event.outputBuffer.getChannelData(0);
         const outputRight = event.outputBuffer.getChannelData(1);
 
-        const minimumBufferedSamples = 2048;
+        const minimumBufferedSamples = outputLeft.length * 2;
 
         if (audioCount < minimumBufferedSamples) {
           for (let index = 0; index < outputLeft.length; index += 1) {
@@ -295,7 +294,6 @@
     let delta = timestamp - lastTimestamp;
     lastTimestamp = timestamp;
 
-    // Avoid a massive catch-up after tab switching or browser stutter.
     if (delta > 100) {
       delta = FRAME_INTERVAL;
     }
@@ -345,20 +343,17 @@
       return;
     }
 
-    ensureAudio();
+    const audio = ensureAudio();
+
     resetAudioBuffer();
     stopLoop();
     drawStatus("Loading NES", currentRom.fileName);
 
     try {
       nes = new window.jsnes.NES({
-        sampleRate: ensureAudio()?.sampleRate || 44100,
+        sampleRate: audio?.sampleRate || 44100,
         onFrame: renderFrame,
-
-        // TEMPORARILY DISABLED:
-        // This proves whether audio is slowing the emulator down.
-        // Once SMB1 runs at proper speed, we can turn this back on and fix sound.
-        // onAudioSample: queueAudioSample,
+        onAudioSample: queueAudioSample,
       });
 
       nes.loadROM(currentRom.bytes);
