@@ -37,6 +37,8 @@
   let audioReadIndex = 0;
   let audioWriteIndex = 0;
   let audioCount = 0;
+  let fpsFrames = 0;
+  let fpsStartedAt = performance.now();
   const audioLeft = new Float32Array(AUDIO_BUFFER_SIZE);
   const audioRight = new Float32Array(AUDIO_BUFFER_SIZE);
 
@@ -245,30 +247,35 @@ function clampSample(value) {
     }
   }
 
-  function loop(timestamp) {
+  function loop() {
     if (!running || !nes) return;
-
-    rafHandle = requestAnimationFrame(loop);
-    if (!lastFrameAt) {
-      lastFrameAt = timestamp;
-    }
-
-    if (timestamp - lastFrameAt < FRAME_INTERVAL) return;
-    lastFrameAt = timestamp;
 
     try {
       nes.frame();
+
+      fpsFrames += 1;
+      const now = performance.now();
+
+      if (now - fpsStartedAt >= 1000) {
+        console.log(`NES FPS: ${fpsFrames}`);
+        fpsFrames = 0;
+        fpsStartedAt = now;
+      }
     } catch (error) {
-      console.error("Old Style Gaming NES error:", error);
+      console.error('Old Style Gaming NES error:', error);
       stopLoop();
-      drawStatus("NES failed", error?.message || "Check browser console");
+      drawStatus('NES failed', error?.message || 'Check browser console');
+      return;
     }
+
+    rafHandle = requestAnimationFrame(loop);
   }
 
   function startLoop() {
     if (running) return;
     running = true;
-    lastFrameAt = 0;
+    fpsFrames = 0;
+    fpsStartedAt = performance.now();
     rafHandle = requestAnimationFrame(loop);
   }
 
