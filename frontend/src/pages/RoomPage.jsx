@@ -325,7 +325,7 @@ export default function RoomPage() {
     : isSoloMode
       ? isAmigaFamily
         ? 'P1 Amiga controls + keyboard/mouse'
-        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Z / M flippers, Down plunger, Space nudge' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
+        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Left Shift / Right Shift flippers, Down plunger, Space nudge' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
       : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
       : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
@@ -444,6 +444,13 @@ export default function RoomPage() {
     }
 
     return event.key;
+  }
+
+  function getPinballRoomKey(event) {
+    const isPhysicalRightShift = event.code === 'ShiftRight'
+      || (event.key === 'Shift' && event.location === KeyboardEvent.DOM_KEY_LOCATION_RIGHT);
+
+    return isPhysicalRightShift ? 'm' : getKeyboardKey(event);
   }
 
   function keyToJoystickBit(key) {
@@ -2260,7 +2267,7 @@ export default function RoomPage() {
     function handleHostKeyDown(event) {
       if (!shouldHandleHostKey(event)) return;
 
-      const key = isCpcPinball && event.code === 'ShiftRight' ? 'Enter' : getKeyboardKey(event);
+      const key = isCpcPinball ? getPinballRoomKey(event) : getKeyboardKey(event);
       if (isAmigaFamily) {
         if (event.repeat) {
           event.preventDefault();
@@ -2304,7 +2311,7 @@ export default function RoomPage() {
     function handleHostKeyUp(event) {
       if (!shouldHandleHostKey(event)) return;
 
-      const key = isCpcPinball && event.code === 'ShiftRight' ? 'Enter' : getKeyboardKey(event);
+      const key = isCpcPinball ? getPinballRoomKey(event) : getKeyboardKey(event);
       if (isAmigaFamily) {
         addInputDebug(`host Amiga key ${event.code} up`, null, 'host keyboard');
         forwardInputToEmulator({
