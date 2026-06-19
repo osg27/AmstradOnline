@@ -289,7 +289,7 @@ async function main() {
     },
   };
 
-  const wasm = await WebAssembly.instantiateStreaming(fetch("zpz6128.wasm"), {
+  const wasm = await WebAssembly.instantiateStreaming(fetch("zpz6128.wasm?v=crtc-type-0-1"), {
     env,
   });
   const {
