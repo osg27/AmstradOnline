@@ -42,6 +42,10 @@ def is_tester_user(user: User) -> bool:
     return user.role == "tester"
 
 
+def is_xyphoe_user(user: User) -> bool:
+    return user.role == "xyphoe"
+
+
 def initial_role_for_username(username: str) -> str:
     normalized = username.lower()
     if normalized == settings.SUPER_ADMIN_USERNAME.lower() or (
@@ -186,6 +190,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         is_admin=is_admin_user(user),
         is_super_admin=is_super_admin_user(user),
         is_tester=is_tester_user(user),
+        is_xyphoe=is_xyphoe_user(user),
     )
 
 
@@ -243,4 +248,5 @@ def get_me(user: User = Depends(get_current_user)):
         "is_admin": is_admin_user(user),
         "is_super_admin": is_super_admin_user(user),
         "is_tester": is_tester_user(user),
+        "is_xyphoe": is_xyphoe_user(user),
     }

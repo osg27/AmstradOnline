@@ -286,6 +286,7 @@ export default function LobbyPage() {
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
   const [isSuperAdmin, setIsSuperAdmin] = useState(localStorage.getItem('isSuperAdmin') === 'true');
   const [isTester, setIsTester] = useState(localStorage.getItem('isTester') === 'true');
+  const [isXyphoe, setIsXyphoe] = useState(localStorage.getItem('isXyphoe') === 'true');
   const [selectedPlatformId, setSelectedPlatformId] = useState('micros');
   const [selectedEra, setSelectedEra] = useState('8bit');
   const [selectedSystemId, setSelectedSystemId] = useState('cpc');
@@ -299,7 +300,7 @@ export default function LobbyPage() {
     eras: platform.eras.map((era) => ({
       ...era,
       systems: era.systems.filter((system) => (
-        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin)
+        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin || (system.id === 'cpc_pinball' && isXyphoe))
       )).map((system) => {
         const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
         const locked = lockedForTesting || Boolean(system.underConstruction);
@@ -314,7 +315,7 @@ export default function LobbyPage() {
         };
       }),
     })),
-  })), [canUsePreviewSystems, isAdmin, isSuperAdmin]);
+  })), [canUsePreviewSystems, isAdmin, isSuperAdmin, isXyphoe]);
 
   const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];
@@ -329,13 +330,16 @@ export default function LobbyPage() {
         const nextIsAdmin = Boolean(session.is_admin);
         const nextIsSuperAdmin = Boolean(session.is_super_admin);
         const nextIsTester = Boolean(session.is_tester);
+        const nextIsXyphoe = Boolean(session.is_xyphoe);
 
         setIsAdmin(nextIsAdmin);
         setIsSuperAdmin(nextIsSuperAdmin);
         setIsTester(nextIsTester);
+        setIsXyphoe(nextIsXyphoe);
         localStorage.setItem('isAdmin', nextIsAdmin ? 'true' : 'false');
         localStorage.setItem('isSuperAdmin', nextIsSuperAdmin ? 'true' : 'false');
         localStorage.setItem('isTester', nextIsTester ? 'true' : 'false');
+        localStorage.setItem('isXyphoe', nextIsXyphoe ? 'true' : 'false');
         if (nextIsAdmin || nextIsTester) {
           const notifications = await apiFetch('/auth/feedback/notifications');
           setFeedbackNotificationCount(notifications.filter((notification) => !notification.is_read).length);
@@ -344,10 +348,12 @@ export default function LobbyPage() {
         setIsAdmin(false);
         setIsSuperAdmin(false);
         setIsTester(false);
+        setIsXyphoe(false);
         setFeedbackNotificationCount(0);
         localStorage.removeItem('isAdmin');
         localStorage.removeItem('isSuperAdmin');
         localStorage.removeItem('isTester');
+        localStorage.removeItem('isXyphoe');
       }
     }
 
@@ -393,7 +399,7 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin) || (modeConfig.testing && !canUsePreviewSystems)) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin && !(selectedSystem.id === 'cpc_pinball' && isXyphoe)) || (modeConfig.testing && !canUsePreviewSystems)) {
         throw new Error('That play mode is not ready yet.');
       }
 
@@ -437,6 +443,7 @@ export default function LobbyPage() {
     localStorage.removeItem('isAdmin');
     localStorage.removeItem('isSuperAdmin');
     localStorage.removeItem('isTester');
+    localStorage.removeItem('isXyphoe');
     navigate('/login');
   }
 

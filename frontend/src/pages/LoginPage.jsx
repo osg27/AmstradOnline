@@ -25,6 +25,7 @@ export default function LoginPage() {
       localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
       localStorage.setItem('isSuperAdmin', data.is_super_admin ? 'true' : 'false');
       localStorage.setItem('isTester', data.is_tester ? 'true' : 'false');
+      localStorage.setItem('isXyphoe', data.is_xyphoe ? 'true' : 'false');
       navigate('/lobby');
     } catch (err) {
       setError(err.message);

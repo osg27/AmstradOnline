@@ -83,6 +83,16 @@
     F8: 119,
     F9: 120,
     F10: 121,
+    '!': 49,
+    '"': 50,
+    '£': 51,
+    '$': 52,
+    '%': 53,
+    '^': 54,
+    '&': 55,
+    '*': 56,
+    '(': 57,
+    ')': 48,
   };
 
   const heldJoystickKeys = new Set();
@@ -91,7 +101,8 @@
 
   function keyCodeFor(key) {
     if (typeof key !== 'string') return null;
-    if (key.length === 1) return key.toUpperCase().charCodeAt(0);
+    if (KEY_CODES[key] !== undefined) return KEY_CODES[key];
+    if (/^[a-z0-9]$/i.test(key)) return key.toUpperCase().charCodeAt(0);
     return KEY_CODES[key] ?? null;
   }
 
@@ -119,8 +130,18 @@
 
   function boot6128() {
     if (!window.jQuery || typeof window.qH !== 'object') return false;
-    window.jQuery('#snapshot').val('boot_cpc6128');
-    window.jQuery('#snapshot').trigger('change');
+    const $ = window.jQuery;
+    $('input[name="brand"][value="amstrad"]').prop('checked', true);
+    $('input[name="firmware"][value="english"]').prop('checked', true);
+    $('input[name="crtc"][value="type1"]').prop('checked', true);
+    $('input[name="monitor"][value="colour"]').prop('checked', true);
+    $('input[name="audio"][value="stereo"]').prop('checked', true);
+    if (typeof window.oU?.y === 'function' && typeof window.oU?.w === 'function') {
+      window.oU.y();
+      window.oU.w();
+    }
+    $('#snapshot').val('boot_cpc6128');
+    $('#snapshot').trigger('change');
     return true;
   }
 
@@ -200,6 +221,7 @@
     if (typeof window.qH !== 'object' || !canvas) return;
     ready = true;
     clearInterval(readinessTimer);
+    boot6128();
     if (pendingDisk) loadDisk(pendingDisk.fileName, pendingDisk.bytes);
   }, 50);
 

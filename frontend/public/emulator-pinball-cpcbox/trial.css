@@ -26,10 +26,17 @@ body {
   background: #000 !important;
 }
 
+#screen-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 #screen {
   display: block !important;
-  width: 100% !important;
+  width: auto !important;
   height: 100% !important;
-  object-fit: contain;
+  max-width: 100% !important;
+  aspect-ratio: 768 / 544;
   image-rendering: pixelated;
 }
