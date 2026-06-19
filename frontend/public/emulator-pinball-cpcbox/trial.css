@@ -1,0 +1,35 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.control-panel,
+.drive-controls,
+#option-panel,
+#option-panel-overlay,
+#logo,
+#error-log,
+#status {
+  display: none !important;
+}
+
+.main-panel,
+#screen-placeholder {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #000 !important;
+}
+
+#screen {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+  image-rendering: pixelated;
+}

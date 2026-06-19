@@ -1,0 +1,9 @@
+CPCBox technical trial
+
+Source: https://github.com/omiq/cpcbox
+Original project: http://www.cpcbox.com
+
+No explicit software license was present in the source repository when this
+trial was created. Do not treat this technical integration as confirmation of
+redistribution rights. Obtain permission from the CPCBox author before public
+release.

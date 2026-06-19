@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="keywords" content="cpcbox, amstrad cpc, amstrad, cpc, schneider cpc, cpc 464, cpc 664, cpc 6128, emulation, emulator, emu, javascript">
+	<meta name="description" content="CPCBox is an Amstrad CPC computer emulator. Written in Javascript, it runs directly on your browser. Play your favorite 80's games online, let's go 8-bit!">
+	
+	<link rel="icon" href="img/favicon32.ico" type="image/x-icon">
+	<title>Amstrad Pinball Dreams - CPCBox Trial</title>
+	
+	<link rel="stylesheet" type="text/css" href="css/cpcbox.style.css?v=20241226">
+	<link rel="stylesheet" type="text/css" href="css/volume-slider.css?v=20241222">
+	<link rel="stylesheet" type="text/css" href="trial.css?v=2026-06-19-2">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+	
+	<script type="text/javascript" src="libs/jquery-1.8.3.min.js?v=20241221"></script>
+	<script type="text/javascript" src="libs/jquerytools.rangeinput.js?v=20241221"></script>
+	<script type="text/javascript" src="libs/inflate.js?v=20241221"></script>
+	
+	<script type="text/javascript" src="cpcbox.sysroms.js?v=20241221"></script>
+	<script type="text/javascript" src="cpcbox.js?v=20241221"></script>
+	<script type="text/javascript" src="autostart-config.js?v=20241221"></script>
+	<script type="text/javascript" src="integration.js?v=2026-06-19-2" defer></script>
+</head>
+
+<body>
+	<noscript>
+		<div class="error-output">CPCBox makes use of Javascript. Please check your browser settings to enable Javascript.</div>
+	</noscript>
+	
+	<div id="error-log" class="error-output" style="display:none"></div>
+	<div id="status" style="display:none">Loading...</div>
+	<div class="main-panel">
+		<div class="control-panel">
+			<a target="_blank" href="https://retrogamecoders.com/amstrad-cpc-emulator">Amstrad CPC Emulator</a>
+			<select id="snapshot" autocomplete="off">
+				<option value="boot_cpc6128">Choose configuration...</option>
+				<optgroup label="Boot">
+					<option value="boot_cpc464">CPC 464</option>
+					<option value="boot_cpc664">CPC 664</option>
+					<option value="boot_cpc6128">CPC 6128</option>
+				</optgroup>
+				<optgroup label="Oh Mummy">
+					<option value="oh-mummy-slow-easy.sna">Slow and Easy (no sound)</option>
+				</optgroup>
+				<optgroup label="Games">
+					<option value="1943.sna">1943</option>
+					<option value="arkanoid.sna">Arkanoid</option>
+					<option value="astro_marine_corps.sna">Astro Marine Corps</option>
+					<option value="batman.sna">Batman</option>
+					<option value="bomb_jack.sna">Bomb Jack</option>
+					<option value="boulder_dash.sna">Boulder Dash</option>
+					<option value="bruce_lee.sna">Bruce Lee</option>
+					<option value="buggy_boy.sna">Buggy Boy</option>
+					<option value="chase_hq.sna">Chase HQ</option>
+					<option value="commando.sna">Commando</option>
+					<option value="cybernoid.sna">Cybernoid</option>
+					<option value="donkey_kong.sna">Donkey Kong</option>
+					<option value="dragon_ninja.sna">Dragon Ninja</option>
+					<option value="fruity_frank.sna">Fruity Frank</option>
+					<option value="ghosts_n_goblins.sna">Ghosts'n Goblins</option>
+					<option value="great_courts.sna">Great Courts</option>
+					<option value="gryzor.sna">Gryzor</option>
+					<option value="head_over_heels.sna">Head Over Heels</option>
+					<option value="ikari_warriors.sna">Ikari Warriors</option>
+					<option value="live_and_let_die.sna">Live and Let Die</option>
+					<option value="prohibition.sna">Prohibition</option>
+					<option value="rick_dangerous.sna">Rick Dangerous</option>
+					<option value="target_renegade.sna">Target Renegade</option>
+					<option value="tetris_95.sna">Tetris 95</option>
+					<option value="wonder_boy.sna">Wonder Boy</option>
+				</optgroup>
+				<optgroup label="Demos">
+					<option value="backtro.sna">Backtro</option>
+					<option value="dtc.sna">DTC</option>
+					<option value="ecole_buissonniere.sna">Ecole Buissonnière</option>
+					<option value="from_scratch.sna">From Scratch</option>
+					<option value="tire_au_flan.sna">Tire Au Flan</option>
+					<option value="wolfenstrad.sna">Wolfenstrad</option>
+				</optgroup>
+			</select>
+			
+			<div id="button-run" class="button-size1 disabled-button">
+				<i class="fas fa-play"></i> Resume
+			</div>
+			<div id="button-reset" title="Reset CPC" class="button-size1 disabled-button">
+				<i class="fas fa-power-off"></i>
+			</div>
+			<div id="checkbox-settings" title="Settings">
+				<i class="fas fa-cog"></i>
+			</div>
+			<div id="checkbox-fullscreen" title="Fullscreen">
+				<i class="fas fa-expand"></i>
+			</div>
+			<div id="checkbox-joystick" title="Disable CPC joystick">
+				<i class="fas fa-gamepad"></i>
+			</div>
+			<div id="checkbox-sound" title="Unmute">
+				<i class="fas fa-volume-up"></i>
+			</div>
+			<input type="range" name="sound-volume" min="1" max="100" value="75" style="display:none">
+		
+		</div>
+		<div id="screen-placeholder">
+			<div id="logo"></div>
+			<canvas id="screen" width="768" height="272" style="display:none"></canvas>
+			<div id="option-panel-overlay" style="display:none"></div>
+			<div id="option-panel" style="display:none">
+				<div id="option-panel-header">
+					Settings
+					<div id="settings-close">×</div>
+				</div>
+				<div id="option-panel-content">
+					<div class="option-heading">Brand name</div>
+					<div class="option-list">
+						<input type="radio" id="brand1" name="brand" value="amstrad">
+						<label for="brand1" class="option-label">
+							<div class="option-name">Amstrad</div>
+							<div class="option-comment">Worldwide distributor</div>
+						</label>
+						<input type="radio" id="brand2" name="brand" value="schneider">
+						<label for="brand2" class="option-label">
+							<div class="option-name">Schneider</div>
+							<div class="option-comment">German distributor</div>
+						</label>
+						<input type="radio" id="brand3" name="brand" value="awa">
+						<label for="brand3" class="option-label">
+							<div class="option-name">AWA</div>
+							<div class="option-comment">Australian distributor</div>
+						</label>
+					</div>
+					
+					<div class="option-heading">Keyboard</div>
+					<div class="option-list">
+						<input type="radio" id="keyboard1" name="firmware" value="english">
+						<label for="keyboard1" class="option-label">
+							<span class="option-flag">🇬🇧</span>
+							<div class="option-comment">English layout</div>
+						</label>
+						<input type="radio" id="keyboard2" name="firmware" value="french">
+						<label for="keyboard2" class="option-label">
+							<span class="option-flag">🇫🇷</span>
+							<div class="option-comment">French layout</div>
+						</label>
+						<input type="radio" id="keyboard3" name="firmware" value="spanish">
+						<label for="keyboard3" class="option-label">
+							<span class="option-flag">🇪🇸</span>
+							<div class="option-comment">Spanish layout</div>
+						</label>
+					</div>
+					
+					<div class="option-heading">CRTC</div>
+					<div class="option-list">
+						<input type="radio" id="crtc0" name="crtc" value="type0">
+						<label for="crtc0" class="option-label">
+							<div class="option-name">Type 0</div>
+							<div class="option-comment">Hitachi HD6845S</div>
+						</label>
+						<input type="radio" id="crtc1" name="crtc" value="type1">
+						<label for="crtc1" class="option-label">
+							<div class="option-name">Type 1</div>
+							<div class="option-comment">UMC UM6845R</div>
+						</label>
+						<input type="radio" id="crtc2" name="crtc" value="type2">
+						<label for="crtc2" class="option-label">
+							<div class="option-name">Type 2</div>
+							<div class="option-comment">Motorola MC6845</div>
+						</label>
+					</div>
+					
+					<div class="option-heading">Monitor</div>
+					<div class="option-list">
+						<input type="radio" id="monitor1" name="monitor" value="colour">
+						<label for="monitor1" class="option-label">
+							<div class="option-name">
+								<span style="color:red">Co</span><span style="color:green">lo</span><span style="color:blue">ur</span>
+							</div>
+							<div class="option-comment">RGB CPC/Plus</div>
+						</label>
+						<input type="radio" id="monitor2" name="monitor" value="green">
+						<label for="monitor2" class="option-label">
+							<div class="option-name">
+								<span style="color:#090">Gr</span><span style="color:#0C0">e</span><span style="color:#060">en</span>
+							</div>
+							<div class="option-comment">Monochrome CPC</div>
+						</label>
+						<input type="radio" id="monitor3" name="monitor" value="grayscale">
+						<label for="monitor3" class="option-label">
+							<div class="option-name">
+								<span style="color:#666">Gre</span><span style="color:#999">ysc</span><span style="color:#333">ale</span>
+							</div>
+							<div class="option-comment">Monochrome Plus</div>
+						</label>
+					</div>
+					
+					<div class="option-heading">Audio mixer</div>
+					<div class="option-list">
+						<input type="radio" id="audio1" name="audio" value="mono">
+						<label for="audio1" class="option-label">
+							<div class="option-name">Mono</div>
+							<div class="option-comment">CPC internal speaker</div>
+						</label>
+						<input type="radio" id="audio2" name="audio" value="stereo">
+						<label for="audio2" class="option-label">
+							<div class="option-name">Stereo</div>
+							<div class="option-comment">CPC external & Plus speakers</div>
+						</label>
+					</div>
+					
+					
+				
+					<div class="option-heading">Peripherals</div>
+					<div class="option-list peripherals">
+						<div class="peripheral-item">
+							<input type="checkbox" id="floppy-option">
+							<label for="floppy-option" class="option-label">
+								<div class="option-name">Extra floppy drive</div>
+							</label>
+						</div>
+							<input type="hidden" id="tape-option" style="visibility: hidden;">
+						
+						<div class="peripheral-item">
+							<input type="checkbox" id="ram-option">
+							<label for="ram-option" class="option-label">
+								<div class="option-name">512KB RAM expansion</div>
+							</label>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		
+		
+		<!-- Drive controls - moved above the fold -->
+		<div class="drive-controls">
+			<fieldset id="fieldset-tape" style="display:none">
+				<legend>Tape deck</legend>
+				<div id="tape-choose" class="button-size2 button" onclick="$('#tape-input').click();">
+					<i class="fas fa-folder-open"></i>
+				</div>
+				<div id="tape-filename"><i>Empty</i></div>
+				<select id="tape-zipselect" style="display:none"></select>
+				<input type="file" id="tape-input">
+				<div id="tape-counter">000</div>
+				<div id="tape-record" class="button-size2 disabled-button"><i class="fas fa-circle"></i></div>
+				<div id="tape-play" class="button-size2 disabled-button"><i class="fas fa-play"></i></div>
+				<div id="tape-rewind" class="button-size2 disabled-button"><i class="fas fa-backward"></i></div>
+				<div id="tape-forward" class="button-size2 disabled-button"><i class="fas fa-forward"></i></div>
+				<div id="tape-stop" class="button-size2 disabled-button"><i class="fas fa-stop"></i></div>
+				<div id="tape-eject" class="button-size2 disabled-button"><i class="fas fa-eject"></i></div>
+			</fieldset>
+			
+			<fieldset id="fieldset-drivea" style="display:none">
+				<legend>Drive A:</legend>
+				<div id="drivea-choose" class="button-size2 button" onclick="$('#drivea-input').click();">
+					<i class="fas fa-folder-open"></i>
+				</div>
+				<div id="drivea-filename"><i>Empty</i></div>
+				<select id="drivea-zipselect" style="display:none"></select>
+				<input type="file" id="drivea-input">
+				<div id="drivea-led" class="led"></div>
+				<div id="drivea-eject" class="button-size2 disabled-button"><i class="fas fa-eject"></i></div>
+			</fieldset>
+			
+			<fieldset id="fieldset-driveb" style="display:none">
+				<legend>Drive B:</legend>
+				<div id="driveb-choose" class="button-size2 button" onclick="$('#driveb-input').click();">
+					<i class="fas fa-folder-open"></i>
+				</div>
+				<div id="driveb-filename"><i>Empty</i></div>
+				<select id="driveb-zipselect" style="display:none"></select>
+				<input type="file" id="driveb-input">
+				<div id="driveb-led" class="led"></div>
+				<div id="driveb-eject" class="button-size2 disabled-button"><i class="fas fa-eject"></i></div>
+			</fieldset>
+		</div>
+	</div>
+	
+	<!-- Auto-start script -->
+	<script type="text/javascript">
+		$(document).ready(function() {
+			if (typeof AUTO_START_ENABLED !== 'undefined' && AUTO_START_ENABLED) {
+				// Set the dropdown to the auto-start configuration
+				$('#snapshot').val(AUTO_START_CONFIG);
+				
+				// Update status to show auto-start is happening
+				var message = (typeof AUTO_START_MESSAGE !== 'undefined') ? AUTO_START_MESSAGE : 'Auto-starting...';
+				$('#status').text(message);
+				
+				// Auto-start after a short delay to ensure everything is loaded
+				var delay = (typeof AUTO_START_DELAY !== 'undefined') ? AUTO_START_DELAY : 2000;
+				setTimeout(function() {
+					// Trigger the change event to start the emulator
+					$('#snapshot').trigger('change');
+				}, delay);
+			} else {
+				// If auto-start is disabled, show the normal paused status
+				$('#status').text('Paused');
+			}
+		});
+	</script>
+</body>
+</html>
