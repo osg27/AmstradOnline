@@ -151,7 +151,10 @@ class EJS_COMPRESSION {
                 })
                 resolve(blob);
             } else {
-                const blob = new Blob([res.data.files[0].bytes], {
+                const workerSource = typeof res.data === "string"
+                    ? res.data
+                    : new TextDecoder().decode(res.data.files[0].bytes);
+                const blob = new Blob([workerSource], {
                     type: "application/javascript"
                 })
                 resolve(blob);
