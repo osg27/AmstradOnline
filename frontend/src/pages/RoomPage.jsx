@@ -314,7 +314,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-16-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-4' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-16-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-5' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -325,7 +325,7 @@ export default function RoomPage() {
     : isSoloMode
       ? isAmigaFamily
         ? 'P1 Amiga controls + keyboard/mouse'
-        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
+        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Shift / Alt flippers, Down plunger, Space nudge' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
       : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
       : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
@@ -425,7 +425,7 @@ export default function RoomPage() {
     );
   }
 
-  function shouldHandleHostKey(event) {
+  function shouldHandleHostKey(event, allowPinballModifiers = false) {
     const tag = event.target?.tagName?.toLowerCase();
 
     return (
@@ -433,8 +433,8 @@ export default function RoomPage() {
       && tag !== 'textarea'
       && tag !== 'select'
       && !event.target?.isContentEditable
-      && !event.metaKey
-      && !event.altKey
+      && (!event.metaKey || (allowPinballModifiers && event.key === 'Meta'))
+      && (!event.altKey || (allowPinballModifiers && event.key === 'Alt'))
     );
   }
 
@@ -444,6 +444,27 @@ export default function RoomPage() {
     }
 
     return event.key;
+  }
+
+  function getPinballKeyboardKey(event) {
+    switch (event.code) {
+      case 'ShiftLeft':
+      case 'AltLeft':
+      case 'MetaLeft':
+        return 'ArrowLeft';
+      case 'ShiftRight':
+      case 'AltRight':
+      case 'MetaRight':
+        return 'ArrowRight';
+      case 'Space':
+        return ' ';
+      case 'KeyP':
+        return 'p';
+      case 'KeyM':
+        return 'm';
+      default:
+        return getKeyboardKey(event);
+    }
   }
 
   function keyToJoystickBit(key) {
@@ -479,6 +500,14 @@ export default function RoomPage() {
     const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone;
     const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
+    if (system === 'cpc_pinball') {
+      let pinballMask = 0;
+      if (left) pinballMask |= 4;
+      if (right) pinballMask |= 8;
+      if (down) pinballMask |= 2;
+      if (pad.buttons[1]?.pressed) pinballMask |= 32;
+      return pinballMask;
+    }
     const isMultiButtonSystem = system === 'megadrive' || system === 'nes' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'arcade';
     const fire = isMultiButtonSystem
       ? pad.buttons[0]?.pressed
@@ -1013,7 +1042,7 @@ export default function RoomPage() {
 
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : 2;
-    const joystickMask = isAmigaFamily || isMegaDrive || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isArcade ? mask : mask & 31;
+    const joystickMask = isAmigaFamily || isMegaDrive || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isArcade || isCpcPinball ? mask : mask & 31;
     const previousMask = localJoystickMaskRef.current;
     const payload = {
       type: 'joystick',
@@ -1059,7 +1088,7 @@ export default function RoomPage() {
         player,
         mask: joystickMask,
       });
-      if (!isAmigaFamily && !isMegaDrive && !isNes && !isSnes && !isPcEngine && !isPlayStation && !isC64 && !isArcade) {
+      if (!isAmigaFamily && !isMegaDrive && !isNes && !isSnes && !isPcEngine && !isPlayStation && !isC64 && !isArcade && !isCpcPinball) {
         forwardExtraButtonAsKey(mask, player, previousMask);
       }
       localJoystickMaskRef.current = mask;
@@ -1084,7 +1113,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isAmigaLink, isArcade, isC64, isCpcParty, isHost, isMegaDrive, isNes, isPcEngine, isPlayStation, isSnes, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isAmigaLink, isArcade, isC64, isCpcParty, isCpcPinball, isHost, isMegaDrive, isNes, isPcEngine, isPlayStation, isSnes, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -2247,9 +2276,9 @@ export default function RoomPage() {
     if (!canControlLocalEmulator) return undefined;
 
     function handleHostKeyDown(event) {
-      if (!shouldHandleHostKey(event)) return;
+      if (!shouldHandleHostKey(event, isCpcPinball)) return;
 
-      const key = getKeyboardKey(event);
+      const key = isCpcPinball ? getPinballKeyboardKey(event) : getKeyboardKey(event);
       if (isAmigaFamily) {
         if (event.repeat) {
           event.preventDefault();
@@ -2291,9 +2320,9 @@ export default function RoomPage() {
     }
 
     function handleHostKeyUp(event) {
-      if (!shouldHandleHostKey(event)) return;
+      if (!shouldHandleHostKey(event, isCpcPinball)) return;
 
-      const key = getKeyboardKey(event);
+      const key = isCpcPinball ? getPinballKeyboardKey(event) : getKeyboardKey(event);
       if (isAmigaFamily) {
         addInputDebug(`host Amiga key ${event.code} up`, null, 'host keyboard');
         forwardInputToEmulator({
@@ -2335,7 +2364,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown, true);
       window.removeEventListener('keyup', handleHostKeyUp, true);
     };
-  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isCpcParty, isHost]);
+  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isCpcParty, isCpcPinball, isHost]);
 
   useEffect(() => {
     if (isHost !== false || isAmigaLink) return undefined;

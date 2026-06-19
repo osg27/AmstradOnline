@@ -177,6 +177,7 @@
     if (mask & 4) next.add(37);
     if (mask & 8) next.add(39);
     if (mask & 16) next.add(17);
+    if (mask & 32) next.add(18);
 
     heldJoystickKeys.forEach((code) => {
       if (!next.has(code)) dispatchKey(code, 'up');
