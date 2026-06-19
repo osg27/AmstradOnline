@@ -50,8 +50,8 @@ def require_system_access(db: Session, user_id: int, system: str, *, creating: b
         return
     if system in XYPHOE_SYSTEMS:
         user = db.query(User).filter(User.id == user_id).first()
-        if not user or not (is_admin_user(user) or is_xyphoe_user(user)):
-            raise HTTPException(status_code=403, detail="This system is only available to admins and the Xyphoe role")
+        if not user or not (can_use_preview_systems(user) or is_xyphoe_user(user)):
+            raise HTTPException(status_code=403, detail="This system is only available to testers, admins, and the Xyphoe role")
         return
     if creating and system in SUPER_ADMIN_ONLY_SYSTEMS:
         user = db.query(User).filter(User.id == user_id).first()
