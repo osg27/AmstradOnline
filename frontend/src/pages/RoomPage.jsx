@@ -2442,6 +2442,11 @@ export default function RoomPage() {
     if (isArcade) {
       mirrorCanvas.width = 768;
       mirrorCanvas.height = 576;
+    } else if (isCpcPinball) {
+      // CPCBox renders double-height CPC pixels into a 768x272 framebuffer.
+      // Restore their display aspect in the room mirror and outgoing stream.
+      mirrorCanvas.width = 768;
+      mirrorCanvas.height = 544;
     } else {
       mirrorCanvas.width = sourceCanvas.width || 768;
       mirrorCanvas.height = sourceCanvas.height || 544;
