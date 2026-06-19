@@ -93,6 +93,8 @@
     '*': 56,
     '(': 57,
     ')': 48,
+    '.': 190,
+    '\\': 220,
   };
 
   const heldJoystickKeys = new Set();
@@ -142,6 +144,7 @@
     }
     $('#snapshot').val('boot_cpc6128');
     $('#snapshot').trigger('change');
+    window.oU.g = false;
     return true;
   }
 
@@ -171,13 +174,15 @@
   }
 
   function applyJoystickMask(mask) {
+    if (window.oU) window.oU.g = false;
     const next = new Set();
     if (mask & 1) next.add(38);
     if (mask & 2) next.add(40);
     if (mask & 4) next.add(37);
     if (mask & 8) next.add(39);
     if (mask & 16) next.add(17);
-    if (mask & 32) next.add(18);
+    if (mask & 32) next.add(32);
+    if (mask & 64) next.add(13);
 
     heldJoystickKeys.forEach((code) => {
       if (!next.has(code)) dispatchKey(code, 'up');
@@ -211,6 +216,7 @@
     } else if (data.type === 'amstrad_audio_unlock') {
       ensureAudio();
     } else if (data.type === 'amstrad_remote_input' || data.type === 'amstrad_remote_control') {
+      if (window.oU) window.oU.g = false;
       dispatchKey(keyCodeFor(data.key), data.action);
     } else if (data.type === 'amstrad_remote_joystick') {
       applyJoystickMask(Number(data.mask) || 0);

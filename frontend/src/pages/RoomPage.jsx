@@ -242,8 +242,6 @@ export default function RoomPage() {
   const hostStartingRef = useRef(false);
   const hostStartedRef = useRef(false);
   const loadedDiskNameRef = useRef('');
-  const pinballGameControlsRef = useRef(false);
-  const pinballCommandBufferRef = useRef('');
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
   const inputSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -316,7 +314,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-16-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-5' : '/emulator/index.html?v=2026-06-01-1';
+    : isMegaDrive ? '/megadrive/launcher.html?v=2026-06-13-1' : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isArcade ? '/arcade/launcher.html?v=2026-06-16-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-6' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -327,7 +325,7 @@ export default function RoomPage() {
     : isSoloMode
       ? isAmigaFamily
         ? 'P1 Amiga controls + keyboard/mouse'
-        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Shift / Alt flippers, Down plunger, Space nudge' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
+        : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Z / M flippers, Down plunger, Space nudge' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
       : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
       : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
@@ -427,7 +425,7 @@ export default function RoomPage() {
     );
   }
 
-  function shouldHandleHostKey(event, allowPinballModifiers = false) {
+  function shouldHandleHostKey(event) {
     const tag = event.target?.tagName?.toLowerCase();
 
     return (
@@ -435,8 +433,8 @@ export default function RoomPage() {
       && tag !== 'textarea'
       && tag !== 'select'
       && !event.target?.isContentEditable
-      && (!event.metaKey || (allowPinballModifiers && event.key === 'Meta'))
-      && (!event.altKey || (allowPinballModifiers && event.key === 'Alt'))
+      && !event.metaKey
+      && !event.altKey
     );
   }
 
@@ -446,27 +444,6 @@ export default function RoomPage() {
     }
 
     return event.key;
-  }
-
-  function getPinballKeyboardKey(event) {
-    switch (event.code) {
-      case 'ShiftLeft':
-      case 'AltLeft':
-      case 'MetaLeft':
-        return 'ArrowLeft';
-      case 'ShiftRight':
-      case 'AltRight':
-      case 'MetaRight':
-        return 'ArrowRight';
-      case 'Space':
-        return ' ';
-      case 'KeyP':
-        return 'p';
-      case 'KeyM':
-        return 'm';
-      default:
-        return getKeyboardKey(event);
-    }
   }
 
   function keyToJoystickBit(key) {
@@ -504,10 +481,13 @@ export default function RoomPage() {
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
     if (system === 'cpc_pinball') {
       let pinballMask = 0;
+      if (up) pinballMask |= 1;
       if (left) pinballMask |= 4;
       if (right) pinballMask |= 8;
       if (down) pinballMask |= 2;
-      if (pad.buttons[1]?.pressed) pinballMask |= 32;
+      if (pad.buttons[0]?.pressed) pinballMask |= 16;
+      if (pad.buttons[1]?.pressed) pinballMask |= 64;
+      if (pad.buttons[2]?.pressed || pad.buttons[3]?.pressed) pinballMask |= 32;
       return pinballMask;
     }
     const isMultiButtonSystem = system === 'megadrive' || system === 'nes' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'arcade';
@@ -2278,10 +2258,9 @@ export default function RoomPage() {
     if (!canControlLocalEmulator) return undefined;
 
     function handleHostKeyDown(event) {
-      if (!shouldHandleHostKey(event, isCpcPinball)) return;
+      if (!shouldHandleHostKey(event)) return;
 
-      const pinballLoading = isCpcPinball && !pinballGameControlsRef.current;
-      const key = isCpcPinball && !pinballLoading ? getPinballKeyboardKey(event) : getKeyboardKey(event);
+      const key = getKeyboardKey(event);
       if (isAmigaFamily) {
         if (event.repeat) {
           event.preventDefault();
@@ -2318,28 +2297,14 @@ export default function RoomPage() {
           action: 'down',
         });
 
-        if (pinballLoading && !event.repeat) {
-          if (key === 'Enter') {
-            if (/^\s*run\b/i.test(pinballCommandBufferRef.current)) {
-              pinballGameControlsRef.current = true;
-              addInputDebug('Pinball game controls enabled after RUN command');
-            }
-            pinballCommandBufferRef.current = '';
-          } else if (key === 'Backspace') {
-            pinballCommandBufferRef.current = pinballCommandBufferRef.current.slice(0, -1);
-          } else if (key.length === 1) {
-            pinballCommandBufferRef.current += key;
-          }
-        }
-
         event.preventDefault();
       }
     }
 
     function handleHostKeyUp(event) {
-      if (!shouldHandleHostKey(event, isCpcPinball)) return;
+      if (!shouldHandleHostKey(event)) return;
 
-      const key = isCpcPinball && pinballGameControlsRef.current ? getPinballKeyboardKey(event) : getKeyboardKey(event);
+      const key = getKeyboardKey(event);
       if (isAmigaFamily) {
         addInputDebug(`host Amiga key ${event.code} up`, null, 'host keyboard');
         forwardInputToEmulator({
@@ -2381,7 +2346,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown, true);
       window.removeEventListener('keyup', handleHostKeyUp, true);
     };
-  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isCpcParty, isCpcPinball, isHost]);
+  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isCpcParty, isHost]);
 
   useEffect(() => {
     if (isHost !== false || isAmigaLink) return undefined;
@@ -3196,11 +3161,6 @@ export default function RoomPage() {
       return;
     }
 
-    if (isCpcPinball) {
-      pinballGameControlsRef.current = false;
-      pinballCommandBufferRef.current = '';
-    }
-
     const type = isAmiga || isAmigaLink
       ? 'amiga_reset'
       : isAmigaAga
@@ -3264,11 +3224,6 @@ export default function RoomPage() {
       }
 
       setError('');
-
-      if (isCpcPinball && !isSwapDisk) {
-        pinballGameControlsRef.current = false;
-        pinballCommandBufferRef.current = '';
-      }
 
       if (isCpcSystem && !isSwapDisk) {
         const nextMatches = findControlProfileMatches(file.name);
