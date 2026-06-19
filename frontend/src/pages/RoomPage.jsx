@@ -2260,7 +2260,7 @@ export default function RoomPage() {
     function handleHostKeyDown(event) {
       if (!shouldHandleHostKey(event)) return;
 
-      const key = getKeyboardKey(event);
+      const key = isCpcPinball && event.code === 'ShiftRight' ? 'Enter' : getKeyboardKey(event);
       if (isAmigaFamily) {
         if (event.repeat) {
           event.preventDefault();
@@ -2304,7 +2304,7 @@ export default function RoomPage() {
     function handleHostKeyUp(event) {
       if (!shouldHandleHostKey(event)) return;
 
-      const key = getKeyboardKey(event);
+      const key = isCpcPinball && event.code === 'ShiftRight' ? 'Enter' : getKeyboardKey(event);
       if (isAmigaFamily) {
         addInputDebug(`host Amiga key ${event.code} up`, null, 'host keyboard');
         forwardInputToEmulator({
@@ -2346,7 +2346,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown, true);
       window.removeEventListener('keyup', handleHostKeyUp, true);
     };
-  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isCpcParty, isHost]);
+  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isCpcParty, isCpcPinball, isHost]);
 
   useEffect(() => {
     if (isHost !== false || isAmigaLink) return undefined;
