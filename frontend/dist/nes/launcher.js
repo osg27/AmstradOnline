@@ -15,6 +15,20 @@
   let statusText = 'NES ready';
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+  const nativeFetch = window.fetch.bind(window);
+  const coreCacheVersion = '2026-06-19-3';
+
+  window.fetch = (input, options) => {
+    const inputUrl = typeof input === 'string' || input instanceof URL ? input : input?.url;
+    if (inputUrl) {
+      const url = new URL(inputUrl, window.location.href);
+      if (url.pathname.endsWith('/cores/fceumm-wasm.data')) {
+        url.searchParams.set('osg', coreCacheVersion);
+        input = input instanceof Request ? new Request(url, input) : url;
+      }
+    }
+    return nativeFetch(input, options);
+  };
 
   function drawStatus(main, sub = '') {
     statusText = main;
