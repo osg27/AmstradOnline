@@ -242,6 +242,8 @@ export default function RoomPage() {
   const hostStartingRef = useRef(false);
   const hostStartedRef = useRef(false);
   const loadedDiskNameRef = useRef('');
+  const pinballGameControlsRef = useRef(false);
+  const pinballCommandBufferRef = useRef('');
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
   const inputSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -2278,7 +2280,8 @@ export default function RoomPage() {
     function handleHostKeyDown(event) {
       if (!shouldHandleHostKey(event, isCpcPinball)) return;
 
-      const key = isCpcPinball ? getPinballKeyboardKey(event) : getKeyboardKey(event);
+      const pinballLoading = isCpcPinball && !pinballGameControlsRef.current;
+      const key = isCpcPinball && !pinballLoading ? getPinballKeyboardKey(event) : getKeyboardKey(event);
       if (isAmigaFamily) {
         if (event.repeat) {
           event.preventDefault();
@@ -2315,6 +2318,20 @@ export default function RoomPage() {
           action: 'down',
         });
 
+        if (pinballLoading && !event.repeat) {
+          if (key === 'Enter') {
+            if (/^\s*run\b/i.test(pinballCommandBufferRef.current)) {
+              pinballGameControlsRef.current = true;
+              addInputDebug('Pinball game controls enabled after RUN command');
+            }
+            pinballCommandBufferRef.current = '';
+          } else if (key === 'Backspace') {
+            pinballCommandBufferRef.current = pinballCommandBufferRef.current.slice(0, -1);
+          } else if (key.length === 1) {
+            pinballCommandBufferRef.current += key;
+          }
+        }
+
         event.preventDefault();
       }
     }
@@ -2322,7 +2339,7 @@ export default function RoomPage() {
     function handleHostKeyUp(event) {
       if (!shouldHandleHostKey(event, isCpcPinball)) return;
 
-      const key = isCpcPinball ? getPinballKeyboardKey(event) : getKeyboardKey(event);
+      const key = isCpcPinball && pinballGameControlsRef.current ? getPinballKeyboardKey(event) : getKeyboardKey(event);
       if (isAmigaFamily) {
         addInputDebug(`host Amiga key ${event.code} up`, null, 'host keyboard');
         forwardInputToEmulator({
@@ -3179,6 +3196,11 @@ export default function RoomPage() {
       return;
     }
 
+    if (isCpcPinball) {
+      pinballGameControlsRef.current = false;
+      pinballCommandBufferRef.current = '';
+    }
+
     const type = isAmiga || isAmigaLink
       ? 'amiga_reset'
       : isAmigaAga
@@ -3242,6 +3264,11 @@ export default function RoomPage() {
       }
 
       setError('');
+
+      if (isCpcPinball && !isSwapDisk) {
+        pinballGameControlsRef.current = false;
+        pinballCommandBufferRef.current = '';
+      }
 
       if (isCpcSystem && !isSwapDisk) {
         const nextMatches = findControlProfileMatches(file.name);
