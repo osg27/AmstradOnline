@@ -98,6 +98,7 @@
   };
 
   const heldJoystickKeys = new Set();
+  const heldRemoteKeyCodes = new Set();
   let pendingDisk = null;
   let ready = false;
 
@@ -116,6 +117,20 @@
       keyCode: code,
       which: code,
     }));
+
+    const matrixKey = window.pT?.iQ?.(code);
+    if (matrixKey && window.pT?.hj) {
+      const [row, bit] = matrixKey;
+      window.pT.hj[row] = action === 'down'
+        ? window.pT.hj[row] & ~bit & 255
+        : window.pT.hj[row] | bit;
+    }
+  }
+
+  function releaseAllInput() {
+    heldRemoteKeyCodes.forEach((code) => dispatchKey(code, 'up'));
+    heldRemoteKeyCodes.clear();
+    applyJoystickMask(0);
   }
 
   function tapKey(code, duration = 55) {
@@ -217,11 +232,20 @@
       ensureAudio();
     } else if (data.type === 'amstrad_remote_input' || data.type === 'amstrad_remote_control') {
       if (window.oU) window.oU.g = false;
-      dispatchKey(keyCodeFor(data.key), data.action);
+      const code = keyCodeFor(data.key);
+      dispatchKey(code, data.action);
+      if (code !== null) {
+        if (data.action === 'down') heldRemoteKeyCodes.add(code);
+        else heldRemoteKeyCodes.delete(code);
+      }
     } else if (data.type === 'amstrad_remote_joystick') {
       applyJoystickMask(Number(data.mask) || 0);
+    } else if (data.type === 'amstrad_release_all') {
+      releaseAllInput();
     }
   });
+
+  window.addEventListener('blur', releaseAllInput);
 
   const readinessTimer = setInterval(() => {
     const canvas = document.getElementById('screen');
