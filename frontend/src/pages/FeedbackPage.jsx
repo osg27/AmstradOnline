@@ -6,6 +6,7 @@ import BrandMark from '../components/BrandMark';
 const SYSTEM_OPTIONS = [
   ['general', 'General'],
   ['cpc', 'Amstrad CPC'],
+  ['cpc_pinball', 'Amstrad Pinball Dreams'],
   ['cpc_party', 'Amstrad Party'],
   ['spectrum', 'ZX Spectrum'],
   ['amiga', 'Amiga'],

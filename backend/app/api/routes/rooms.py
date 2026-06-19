@@ -17,7 +17,7 @@ router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", "playstation"}
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
-SUPER_ADMIN_ONLY_SYSTEMS = {"arcade"}
+SUPER_ADMIN_ONLY_SYSTEMS = {"arcade", "cpc_pinball"}
 PRIVATE_SUPER_ADMIN_SYSTEMS = set()
 
 

@@ -55,6 +55,21 @@ const PLATFORM_SHELVES = [
             },
           },
           {
+            id: 'cpc_pinball',
+            name: 'Amstrad Pinball Dreams',
+            shortName: 'CPC PD',
+            accent: 'violet',
+            summary: 'A separate CPC compatibility room for Pinball Dreams experiments.',
+            formats: '.dsk',
+            superAdminOnly: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available' },
+              link: { enabled: false, note: 'Not available' },
+            },
+          },
+          {
             id: 'spectrum',
             name: 'ZX Spectrum',
             shortName: 'ZX',
