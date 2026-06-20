@@ -383,10 +383,8 @@
       loaderScript.remove();
       loaderScript = null;
     }
-    if (gameUrl) {
-      URL.revokeObjectURL(gameUrl);
-      gameUrl = null;
-    }
+    if (typeof gameUrl === 'string') URL.revokeObjectURL(gameUrl);
+    gameUrl = null;
   }
 
   function configureEmulator(fileName, romUrl) {
@@ -523,11 +521,11 @@
     }
 
     clearGameContainer();
+    const gameName = currentMedia.length > 1 ? 'old-style-atarist-media.zip' : currentMedia[0].fileName;
     const gameBlob = currentMedia.length > 1
       ? createMediaBundle(currentMedia)
       : new Blob([currentMedia[0].bytes], { type: 'application/octet-stream' });
-    gameUrl = URL.createObjectURL(gameBlob);
-    const gameName = currentMedia.length > 1 ? 'old-style-atarist-media.zip' : currentMedia[0].fileName;
+    gameUrl = new File([gameBlob], gameName, { type: 'application/octet-stream' });
     configureEmulator(gameName, gameUrl);
     drawStatus('Loading Atari ST', currentMedia.length > 1 ? `${currentMedia.length} media files` : currentMedia[0].fileName);
 
