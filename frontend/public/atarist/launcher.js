@@ -525,7 +525,10 @@
     const gameBlob = currentMedia.length > 1
       ? createMediaBundle(currentMedia)
       : new Blob([currentMedia[0].bytes], { type: 'application/octet-stream' });
-    gameUrl = new File([gameBlob], gameName, { type: 'application/octet-stream' });
+    gameUrl = URL.createObjectURL(new File([gameBlob], gameName, {
+      type: 'application/octet-stream',
+    }));
+
     configureEmulator(gameName, gameUrl);
     drawStatus('Loading Atari ST', currentMedia.length > 1 ? `${currentMedia.length} media files` : currentMedia[0].fileName);
 
