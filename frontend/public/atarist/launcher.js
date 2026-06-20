@@ -1,7 +1,7 @@
 (function () {
-  const screen = document.getElementById('atarist-screen');
-  const gameContainer = document.getElementById('game');
-  const context = screen.getContext('2d', { alpha: false });
+  const screen = document.getElementById("atarist-screen");
+  const gameContainer = document.getElementById("game");
+  const context = screen.getContext("2d", { alpha: false });
 
   let currentMedia = [];
   let loaderScript = null;
@@ -16,29 +16,29 @@
   let joystickPortsSwapped = false;
   let soloMode = false;
   let warpEnabled = false;
-  let statusText = 'Atari ST ready';
+  let statusText = "Atari ST ready";
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
-  function drawStatus(main, sub = '') {
+  function drawStatus(main, sub = "") {
     statusText = main;
-    context.fillStyle = '#000';
+    context.fillStyle = "#000";
     context.fillRect(0, 0, screen.width, screen.height);
-    context.fillStyle = '#fff';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.font = '700 34px system-ui, sans-serif';
+    context.fillStyle = "#fff";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.font = "700 34px system-ui, sans-serif";
     context.fillText(main, screen.width / 2, screen.height / 2 - 18);
     if (sub) {
-      context.fillStyle = '#bcc4cf';
-      context.font = '22px system-ui, sans-serif';
+      context.fillStyle = "#bcc4cf";
+      context.font = "22px system-ui, sans-serif";
       context.fillText(sub, screen.width / 2, screen.height / 2 + 24);
     }
   }
 
   function ensureAudio() {
     if (!OriginalAudioContext) return null;
-    if (sharedAudioContext?.state === 'closed') {
+    if (sharedAudioContext?.state === "closed") {
       sharedAudioContext = null;
       audioDestination = null;
       keepAlive = null;
@@ -73,12 +73,15 @@
     const originalConnect = window.AudioNode?.prototype?.connect;
     if (originalConnect && !window.__oldStyleAtariStAudioPatched) {
       window.__oldStyleAtariStAudioPatched = true;
-      window.AudioNode.prototype.connect = function patchedConnect(destination, ...args) {
+      window.AudioNode.prototype.connect = function patchedConnect(
+        destination,
+        ...args
+      ) {
         const result = originalConnect.call(this, destination, ...args);
         if (
-          audioDestination
-          && destination === sharedAudioContext?.destination
-          && this !== audioDestination
+          audioDestination &&
+          destination === sharedAudioContext?.destination &&
+          this !== audioDestination
         ) {
           try {
             originalConnect.call(this, audioDestination);
@@ -116,7 +119,7 @@
       id: `Old Style Atari ST Pad ${index + 1}`,
       index,
       connected: true,
-      mapping: 'standard',
+      mapping: "standard",
       timestamp: performance.now(),
       axes: [0, 0, 0, 0],
       buttons: pressedButtons.map((pressed) => ({
@@ -128,10 +131,12 @@
   }
 
   const originalGetGamepads = navigator.getGamepads?.bind(navigator);
-  Object.defineProperty(navigator, 'getGamepads', {
+  Object.defineProperty(navigator, "getGamepads", {
     configurable: true,
     value() {
-      const nativePads = originalGetGamepads ? Array.from(originalGetGamepads()) : [];
+      const nativePads = originalGetGamepads
+        ? Array.from(originalGetGamepads())
+        : [];
       nativePads[0] = buildPad(0, localMask);
       nativePads[1] = buildPad(1, remoteMask);
       return nativePads;
@@ -185,20 +190,26 @@
     lastSimulatedMasks = [0, 0];
     setMask(1, localMask);
     setMask(2, soloMode ? 0 : remoteMask);
-    console.log(`Old Style Gaming Atari ST: P1 joystick using port ${joystickPortsSwapped ? '1' : '2'}`);
+    console.log(
+      `Old Style Gaming Atari ST: P1 joystick using port ${joystickPortsSwapped ? "1" : "2"}`,
+    );
   }
 
-  function postMediaStatus(message = '') {
+  function postMediaStatus(message = "") {
     const manager = window.EJS_emulator?.gameManager;
-    const count = manager ? (manager.getDiskCount?.() || 0) : currentMedia.length;
-    const current = count ? (manager?.getCurrentDisk?.() || 0) : 0;
-    window.parent.postMessage({
-      type: 'atarist_media_status',
-      count,
-      current,
-      fileName: currentMedia[current]?.fileName || currentMedia[0]?.fileName || '',
-      message,
-    }, window.location.origin);
+    const count = manager ? manager.getDiskCount?.() || 0 : currentMedia.length;
+    const current = count ? manager?.getCurrentDisk?.() || 0 : 0;
+    window.parent.postMessage(
+      {
+        type: "atarist_media_status",
+        count,
+        current,
+        fileName:
+          currentMedia[current]?.fileName || currentMedia[0]?.fileName || "",
+        message,
+      },
+      window.location.origin,
+    );
   }
 
   function nextMedia() {
@@ -206,13 +217,17 @@
     const count = manager?.getDiskCount?.() || 0;
 
     if (count < 2) {
-      postMediaStatus('Only one Atari ST disk or tape is mounted');
+      postMediaStatus("Only one Atari ST disk or tape is mounted");
       return;
     }
 
     const next = ((manager.getCurrentDisk?.() || 0) + 1) % count;
     manager.setCurrentDisk(next);
-    setTimeout(() => postMediaStatus(`Switched to Atari ST media ${next + 1} of ${count}`), 50);
+    setTimeout(
+      () =>
+        postMediaStatus(`Switched to Atari ST media ${next + 1} of ${count}`),
+      50,
+    );
   }
 
   function setWarp(enabled) {
@@ -223,41 +238,43 @@
       manager.setFastForwardRatio(0);
       manager.toggleFastForward(warpEnabled);
     }
-    console.log(`Old Style Gaming Atari ST: warp ${warpEnabled ? 'enabled' : 'disabled'}`);
+    console.log(
+      `Old Style Gaming Atari ST: warp ${warpEnabled ? "enabled" : "disabled"}`,
+    );
   }
 
   function keyToMaskBit(key) {
     switch (key) {
-      case 'ArrowUp':
-      case 'q':
-      case 'Q':
+      case "ArrowUp":
+      case "q":
+      case "Q":
         return 1;
-      case 'ArrowDown':
-      case 'a':
-      case 'A':
+      case "ArrowDown":
+      case "a":
+      case "A":
         return 2;
-      case 'ArrowLeft':
-      case 'o':
-      case 'O':
+      case "ArrowLeft":
+      case "o":
+      case "O":
         return 4;
-      case 'ArrowRight':
-      case 'p':
-      case 'P':
+      case "ArrowRight":
+      case "p":
+      case "P":
         return 8;
-      case 'x':
-      case 'X':
-      case 'f':
-      case 'F':
+      case "x":
+      case "X":
+      case "f":
+      case "F":
         return 16;
-      case 'z':
-      case 'Z':
-      case 'g':
-      case 'G':
+      case "z":
+      case "Z":
+      case "g":
+      case "G":
         return 32;
-      case 'Enter':
+      case "Enter":
         return 64;
-      case 'c':
-      case 'C':
+      case "c":
+      case "C":
         return 128;
       default:
         return 0;
@@ -266,7 +283,7 @@
 
   function handleKeyInput(player, key, action) {
     const bit = keyToMaskBit(key);
-    const isDown = action === 'down' || action === 'keydown';
+    const isDown = action === "down" || action === "keydown";
 
     if (bit) {
       const current = player === 1 ? localMask : remoteMask;
@@ -278,8 +295,9 @@
   }
 
   function keyboardCodeFor(key) {
-    if (key === ' ') return 'Space';
-    if (key.length === 1 && /[a-z]/i.test(key)) return `Key${key.toUpperCase()}`;
+    if (key === " ") return "Space";
+    if (key.length === 1 && /[a-z]/i.test(key))
+      return `Key${key.toUpperCase()}`;
     if (key.length === 1 && /[0-9]/.test(key)) return `Digit${key}`;
     return key;
   }
@@ -294,7 +312,7 @@
       Alt: 18,
       CapsLock: 20,
       Escape: 27,
-      ' ': 32,
+      " ": 32,
       PageUp: 33,
       PageDown: 34,
       End: 35,
@@ -314,7 +332,7 @@
   function dispatchKeyboardInput(key, isDown) {
     const target = window.EJS_emulator?.elements?.parent || gameContainer;
     const keyCode = keyboardKeyCodeFor(key);
-    const event = new KeyboardEvent(isDown ? 'keydown' : 'keyup', {
+    const event = new KeyboardEvent(isDown ? "keydown" : "keyup", {
       key,
       code: keyboardCodeFor(key),
       bubbles: true,
@@ -329,10 +347,12 @@
   }
 
   function emulatorPointerTarget() {
-    return gameContainer.querySelector('canvas')
-      || window.EJS_emulator?.elements?.game
-      || window.EJS_emulator?.elements?.parent
-      || gameContainer;
+    return (
+      gameContainer.querySelector("canvas") ||
+      window.EJS_emulator?.elements?.game ||
+      window.EJS_emulator?.elements?.parent ||
+      gameContainer
+    );
   }
 
   function dispatchMouseMove(dx, dy) {
@@ -341,7 +361,7 @@
     if (!movementX && !movementY) return;
 
     const target = emulatorPointerTarget();
-    const event = new MouseEvent('mousemove', {
+    const event = new MouseEvent("mousemove", {
       bubbles: true,
       cancelable: true,
       view: window,
@@ -358,16 +378,18 @@
   function dispatchMouseButton(button, action) {
     const target = emulatorPointerTarget();
     const browserButton = Number(button) === 3 ? 2 : 0;
-    const isDown = action === 'down' || action === 'mousedown';
-    target.dispatchEvent(new MouseEvent(isDown ? 'mousedown' : 'mouseup', {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-      button: browserButton,
-      buttons: isDown ? (browserButton === 2 ? 2 : 1) : 0,
-      clientX: target.clientWidth / 2,
-      clientY: target.clientHeight / 2,
-    }));
+    const isDown = action === "down" || action === "mousedown";
+    target.dispatchEvent(
+      new MouseEvent(isDown ? "mousedown" : "mouseup", {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        button: browserButton,
+        buttons: isDown ? (browserButton === 2 ? 2 : 1) : 0,
+        clientX: target.clientWidth / 2,
+        clientY: target.clientHeight / 2,
+      }),
+    );
   }
 
   function clearGameContainer() {
@@ -376,47 +398,57 @@
       window.EJS_emulator?.gamepad?.terminate?.();
     } catch {}
 
-    gameContainer.innerHTML = '';
+    gameContainer.innerHTML = "";
     window.EJS_emulator = null;
     lastSimulatedMasks = [0, 0];
     if (loaderScript) {
       loaderScript.remove();
       loaderScript = null;
     }
-    if (typeof gameUrl === 'string') URL.revokeObjectURL(gameUrl);
+    if (typeof gameUrl === "string" && gameUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(gameUrl);
+    }
     gameUrl = null;
   }
 
   function configureEmulator(fileName, romUrl) {
     window.EJS_DEBUG_XX = true;
-    window.EJS_player = '#game';
-    window.EJS_core = 'atarist';
+    window.EJS_player = "#game";
+    window.EJS_core = "atarist";
     // Keep this URL free of a query string: EmulatorJS uses the final path
     // segment as the firmware filename, and Hatari requires exactly /tos.img.
     window.EJS_biosUrl = customTos
-      ? new File([customTos.bytes], 'tos.img', { type: 'application/octet-stream' })
-      : '/atarist/tos.img';
+      ? new File([customTos.bytes], "tos.img", {
+          type: "application/octet-stream",
+        })
+      : "/atarist/tos.img";
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
-    window.EJS_pathtodata = '/emulatorjs/data/';
+    console.log("ATARI DEBUG fileName:", fileName);
+    console.log("ATARI DEBUG romUrl:", romUrl);
+    console.log("ATARI DEBUG EJS_gameUrl:", window.EJS_gameUrl);
+    console.log("ATARI DEBUG bios:", window.EJS_biosUrl);
+    window.EJS_pathtodata = "/emulatorjs/data/";
     window.EJS_paths = {
-      'emulator.js': '/emulatorjs/data/src/emulator.js',
-      'emulator.css': '/emulatorjs/data/emulator.css',
-      'cache.js': '/emulatorjs/data/src/cache.js',
-      'compression.js': '/emulatorjs/data/src/compression.js',
-      'consts.js': '/emulatorjs/data/src/consts.js',
-      'GameManager.js': '/emulatorjs/data/src/GameManager.js',
-      'gamepad.js': '/emulatorjs/data/src/gamepad.js',
-      'license.js': '/emulatorjs/data/src/license.js',
-      'netplay.js': '/emulatorjs/data/src/netplay.js',
-      'setup.js': '/emulatorjs/data/src/setup.js',
-      'shaders.js': '/emulatorjs/data/src/shaders.js',
-      'storage.js': '/emulatorjs/data/src/storage.js',
-      'utils.js': '/emulatorjs/data/src/utils.js',
-      'nipplejs.js': '/emulatorjs/data/src/vendor/nipplejs.js',
-      'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
-      'hatari-wasm.data': '/emulatorjs/data/cores/hatari-wasm.data?v=atarist-2026-06-20-6',
-      'hatari-legacy-wasm.data': '/emulatorjs/data/cores/hatari-legacy-wasm.data?v=atarist-2026-06-20-6',
+      "emulator.js": "/emulatorjs/data/src/emulator.js",
+      "emulator.css": "/emulatorjs/data/emulator.css",
+      "cache.js": "/emulatorjs/data/src/cache.js",
+      "compression.js": "/emulatorjs/data/src/compression.js",
+      "consts.js": "/emulatorjs/data/src/consts.js",
+      "GameManager.js": "/emulatorjs/data/src/GameManager.js",
+      "gamepad.js": "/emulatorjs/data/src/gamepad.js",
+      "license.js": "/emulatorjs/data/src/license.js",
+      "netplay.js": "/emulatorjs/data/src/netplay.js",
+      "setup.js": "/emulatorjs/data/src/setup.js",
+      "shaders.js": "/emulatorjs/data/src/shaders.js",
+      "storage.js": "/emulatorjs/data/src/storage.js",
+      "utils.js": "/emulatorjs/data/src/utils.js",
+      "nipplejs.js": "/emulatorjs/data/src/vendor/nipplejs.js",
+      "socket.io.min.js": "/emulatorjs/data/src/vendor/socket.io.min.js",
+      "hatari-wasm.data":
+        "/emulatorjs/data/cores/hatari-wasm.data?v=atarist-2026-06-20-6",
+      "hatari-legacy-wasm.data":
+        "/emulatorjs/data/cores/hatari-legacy-wasm.data?v=atarist-2026-06-20-6",
     };
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
@@ -429,40 +461,40 @@
       cacheMaxAgeMins: 60,
     };
     window.EJS_volume = 1;
-    window.EJS_backgroundColor = '#000';
-    window.EJS_color = '#2f8f76';
-    window.EJS_alignStartButton = 'center';
+    window.EJS_backgroundColor = "#000";
+    window.EJS_color = "#2f8f76";
+    window.EJS_alignStartButton = "center";
     window.EJS_defaultControls = {
       0: {
-        0: { value: 'x', value2: 'BUTTON_1' },
-        1: { value: 'z', value2: 'BUTTON_2' },
-        3: { value: 'enter', value2: 'START' },
-        4: { value: 'up arrow', value2: 'DPAD_UP' },
-        5: { value: 'down arrow', value2: 'DPAD_DOWN' },
-        6: { value: 'left arrow', value2: 'DPAD_LEFT' },
-        7: { value: 'right arrow', value2: 'DPAD_RIGHT' },
-        8: { value: 'c', value2: 'SELECT' },
+        0: { value: "x", value2: "BUTTON_1" },
+        1: { value: "z", value2: "BUTTON_2" },
+        3: { value: "enter", value2: "START" },
+        4: { value: "up arrow", value2: "DPAD_UP" },
+        5: { value: "down arrow", value2: "DPAD_DOWN" },
+        6: { value: "left arrow", value2: "DPAD_LEFT" },
+        7: { value: "right arrow", value2: "DPAD_RIGHT" },
+        8: { value: "c", value2: "SELECT" },
       },
       1: {
-        0: { value: 'f', value2: 'BUTTON_1' },
-        1: { value: 'g', value2: 'BUTTON_2' },
-        3: { value: 'enter', value2: 'START' },
-        4: { value: 'q', value2: 'DPAD_UP' },
-        5: { value: 'a', value2: 'DPAD_DOWN' },
-        6: { value: 'o', value2: 'DPAD_LEFT' },
-        7: { value: 'p', value2: 'DPAD_RIGHT' },
+        0: { value: "f", value2: "BUTTON_1" },
+        1: { value: "g", value2: "BUTTON_2" },
+        3: { value: "enter", value2: "START" },
+        4: { value: "q", value2: "DPAD_UP" },
+        5: { value: "a", value2: "DPAD_DOWN" },
+        6: { value: "o", value2: "DPAD_LEFT" },
+        7: { value: "p", value2: "DPAD_RIGHT" },
       },
     };
     window.EJS_defaultOptions = {
-      keyboardInput: 'enabled',
-      altKeyboardInput: 'enabled',
-      hatari_machinetype: 'st',
-      hatari_ramsize: '1',
-      hatari_fastboot: 'true',
-      hatari_start_in_mouse_mode: 'false',
-      hatari_twojoy: 'true',
-      hatari_nokeys: 'false',
-      hatari_fastfdc: 'true',
+      keyboardInput: "enabled",
+      altKeyboardInput: "enabled",
+      hatari_machinetype: "st",
+      hatari_ramsize: "1",
+      hatari_fastboot: "true",
+      hatari_start_in_mouse_mode: "false",
+      hatari_twojoy: "true",
+      hatari_nokeys: "false",
+      hatari_fastfdc: "true",
     };
     window.EJS_Buttons = {
       playPause: false,
@@ -485,11 +517,11 @@
     };
 
     window.EJS_ready = () => {
-      console.log('Old Style Gaming Atari ST: EmulatorJS ready');
+      console.log("Old Style Gaming Atari ST: EmulatorJS ready");
     };
     window.EJS_onGameStart = () => {
-      console.log('Old Style Gaming Atari ST: game started');
-      statusText = '';
+      console.log("Old Style Gaming Atari ST: game started");
+      statusText = "";
       window.EJS_emulator?.gameManager?.setKeyboardEnabled?.(true);
       window.EJS_emulator?.gameManager?.setControllerPortDevice?.(0, 1);
       window.EJS_emulator?.gameManager?.setControllerPortDevice?.(1, 1);
@@ -497,45 +529,62 @@
       setMask(1, localMask);
       setMask(2, soloMode ? 0 : remoteMask);
       setWarp(warpEnabled);
-      postMediaStatus(currentMedia.length > 1 ? `${currentMedia.length} Atari ST media files mounted` : '');
+      postMediaStatus(
+        currentMedia.length > 1
+          ? `${currentMedia.length} Atari ST media files mounted`
+          : "",
+      );
       window.EJS_emulator?.elements?.parent?.focus?.();
     };
     window.EJS_onExit = () => {
-      drawStatus('Atari ST stopped', fileName);
+      drawStatus("Atari ST stopped", fileName);
     };
   }
 
   async function loadCurrentRom() {
     if (!currentMedia.length) {
-      drawStatus('Atari ST ready', 'Load a Atari ST ROM from the room');
+      drawStatus("Atari ST ready", "Load a Atari ST ROM from the room");
       return;
     }
 
-    ensureAudio()?.resume?.().catch(() => {});
-    drawStatus('Checking Atari ST runtime', currentMedia[0].fileName);
+    ensureAudio()
+      ?.resume?.()
+      .catch(() => {});
+    drawStatus("Checking Atari ST runtime", currentMedia[0].fileName);
+
     try {
       await preflightEmulatorJs();
     } catch (error) {
-      drawStatus('Atari ST runtime missing', error.message);
+      drawStatus("Atari ST runtime missing", error.message);
       return;
     }
 
     clearGameContainer();
-    const gameName = currentMedia.length > 1 ? 'old-style-atarist-media.zip' : currentMedia[0].fileName;
-    const gameBlob = currentMedia.length > 1
-      ? createMediaBundle(currentMedia)
-      : new Blob([currentMedia[0].bytes], { type: 'application/octet-stream' });
-    gameUrl = URL.createObjectURL(new File([gameBlob], gameName, {
-      type: 'application/octet-stream',
-    }));
+
+    // TEMP TEST: single disk only, no zip/multi-disk bundle
+    const gameName = currentMedia[0].fileName;
+    const gameBlob = new Blob([currentMedia[0].bytes], {
+      type: "application/octet-stream",
+    });
+
+    gameUrl = URL.createObjectURL(gameBlob);
+
+    console.log("ATARI DEBUG loadCurrentRom gameName:", gameName);
+    console.log("ATARI DEBUG loadCurrentRom gameUrl:", gameUrl);
+    console.log(
+      "ATARI DEBUG loadCurrentRom bytes:",
+      currentMedia[0].bytes?.length,
+    );
 
     configureEmulator(gameName, gameUrl);
-    drawStatus('Loading Atari ST', currentMedia.length > 1 ? `${currentMedia.length} media files` : currentMedia[0].fileName);
 
-    loaderScript = document.createElement('script');
+    drawStatus("Loading Atari ST", currentMedia[0].fileName);
+
+    loaderScript = document.createElement("script");
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
     loaderScript.async = true;
-    loaderScript.onerror = () => drawStatus('Atari ST failed to load', 'Could not load EmulatorJS');
+    loaderScript.onerror = () =>
+      drawStatus("Atari ST failed to load", "Could not load EmulatorJS");
     document.body.appendChild(loaderScript);
   }
 
@@ -544,7 +593,7 @@
     for (const byte of bytes) {
       crc ^= byte;
       for (let bit = 0; bit < 8; bit += 1) {
-        crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+        crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
       }
     }
     return (crc ^ 0xffffffff) >>> 0;
@@ -554,21 +603,24 @@
     const encoder = new TextEncoder();
     const usedNames = new Set();
     const entries = media.map((item, index) => {
-      let name = item.fileName.replace(/[\\/:*?"<>|]/g, '_') || `disk-${index + 1}.st`;
+      let name =
+        item.fileName.replace(/[\\/:*?"<>|]/g, "_") || `disk-${index + 1}.st`;
       while (usedNames.has(name.toLowerCase())) name = `${index + 1}-${name}`;
       usedNames.add(name.toLowerCase());
       return { name, bytes: item.bytes };
     });
     entries.push({
-      name: 'old-style-atarist.m3u',
-      bytes: encoder.encode(entries.map((entry) => entry.name).join('\n')),
+      name: "old-style-atarist.m3u",
+      bytes: encoder.encode(entries.map((entry) => entry.name).join("\n")),
     });
 
     const localParts = [];
     const centralParts = [];
     let offset = 0;
-    const write16 = (view, position, value) => view.setUint16(position, value, true);
-    const write32 = (view, position, value) => view.setUint32(position, value, true);
+    const write16 = (view, position, value) =>
+      view.setUint16(position, value, true);
+    const write32 = (view, position, value) =>
+      view.setUint32(position, value, true);
 
     entries.forEach((entry) => {
       const name = encoder.encode(entry.name);
@@ -601,7 +653,10 @@
       offset += local.length + entry.bytes.length;
     });
 
-    const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+    const centralSize = centralParts.reduce(
+      (sum, part) => sum + part.length,
+      0,
+    );
     const end = new Uint8Array(22);
     const endView = new DataView(end.buffer);
     write32(endView, 0, 0x06054b50);
@@ -609,50 +664,68 @@
     write16(endView, 10, entries.length);
     write32(endView, 12, centralSize);
     write32(endView, 16, offset);
-    return new Blob([...localParts, ...centralParts, end], { type: 'application/zip' });
+    return new Blob([...localParts, ...centralParts, end], {
+      type: "application/zip",
+    });
   }
 
   async function preflightEmulatorJs() {
     const required = [
-      '/emulatorjs/data/loader.js',
-      '/emulatorjs/data/src/emulator.js',
-      '/emulatorjs/data/src/compression.js',
-      '/emulatorjs/data/compression/extractzip.js',
-      '/emulatorjs/data/cores/hatari-wasm.data',
-      '/emulatorjs/data/cores/hatari-legacy-wasm.data',
-      '/atarist/tos.img',
+      "/emulatorjs/data/loader.js",
+      "/emulatorjs/data/src/emulator.js",
+      "/emulatorjs/data/src/compression.js",
+      "/emulatorjs/data/compression/extractzip.js",
+      "/emulatorjs/data/cores/hatari-wasm.data",
+      "/emulatorjs/data/cores/hatari-legacy-wasm.data",
+      "/atarist/tos.img",
     ];
 
     for (const path of required) {
-      const response = await fetch(`${path}?v=${Date.now()}`, { cache: 'no-store' });
-      const contentType = response.headers.get('content-type') || '';
+      const response = await fetch(`${path}?v=${Date.now()}`, {
+        cache: "no-store",
+      });
+      const contentType = response.headers.get("content-type") || "";
 
-      if (!response.ok || contentType.includes('text/html')) {
-        throw new Error(`${path} returned ${response.status || 'HTML'}`);
+      if (!response.ok || contentType.includes("text/html")) {
+        throw new Error(`${path} returned ${response.status || "HTML"}`);
       }
     }
   }
 
-  window.addEventListener('error', (event) => {
-    const where = event.filename ? `${event.filename.split('/').slice(-3).join('/')} ${event.lineno || ''}`.trim() : '';
-    const message = [event.message || 'Check browser console', where].filter(Boolean).join(' - ');
-    console.error('Old Style Gaming Atari ST error:', event.error || event.message, event.filename);
-    drawStatus('Atari ST error', message);
+  window.addEventListener("error", (event) => {
+    const where = event.filename
+      ? `${event.filename.split("/").slice(-3).join("/")} ${event.lineno || ""}`.trim()
+      : "";
+    const message = [event.message || "Check browser console", where]
+      .filter(Boolean)
+      .join(" - ");
+    console.error(
+      "Old Style Gaming Atari ST error:",
+      event.error || event.message,
+      event.filename,
+    );
+    drawStatus("Atari ST error", message);
   });
 
-  window.addEventListener('unhandledrejection', (event) => {
-    console.error('Old Style Gaming Atari ST promise error:', event.reason);
-    drawStatus('Atari ST error', event.reason?.message || 'Check browser console');
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error("Old Style Gaming Atari ST promise error:", event.reason);
+    drawStatus(
+      "Atari ST error",
+      event.reason?.message || "Check browser console",
+    );
   });
 
   function mirrorEmulatorCanvas() {
-    const gameCanvas = gameContainer.querySelector('canvas');
+    const gameCanvas = gameContainer.querySelector("canvas");
 
     if (gameCanvas && gameCanvas.width && gameCanvas.height) {
-      context.fillStyle = '#000';
+      context.fillStyle = "#000";
       context.fillRect(0, 0, screen.width, screen.height);
 
-      const scale = Math.min(screen.width / gameCanvas.width, screen.height / gameCanvas.height);
+      const scale = Math.min(
+        screen.width / gameCanvas.width,
+        screen.height / gameCanvas.height,
+      );
       const width = gameCanvas.width * scale;
       const height = gameCanvas.height * scale;
       const x = (screen.width - width) / 2;
@@ -667,85 +740,90 @@
     requestAnimationFrame(mirrorEmulatorCanvas);
   }
 
-  window.addEventListener('message', (event) => {
+  window.addEventListener("message", (event) => {
     if (event.origin !== window.location.origin) return;
 
     const message = event.data || {};
-    if (message.type === 'atarist_start') {
+    if (message.type === "atarist_start") {
       soloMode = Boolean(message.soloMode);
       window.getAtariStAudioStream();
       return;
     }
 
-    if (message.type === 'atarist_autoload') {
-      currentMedia = (message.media?.length ? message.media : [message]).map((item) => ({
-        fileName: item.fileName || 'game.st',
-        bytes: new Uint8Array(item.bytes || []),
-      }));
+    if (message.type === "atarist_autoload") {
+      currentMedia = (message.media?.length ? message.media : [message]).map(
+        (item) => ({
+          fileName: item.fileName || "game.st",
+          bytes: new Uint8Array(item.bytes || []),
+        }),
+      );
       loadCurrentRom();
       return;
     }
 
-    if (message.type === 'atarist_tos') {
+    if (message.type === "atarist_tos") {
       customTos = {
-        fileName: message.fileName || 'tos.img',
+        fileName: message.fileName || "tos.img",
         bytes: new Uint8Array(message.bytes || []),
       };
-      drawStatus('Atari TOS ready', customTos.fileName);
+      drawStatus("Atari TOS ready", customTos.fileName);
       return;
     }
 
-    if (message.type === 'atarist_next_media') {
+    if (message.type === "atarist_next_media") {
       nextMedia();
       return;
     }
 
-    if (message.type === 'atarist_swap_joystick_ports') {
+    if (message.type === "atarist_swap_joystick_ports") {
       soloMode = Boolean(message.soloMode);
       swapJoystickPorts();
       return;
     }
 
-    if (message.type === 'atarist_set_warp') {
+    if (message.type === "atarist_set_warp") {
       setWarp(message.enabled);
       return;
     }
 
-    if (message.type === 'atarist_reset') {
+    if (message.type === "atarist_reset") {
       window.EJS_emulator?.gameManager?.restart?.();
       return;
     }
 
-    if (message.type === 'amiga_mouse_move') {
+    if (message.type === "amiga_mouse_move") {
       dispatchMouseMove(message.movementX, message.movementY);
       return;
     }
 
-    if (message.type === 'amiga_mouse_button') {
+    if (message.type === "amiga_mouse_button") {
       dispatchMouseButton(message.button, message.action);
       return;
     }
 
-    if (message.type === 'amstrad_audio_unlock') {
+    if (message.type === "amstrad_audio_unlock") {
       window.getAtariStAudioStream();
       return;
     }
 
-    if (message.type === 'amstrad_remote_joystick') {
+    if (message.type === "amstrad_remote_joystick") {
       setMask(message.player || 1, Number(message.mask) || 0);
       return;
     }
 
-    if (message.type === 'amstrad_remote_input' || message.type === 'amstrad_remote_control') {
+    if (
+      message.type === "amstrad_remote_input" ||
+      message.type === "amstrad_remote_control"
+    ) {
       handleKeyInput(message.player || 1, message.key, message.action);
     }
   });
 
-  screen.addEventListener('pointerdown', () => {
+  screen.addEventListener("pointerdown", () => {
     window.getAtariStAudioStream();
     window.focus();
   });
 
-  drawStatus('Atari ST ready', 'Load an Atari ST disk from the room');
+  drawStatus("Atari ST ready", "Load an Atari ST disk from the room");
   mirrorEmulatorCanvas();
 })();
