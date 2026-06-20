@@ -417,8 +417,8 @@
       'utils.js': '/emulatorjs/data/src/utils.js',
       'nipplejs.js': '/emulatorjs/data/src/vendor/nipplejs.js',
       'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
-      'hatari-wasm.data': '/emulatorjs/data/cores/hatari-wasm.data?v=atarist-2026-06-20-5',
-      'hatari-legacy-wasm.data': '/emulatorjs/data/cores/hatari-legacy-wasm.data?v=atarist-2026-06-20-5',
+      'hatari-wasm.data': '/emulatorjs/data/cores/hatari-wasm.data?v=atarist-2026-06-20-6',
+      'hatari-legacy-wasm.data': '/emulatorjs/data/cores/hatari-legacy-wasm.data?v=atarist-2026-06-20-6',
     };
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
