@@ -13,6 +13,7 @@ const KICKSTART_STORE_NAME = 'roms';
 const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart';
 const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
+const ATARI_ST_TOS_KEY = 'atari-st-tos';
 const CONTROL_MATCH_LIMIT = 6;
 
 const CONTROL_ACTION_LABELS = {
@@ -228,6 +229,7 @@ export default function RoomPage() {
   const fileInputRef = useRef(null);
   const swapDiskInputRef = useRef(null);
   const kickstartInputRef = useRef(null);
+  const atariTosInputRef = useRef(null);
   const playstationBiosInputRef = useRef(null);
   const pcRef = useRef(null);
   const dataChannelRef = useRef(null);
@@ -272,6 +274,7 @@ export default function RoomPage() {
   const [c64JoystickPortsSwapped, setC64JoystickPortsSwapped] = useState(false);
   const [c64MediaCount, setC64MediaCount] = useState(0);
   const [c64MediaIndex, setC64MediaIndex] = useState(0);
+  const [atariTosName, setAtariTosName] = useState('');
   const [atariStMediaCount, setAtariStMediaCount] = useState(0);
   const [atariStMediaIndex, setAtariStMediaIndex] = useState(0);
   const [controlProfileMatches, setControlProfileMatches] = useState([]);
@@ -310,7 +313,7 @@ export default function RoomPage() {
   const isAtariSt = roomSystem === 'atarist';
   const isMouseComputer = isAmigaFamily || isAtariSt;
   const isArcade = roomSystem === 'arcade';
-  const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : '';
+  const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isCpcPinball ? 'Amstrad Pinball Dreams' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
@@ -991,13 +994,16 @@ export default function RoomPage() {
         if (cancelled || !storedKickstart) return;
 
         forwardInputToEmulator({
-          type: isPlayStation ? 'playstation_bios' : 'amiga_kickstart',
+          type: isPlayStation ? 'playstation_bios' : isAtariSt ? 'atarist_tos' : 'amiga_kickstart',
           fileName: storedKickstart.fileName,
           bytes: storedKickstart.bytes,
         });
         if (isPlayStation) {
           setPlaystationBiosName(`${storedKickstart.fileName} (saved locally)`);
           addLog(`Loaded saved PlayStation BIOS: ${storedKickstart.fileName}`);
+        } else if (isAtariSt) {
+          setAtariTosName(`${storedKickstart.fileName} (saved locally)`);
+          addLog(`Loaded saved Atari TOS: ${storedKickstart.fileName}`);
         } else {
           setKickstartRomName(`${storedKickstart.fileName} (saved)`);
           addLog(`Loaded saved Kickstart ROM: ${storedKickstart.fileName}`);
@@ -1013,7 +1019,7 @@ export default function RoomPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isHost, isPlayStation, kickstartStorageKey]);
+  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isHost, isPlayStation, kickstartStorageKey]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -3146,6 +3152,11 @@ export default function RoomPage() {
     playstationBiosInputRef.current?.click();
   }
 
+  function openAtariTosPicker() {
+    if (!canControlLocalEmulator || !isAtariSt) return;
+    atariTosInputRef.current?.click();
+  }
+
   function openSwapDiskPicker() {
     if (!canControlLocalEmulator || (!isAmigaFamily && !isC64 && !isAtariSt) || !hostStarted) return;
 
@@ -3498,6 +3509,43 @@ export default function RoomPage() {
     }
   }
 
+  async function handleAtariTosSelected(event) {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const lowerName = file.name.toLowerCase();
+      if (!['.img', '.rom', '.bin'].some((extension) => lowerName.endsWith(extension))) {
+        setError('Atari TOS must be an .img, .rom, or .bin file');
+        event.target.value = '';
+        return;
+      }
+
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (![192, 256, 512, 1024].includes(bytes.length / 1024)) {
+        setError('Atari TOS ROM must be 192 KB, 256 KB, 512 KB, or 1024 KB');
+        event.target.value = '';
+        return;
+      }
+
+      await saveStoredKickstart(ATARI_ST_TOS_KEY, file.name, bytes);
+      setAtariTosName(`${file.name} (saved locally)`);
+      if (hostStarted) {
+        setHostStarted(false);
+        hostStartedRef.current = false;
+        hostStartingRef.current = false;
+        await reloadAtariStFrame();
+      }
+      forwardInputToEmulator({ type: 'atarist_tos', fileName: file.name, bytes });
+      addLog(`Loaded local Atari TOS: ${file.name}`);
+      setStatus(`Atari TOS ready: ${file.name}. Start the emulator again`);
+      event.target.value = '';
+    } catch (err) {
+      setError(err.message);
+      addLog(`Atari TOS load error: ${err.message}`);
+    }
+  }
+
   function chooseControlProfile(profile) {
     setSelectedControlProfile(profile);
     setControlProfileDrawerOpen(true);
@@ -3567,7 +3615,7 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {(loadedDiskName || isAmigaFamily || isPlayStation) ? (
+        {(loadedDiskName || isAmigaFamily || isPlayStation || isAtariSt) ? (
           <div className="session-strip">
             {loadedDiskName ? <span>{loadedDiskName}</span> : null}
             {isCpcSystem && selectedControlProfile ? (
@@ -3582,6 +3630,7 @@ export default function RoomPage() {
             ) : null}
             {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isAmigaAga ? 'ROM: A1200 Kickstart recommended' : 'ROM: AROS'}</span> : null}
             {isPlayStation ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : 'BIOS: HLE fallback / load your own locally'}</span> : null}
+            {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
             {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
           </div>
         ) : null}
@@ -3749,6 +3798,16 @@ export default function RoomPage() {
                   />
                 ) : null}
 
+                {isAtariSt ? (
+                  <input
+                    ref={atariTosInputRef}
+                    type="file"
+                    accept=".img,.rom,.bin"
+                    onChange={handleAtariTosSelected}
+                    style={{ display: 'none' }}
+                  />
+                ) : null}
+
                 {isArcade ? (
                   <div className="arcade-config">
                     <label>
@@ -3861,6 +3920,12 @@ export default function RoomPage() {
                   {isPlayStation ? (
                     <button type="button" className="secondary" onClick={openPlayStationBiosPicker}>
                       {playstationBiosName ? 'Change local PlayStation BIOS' : 'Load local PlayStation BIOS'}
+                    </button>
+                  ) : null}
+
+                  {isAtariSt ? (
+                    <button type="button" className="secondary" onClick={openAtariTosPicker}>
+                      {atariTosName ? 'Change local Atari TOS' : 'Load local Atari TOS'}
                     </button>
                   ) : null}
 
