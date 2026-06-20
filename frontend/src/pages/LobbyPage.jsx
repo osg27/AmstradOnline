@@ -106,6 +106,21 @@ const PLATFORM_SHELVES = [
         strapline: 'The bigger home machines.',
         systems: [
           {
+            id: 'atarist',
+            name: 'Atari ST',
+            shortName: 'ST',
+            accent: 'ruby',
+            summary: 'Atari ST games powered by Hatari with keyboard, mouse, joystick, and multi-disk support.',
+            formats: '.st .msa .stx .ipf',
+            superAdminOnly: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
+          {
             id: 'amiga',
             name: 'Commodore Amiga',
             shortName: 'A500',

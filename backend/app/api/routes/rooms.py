@@ -19,7 +19,7 @@ UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
 SUPER_ADMIN_ONLY_SYSTEMS = {"arcade"}
 XYPHOE_SYSTEMS = {"cpc_pinball"}
-PRIVATE_SUPER_ADMIN_SYSTEMS = set()
+PRIVATE_SUPER_ADMIN_SYSTEMS = {"atarist"}
 
 
 def get_current_user_id(authorization: str | None = Header(default=None)) -> int:

@@ -2,6 +2,7 @@ export const version = "4.3.0-pre";
 
 export const cores = {
     "atari5200": ["a5200"],
+    "atarist": ["hatari"],
     "vb": ["beetle_vb"],
     "nds": ["melonds", "desmume", "desmume2015"],
     "arcade": ["fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2", "same_cdi"],

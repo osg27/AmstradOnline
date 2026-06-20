@@ -1,0 +1,15 @@
+Atari ST support uses the Hatari libretro core and EmuTOS.
+
+Hatari libretro core
+Copyright the Hatari and libretro contributors
+License: GNU General Public License version 2
+Source: https://github.com/libretro/hatari
+
+EmuTOS 1.4
+Copyright the EmuTOS development team
+License: GNU General Public License version 2 or later
+Source: https://github.com/emutos/emutos
+Release: https://sourceforge.net/projects/emutos/files/emutos/1.4/
+
+The corresponding license text is supplied alongside the firmware and inside
+the Hatari core package.

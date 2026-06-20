@@ -1,0 +1,15 @@
+<!doctype html>
+<html><body style="margin:0;background:#111">
+<iframe id="st" src="./launcher.html" style="width:800px;height:600px;border:0"></iframe>
+<script>
+  const frame = document.getElementById('st');
+  frame.addEventListener('load', () => {
+    const disk = new Uint8Array(737280);
+    const boot = [0xeb,0x3c,0x90,0x4f,0x53,0x47,0x53,0x54,0x20,0x20,0x20,0x00,0x02,0x02,0x01,0x00,0x02,0x70,0x00,0xa0,0x05,0xf9,0x03,0x00,0x09,0x00,0x02,0x00,0x00,0x00,0x00,0x00];
+    disk.set(boot);
+    disk[512] = 0xf9; disk[513] = 0xff; disk[514] = 0xff;
+    disk[2048] = 0xf9; disk[2049] = 0xff; disk[2050] = 0xff;
+    frame.contentWindow.postMessage({ type: 'atarist_start', soloMode: true }, location.origin);
+    frame.contentWindow.postMessage({ type: 'atarist_autoload', fileName: 'blank.st', bytes: disk }, location.origin);
+  });
+</script></body></html>

@@ -1,0 +1,1 @@
+{"name":"hatari","extensions":["st","msa","stx","ipf","m3u","vhd","ide","gem","zip"],"makeoptions":{"arguments":["EXTERNAL_ZLIB=1"],"buildpath":"./","makescript":"Makefile.libretro"},"options":{"supportsMouse":true,"useKeyboard":true},"license":"gpl.txt","repo":"https://github.com/libretro/hatari"}
