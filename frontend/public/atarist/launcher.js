@@ -513,6 +513,11 @@
     };
 
     window.EJS_ready = () => {
+      // Match the capture canvas before RetroArch creates its WebGL context.
+      // The browser default (300x150) causes a lossy scale followed by a
+      // second scale in mirrorEmulatorCanvas().
+      window.EJS_emulator.canvas.width = screen.width;
+      window.EJS_emulator.canvas.height = screen.height;
       console.log("Old Style Gaming Atari ST: EmulatorJS ready");
     };
     window.EJS_onGameStart = () => {
