@@ -412,6 +412,10 @@
   }
 
   function configureEmulator(fileName, romUrl) {
+    const customTosName = customTos?.fileName?.toLowerCase() || "";
+    const needsSte =
+      customTos?.bytes?.length === 262144 || /tos\s*2[._-]?0[5-6]/.test(customTosName);
+
     window.EJS_DEBUG_XX = true;
     window.EJS_player = "#game";
     window.EJS_core = "atarist";
@@ -484,7 +488,7 @@
     window.EJS_defaultOptions = {
       keyboardInput: "enabled",
       altKeyboardInput: "enabled",
-      hatari_machinetype: "st",
+      hatari_machinetype: needsSte ? "ste" : "st",
       hatari_ramsize: "1",
       hatari_fastboot: "true",
       hatari_start_in_mouse_mode: "false",
