@@ -490,7 +490,7 @@
       hatari_start_in_mouse_mode: "false",
       hatari_twojoy: "true",
       hatari_nokeys: "false",
-      hatari_fastfdc: "true",
+      hatari_fastfdc: "false",
     };
     window.EJS_Buttons = {
       playPause: false,
