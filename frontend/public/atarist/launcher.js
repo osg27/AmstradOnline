@@ -424,10 +424,6 @@
       : "/atarist/tos.img";
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
-    console.log("ATARI DEBUG fileName:", fileName);
-    console.log("ATARI DEBUG romUrl:", romUrl);
-    console.log("ATARI DEBUG EJS_gameUrl:", window.EJS_gameUrl);
-    console.log("ATARI DEBUG bios:", window.EJS_biosUrl);
     window.EJS_pathtodata = "/emulatorjs/data/";
     window.EJS_paths = {
       "emulator.js": "/emulatorjs/data/src/emulator.js",
@@ -560,25 +556,26 @@
     }
 
     clearGameContainer();
-
-    // TEMP TEST: single disk only, no zip/multi-disk bundle
-    const gameName = currentMedia[0].fileName;
-    const gameBlob = new Blob([currentMedia[0].bytes], {
+    const gameName =
+      currentMedia.length > 1
+        ? "old-style-atarist-media.zip"
+        : currentMedia[0].fileName;
+    const gameBlob =
+      currentMedia.length > 1
+        ? createMediaBundle(currentMedia)
+        : new Blob([currentMedia[0].bytes], {
+            type: "application/octet-stream",
+          });
+    gameUrl = new File([gameBlob], gameName, {
       type: "application/octet-stream",
     });
-
-    gameUrl = URL.createObjectURL(gameBlob);
-
-    console.log("ATARI DEBUG loadCurrentRom gameName:", gameName);
-    console.log("ATARI DEBUG loadCurrentRom gameUrl:", gameUrl);
-    console.log(
-      "ATARI DEBUG loadCurrentRom bytes:",
-      currentMedia[0].bytes?.length,
-    );
-
     configureEmulator(gameName, gameUrl);
-
-    drawStatus("Loading Atari ST", currentMedia[0].fileName);
+    drawStatus(
+      "Loading Atari ST",
+      currentMedia.length > 1
+        ? `${currentMedia.length} media files`
+        : currentMedia[0].fileName,
+    );
 
     loaderScript = document.createElement("script");
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
