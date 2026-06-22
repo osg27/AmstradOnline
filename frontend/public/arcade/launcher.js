@@ -40,6 +40,7 @@
 
   function drawStatus(main, sub = '') {
     statusText = main;
+    screen.style.display = 'block';
     postArcadeLog(sub ? `${main}: ${sub}` : main, main.toLowerCase().includes('error') || main.toLowerCase().includes('failed') ? 'error' : 'info');
     context.fillStyle = '#000';
     context.fillRect(0, 0, screen.width, screen.height);
@@ -340,6 +341,7 @@
       console.log('Old Style Gaming Arcade: game started');
       postArcadeLog(`MAME game started: ${fileName}`);
       statusText = '';
+      screen.style.display = 'none';
     };
     window.EJS_onExit = () => {
       drawStatus('MAME stopped', fileName);
@@ -405,28 +407,6 @@
     drawStatus('MAME error', event.reason?.message || 'Check browser console');
   });
 
-  function mirrorEmulatorCanvas() {
-    const gameCanvas = gameContainer.querySelector('canvas');
-
-    if (gameCanvas && gameCanvas.width && gameCanvas.height) {
-      context.fillStyle = '#000';
-      context.fillRect(0, 0, screen.width, screen.height);
-
-      const scale = Math.min(screen.width / gameCanvas.width, screen.height / gameCanvas.height);
-      const width = gameCanvas.width * scale;
-      const height = gameCanvas.height * scale;
-      const x = (screen.width - width) / 2;
-      const y = (screen.height - height) / 2;
-
-      context.imageSmoothingEnabled = false;
-      context.drawImage(gameCanvas, x, y, width, height);
-    } else if (statusText) {
-      // Keep the last status frame visible until the core creates its own canvas.
-    }
-
-    requestAnimationFrame(mirrorEmulatorCanvas);
-  }
-
   window.addEventListener('message', (event) => {
     if (event.origin !== window.location.origin) return;
 
@@ -471,5 +451,4 @@
   });
 
   drawStatus('MAME 2003-Plus ready', 'Load a compatible arcade ROM zip from the room');
-  mirrorEmulatorCanvas();
 })();
