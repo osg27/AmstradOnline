@@ -167,13 +167,23 @@
       return;
     }
 
-    gens._start();
-    targetFps = gens._is_pal() ? 50 : NTSC_FPS;
-    interval = 1000 / targetFps;
-    bindViews();
-    started = true;
-    pendingStart = false;
-    then = Date.now();
+    try {
+      console.info(`${systemName}: starting ${romName}`);
+      gens._start();
+      targetFps = gens._is_pal() ? 50 : NTSC_FPS;
+      interval = 1000 / targetFps;
+      bindViews();
+      started = true;
+      pendingStart = false;
+      then = Date.now();
+      console.info(`${systemName}: emulator started at ${targetFps} FPS`);
+    } catch (error) {
+      started = false;
+      pendingStart = false;
+      drawStatus(`${systemName} failed`, error.message || String(error));
+      console.error(`${systemName}: failed to start`, error);
+      return;
+    }
 
     if (!looping) {
       looping = true;
@@ -208,6 +218,7 @@
 
   function loadRom(fileName, bytes) {
     romName = fileName || 'game.bin';
+    console.info(`${systemName}: received ${romName}`);
 
     if (!wasmReady) {
       drawStatus('Loading ROM', romName);
@@ -361,6 +372,7 @@
     gens._init();
     gens._set_system(isMasterSystem ? 1 : 0);
     wasmReady = true;
+    console.info(`${systemName}: WASM ready in ${isMasterSystem ? 'Master System II' : 'Mega Drive'} mode`);
     drawStatus(`${systemName} ready`, 'Load a ROM file');
 
     const pendingRom = window.__pendingMegaDriveRom;
