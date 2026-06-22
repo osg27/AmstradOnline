@@ -172,6 +172,21 @@ const PLATFORM_SHELVES = [
         strapline: 'The first console shelf.',
         systems: [
           {
+            id: 'mastersystem',
+            name: 'Sega Master System',
+            shortName: 'SMS',
+            accent: 'violet',
+            summary: 'Master System games with two-player controls.',
+            formats: '.sms',
+            testing: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available' },
+            },
+          },
+          {
             id: 'nes',
             name: 'Nintendo Entertainment System',
             shortName: 'NES',

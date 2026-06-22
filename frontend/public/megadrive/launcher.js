@@ -7,6 +7,8 @@
   const GAMEPAD_API_STRIDE = 32;
   const NTSC_FPS = 60;
   const SOUND_DELAY_FRAME = 8;
+  const isMasterSystem = new URLSearchParams(window.location.search).get('system') === 'mastersystem';
+  const systemName = isMasterSystem ? 'Master System' : 'Mega Drive';
 
   const canvas = document.getElementById('screen');
   const ctx = canvas.getContext('2d');
@@ -124,9 +126,9 @@
   function writePadInput(offset, mask) {
     input[offset + 6] = getAxis(mask, 4, 8);
     input[offset + 7] = getAxis(mask, 1, 2);
-    input[offset + 8 + 2] = mask & 16 ? 1 : 0; // A
-    input[offset + 8 + 3] = mask & 32 ? 1 : 0; // B
-    input[offset + 8 + 1] = mask & 128 ? 1 : 0; // C
+    input[offset + 8 + 2] = !isMasterSystem && mask & 16 ? 1 : 0; // A
+    input[offset + 8 + 3] = mask & (isMasterSystem ? 16 : 32) ? 1 : 0; // B / Button 1
+    input[offset + 8 + 1] = mask & (isMasterSystem ? 32 : 128) ? 1 : 0; // C / Button 2
     input[offset + 8 + 7] = mask & 64 ? 1 : 0; // Start
   }
 
@@ -156,12 +158,12 @@
     ensureAudio();
 
     if (!wasmReady) {
-      drawStatus('Starting Mega Drive', 'Checking genplus runtime...');
+      drawStatus(`Starting ${systemName}`, 'Checking genplus runtime...');
       return;
     }
 
     if (!romReady) {
-      drawStatus('Mega Drive ready', 'Load a ROM file');
+      drawStatus(`${systemName} ready`, 'Load a ROM file');
       return;
     }
 
@@ -186,7 +188,7 @@
     remotePressedKeys.clear();
 
     if (!wasmReady || !romReady) {
-      drawStatus('Mega Drive ready', romName || 'Load a ROM file');
+      drawStatus(`${systemName} ready`, romName || 'Load a ROM file');
       return;
     }
 
@@ -221,7 +223,7 @@
     );
     romBuffer.set(romBytes);
     romReady = true;
-    drawStatus('Mega Drive ready', romName);
+    drawStatus(`${systemName} ready`, romName);
     startEmulator();
   }
 
@@ -352,13 +354,14 @@
     if (!started) startEmulator();
   });
 
-  drawStatus('Starting Mega Drive', 'Checking genplus runtime...');
+  drawStatus(`Starting ${systemName}`, 'Checking genplus runtime...');
 
   window.Module().then((module) => {
     gens = module;
     gens._init();
+    gens._set_system(isMasterSystem ? 1 : 0);
     wasmReady = true;
-    drawStatus('Mega Drive ready', 'Load a ROM file');
+    drawStatus(`${systemName} ready`, 'Load a ROM file');
 
     const pendingRom = window.__pendingMegaDriveRom;
     if (pendingRom) {
@@ -370,7 +373,7 @@
       startEmulator();
     }
   }).catch((error) => {
-    drawStatus('Mega Drive failed', error.message);
+    drawStatus(`${systemName} failed`, error.message);
     console.error(error);
   });
 }());

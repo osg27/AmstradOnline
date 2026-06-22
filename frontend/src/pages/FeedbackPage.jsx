@@ -11,6 +11,7 @@ const SYSTEM_OPTIONS = [
   ['spectrum', 'ZX Spectrum'],
   ['amiga', 'Amiga'],
   ['amiga_aga', 'Amiga AGA'],
+  ['mastersystem', 'Sega Master System'],
   ['megadrive', 'Mega Drive'],
   ['snes', 'SNES'],
   ['pcengine', 'PC Engine / TurboGrafx-16'],
