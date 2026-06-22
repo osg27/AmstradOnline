@@ -315,7 +315,7 @@ export default function LobbyPage() {
     eras: platform.eras.map((era) => ({
       ...era,
       systems: era.systems.filter((system) => (
-        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin || (system.id === 'cpc_pinball' && (isAdmin || isTester || isXyphoe)))
+        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin || (system.id === 'cpc_pinball' && (isAdmin || isTester || isXyphoe)) || (system.id === 'atarist' && canUsePreviewSystems))
       )).map((system) => {
         const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
         const locked = lockedForTesting || Boolean(system.underConstruction);
@@ -414,7 +414,7 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin && !(selectedSystem.id === 'cpc_pinball' && (isAdmin || isTester || isXyphoe))) || (modeConfig.testing && !canUsePreviewSystems)) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin && !(selectedSystem.id === 'cpc_pinball' && (isAdmin || isTester || isXyphoe)) && !(selectedSystem.id === 'atarist' && canUsePreviewSystems)) || (modeConfig.testing && !canUsePreviewSystems)) {
         throw new Error('That play mode is not ready yet.');
       }
 

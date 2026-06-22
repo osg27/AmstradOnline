@@ -3135,10 +3135,10 @@ export default function RoomPage() {
   }
 
   useEffect(() => {
-    if (!isSoloMode && isHost && signalingOpen && !isAmigaFamily && !isArcade) {
+    if (!isSoloMode && isHost && signalingOpen && !isAmigaFamily && !isArcade && !isAtariSt) {
       startHostSession();
     }
-  }, [isAmigaFamily, isArcade, isHost, isSoloMode, room, signalingOpen]);
+  }, [isAmigaFamily, isArcade, isAtariSt, isHost, isSoloMode, room, signalingOpen]);
 
   useEffect(() => {
     if (!isSoloMode && room && !isHost && !isAmigaLink) {
@@ -3228,7 +3228,7 @@ export default function RoomPage() {
       hostStartingRef.current = false;
       await reloadAtariStFrame();
       addLog('Atari ST returned to start state');
-      setStatus('Atari ST ready. Press Start emulator, then load a disk');
+      setStatus('Atari ST ready. Load a disk to start');
       return;
     }
 
@@ -3400,11 +3400,14 @@ export default function RoomPage() {
       }
       if (isAtariSt && loadedDiskName) {
         setStatus('Preparing a clean Atari ST runtime');
-        await reloadAtariStFrame({ start: true });
+        setHostStarted(false);
+        hostStartedRef.current = false;
+        hostStartingRef.current = false;
+        await reloadAtariStFrame();
       }
       forwardInputToEmulator(loadMessage);
 
-      if (isArcade || isAmigaAga) {
+      if (isArcade || isAmigaAga || isAtariSt) {
         if (isArcade) {
           setArcadeDriver(arcadeDriverName);
         }
@@ -3550,7 +3553,7 @@ export default function RoomPage() {
       }
       forwardInputToEmulator({ type: 'atarist_tos', fileName: file.name, bytes });
       addLog(`Loaded local Atari TOS: ${file.name}`);
-      setStatus(`Atari TOS ready: ${file.name}. Start the emulator again`);
+      setStatus(`Atari TOS ready: ${file.name}. Load a disk to start`);
       event.target.value = '';
     } catch (err) {
       setError(err.message);
@@ -3857,17 +3860,19 @@ export default function RoomPage() {
                     flexWrap: 'wrap',
                   }}
                 >
-                  <button type="button" onClick={startHostSession} disabled={hostStarted || (isAmigaAga && !loadedDiskName)}>
-                    {isAmigaAga && !loadedDiskName
-                      ? 'Load AGA file to start'
-                      : isSoloMode
-                        ? hostStarted ? 'Emulator running' : 'Start emulator'
-                        : isAmigaLink
-                          ? hostStarted ? 'Local Amiga running' : 'Start local Amiga'
-                          : hostStarted ? 'Host session running' : 'Start host session'}
-                  </button>
+                  {!isAtariSt ? (
+                    <button type="button" onClick={startHostSession} disabled={hostStarted || (isAmigaAga && !loadedDiskName)}>
+                      {isAmigaAga && !loadedDiskName
+                        ? 'Load AGA file to start'
+                        : isSoloMode
+                          ? hostStarted ? 'Emulator running' : 'Start emulator'
+                          : isAmigaLink
+                            ? hostStarted ? 'Local Amiga running' : 'Start local Amiga'
+                            : hostStarted ? 'Host session running' : 'Start host session'}
+                    </button>
+                  ) : null}
 
-                  <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isAmigaAga}>
+                  <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isAmigaAga && !isAtariSt}>
                     {mediaLabel}
                   </button>
 
