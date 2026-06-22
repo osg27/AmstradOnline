@@ -1,46 +1,58 @@
 (function () {
   const screen = document.getElementById('arcade-screen');
-  const statusPanel = document.getElementById('arcade-status');
-  const statusTitle = statusPanel?.querySelector('strong');
-  const statusDetail = statusPanel?.querySelector('span');
+  const gameContainer = document.getElementById('mame-container');
+  const context = screen.getContext('2d', { alpha: false });
 
-  let currentRun = null;
-  let scriptElement = null;
-  let statusText = 'MAME ready';
-  let localMask = 0;
-  let remoteMask = 0;
+  let currentRom = null;
+  let loaderScript = null;
+  let gameUrl = null;
   let sharedAudioContext = null;
   let audioDestination = null;
   let keepAlive = null;
-
-  const MAME_DATA_ROOT = '/mame-data';
-  const MAME_STORAGE_DIRS = ['cfg', 'nvram', 'inp', 'sta', 'snap', 'diff'];
+  let localMask = 0;
+  let remoteMask = 0;
+  let lastSimulatedMasks = [0, 0];
+  let statusText = 'MAME 2003-Plus ready';
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+  const nativeFetch = window.fetch.bind(window);
+  const coreCacheVersion = '2026-06-22-1';
 
   function postArcadeLog(message, level = 'info') {
-    try {
-      window.parent?.postMessage({
-        type: 'arcade_log',
-        level,
-        message: String(message || ''),
-      }, window.location.origin);
-    } catch {
-      // Parent logging is best-effort only.
-    }
+    window.parent?.postMessage({
+      type: 'arcade_log',
+      level,
+      message: String(message || ''),
+    }, window.location.origin);
   }
+
+  window.fetch = (input, options) => {
+    const inputUrl = typeof input === 'string' || input instanceof URL ? input : input?.url;
+    if (inputUrl) {
+      const url = new URL(inputUrl, window.location.href);
+      if (/\/cores\/mame2003_plus(?:-legacy)?-wasm\.data$/.test(url.pathname)) {
+        url.searchParams.set('osg', coreCacheVersion);
+        input = input instanceof Request ? new Request(url, input) : url;
+      }
+    }
+    return nativeFetch(input, options);
+  };
 
   function drawStatus(main, sub = '') {
     statusText = main;
-    postArcadeLog(sub ? `${main}: ${sub}` : main, main.toLowerCase().includes('error') ? 'error' : 'info');
-    if (!statusPanel || !statusTitle || !statusDetail) return;
-    statusTitle.textContent = main;
-    statusDetail.textContent = sub;
-    statusPanel.classList.remove('hidden');
-  }
-
-  function hideStatus() {
-    statusPanel?.classList.add('hidden');
+    postArcadeLog(sub ? `${main}: ${sub}` : main, main.toLowerCase().includes('error') || main.toLowerCase().includes('failed') ? 'error' : 'info');
+    context.fillStyle = '#000';
+    context.fillRect(0, 0, screen.width, screen.height);
+    context.fillStyle = '#fff';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.font = '700 34px system-ui, sans-serif';
+    context.fillText(main, screen.width / 2, screen.height / 2 - 18);
+    if (sub) {
+      context.fillStyle = '#bcc4cf';
+      context.font = '22px system-ui, sans-serif';
+      context.fillText(sub, screen.width / 2, screen.height / 2 + 24);
+    }
   }
 
   function ensureAudio() {
@@ -85,7 +97,7 @@
           try {
             originalConnect.call(this, audioDestination);
           } catch {
-            // Keep the normal MAME audio path working if this node cannot be split.
+            // Some nodes only allow one output. The main audio path should keep working.
           }
         }
         return result;
@@ -99,361 +111,83 @@
     return audioDestination?.stream || null;
   };
 
-  function normalizeRuntime(runtime) {
-    const name = String(runtime || 'mamepacmantest.js').trim() || 'mamepacmantest.js';
-    return name.endsWith('.js') ? name : `${name}.js`;
+  function maskToButtons(mask) {
+    const buttons = new Array(16).fill(false);
+    buttons[12] = Boolean(mask & 1);
+    buttons[13] = Boolean(mask & 2);
+    buttons[14] = Boolean(mask & 4);
+    buttons[15] = Boolean(mask & 8);
+    buttons[0] = Boolean(mask & 16); // B
+    buttons[1] = Boolean(mask & 32); // A
+    buttons[9] = Boolean(mask & 64); // Start
+    buttons[8] = Boolean(mask & 128); // Select
+    return buttons;
   }
 
-  function driverFromFileName(fileName) {
-    return String(fileName || 'game.zip')
-      .replace(/\.(zip|7z|rar|chd)$/i, '')
-      .trim()
-      .toLowerCase();
-  }
-
-  function splitArgs(args) {
-    return String(args || '')
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
-  }
-
-  async function preflightRuntime(runtime) {
-    const paths = [
-      `/arcade/mame/${runtime}`,
-      `/arcade/mame/${runtime.replace(/\.js$/i, '.wasm')}`,
-    ];
-
-    for (const path of paths) {
-      const response = await fetch(`${path}?v=${Date.now()}`, { cache: 'no-store' });
-      const contentType = response.headers.get('content-type') || '';
-      if (!response.ok || contentType.includes('text/html')) {
-        throw new Error(`${path} missing`);
-      }
-    }
-  }
-
-  function buildArguments(run) {
-    const args = [
-      run.driver,
-      '-verbose',
-      '-window',
-      '-skip_gameinfo',
-      '-video',
-      'soft',
-      '-resolution',
-      '640x480',
-      '-rompath',
-      '/roms',
-      '-cfg_directory',
-      `${MAME_DATA_ROOT}/cfg`,
-      '-nvram_directory',
-      `${MAME_DATA_ROOT}/nvram`,
-      '-input_directory',
-      `${MAME_DATA_ROOT}/inp`,
-      '-state_directory',
-      `${MAME_DATA_ROOT}/sta`,
-      '-snapshot_directory',
-      `${MAME_DATA_ROOT}/snap`,
-      '-diff_directory',
-      `${MAME_DATA_ROOT}/diff`,
-    ];
-
-    splitArgs(run.args).forEach((arg) => args.push(arg));
-    return args;
-  }
-
-  function clearPreviousRuntime() {
-    syncMameStorage(false);
-
-    if (scriptElement) {
-      scriptElement.remove();
-      scriptElement = null;
-    }
-    delete window.Module;
-  }
-
-  function ensureDir(path) {
-    try {
-      FS.mkdir(path);
-    } catch {}
-  }
-
-  function ensureMameStorage() {
-    ensureDir(MAME_DATA_ROOT);
-    MAME_STORAGE_DIRS.forEach((dir) => ensureDir(`${MAME_DATA_ROOT}/${dir}`));
-  }
-
-  function mameConfigXml(systemName) {
-    return [
-      '<?xml version="1.0"?>',
-      '<mameconfig version="10">',
-      `  <system name="${String(systemName || 'default').replace(/[<>&"]/g, '')}" />`,
-      '</mameconfig>',
-      '',
-    ].join('\n');
-  }
-
-  function fileExists(path) {
-    try {
-      return Boolean(FS.analyzePath(path).exists);
-    } catch {
-      return false;
-    }
-  }
-
-  function seedMameConfig(driver) {
-    const cfgDir = `${MAME_DATA_ROOT}/cfg`;
-    const configs = [
-      ['default.cfg', 'default'],
-      [`${String(driver || 'game').trim().toLowerCase()}.cfg`, String(driver || 'game').trim().toLowerCase()],
-    ];
-
-    configs.forEach(([fileName, systemName]) => {
-      const path = `${cfgDir}/${fileName}`;
-      if (fileExists(path)) return;
-      try {
-        FS.writeFile(path, mameConfigXml(systemName));
-        postArcadeLog(`Created MAME config ${fileName}`);
-      } catch (error) {
-        postArcadeLog(`MAME config seed warning: ${error.message || error}`, 'error');
-      }
-    });
-  }
-
-  function syncMameStorage(populate) {
-    if (typeof FS === 'undefined' || !FS.syncfs) return;
-    try {
-      FS.syncfs(populate, (error) => {
-        if (error) {
-          postArcadeLog(`MAME storage sync warning: ${error.message || error}`, 'error');
-        }
-      });
-    } catch (error) {
-      postArcadeLog(`MAME storage sync warning: ${error.message || error}`, 'error');
-    }
-  }
-
-  function configureModule(run) {
-    const canvas = screen;
-    canvas.className = 'emscripten';
-    canvas.tabIndex = -1;
-    canvas.width = 640;
-    canvas.height = 480;
-    canvas.addEventListener('webglcontextlost', (event) => {
-      event.preventDefault();
-      drawStatus('MAME error', 'WebGL context lost. Reload the room.');
-    }, false);
-
-    window.Module = {
-      noInitialRun: false,
-      arguments: buildArguments(run),
-      locateFile(path) {
-        return `/arcade/mame/${path}`;
-      },
-      preRun: [
-        function mountMameStorage() {
-          window.Module.addRunDependency('oldstyle-mame-storage');
-
-          try {
-            ensureDir(MAME_DATA_ROOT);
-            if (typeof IDBFS !== 'undefined') {
-              try {
-                FS.mount(IDBFS, {}, MAME_DATA_ROOT);
-              } catch {}
-            }
-
-            if (FS?.syncfs && typeof IDBFS !== 'undefined') {
-              FS.syncfs(true, (error) => {
-                if (error) {
-                  postArcadeLog(`MAME storage load warning: ${error.message || error}`, 'error');
-                }
-                ensureMameStorage();
-                seedMameConfig(run.driver);
-                window.Module.removeRunDependency('oldstyle-mame-storage');
-              });
-              return;
-            }
-
-            ensureMameStorage();
-            seedMameConfig(run.driver);
-          } catch (error) {
-            postArcadeLog(`MAME storage setup warning: ${error.message || error}`, 'error');
-            ensureMameStorage();
-            seedMameConfig(run.driver);
-          }
-
-          window.Module.removeRunDependency('oldstyle-mame-storage');
-        },
-        function mountLocalRoms() {
-          window.Module.addRunDependency('oldstyle-roms');
-          try {
-            ensureDir('/roms');
-          } catch {}
-
-          try {
-            run.files.forEach((file) => {
-              FS.writeFile(`/roms/${file.name}`, file.bytes);
-              postArcadeLog(`Mounted ${file.name} to /roms/${file.name} (${file.bytes.length} bytes)`);
-              console.log(`Mounted ${file.name} to /roms/${file.name}`);
-            });
-          } finally {
-            window.Module.removeRunDependency('oldstyle-roms');
-          }
-        },
-      ],
-      postRun: [
-        function flushMameStorage() {
-          syncMameStorage(false);
-        },
-      ],
-      print(text) {
-        postArcadeLog(text);
-        console.log(text);
-      },
-      printErr(text) {
-        postArcadeLog(text, 'error');
-        console.warn(text);
-      },
-      canvas,
-      setStatus(text) {
-        if (text) {
-          drawStatus('MAME loading', text);
-        } else {
-          hideStatus();
-        }
-      },
-      monitorRunDependencies(left) {
-        if (left) {
-          drawStatus('MAME loading', `Preparing ${left} dependencies`);
-        }
-      },
-    };
-  }
-
-  function startCanvasDiagnostics() {
-    let ticks = 0;
-    const timer = window.setInterval(() => {
-      ticks += 1;
-      const rect = screen.getBoundingClientRect();
-      const style = window.getComputedStyle(screen);
-      const contextType = screen.__oldStyleContextType || 'unknown';
-
-      postArcadeLog(
-        `Canvas diagnostic ${ticks}: attr ${screen.width}x${screen.height}, css ${Math.round(rect.width)}x${Math.round(rect.height)}, display ${style.display}, visibility ${style.visibility}, opacity ${style.opacity}, context ${contextType}`,
-      );
-
-      if (ticks >= 5) {
-        window.clearInterval(timer);
-      }
-    }, 1000);
-  }
-
-  function loadScript(runtime) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.async = true;
-      script.type = 'text/javascript';
-      script.src = `/arcade/mame/${runtime}?v=${Date.now()}`;
-      script.onload = () => {
-        postArcadeLog(`Loaded runtime ${runtime}`);
-        resolve();
-      };
-      script.onerror = () => reject(new Error(`Could not load ${runtime}`));
-      document.body.appendChild(script);
-      scriptElement = script;
-    });
-  }
-
-  async function startRun(run) {
-    const runtime = normalizeRuntime(run.runtime);
-    const driver = String(run.driver || driverFromFileName(run.files?.[0]?.name)).trim().toLowerCase();
-
-    if (!driver) {
-      drawStatus('MAME driver needed', 'Enter a driver name before loading the ROM');
-      return;
-    }
-
-    currentRun = {
-      ...run,
-      runtime,
-      driver,
-      files: (run.files || []).map((file) => ({
-        name: file.name,
-        bytes: file.bytes instanceof Uint8Array ? file.bytes : new Uint8Array(file.bytes || []),
+  function buildPad(index, mask) {
+    const pressedButtons = maskToButtons(mask);
+    return {
+      id: `Old Style Arcade Pad ${index + 1}`,
+      index,
+      connected: true,
+      mapping: 'standard',
+      timestamp: performance.now(),
+      axes: [0, 0, 0, 0],
+      buttons: pressedButtons.map((pressed) => ({
+        pressed,
+        touched: pressed,
+        value: pressed ? 1 : 0,
       })),
     };
-
-    ensureAudio()?.resume?.().catch(() => {});
-    drawStatus('Checking MAME runtime', `${runtime} / ${driver}`);
-    await preflightRuntime(runtime);
-
-    clearPreviousRuntime();
-    configureModule(currentRun);
-    drawStatus('Starting MAME', `${driver} (${runtime})`);
-    postArcadeLog(`Starting driver ${driver} with ${currentRun.files.length} file(s)`);
-    postArcadeLog(`MAME args: ${buildArguments(currentRun).join(' ')}`);
-    startCanvasDiagnostics();
-    await loadScript(runtime);
-    hideStatus();
-    statusText = '';
   }
 
-  function keyForMask(player, bit) {
-    const playerOne = {
-      1: 'ArrowUp',
-      2: 'ArrowDown',
-      4: 'ArrowLeft',
-      8: 'ArrowRight',
-      16: 'Control',
-      32: 'Alt',
-      64: '1',
-      128: ' ',
-    };
-    const playerTwo = {
-      1: 'r',
-      2: 'f',
-      4: 'd',
-      8: 'g',
-      16: 'a',
-      32: 's',
-      64: '2',
-      128: 'q',
-    };
-    return (player === 1 ? playerOne : playerTwo)[bit] || '';
-  }
+  const originalGetGamepads = navigator.getGamepads?.bind(navigator);
+  Object.defineProperty(navigator, 'getGamepads', {
+    configurable: true,
+    value() {
+      const nativePads = originalGetGamepads ? Array.from(originalGetGamepads()) : [];
+      nativePads[0] = buildPad(0, localMask);
+      nativePads[1] = buildPad(1, remoteMask);
+      return nativePads;
+    },
+  });
 
-  function dispatchKey(key, action) {
-    if (!key) return;
+  function simulateMask(playerIndex, nextMask) {
+    const emulator = window.EJS_emulator;
+    const manager = emulator?.gameManager;
 
-    const eventType = action === 'down' ? 'keydown' : 'keyup';
-    const event = new KeyboardEvent(eventType, {
-      key,
-      code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
-      bubbles: true,
-      cancelable: true,
-    });
+    if (!emulator?.started || !manager?.simulateInput) return;
 
-    screen.dispatchEvent(event);
-    window.dispatchEvent(event);
-  }
+    const previous = lastSimulatedMasks[playerIndex] || 0;
+    const mappings = [
+      [1, 4],
+      [2, 5],
+      [4, 6],
+      [8, 7],
+      [16, 0],
+      [32, 8],
+      [64, 3],
+      [128, 2],
+    ];
 
-  function setMask(player, nextMask) {
-    const previousMask = player === 1 ? localMask : remoteMask;
-    const mappings = [1, 2, 4, 8, 16, 32, 64, 128];
-
-    mappings.forEach((bit) => {
-      const wasPressed = Boolean(previousMask & bit);
+    mappings.forEach(([bit, button]) => {
+      const wasPressed = Boolean(previous & bit);
       const isPressed = Boolean(nextMask & bit);
       if (wasPressed !== isPressed) {
-        dispatchKey(keyForMask(player, bit), isPressed ? 'down' : 'up');
+        manager.simulateInput(playerIndex, button, isPressed ? 1 : 0);
       }
     });
 
+    lastSimulatedMasks[playerIndex] = nextMask;
+  }
+
+  function setMask(player, mask) {
     if (player === 1) {
-      localMask = nextMask;
+      localMask = mask;
+      simulateMask(0, mask);
     } else {
-      remoteMask = nextMask;
+      remoteMask = mask;
+      simulateMask(1, mask);
     }
   }
 
@@ -504,6 +238,195 @@
     setMask(player, next);
   }
 
+  function clearGameContainer() {
+    try {
+      window.EJS_emulator?.gameManager?.clearEJSResetTimer?.();
+      window.EJS_emulator?.gamepad?.terminate?.();
+    } catch {}
+
+    gameContainer.innerHTML = '';
+    window.EJS_emulator = null;
+    lastSimulatedMasks = [0, 0];
+    if (loaderScript) {
+      loaderScript.remove();
+      loaderScript = null;
+    }
+    if (gameUrl) {
+      URL.revokeObjectURL(gameUrl);
+      gameUrl = null;
+    }
+  }
+
+  function configureEmulator(fileName, romUrl) {
+    window.EJS_DEBUG_XX = true;
+    window.EJS_player = '#mame-container';
+    window.EJS_core = 'mame2003_plus';
+    window.EJS_gameName = fileName;
+    window.EJS_gameUrl = romUrl;
+    window.EJS_pathtodata = '/emulatorjs/data/';
+    window.EJS_paths = {
+      'emulator.js': '/emulatorjs/data/src/emulator.js',
+      'emulator.css': '/emulatorjs/data/emulator.css',
+      'cache.js': '/emulatorjs/data/src/cache.js',
+      'compression.js': '/emulatorjs/data/src/compression.js',
+      'consts.js': '/emulatorjs/data/src/consts.js',
+      'GameManager.js': '/emulatorjs/data/src/GameManager.js',
+      'gamepad.js': '/emulatorjs/data/src/gamepad.js',
+      'license.js': '/emulatorjs/data/src/license.js',
+      'netplay.js': '/emulatorjs/data/src/netplay.js',
+      'setup.js': '/emulatorjs/data/src/setup.js',
+      'shaders.js': '/emulatorjs/data/src/shaders.js',
+      'storage.js': '/emulatorjs/data/src/storage.js',
+      'utils.js': '/emulatorjs/data/src/utils.js',
+      'nipplejs.js': '/emulatorjs/data/src/vendor/nipplejs.js',
+      'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
+    };
+    window.EJS_startOnLoaded = true;
+    window.EJS_threads = false;
+    window.EJS_forceLegacyCores = false;
+    window.EJS_disableAutoLang = false;
+    window.EJS_disableLocalStorage = true;
+    window.EJS_volume = 1;
+    window.EJS_backgroundColor = '#000';
+    window.EJS_color = '#2f8f76';
+    window.EJS_alignStartButton = 'center';
+    window.EJS_defaultControls = {
+      0: {
+        0: { value: 'x', value2: 'BUTTON_1' },
+        2: { value: 'c', value2: 'SELECT' },
+        3: { value: 'enter', value2: 'START' },
+        4: { value: 'up arrow', value2: 'DPAD_UP' },
+        5: { value: 'down arrow', value2: 'DPAD_DOWN' },
+        6: { value: 'left arrow', value2: 'DPAD_LEFT' },
+        7: { value: 'right arrow', value2: 'DPAD_RIGHT' },
+        8: { value: 'z', value2: 'BUTTON_2' },
+      },
+      1: {
+        0: { value: 'f', value2: 'BUTTON_1' },
+        2: { value: 'c', value2: 'SELECT' },
+        3: { value: 'enter', value2: 'START' },
+        4: { value: 'q', value2: 'DPAD_UP' },
+        5: { value: 'a', value2: 'DPAD_DOWN' },
+        6: { value: 'o', value2: 'DPAD_LEFT' },
+        7: { value: 'p', value2: 'DPAD_RIGHT' },
+        8: { value: 'g', value2: 'BUTTON_2' },
+      },
+    };
+    window.EJS_Buttons = {
+      playPause: false,
+      restart: false,
+      mute: false,
+      settings: false,
+      fullscreen: false,
+      saveState: false,
+      loadState: false,
+      screenRecord: false,
+      gamepad: false,
+      cheat: false,
+      volumeSlider: false,
+      saveSavFiles: false,
+      loadSavFiles: false,
+      quickSave: false,
+      quickLoad: false,
+      screenshot: false,
+      cacheManager: false,
+    };
+
+    window.EJS_ready = () => {
+      console.log('Old Style Gaming Arcade: EmulatorJS ready');
+      postArcadeLog('MAME 2003-Plus EmulatorJS ready');
+    };
+    window.EJS_onGameStart = () => {
+      console.log('Old Style Gaming Arcade: game started');
+      postArcadeLog(`MAME game started: ${fileName}`);
+      statusText = '';
+    };
+    window.EJS_onExit = () => {
+      drawStatus('MAME stopped', fileName);
+    };
+  }
+
+  async function loadCurrentRom() {
+    if (!currentRom) {
+      drawStatus('MAME 2003-Plus ready', 'Load a compatible arcade ROM zip from the room');
+      return;
+    }
+
+    ensureAudio()?.resume?.().catch(() => {});
+    drawStatus('Checking MAME runtime', currentRom.fileName);
+    try {
+      await preflightEmulatorJs();
+    } catch (error) {
+      drawStatus('MAME runtime missing', error.message);
+      return;
+    }
+
+    clearGameContainer();
+    const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
+    gameUrl = URL.createObjectURL(gameBlob);
+    configureEmulator(currentRom.fileName, gameUrl);
+    drawStatus('Loading MAME', currentRom.fileName);
+
+    loaderScript = document.createElement('script');
+    loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
+    loaderScript.async = true;
+    loaderScript.onerror = () => drawStatus('MAME failed to load', 'Could not load EmulatorJS');
+    document.body.appendChild(loaderScript);
+  }
+
+  async function preflightEmulatorJs() {
+    const required = [
+      '/emulatorjs/data/loader.js',
+      '/emulatorjs/data/src/emulator.js',
+      '/emulatorjs/data/src/compression.js',
+      '/emulatorjs/data/compression/extractzip.js',
+      '/emulatorjs/data/cores/mame2003_plus-wasm.data',
+    ];
+
+    for (const path of required) {
+      const response = await fetch(`${path}?v=${Date.now()}`, { cache: 'no-store' });
+      const contentType = response.headers.get('content-type') || '';
+
+      if (!response.ok || contentType.includes('text/html')) {
+        throw new Error(`${path} returned ${response.status || 'HTML'}`);
+      }
+    }
+  }
+
+  window.addEventListener('error', (event) => {
+    const where = event.filename ? `${event.filename.split('/').slice(-3).join('/')} ${event.lineno || ''}`.trim() : '';
+    const message = [event.message || 'Check browser console', where].filter(Boolean).join(' - ');
+    console.error('Old Style Gaming Arcade error:', event.error || event.message, event.filename);
+    drawStatus('MAME error', message);
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('Old Style Gaming Arcade promise error:', event.reason);
+    drawStatus('MAME error', event.reason?.message || 'Check browser console');
+  });
+
+  function mirrorEmulatorCanvas() {
+    const gameCanvas = gameContainer.querySelector('canvas');
+
+    if (gameCanvas && gameCanvas.width && gameCanvas.height) {
+      context.fillStyle = '#000';
+      context.fillRect(0, 0, screen.width, screen.height);
+
+      const scale = Math.min(screen.width / gameCanvas.width, screen.height / gameCanvas.height);
+      const width = gameCanvas.width * scale;
+      const height = gameCanvas.height * scale;
+      const x = (screen.width - width) / 2;
+      const y = (screen.height - height) / 2;
+
+      context.imageSmoothingEnabled = false;
+      context.drawImage(gameCanvas, x, y, width, height);
+    } else if (statusText) {
+      // Keep the last status frame visible until the core creates its own canvas.
+    }
+
+    requestAnimationFrame(mirrorEmulatorCanvas);
+  }
+
   window.addEventListener('message', (event) => {
     if (event.origin !== window.location.origin) return;
 
@@ -514,35 +437,16 @@
     }
 
     if (message.type === 'arcade_autoload') {
-      postArcadeLog(`Received ROM ${message.fileName || 'game.zip'} for driver ${message.driver || '(auto)'}`);
-      startRun({
-        runtime: message.runtime,
-        driver: message.driver,
-        args: message.args,
-        files: [
-          {
-            name: message.fileName || 'game.zip',
-            bytes: new Uint8Array(message.bytes || []),
-          },
-        ],
-      }).catch((error) => {
-        console.error('Old Style Gaming MAME error:', error);
-        postArcadeLog(error?.stack || error?.message || error, 'error');
-        drawStatus('MAME error', error.message || 'Check browser console');
-      });
+      currentRom = {
+        fileName: message.fileName || 'game.zip',
+        bytes: new Uint8Array(message.bytes || []),
+      };
+      loadCurrentRom();
       return;
     }
 
     if (message.type === 'arcade_reset') {
-      if (!currentRun) {
-        drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
-        return;
-      }
-      startRun(currentRun).catch((error) => {
-        console.error('Old Style Gaming MAME reset error:', error);
-        postArcadeLog(error?.stack || error?.message || error, 'error');
-        drawStatus('MAME error', error.message || 'Check browser console');
-      });
+      loadCurrentRom();
       return;
     }
 
@@ -561,24 +465,11 @@
     }
   });
 
-  window.addEventListener('error', (event) => {
-    const message = event.message || 'Check browser console';
-    console.error('Old Style Gaming MAME window error:', event.error || message);
-    postArcadeLog(event.error?.stack || message, 'error');
-    drawStatus('MAME error', message);
-  });
-
-  window.addEventListener('unhandledrejection', (event) => {
-    console.error('Old Style Gaming MAME promise error:', event.reason);
-    postArcadeLog(event.reason?.stack || event.reason?.message || event.reason, 'error');
-    drawStatus('MAME error', event.reason?.message || 'Check browser console');
-  });
-
   screen.addEventListener('pointerdown', () => {
     window.getArcadeAudioStream();
     window.focus();
   });
 
-  drawStatus('MAME ready', 'Load a MAME ROM zip from the room');
-  postArcadeLog('Arcade launcher ready');
+  drawStatus('MAME 2003-Plus ready', 'Load a compatible arcade ROM zip from the room');
+  mirrorEmulatorCanvas();
 })();

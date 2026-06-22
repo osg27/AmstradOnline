@@ -267,9 +267,6 @@ export default function RoomPage() {
   const [micStatus, setMicStatus] = useState('Mic off');
   const [micDevices, setMicDevices] = useState([]);
   const [selectedMicDeviceId, setSelectedMicDeviceId] = useState('');
-  const [arcadeDriver, setArcadeDriver] = useState('');
-  const [arcadeRuntime, setArcadeRuntime] = useState('mamepacmantest.js');
-  const [arcadeArgs, setArcadeArgs] = useState('');
   const [c64WarpEnabled, setC64WarpEnabled] = useState(false);
   const [c64JoystickPortsSwapped, setC64JoystickPortsSwapped] = useState(false);
   const [c64MediaCount, setC64MediaCount] = useState(0);
@@ -323,7 +320,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-16-2' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-22-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -3302,7 +3299,6 @@ export default function RoomPage() {
       if (!file) return;
 
       const isSwapDisk = isAmigaFamily && event.target.dataset.mode === 'swap';
-      const arcadeDriverName = arcadeDriver.trim() || file.name.replace(/\.(zip|7z|rar|chd)$/i, '').toLowerCase();
       const allowedExtensions = isAmigaFamily
         ? ['.adf', '.zip']
         : isMasterSystem ? ['.sms'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isNes ? ['.nes'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isPcEngine ? ['.pce', '.sgx', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf'] : isArcade ? ['.zip'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
@@ -3357,12 +3353,6 @@ export default function RoomPage() {
         return;
       }
 
-      if (isArcade && !arcadeDriverName) {
-        setError('Enter the MAME driver name first');
-        event.target.value = '';
-        return;
-      }
-
       const filesToLoad = (isAmigaAga || isPlayStation || isC64 || isAtariSt) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
@@ -3379,9 +3369,6 @@ export default function RoomPage() {
         files: isPlayStation ? loadedFiles : undefined,
         disks: isAmigaAga && !isSwapDisk ? loadedFiles : undefined,
         media: isC64 || isAtariSt ? loadedFiles : undefined,
-        driver: arcadeDriverName,
-        runtime: arcadeRuntime.trim() || 'mamepacmantest.js',
-        args: arcadeArgs.trim(),
       };
 
       if (isC64 && loadedDiskName) {
@@ -3410,9 +3397,6 @@ export default function RoomPage() {
       forwardInputToEmulator(loadMessage);
 
       if (isArcade || isAmigaAga || isAtariSt) {
-        if (isArcade) {
-          setArcadeDriver(arcadeDriverName);
-        }
         if (!hostStartedRef.current && !hostStartingRef.current) {
           await startHostSession();
         }
@@ -3823,35 +3807,6 @@ export default function RoomPage() {
                     onChange={handleAtariTosSelected}
                     style={{ display: 'none' }}
                   />
-                ) : null}
-
-                {isArcade ? (
-                  <div className="arcade-config">
-                    <label>
-                      <span>Runtime</span>
-                      <input
-                        value={arcadeRuntime}
-                        onChange={(event) => setArcadeRuntime(event.target.value)}
-                        placeholder="mamepacmantest.js"
-                      />
-                    </label>
-                    <label>
-                      <span>Driver</span>
-                      <input
-                        value={arcadeDriver}
-                        onChange={(event) => setArcadeDriver(event.target.value.toLowerCase().trim())}
-                        placeholder="pacman"
-                      />
-                    </label>
-                    <label>
-                      <span>Args</span>
-                      <input
-                        value={arcadeArgs}
-                        onChange={(event) => setArcadeArgs(event.target.value)}
-                        placeholder="Optional MAME args"
-                      />
-                    </label>
-                  </div>
                 ) : null}
 
                 <div

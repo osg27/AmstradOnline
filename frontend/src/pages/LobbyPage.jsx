@@ -279,7 +279,7 @@ const PLATFORM_SHELVES = [
             name: 'MAME Arcade',
             shortName: 'MAME',
             accent: 'gold',
-            summary: 'MAME arcade games with configurable drivers and runtimes.',
+            summary: 'Arcade games using the MAME 2003-Plus ROM set.',
             formats: '.zip',
             superAdminOnly: true,
             modes: {
