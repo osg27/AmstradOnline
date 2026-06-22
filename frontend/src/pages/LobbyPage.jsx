@@ -193,7 +193,7 @@ const PLATFORM_SHELVES = [
             accent: 'ruby',
             summary: 'NES games powered by the EmulatorJS FCEUmm core.',
             formats: '.nes',
-            superAdminOnly: true,
+            testing: true,
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
