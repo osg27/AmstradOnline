@@ -5,7 +5,6 @@
 
   let currentRom = null;
   let loaderScript = null;
-  let gameUrl = null;
   let sharedAudioContext = null;
   let audioDestination = null;
   let keepAlive = null;
@@ -252,18 +251,14 @@
       loaderScript.remove();
       loaderScript = null;
     }
-    if (gameUrl) {
-      URL.revokeObjectURL(gameUrl);
-      gameUrl = null;
-    }
   }
 
-  function configureEmulator(fileName, romUrl) {
+  function configureEmulator(fileName, romFile) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#mame-container';
     window.EJS_core = 'mame2003_plus';
     window.EJS_gameName = fileName;
-    window.EJS_gameUrl = romUrl;
+    window.EJS_gameUrl = romFile;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
       'emulator.js': '/emulatorjs/data/src/emulator.js',
@@ -364,9 +359,8 @@
     }
 
     clearGameContainer();
-    const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
-    gameUrl = URL.createObjectURL(gameBlob);
-    configureEmulator(currentRom.fileName, gameUrl);
+    const gameFile = new File([currentRom.bytes], currentRom.fileName, { type: 'application/zip' });
+    configureEmulator(currentRom.fileName, gameFile);
     drawStatus('Loading MAME', currentRom.fileName);
 
     loaderScript = document.createElement('script');
