@@ -320,7 +320,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-22-3' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-22-4' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -504,7 +504,9 @@ export default function RoomPage() {
       ? pad.buttons[1]?.pressed
       : [2, 3].some((index) => pad.buttons[index]?.pressed);
     const third = isMultiButtonSystem && pad.buttons[2]?.pressed;
-    const start = [7, 9].some((index) => pad.buttons[index]?.pressed);
+    const start = system === 'arcade'
+      ? pad.buttons[9]?.pressed
+      : [7, 9].some((index) => pad.buttons[index]?.pressed);
 
     if (up) mask |= 1;
     if (down) mask |= 2;
@@ -514,6 +516,13 @@ export default function RoomPage() {
     if (extra) mask |= 32;
     if (start) mask |= 64;
     if (third) mask |= 128;
+    if (system === 'arcade') {
+      if (pad.buttons[3]?.pressed) mask |= 256;
+      if (pad.buttons[4]?.pressed) mask |= 512;
+      if (pad.buttons[5]?.pressed) mask |= 1024;
+      if (pad.buttons[6]?.pressed) mask |= 2048;
+      if (pad.buttons[8]?.pressed) mask |= 4096;
+    }
     if (system === 'playstation') {
       if (pad.buttons[3]?.pressed) mask |= 256;
       if (pad.buttons[8]?.pressed) mask |= 512;
@@ -525,6 +534,24 @@ export default function RoomPage() {
   }
 
   function joystickMaskToLabels(mask) {
+    if (isArcade) {
+      return [
+        ['Up', Boolean(mask & 1)],
+        ['Down', Boolean(mask & 2)],
+        ['Left', Boolean(mask & 4)],
+        ['Right', Boolean(mask & 8)],
+        ['Button 0', Boolean(mask & 16)],
+        ['Button 1', Boolean(mask & 32)],
+        ['Button 2', Boolean(mask & 128)],
+        ['Button 3', Boolean(mask & 256)],
+        ['Button 4', Boolean(mask & 512)],
+        ['Button 5', Boolean(mask & 1024)],
+        ['Button 6', Boolean(mask & 2048)],
+        ['Coin', Boolean(mask & 4096)],
+        ['Start', Boolean(mask & 64)],
+      ];
+    }
+
     return [
       ['Up', Boolean(mask & 1)],
       ['Down', Boolean(mask & 2)],

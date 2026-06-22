@@ -117,10 +117,15 @@
     buttons[13] = Boolean(mask & 2);
     buttons[14] = Boolean(mask & 4);
     buttons[15] = Boolean(mask & 8);
-    buttons[0] = Boolean(mask & 16); // B
-    buttons[1] = Boolean(mask & 32); // A
+    buttons[0] = Boolean(mask & 16);
+    buttons[1] = Boolean(mask & 32);
+    buttons[2] = Boolean(mask & 128);
+    buttons[3] = Boolean(mask & 256);
+    buttons[4] = Boolean(mask & 512);
+    buttons[5] = Boolean(mask & 1024);
+    buttons[6] = Boolean(mask & 2048);
+    buttons[8] = Boolean(mask & 4096); // Coin / Select
     buttons[9] = Boolean(mask & 64); // Start
-    buttons[8] = Boolean(mask & 128); // Select
     return buttons;
   }
 
@@ -166,8 +171,13 @@
       [8, 7],
       [16, 0],
       [32, 8],
+      [128, 9],
+      [256, 1],
+      [512, 10],
+      [1024, 11],
+      [2048, 12],
+      [4096, 2],
       [64, 3],
-      [128, 2],
     ];
 
     mappings.forEach(([bit, button]) => {
@@ -219,11 +229,39 @@
       case 'g':
       case 'G':
         return 32;
-      case 'Enter':
-        return 64;
       case 'c':
       case 'C':
+      case 'h':
+      case 'H':
         return 128;
+      case 'v':
+      case 'V':
+      case 'r':
+      case 'R':
+        return 256;
+      case 'b':
+      case 'B':
+      case 't':
+      case 'T':
+        return 512;
+      case 'n':
+      case 'N':
+      case 'y':
+      case 'Y':
+        return 1024;
+      case 'm':
+      case 'M':
+      case 'u':
+      case 'U':
+        return 2048;
+      case 'Enter':
+      case '1':
+      case '2':
+        return 64;
+      case 'Shift':
+      case '5':
+      case '6':
+        return 4096;
       default:
         return 0;
     }
@@ -289,23 +327,33 @@
     window.EJS_defaultControls = {
       0: {
         0: { value: 'x', value2: 'BUTTON_1' },
-        2: { value: 'c', value2: 'SELECT' },
+        1: { value: 'v', value2: 'BUTTON_4' },
+        2: { value: '5', value2: 'SELECT' },
         3: { value: 'enter', value2: 'START' },
         4: { value: 'up arrow', value2: 'DPAD_UP' },
         5: { value: 'down arrow', value2: 'DPAD_DOWN' },
         6: { value: 'left arrow', value2: 'DPAD_LEFT' },
         7: { value: 'right arrow', value2: 'DPAD_RIGHT' },
         8: { value: 'z', value2: 'BUTTON_2' },
+        9: { value: 'c', value2: 'BUTTON_3' },
+        10: { value: 'b', value2: 'LEFT_TOP_SHOULDER' },
+        11: { value: 'n', value2: 'RIGHT_TOP_SHOULDER' },
+        12: { value: 'm', value2: 'LEFT_BOTTOM_SHOULDER' },
       },
       1: {
         0: { value: 'f', value2: 'BUTTON_1' },
-        2: { value: 'c', value2: 'SELECT' },
-        3: { value: 'enter', value2: 'START' },
+        1: { value: 'r', value2: 'BUTTON_4' },
+        2: { value: '6', value2: 'SELECT' },
+        3: { value: '2', value2: 'START' },
         4: { value: 'q', value2: 'DPAD_UP' },
         5: { value: 'a', value2: 'DPAD_DOWN' },
         6: { value: 'o', value2: 'DPAD_LEFT' },
         7: { value: 'p', value2: 'DPAD_RIGHT' },
         8: { value: 'g', value2: 'BUTTON_2' },
+        9: { value: 'h', value2: 'BUTTON_3' },
+        10: { value: 't', value2: 'LEFT_TOP_SHOULDER' },
+        11: { value: 'y', value2: 'RIGHT_TOP_SHOULDER' },
+        12: { value: 'u', value2: 'LEFT_BOTTOM_SHOULDER' },
       },
     };
     window.EJS_Buttons = {
