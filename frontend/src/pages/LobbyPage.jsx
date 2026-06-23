@@ -274,6 +274,21 @@ const PLATFORM_SHELVES = [
               link: { enabled: false, note: 'Not available' },
             },
           },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'arcade',
+    label: 'Arcade',
+    kicker: 'Cabinets, coins, chaos',
+    strapline: 'MAME rooms for one-on-one and party cabinet games.',
+    eras: [
+      {
+        id: 'mame',
+        label: 'MAME',
+        strapline: 'Arcade boards powered by MAME 2003-Plus.',
+        systems: [
           {
             id: 'arcade',
             name: 'MAME Arcade',
@@ -281,7 +296,7 @@ const PLATFORM_SHELVES = [
             accent: 'gold',
             summary: 'Arcade games using the MAME 2003-Plus ROM set.',
             formats: '.zip',
-            superAdminOnly: true,
+            testing: true,
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
@@ -303,6 +318,10 @@ const EMPTY_ERA_COPY = {
   consoles: {
     title: 'Console shelf coming later',
     detail: 'The 8-bit console row is reserved so the library can grow without another redesign.',
+  },
+  arcade: {
+    title: 'No cabinets available yet',
+    detail: 'Arcade support will appear here when it is ready for your account.',
   },
 };
 

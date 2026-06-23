@@ -1614,6 +1614,28 @@ input:focus {
   padding: 0.55rem 0.7rem;
 }
 
+.arcade-rom-browser-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.arcade-rom-toggle {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.arcade-rom-toggle input {
+  width: auto;
+  min-height: auto;
+}
+
 .arcade-rom-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -1629,6 +1651,10 @@ input:focus {
   justify-items: start;
   text-align: left;
   line-height: 1.2;
+}
+
+.arcade-rom-list button.clone-rom {
+  opacity: 0.82;
 }
 
 .arcade-rom-list span {

@@ -14,10 +14,10 @@ from app.models.user import User
 from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomHeartbeatRequest, RoomJoinRequest, RoomResponse
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
-TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", "playstation", "atarist", "mastersystem"}
+TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", "playstation", "atarist", "mastersystem", "arcade"}
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
-SUPER_ADMIN_ONLY_SYSTEMS = {"arcade"}
+SUPER_ADMIN_ONLY_SYSTEMS = set()
 XYPHOE_SYSTEMS = {"cpc_pinball"}
 PRIVATE_SUPER_ADMIN_SYSTEMS = set()
 

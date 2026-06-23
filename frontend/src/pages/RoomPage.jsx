@@ -201,6 +201,7 @@ export default function RoomPage() {
   const [arcadeRomFolderName, setArcadeRomFolderName] = useState('');
   const [arcadeRomEntries, setArcadeRomEntries] = useState([]);
   const [arcadeRomSearch, setArcadeRomSearch] = useState('');
+  const [showArcadeCloneRoms, setShowArcadeCloneRoms] = useState(false);
   const [arcadeRomScanning, setArcadeRomScanning] = useState(false);
   const [loadedAgaDiskCount, setLoadedAgaDiskCount] = useState(0);
   const [currentAgaDiskIndex, setCurrentAgaDiskIndex] = useState(0);
@@ -367,18 +368,27 @@ export default function RoomPage() {
     return names;
   }, [partyRoster]);
   const activePartyPlayerName = partyPlayerNameByNumber.get(activePartyPlayer);
+  const arcadeParentRomCount = useMemo(
+    () => arcadeRomEntries.filter((entry) => !entry.isClone).length,
+    [arcadeRomEntries],
+  );
+  const arcadeCloneRomCount = arcadeRomEntries.length - arcadeParentRomCount;
   const filteredArcadeRomEntries = useMemo(() => {
     const query = arcadeRomSearch.trim().toLowerCase();
+    const visibleEntries = showArcadeCloneRoms
+      ? arcadeRomEntries
+      : arcadeRomEntries.filter((entry) => !entry.isClone);
     const entries = query
-      ? arcadeRomEntries.filter((entry) => (
+      ? visibleEntries.filter((entry) => (
         entry.name.toLowerCase().includes(query)
         || entry.displayName.toLowerCase().includes(query)
         || entry.path.toLowerCase().includes(query)
+        || entry.parentTitle.toLowerCase().includes(query)
       ))
-      : arcadeRomEntries;
+      : visibleEntries;
 
     return entries.slice(0, 120);
-  }, [arcadeRomEntries, arcadeRomSearch]);
+  }, [arcadeRomEntries, arcadeRomSearch, showArcadeCloneRoms]);
 
   useEffect(() => {
     isHostRef.current = isHost === true;
@@ -3292,13 +3302,27 @@ export default function RoomPage() {
     fileInputRef.current?.click();
   }
 
-  function formatArcadeRomName(fileName) {
-    const romKey = fileName.replace(/\.zip$/i, '').toLowerCase();
-    return mame2003PlusTitles[romKey] || fileName
+  function fallbackArcadeRomName(fileName) {
+    return fileName
       .replace(/\.zip$/i, '')
       .replace(/[_-]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+  }
+
+  function getArcadeRomMetadata(fileName) {
+    const romKey = fileName.replace(/\.zip$/i, '').toLowerCase();
+    const metadata = mame2003PlusTitles[romKey];
+    const parent = metadata?.parent || '';
+    const parentTitle = parent ? mame2003PlusTitles[parent]?.title || parent : '';
+
+    return {
+      romKey,
+      displayName: metadata?.title || fallbackArcadeRomName(fileName),
+      parent,
+      parentTitle,
+      isClone: Boolean(parent),
+    };
   }
 
   async function collectArcadeRomEntries(directoryHandle, prefix = '') {
@@ -3309,10 +3333,11 @@ export default function RoomPage() {
 
       if (handle.kind === 'file') {
         if (name.toLowerCase().endsWith('.zip')) {
+          const metadata = getArcadeRomMetadata(name);
           entries.push({
             name,
             path,
-            displayName: formatArcadeRomName(name),
+            ...metadata,
             handle,
           });
         }
@@ -4193,25 +4218,39 @@ export default function RoomPage() {
                     <div className="arcade-rom-browser-head">
                       <div>
                         <strong>{arcadeRomFolderName || 'MAME ROMs'}</strong>
-                        <span>{arcadeRomEntries.length} ZIP ROM{arcadeRomEntries.length === 1 ? '' : 's'} found</span>
+                        <span>
+                          {showArcadeCloneRoms
+                            ? `${arcadeRomEntries.length} ZIP ROM${arcadeRomEntries.length === 1 ? '' : 's'} found`
+                            : `${arcadeParentRomCount} parent game${arcadeParentRomCount === 1 ? '' : 's'} shown${arcadeCloneRomCount ? ` (${arcadeCloneRomCount} clones hidden)` : ''}`}
+                        </span>
                       </div>
-                      <input
-                        type="search"
-                        value={arcadeRomSearch}
-                        onChange={(event) => setArcadeRomSearch(event.target.value)}
-                        placeholder="Search games or zip names"
-                      />
+                      <div className="arcade-rom-browser-actions">
+                        <label className="arcade-rom-toggle">
+                          <input
+                            type="checkbox"
+                            checked={showArcadeCloneRoms}
+                            onChange={(event) => setShowArcadeCloneRoms(event.target.checked)}
+                          />
+                          <span>Show clones/children</span>
+                        </label>
+                        <input
+                          type="search"
+                          value={arcadeRomSearch}
+                          onChange={(event) => setArcadeRomSearch(event.target.value)}
+                          placeholder="Search games or zip names"
+                        />
+                      </div>
                     </div>
                     <div className="arcade-rom-list" aria-label="MAME ROM folder games">
                       {filteredArcadeRomEntries.map((entry) => (
                         <button
                           key={entry.path}
                           type="button"
-                          className={loadedDiskName === entry.name ? 'active' : 'secondary'}
+                          className={`${loadedDiskName === entry.name ? 'active' : 'secondary'}${entry.isClone ? ' clone-rom' : ''}`}
                           onClick={() => loadArcadeRomEntry(entry)}
                         >
                           <span>{entry.displayName}</span>
-                          <small>{entry.path}</small>
+                          <small>{entry.path}{entry.isClone && entry.parentTitle ? ` - clone of ${entry.parentTitle}` : ''}</small>
                         </button>
                       ))}
                     </div>
