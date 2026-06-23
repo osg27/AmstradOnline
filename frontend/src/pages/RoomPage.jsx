@@ -893,6 +893,63 @@ export default function RoomPage() {
     hostAudioStreamRef.current = nextAudioStream || null;
   }, [emulatorSrc, isPlayStation, isSoloMode]);
 
+  const reloadArcadeFrame = useCallback(async () => {
+    const frame = emulatorFrameRef.current;
+    if (!frame || !isArcade) return null;
+
+    if (mirrorLoopRef.current) {
+      cancelAnimationFrame(mirrorLoopRef.current);
+      mirrorLoopRef.current = null;
+    }
+
+    await new Promise((resolve) => {
+      frame.addEventListener('load', resolve, { once: true });
+      const separator = emulatorSrc.includes('?') ? '&' : '?';
+      frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
+    });
+
+    return frame;
+  }, [emulatorSrc, isArcade]);
+
+  async function replaceHostMediaStreams(nextVideoStream, nextAudioStream = null) {
+    const previousVideoStream = hostVideoStreamRef.current;
+    const previousAudioStream = hostAudioStreamRef.current;
+    const nextVideoTrack = nextVideoStream?.getVideoTracks?.()[0] || null;
+    const nextAudioTrack = nextAudioStream?.getAudioTracks?.()[0] || null;
+
+    if (!nextVideoTrack) {
+      throw new Error('New arcade video stream missing');
+    }
+
+    const peerConnections = isMultiPeerParty
+      ? Array.from(partyHostPeersRef.current.values()).map((peer) => peer.pc).filter(Boolean)
+      : [pcRef.current].filter(Boolean);
+
+    for (const pc of peerConnections) {
+      const videoSender = pc.getSenders?.().find((sender) => sender.track?.kind === 'video');
+      const audioSender = pc.getSenders?.().find((sender) => sender.track?.kind === 'audio' && nextAudioTrack);
+
+      if (videoSender) {
+        await videoSender.replaceTrack(nextVideoTrack);
+      } else if (!isSoloMode) {
+        pc.addTrack(nextVideoTrack, nextVideoStream);
+      }
+
+      if (nextAudioTrack) {
+        if (audioSender) {
+          await audioSender.replaceTrack(nextAudioTrack);
+        } else if (!isSoloMode) {
+          pc.addTrack(nextAudioTrack, nextAudioStream);
+        }
+      }
+    }
+
+    previousVideoStream?.getTracks?.().forEach((track) => track.stop());
+    previousAudioStream?.getTracks?.().forEach((track) => track.stop());
+    hostVideoStreamRef.current = nextVideoStream;
+    hostAudioStreamRef.current = nextAudioStream || null;
+  }
+
   const configureSerialChannel = useCallback((channel) => {
     serialChannelRef.current = channel;
     channel.binaryType = 'arraybuffer';
@@ -3315,6 +3372,32 @@ export default function RoomPage() {
 
     setError('');
     const bytes = new Uint8Array(await file.arrayBuffer());
+
+    if (hostStartedRef.current && loadedDiskName) {
+      setStatus(`Changing MAME ROM: ${file.name}`);
+      const frame = await reloadArcadeFrame();
+      if (!frame) {
+        throw new Error('Arcade frame not found');
+      }
+
+      frame.contentWindow?.postMessage({
+        type: 'arcade_autoload',
+        fileName: file.name,
+        bytes,
+      }, window.location.origin);
+      frame.contentWindow?.postMessage({ type: 'arcade_start' }, window.location.origin);
+
+      const emulatorCanvas = await waitForEmulatorCanvas(frame);
+      const nextVideoStream = emulatorCanvas.captureStream(60);
+      const nextAudioStream = await waitForHostAudioStream(frame);
+      await replaceHostMediaStreams(nextVideoStream, nextAudioStream);
+
+      setLoadedDiskName(file.name);
+      addLog(`Changed MAME ROM: ${file.name}`);
+      setStatus(`Changed MAME ROM: ${file.name}`);
+      return;
+    }
+
     forwardInputToEmulator({
       type: 'arcade_autoload',
       fileName: file.name,
