@@ -3372,19 +3372,21 @@ export default function RoomPage() {
 
     setError('');
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const frame = await reloadArcadeFrame();
 
-    if (hostStartedRef.current && loadedDiskName) {
-      setStatus(`Changing MAME ROM: ${file.name}`);
-      const frame = await reloadArcadeFrame();
-      if (!frame) {
-        throw new Error('Arcade frame not found');
-      }
+    if (!frame) {
+      throw new Error('Arcade frame not found');
+    }
 
-      frame.contentWindow?.postMessage({
-        type: 'arcade_autoload',
-        fileName: file.name,
-        bytes,
-      }, window.location.origin);
+    frame.contentWindow?.postMessage({
+      type: 'arcade_autoload',
+      fileName: file.name,
+      bytes,
+    }, window.location.origin);
+
+    if (hostStartedRef.current) {
+      setStatus(loadedDiskName ? `Changing MAME ROM: ${file.name}` : `Loading MAME ROM: ${file.name}`);
+
       frame.contentWindow?.postMessage({ type: 'arcade_start' }, window.location.origin);
 
       const emulatorCanvas = await waitForEmulatorCanvas(frame);
@@ -3393,18 +3395,12 @@ export default function RoomPage() {
       await replaceHostMediaStreams(nextVideoStream, nextAudioStream);
 
       setLoadedDiskName(file.name);
-      addLog(`Changed MAME ROM: ${file.name}`);
-      setStatus(`Changed MAME ROM: ${file.name}`);
+      addLog(`${loadedDiskName ? 'Changed' : 'Loaded'} MAME ROM: ${file.name}`);
+      setStatus(`${loadedDiskName ? 'Changed' : 'Loaded'} MAME ROM: ${file.name}`);
       return;
     }
 
-    forwardInputToEmulator({
-      type: 'arcade_autoload',
-      fileName: file.name,
-      bytes,
-    });
-
-    if (!hostStartedRef.current && !hostStartingRef.current) {
+    if (!hostStartingRef.current) {
       await startHostSession();
     }
 
