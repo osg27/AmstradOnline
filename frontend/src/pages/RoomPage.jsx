@@ -3051,8 +3051,13 @@ export default function RoomPage() {
       }
 
       const emulatorCanvas = await waitForEmulatorCanvas(iframe);
+      const useDirectCanvasStream = isArcade && typeof emulatorCanvas.captureStream === 'function';
 
-      startMirrorLoop(emulatorCanvas);
+      if (useDirectCanvasStream) {
+        addLog('Using native arcade canvas stream');
+      } else {
+        startMirrorLoop(emulatorCanvas);
+      }
 
       if (isAmigaLink) {
         addLog('Local linked Amiga ready');
@@ -3061,13 +3066,14 @@ export default function RoomPage() {
         return;
       }
 
-      const mirrorCanvas = mirrorCanvasRef.current;
+      const stream = useDirectCanvasStream
+        ? emulatorCanvas.captureStream(60)
+        : mirrorCanvasRef.current?.captureStream(60);
 
-      if (!mirrorCanvas) {
-        throw new Error('Mirror canvas missing');
+      if (!stream) {
+        throw new Error('Video stream missing');
       }
 
-      const stream = mirrorCanvas.captureStream(60);
       hostVideoStreamRef.current = stream;
 
       const audioStream = await waitForHostAudioStream(iframe);
