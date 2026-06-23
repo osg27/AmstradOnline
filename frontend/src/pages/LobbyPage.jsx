@@ -285,7 +285,7 @@ const PLATFORM_SHELVES = [
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available yet' },
+              party: { enabled: true, system: 'arcade' },
               link: { enabled: false, note: 'Not available yet' },
             },
           },
@@ -352,6 +352,13 @@ export default function LobbyPage() {
   const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0] || null;
   const selectedModeConfig = selectedSystem?.modes[selectedMode];
   const emptyEraCopy = EMPTY_ERA_COPY[selectedPlatform?.id] || EMPTY_ERA_COPY.micros;
+
+  useEffect(() => {
+    if (selectedMode !== 'party') return;
+    if (selectedSystem?.modes.party?.system === 'arcade' && ![3, 4].includes(partyMaxPlayers)) {
+      setPartyMaxPlayers(4);
+    }
+  }, [partyMaxPlayers, selectedMode, selectedSystem]);
 
   useEffect(() => {
     async function loadSession() {
@@ -434,11 +441,15 @@ export default function LobbyPage() {
       }
 
       const roomSystem = modeConfig.system || selectedSystem.id;
+      const isPartyRoom = mode === 'party' && (roomSystem === 'cpc_party' || roomSystem === 'arcade');
+      const nextPartyMaxPlayers = roomSystem === 'arcade'
+        ? Math.min(4, Math.max(3, partyMaxPlayers))
+        : partyMaxPlayers;
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
         body: JSON.stringify({
           system: roomSystem,
-          party_max_players: roomSystem === 'cpc_party' ? partyMaxPlayers : 2,
+          party_max_players: isPartyRoom ? nextPartyMaxPlayers : 2,
         }),
       });
 
@@ -623,14 +634,14 @@ export default function LobbyPage() {
               </div>
             ) : null}
 
-            {selectedMode === 'party' && selectedSystem?.modes.party?.system === 'cpc_party' ? (
+            {selectedMode === 'party' && ['cpc_party', 'arcade'].includes(selectedSystem?.modes.party?.system) ? (
               <label className="party-player-select mode-party-select">
                 <span>Party players</span>
                 <select
                   value={partyMaxPlayers}
                   onChange={(event) => setPartyMaxPlayers(Number(event.target.value))}
                 >
-                  {[2, 3, 4, 5, 6, 7, 8].map((count) => (
+                  {(selectedSystem?.modes.party?.system === 'arcade' ? [3, 4] : [2, 3, 4, 5, 6, 7, 8]).map((count) => (
                     <option key={count} value={count}>{count}</option>
                   ))}
                 </select>

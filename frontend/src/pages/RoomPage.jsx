@@ -314,13 +314,15 @@ export default function RoomPage() {
   const isArcade = roomSystem === 'arcade';
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
+  const isArcadeParty = isArcade && !isSoloMode && partyMaxPlayers > 2;
+  const isMultiPeerParty = isCpcParty || isArcadeParty;
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isCpcPinball ? 'Amstrad Pinball Dreams' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-07-6'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-22-4' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-23-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -334,7 +336,7 @@ export default function RoomPage() {
         : isMasterSystem ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isAtariSt ? 'P1 Atari ST joystick + keyboard/mouse' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Z / M flippers, Down plunger, Space nudge' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
       : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
-      : isMasterSystem ? (isHost ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : 'P2 controller 2 / Button 1 / Button 2') : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isAtariSt ? (isHost ? 'P1 Atari ST joystick + keyboard/mouse' : 'P2 Atari ST joystick') : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+      : isMasterSystem ? (isHost ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : 'P2 controller 2 / Button 1 / Button 2') : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isAtariSt ? (isHost ? 'P1 Atari ST joystick + keyboard/mouse' : 'P2 Atari ST joystick') : isArcadeParty ? `P${currentPartyPlayerNumber} arcade controls` : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isSoloMode ? 'Solo' : isHost ? 'Host' : 'Guest';
@@ -345,6 +347,8 @@ export default function RoomPage() {
     ? `P1: ${username || playerOneName}`
     : isCpcParty
     ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}`
+    : isArcadeParty
+      ? `P${currentPartyPlayerNumber}: ${isHost ? playerOneName : username || playerTwoName} / controller ${currentPartyPlayerNumber}`
     : isSegaConsole || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isAtariSt || isArcade
       ? `${isHost ? `P1: ${playerOneName}` : `P2: ${playerTwoName}`} / controller ${isHost ? '1' : '2'}`
       : isHost
@@ -396,13 +400,13 @@ export default function RoomPage() {
   }, [isHost, room, username]);
 
   useEffect(() => {
-    if (!isCpcParty || !isHost) {
+    if (!isMultiPeerParty || !isHost) {
       setPartyRoster([]);
       return;
     }
 
     refreshPartyRoster();
-  }, [isCpcParty, isHost, username]);
+  }, [isHost, isMultiPeerParty, username]);
 
   const addLog = useCallback((message) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${message}`, ...prev].slice(0, 80));
@@ -1101,7 +1105,7 @@ export default function RoomPage() {
   }, [forwardInputToEmulator, forwardJoystickMaskAsKeys, isCpcParty]);
 
   const sendLocalJoystickMask = useCallback((mask) => {
-    const player = isHost ? 1 : 2;
+    const player = isHost ? 1 : isMultiPeerParty ? currentPartyPlayerNumber : 2;
     const joystickMask = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isAtariSt || isArcade || isCpcPinball ? mask : mask & 31;
     const previousMask = localJoystickMaskRef.current;
     const payload = {
@@ -1173,7 +1177,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isAmigaLink, isArcade, isC64, isCpcParty, isCpcPinball, isHost, isNes, isPcEngine, isPlayStation, isSegaConsole, isSnes, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, currentPartyPlayerNumber, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaFamily, isAmigaLink, isArcade, isC64, isCpcParty, isCpcPinball, isHost, isMultiPeerParty, isNes, isPcEngine, isPlayStation, isSegaConsole, isSnes, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -1428,7 +1432,7 @@ export default function RoomPage() {
       inputSequenceRef.current += 1;
       channel.send(JSON.stringify({
         type: 'input_state',
-        player: 2,
+        player: currentPartyPlayerNumber,
         sessionId: inputSessionIdRef.current,
         seq: inputSequenceRef.current,
         mask,
@@ -1442,7 +1446,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(snapshotTimer);
     };
-  }, [inputCaptured, isHost]);
+  }, [currentPartyPlayerNumber, inputCaptured, isHost]);
 
   useEffect(() => {
     if (isHost !== true) {
@@ -1450,14 +1454,22 @@ export default function RoomPage() {
     }
 
     const staleRemoteInputTimer = window.setInterval(() => {
-      if (isCpcParty) {
+      if (isMultiPeerParty) {
         for (const peer of partyHostPeersRef.current.values()) {
           if (!peer.joystickMask) continue;
           if (!peer.lastInputAt) continue;
           if (performance.now() - peer.lastInputAt < 180) continue;
 
           addInputDebug(`P${peer.playerNumber} input timed out, releasing held input`, 0, 'guest remote');
-          releaseCpcPartySharedInput(peer.joystickMask);
+          if (isCpcParty) {
+            releaseCpcPartySharedInput(peer.joystickMask);
+          } else {
+            forwardInputToEmulator({
+              type: 'amstrad_remote_joystick',
+              player: peer.playerNumber,
+              mask: 0,
+            });
+          }
           peer.joystickMask = 0;
         }
         return;
@@ -1485,7 +1497,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(staleRemoteInputTimer);
     };
-  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmigaFamily, isArcade, isC64, isCpcParty, isHost, isNes, isPcEngine, isPlayStation, isSegaConsole, isSnes, releaseCpcPartySharedInput]);
+  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAmigaFamily, isArcade, isC64, isCpcParty, isHost, isMultiPeerParty, isNes, isPcEngine, isPlayStation, isSegaConsole, isSnes, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     if (isHost !== true || isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isAtariSt || isArcade) {
@@ -1588,9 +1600,14 @@ export default function RoomPage() {
           lastRemoteInputAtRef.current = performance.now();
         }
       };
+      const getInputPlayer = (fallbackPlayer = parsed.player) => {
+        if (partyPeerState) return partyPlayerOverride || 2;
+        if (isCpcParty) return partyPlayerOverride || 2;
+        return fallbackPlayer;
+      };
 
       if (parsed.type === 'key') {
-        const player = isCpcParty ? partyPlayerOverride || 2 : parsed.player;
+        const player = getInputPlayer(parsed.player);
 
         if (isCpcParty && activePartyPlayer !== player) {
           addInputDebug(`ignored guest key, party turn is P${activePartyPlayer}`, null, 'party turn');
@@ -1607,7 +1624,7 @@ export default function RoomPage() {
       }
 
       if (parsed.type === 'control') {
-        const player = isCpcParty ? partyPlayerOverride || 2 : parsed.player;
+        const player = getInputPlayer(parsed.player);
 
         if (isCpcParty && activePartyPlayer !== player) {
           addInputDebug(`ignored guest control, party turn is P${activePartyPlayer}`, null, 'party turn');
@@ -1636,7 +1653,7 @@ export default function RoomPage() {
       }
 
       if (parsed.type === 'input_state') {
-        const player = isCpcParty ? partyPlayerOverride || 2 : parsed.player === 2 ? 2 : 1;
+        const player = getInputPlayer(parsed.player === 2 ? 2 : 1);
         const mask = parsed.mask | 0;
         const seq = Number(parsed.seq) || 0;
         const sessionId = String(parsed.sessionId || 'legacy');
@@ -1705,7 +1722,7 @@ export default function RoomPage() {
       }
 
       if (parsed.type === 'joystick') {
-        const player = isCpcParty ? partyPlayerOverride || 2 : parsed.player === 2 ? 2 : 1;
+        const player = getInputPlayer(parsed.player === 2 ? 2 : 1);
         const mask = parsed.mask | 0;
         const previousMask = getRemoteMask();
 
@@ -1788,7 +1805,7 @@ export default function RoomPage() {
       return;
     }
 
-    if (isHost && isCpcParty) {
+    if (isHost && isMultiPeerParty) {
       if (message.type === 'peer-ready' && message.role === 'guest') {
         await createPartyPeerForGuest(message);
         return;
@@ -1978,7 +1995,7 @@ export default function RoomPage() {
         addLog(`ICE error: ${err.message}`);
       }
     }
-  }, [addLog, isCpcParty, isHost, partyMaxPlayers]);
+  }, [addLog, isHost, isMultiPeerParty, partyMaxPlayers]);
 
   const { send: sendSignal, isOpen: signalingOpen } = useSignaling(isSoloMode ? null : roomCode, onSignalMessage, signalingClientIdRef.current);
 
@@ -2003,7 +2020,7 @@ export default function RoomPage() {
         connected: true,
       },
     ]
-    : isCpcParty
+    : isMultiPeerParty
     ? partyRoster
     : [
       {
@@ -2051,7 +2068,7 @@ export default function RoomPage() {
         ok: signalingOpen,
       },
       {
-        label: isCpcParty ? 'Players' : 'Peer',
+        label: isMultiPeerParty ? 'Players' : 'Peer',
         ok: remoteConnected,
       },
       {
@@ -2729,7 +2746,15 @@ export default function RoomPage() {
     if (!peer) return;
 
     if (peer.joystickMask) {
-      releaseCpcPartySharedInput(peer.joystickMask);
+      if (isCpcParty) {
+        releaseCpcPartySharedInput(peer.joystickMask);
+      } else {
+        forwardInputToEmulator({
+          type: 'amstrad_remote_joystick',
+          player: peer.playerNumber,
+          mask: 0,
+        });
+      }
     }
 
     peer.channel?.close();
@@ -2741,7 +2766,7 @@ export default function RoomPage() {
 
   async function createPartyPeerForGuest(guestMessage) {
     const guestId = guestMessage.from;
-    if (!guestId || !isCpcParty || !isHost) return;
+    if (!guestId || !isMultiPeerParty || !isHost) return;
 
     const existingPeer = partyHostPeersRef.current.get(guestId);
     if (existingPeer?.offer) {
@@ -2828,7 +2853,15 @@ export default function RoomPage() {
     channel.onmessage = (msg) => handleGuestPayloadOnHostRef.current?.(msg.data, playerNumber, peerState);
     channel.onclose = () => {
       if (peerState.joystickMask) {
-        releaseCpcPartySharedInput(peerState.joystickMask);
+        if (isCpcParty) {
+          releaseCpcPartySharedInput(peerState.joystickMask);
+        } else {
+          forwardInputToEmulator({
+            type: 'amstrad_remote_joystick',
+            player: playerNumber,
+            mask: 0,
+          });
+        }
       }
       peerState.joystickMask = 0;
     };
@@ -2856,7 +2889,7 @@ export default function RoomPage() {
   }
 
   async function connectPendingPartyGuests() {
-    if (!isCpcParty || !isHost || !hostVideoStreamRef.current) return;
+    if (!isMultiPeerParty || !isHost || !hostVideoStreamRef.current) return;
 
     const pendingGuests = Array.from(pendingPartyGuestsRef.current.values());
     pendingPartyGuestsRef.current.clear();
@@ -3090,7 +3123,7 @@ export default function RoomPage() {
         throw new Error('Peer connection is not ready');
       }
 
-      if (isCpcParty) {
+      if (isMultiPeerParty) {
         addLog(`Party stream ready with ${stream.getVideoTracks().length} video track(s) and ${audioStream?.getAudioTracks().length || 0} audio track(s)`);
         setStatus('Party host ready, waiting for guests');
         hostStartedRef.current = true;
@@ -3975,6 +4008,24 @@ export default function RoomPage() {
                       ))}
                     </div>
                     <p className="muted">Guests appear here as they join, so the host can pick the right player turn before the game starts.</p>
+                  </div>
+                ) : null}
+
+                {isArcadeParty ? (
+                  <div className="party-turn-panel">
+                    <div className="party-turn-header">
+                      <strong>Arcade players</strong>
+                      <span>Players are assigned as they join and play at the same time.</span>
+                    </div>
+                    <div className="party-roster" aria-label="Arcade party players">
+                      {partyRoster.map((player) => (
+                        <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
+                          <strong>P{player.playerNumber}</strong>
+                          <span>{player.username}</span>
+                          <small>{player.role}{player.connected ? ' connected' : ' joining'}</small>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
               </>

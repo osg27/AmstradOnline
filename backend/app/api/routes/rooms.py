@@ -87,7 +87,7 @@ def create_room(
         owner_user_id=user_id,
         status="waiting",
         system=system,
-        party_max_players=payload.party_max_players if system == "cpc_party" and payload else 2,
+        party_max_players=payload.party_max_players if system in {"cpc_party", "arcade"} and payload else 2,
     )
     db.add(room)
     db.commit()

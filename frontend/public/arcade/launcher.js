@@ -8,9 +8,8 @@
   let sharedAudioContext = null;
   let audioDestination = null;
   let keepAlive = null;
-  let localMask = 0;
-  let remoteMask = 0;
-  let lastSimulatedMasks = [0, 0];
+  const playerMasks = [0, 0, 0, 0];
+  let lastSimulatedMasks = [0, 0, 0, 0];
   let statusText = 'MAME 2003-Plus ready';
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
@@ -151,8 +150,9 @@
     configurable: true,
     value() {
       const nativePads = originalGetGamepads ? Array.from(originalGetGamepads()) : [];
-      nativePads[0] = buildPad(0, localMask);
-      nativePads[1] = buildPad(1, remoteMask);
+      playerMasks.forEach((mask, index) => {
+        nativePads[index] = buildPad(index, mask);
+      });
       return nativePads;
     },
   });
@@ -192,13 +192,9 @@
   }
 
   function setMask(player, mask) {
-    if (player === 1) {
-      localMask = mask;
-      simulateMask(0, mask);
-    } else {
-      remoteMask = mask;
-      simulateMask(1, mask);
-    }
+    const playerIndex = Math.min(3, Math.max(0, (Number(player) || 1) - 1));
+    playerMasks[playerIndex] = mask;
+    simulateMask(playerIndex, mask);
   }
 
   function keyToMaskBit(key) {
@@ -271,7 +267,8 @@
     const bit = keyToMaskBit(key);
     if (!bit) return;
 
-    const current = player === 1 ? localMask : remoteMask;
+    const playerIndex = Math.min(3, Math.max(0, (Number(player) || 1) - 1));
+    const current = playerMasks[playerIndex] || 0;
     const next = action === 'down' ? current | bit : current & ~bit;
     setMask(player, next);
   }
@@ -284,7 +281,8 @@
 
     gameContainer.innerHTML = '';
     window.EJS_emulator = null;
-    lastSimulatedMasks = [0, 0];
+    playerMasks.fill(0);
+    lastSimulatedMasks = [0, 0, 0, 0];
     if (loaderScript) {
       loaderScript.remove();
       loaderScript = null;
@@ -354,6 +352,36 @@
         10: { value: 't', value2: 'LEFT_TOP_SHOULDER' },
         11: { value: 'y', value2: 'RIGHT_TOP_SHOULDER' },
         12: { value: 'u', value2: 'LEFT_BOTTOM_SHOULDER' },
+      },
+      2: {
+        0: { value: 'i', value2: 'BUTTON_1' },
+        1: { value: 'k', value2: 'BUTTON_4' },
+        2: { value: '7', value2: 'SELECT' },
+        3: { value: '3', value2: 'START' },
+        4: { value: 'i', value2: 'DPAD_UP' },
+        5: { value: 'k', value2: 'DPAD_DOWN' },
+        6: { value: 'j', value2: 'DPAD_LEFT' },
+        7: { value: 'l', value2: 'DPAD_RIGHT' },
+        8: { value: ',', value2: 'BUTTON_2' },
+        9: { value: '.', value2: 'BUTTON_3' },
+        10: { value: '/', value2: 'LEFT_TOP_SHOULDER' },
+        11: { value: ';', value2: 'RIGHT_TOP_SHOULDER' },
+        12: { value: "'", value2: 'LEFT_BOTTOM_SHOULDER' },
+      },
+      3: {
+        0: { value: 'num1', value2: 'BUTTON_1' },
+        1: { value: 'num4', value2: 'BUTTON_4' },
+        2: { value: '8', value2: 'SELECT' },
+        3: { value: '4', value2: 'START' },
+        4: { value: 'num8', value2: 'DPAD_UP' },
+        5: { value: 'num5', value2: 'DPAD_DOWN' },
+        6: { value: 'num4', value2: 'DPAD_LEFT' },
+        7: { value: 'num6', value2: 'DPAD_RIGHT' },
+        8: { value: 'num2', value2: 'BUTTON_2' },
+        9: { value: 'num3', value2: 'BUTTON_3' },
+        10: { value: 'num7', value2: 'LEFT_TOP_SHOULDER' },
+        11: { value: 'num9', value2: 'RIGHT_TOP_SHOULDER' },
+        12: { value: 'num0', value2: 'LEFT_BOTTOM_SHOULDER' },
       },
     };
     window.EJS_Buttons = {
