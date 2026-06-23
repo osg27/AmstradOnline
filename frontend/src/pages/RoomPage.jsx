@@ -7,6 +7,7 @@ import SocialSidebar from '../components/SocialSidebar';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
+import mame2003PlusTitles from '../data/mame2003PlusTitles';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
@@ -197,6 +198,10 @@ export default function RoomPage() {
   const [hostStarted, setHostStarted] = useState(false);
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
+  const [arcadeRomFolderName, setArcadeRomFolderName] = useState('');
+  const [arcadeRomEntries, setArcadeRomEntries] = useState([]);
+  const [arcadeRomSearch, setArcadeRomSearch] = useState('');
+  const [arcadeRomScanning, setArcadeRomScanning] = useState(false);
   const [loadedAgaDiskCount, setLoadedAgaDiskCount] = useState(0);
   const [currentAgaDiskIndex, setCurrentAgaDiskIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
@@ -362,6 +367,18 @@ export default function RoomPage() {
     return names;
   }, [partyRoster]);
   const activePartyPlayerName = partyPlayerNameByNumber.get(activePartyPlayer);
+  const filteredArcadeRomEntries = useMemo(() => {
+    const query = arcadeRomSearch.trim().toLowerCase();
+    const entries = query
+      ? arcadeRomEntries.filter((entry) => (
+        entry.name.toLowerCase().includes(query)
+        || entry.displayName.toLowerCase().includes(query)
+        || entry.path.toLowerCase().includes(query)
+      ))
+      : arcadeRomEntries;
+
+    return entries.slice(0, 120);
+  }, [arcadeRomEntries, arcadeRomSearch]);
 
   useEffect(() => {
     isHostRef.current = isHost === true;
@@ -3218,6 +3235,114 @@ export default function RoomPage() {
     fileInputRef.current?.click();
   }
 
+  function formatArcadeRomName(fileName) {
+    const romKey = fileName.replace(/\.zip$/i, '').toLowerCase();
+    return mame2003PlusTitles[romKey] || fileName
+      .replace(/\.zip$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  async function collectArcadeRomEntries(directoryHandle, prefix = '') {
+    const entries = [];
+
+    for await (const [name, handle] of directoryHandle.entries()) {
+      const path = prefix ? `${prefix}/${name}` : name;
+
+      if (handle.kind === 'file') {
+        if (name.toLowerCase().endsWith('.zip')) {
+          entries.push({
+            name,
+            path,
+            displayName: formatArcadeRomName(name),
+            handle,
+          });
+        }
+        continue;
+      }
+
+      if (handle.kind === 'directory') {
+        try {
+          entries.push(...await collectArcadeRomEntries(handle, path));
+        } catch {
+          // Some folders may be blocked by the browser picker. Keep scanning the rest.
+        }
+      }
+    }
+
+    return entries;
+  }
+
+  async function openArcadeRomFolder() {
+    if (!canControlLocalEmulator || !isArcade) return;
+
+    if (!window.showDirectoryPicker) {
+      setError('Your browser does not support choosing a ROM folder. Chrome or Edge should work.');
+      return;
+    }
+
+    try {
+      setError('');
+      setArcadeRomScanning(true);
+      const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+      const entries = await collectArcadeRomEntries(directoryHandle);
+      entries.sort((left, right) => left.displayName.localeCompare(right.displayName, undefined, { numeric: true, sensitivity: 'base' }));
+
+      setArcadeRomFolderName(directoryHandle.name || 'MAME ROMs');
+      setArcadeRomEntries(entries);
+      setArcadeRomSearch('');
+      setStatus(entries.length ? `Found ${entries.length} MAME ROM zip${entries.length === 1 ? '' : 's'}` : 'No .zip ROMs found in that folder');
+      addLog(`Scanned MAME ROM folder: ${directoryHandle.name || 'selected folder'} (${entries.length} zip${entries.length === 1 ? '' : 's'})`);
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setError(err.message);
+        addLog(`ROM folder error: ${err.message}`);
+      }
+    } finally {
+      setArcadeRomScanning(false);
+    }
+  }
+
+  async function loadArcadeRomFile(file) {
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setError('Arcade rooms support MAME .zip ROM files');
+      addLog(`Rejected file: ${file.name}`);
+      return;
+    }
+
+    setError('');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    forwardInputToEmulator({
+      type: 'arcade_autoload',
+      fileName: file.name,
+      bytes,
+    });
+
+    if (!hostStartedRef.current && !hostStartingRef.current) {
+      await startHostSession();
+    }
+
+    setLoadedDiskName(file.name);
+    addLog(`Loaded MAME ROM: ${file.name}`);
+    setStatus(`Loaded MAME ROM: ${file.name}`);
+  }
+
+  async function loadArcadeRomEntry(entry) {
+    if (!entry?.handle) return;
+
+    try {
+      setStatus(`Loading MAME ROM: ${entry.name}`);
+      const file = await entry.handle.getFile();
+      await loadArcadeRomFile(file);
+    } catch (err) {
+      setError(err.message);
+      addLog(`MAME ROM load error: ${err.message}`);
+    }
+  }
+
   function openKickstartPicker() {
     if (!canControlLocalEmulator || !isAmigaFamily) return;
 
@@ -3384,6 +3509,12 @@ export default function RoomPage() {
         }
         setError(isAmigaFamily ? 'Amiga rooms currently support .adf and .zip files' : isMasterSystem ? 'Master System rooms support .sms ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isNes ? 'NES rooms support .nes ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, and .dx2 ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, and .zip ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, and .crt files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, and .ipf disk images' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${invalidFile.name}`);
+        event.target.value = '';
+        return;
+      }
+
+      if (isArcade) {
+        await loadArcadeRomFile(file);
         event.target.value = '';
         return;
       }
@@ -3900,6 +4031,12 @@ export default function RoomPage() {
                     {mediaLabel}
                   </button>
 
+                  {isArcade ? (
+                    <button type="button" className="secondary" onClick={openArcadeRomFolder} disabled={arcadeRomScanning}>
+                      {arcadeRomScanning ? 'Scanning ROMs...' : arcadeRomFolderName ? 'Change ROM folder' : 'Choose ROM folder'}
+                    </button>
+                  ) : null}
+
                   {(isAmiga || isAmigaLink || isC64 || isAtariSt) ? (
                     <button type="button" className="secondary" onClick={openSwapDiskPicker} disabled={!hostStarted}>
                       {isC64
@@ -3971,6 +4108,39 @@ export default function RoomPage() {
                   ) : null}
 
                 </div>
+
+                {isArcade && arcadeRomEntries.length > 0 ? (
+                  <div className="arcade-rom-browser">
+                    <div className="arcade-rom-browser-head">
+                      <div>
+                        <strong>{arcadeRomFolderName || 'MAME ROMs'}</strong>
+                        <span>{arcadeRomEntries.length} ZIP ROM{arcadeRomEntries.length === 1 ? '' : 's'} found</span>
+                      </div>
+                      <input
+                        type="search"
+                        value={arcadeRomSearch}
+                        onChange={(event) => setArcadeRomSearch(event.target.value)}
+                        placeholder="Search games or zip names"
+                      />
+                    </div>
+                    <div className="arcade-rom-list" aria-label="MAME ROM folder games">
+                      {filteredArcadeRomEntries.map((entry) => (
+                        <button
+                          key={entry.path}
+                          type="button"
+                          className={loadedDiskName === entry.name ? 'active' : 'secondary'}
+                          onClick={() => loadArcadeRomEntry(entry)}
+                        >
+                          <span>{entry.displayName}</span>
+                          <small>{entry.path}</small>
+                        </button>
+                      ))}
+                    </div>
+                    {filteredArcadeRomEntries.length < arcadeRomEntries.length ? (
+                      <p className="muted">Showing {filteredArcadeRomEntries.length} of {arcadeRomEntries.length}. Use search to narrow the list.</p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {isCpcParty ? (
                   <div className="party-turn-panel">
