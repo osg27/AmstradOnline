@@ -15,6 +15,7 @@ export default function MemberMessages({
   const [activeUser, setActiveUser] = useState(null);
   const [thread, setThread] = useState([]);
   const [recipientUsername, setRecipientUsername] = useState('');
+  const [memberResults, setMemberResults] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
@@ -95,6 +96,23 @@ export default function MemberMessages({
     }
   }, [activeUserId]);
 
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const results = await apiFetch(`/auth/social/players/search?q=${encodeURIComponent(recipientUsername.trim())}`);
+        if (active) setMemberResults(results);
+      } catch {
+        if (active) setMemberResults([]);
+      }
+    }, 180);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [recipientUsername]);
+
   async function startConversation(event) {
     event.preventDefault();
     const username = recipientUsername.trim();
@@ -136,6 +154,24 @@ export default function MemberMessages({
     }
   }
 
+  async function sendFriendRequest(player) {
+    setSending(true);
+    setError('');
+    try {
+      await apiFetch('/auth/social/requests', {
+        method: 'POST',
+        body: JSON.stringify({ username: player.username }),
+      });
+      setMemberResults((items) => items.map((item) => (
+        item.id === player.id ? { ...item, request_pending: true } : item
+      )));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <section className={`member-messages ${layout === 'page' ? 'member-messages-page' : ''}`} aria-label="Member messages">
       <div className="room-chat-head member-messages-head">
@@ -149,12 +185,32 @@ export default function MemberMessages({
         <input
           value={recipientUsername}
           onChange={(event) => setRecipientUsername(event.target.value)}
-          placeholder="Message username"
+          placeholder="Find a member"
           maxLength={50}
           disabled={sending}
         />
-        <button type="submit" disabled={sending || !recipientUsername.trim()}>Start</button>
+        <button type="submit" disabled={sending || !recipientUsername.trim()}>Open</button>
       </form>
+
+      {memberResults.length ? (
+        <div className="member-search-results" aria-label="Member search results">
+          {memberResults.map((player) => (
+            <div className="member-search-result" key={player.id}>
+              <span className={player.is_online ? 'online-dot' : 'offline-dot'} aria-label={player.is_online ? 'Online' : 'Offline'} />
+              <strong>{player.username}</strong>
+              <small>{player.is_friend ? 'Friend' : player.request_pending ? 'Pending' : player.is_online ? 'Online' : 'Member'}</small>
+              <button type="button" className="secondary social-action" disabled={sending} onClick={() => setActiveUser(player)}>
+                Message
+              </button>
+              {!player.is_friend && !player.request_pending ? (
+                <button type="button" className="secondary social-action" disabled={sending} onClick={() => sendFriendRequest(player)}>
+                  Add
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="member-message-body">
         <div className="member-conversation-list" aria-label="Conversations">

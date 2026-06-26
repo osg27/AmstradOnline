@@ -81,35 +81,9 @@ button.secondary,
   text-align: center;
 }
 
-.mail-icon {
-  position: relative;
-  width: 17px;
-  height: 12px;
-  flex: 0 0 auto;
-  border: 2px solid currentColor;
-  border-radius: 2px;
-}
-
-.mail-icon::before,
-.mail-icon::after {
-  content: "";
-  position: absolute;
-  top: 1px;
-  width: 9px;
-  height: 2px;
-  background: currentColor;
-}
-
-.mail-icon::before {
-  left: 0;
-  transform: rotate(35deg);
-  transform-origin: left center;
-}
-
-.mail-icon::after {
-  right: 0;
-  transform: rotate(-35deg);
-  transform-origin: right center;
+.mail-button .bi {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 button.active {
@@ -667,6 +641,37 @@ input:focus {
 
 .member-message-start button {
   padding-inline: 0.7rem;
+}
+
+.member-search-results {
+  display: grid;
+  gap: 0.4rem;
+  max-height: 170px;
+  padding: 0.6rem;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--line);
+  background: #101313;
+}
+
+.member-search-result {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid #292f2d;
+  border-radius: 6px;
+  background: #151818;
+}
+
+.member-search-result strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.member-search-result small {
+  margin-left: auto;
+  color: var(--muted);
 }
 
 .member-message-body {

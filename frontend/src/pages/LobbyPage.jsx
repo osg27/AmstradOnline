@@ -543,7 +543,7 @@ export default function LobbyPage() {
               onClick={() => navigate('/messages')}
               aria-label={messageUnreadCount ? `${messageUnreadCount} unread messages` : 'Messages'}
             >
-              <span className="mail-icon" aria-hidden="true" />
+              <i className="bi bi-envelope-fill" aria-hidden="true" />
               <span>Messages</span>
               {messageUnreadCount ? <strong>{messageUnreadCount}</strong> : null}
             </button>

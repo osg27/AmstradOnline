@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -220,6 +220,45 @@ def send_direct_message(
         "mine": True,
         "recipient": user_summary(recipient, datetime.now(timezone.utc)),
     }
+
+
+@router.get("/players/search")
+def search_players(
+    q: str = Query(default="", max_length=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    now = datetime.now(timezone.utc)
+    query = q.strip()
+    players_query = db.query(User).filter(
+        User.id != current_user.id,
+        User.email_verified.is_(True),
+    )
+    if query:
+        players_query = players_query.filter(func.lower(User.username).contains(query.lower()))
+
+    players = players_query.order_by(User.last_seen_at.desc(), User.username).limit(25).all()
+    friend_ids = get_friend_ids(db, current_user.id)
+    pending_friendships = db.query(Friendship).filter(
+        Friendship.status == "pending",
+        or_(
+            Friendship.requester_id == current_user.id,
+            Friendship.addressee_id == current_user.id,
+        ),
+    ).all()
+    pending_ids = {
+        friendship.addressee_id if friendship.requester_id == current_user.id else friendship.requester_id
+        for friendship in pending_friendships
+    }
+
+    return [
+        {
+            **user_summary(player, now),
+            "is_friend": player.id in friend_ids,
+            "request_pending": player.id in pending_ids,
+        }
+        for player in players
+    ]
 
 
 @router.get("/players/{username}")
