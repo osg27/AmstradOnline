@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
-import LobbyChat from '../components/LobbyChat';
+import MemberMessages from '../components/MemberMessages';
 import SocialSidebar from '../components/SocialSidebar';
 
 const PLAY_MODES = {
@@ -342,6 +342,7 @@ export default function LobbyPage() {
   const [selectedMode, setSelectedMode] = useState('hosted');
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
+  const [messageTarget, setMessageTarget] = useState(null);
   const canUsePreviewSystems = isAdmin || isTester;
 
   const visibleShelves = useMemo(() => PLATFORM_SHELVES.map((platform) => ({
@@ -680,8 +681,8 @@ export default function LobbyPage() {
         </main>
         </div>
         <div className="lobby-side-rail">
-          <LobbyChat showAllMessages={isSuperAdmin} />
-          <SocialSidebar />
+          <MemberMessages targetUser={messageTarget} onTargetHandled={() => setMessageTarget(null)} />
+          <SocialSidebar onMessagePlayer={setMessageTarget} />
         </div>
       </div>
     </div>

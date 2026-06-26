@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import get_current_user, is_super_admin_user
 from app.core.database import get_db
-from app.models.friendship import Friendship, LobbyMessage, RoomInvite
+from app.models.friendship import DirectMessage, Friendship, LobbyMessage, RoomInvite
 from app.models.room import Room
 from app.models.user import User
 
@@ -21,6 +21,12 @@ class FriendRequest(BaseModel):
 
 class LobbyChatMessage(BaseModel):
     message: str = Field(min_length=1, max_length=300)
+
+
+class DirectMessagePayload(BaseModel):
+    message: str = Field(min_length=1, max_length=500)
+    recipient_id: int | None = None
+    recipient_username: str | None = Field(default=None, min_length=3, max_length=50)
 
 
 def is_online(user: User, now: datetime) -> bool:
@@ -60,6 +66,17 @@ def get_friend_ids(db: Session, user_id: int) -> set[int]:
     return {
         friendship.addressee_id if friendship.requester_id == user_id else friendship.requester_id
         for friendship in friendships
+    }
+
+
+def message_summary(message: DirectMessage, other_user: User, current_user: User, now: datetime) -> dict:
+    return {
+        "id": message.id,
+        "user": user_summary(other_user, now),
+        "message": message.message,
+        "created_at": message.created_at,
+        "mine": message.sender_id == current_user.id,
+        "unread": message.recipient_id == current_user.id and message.read_at is None,
     }
 
 
@@ -119,6 +136,150 @@ def send_lobby_chat_message(
         "created_at": message.created_at,
         "mine": True,
     }
+
+
+@router.get("/messages")
+def get_message_conversations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    now = datetime.now(timezone.utc)
+    messages = (
+        db.query(DirectMessage)
+        .filter(or_(DirectMessage.sender_id == current_user.id, DirectMessage.recipient_id == current_user.id))
+        .order_by(DirectMessage.created_at.desc())
+        .limit(250)
+        .all()
+    )
+
+    latest_by_user_id = {}
+    unread_counts = {}
+    for message in messages:
+        other_user_id = message.recipient_id if message.sender_id == current_user.id else message.sender_id
+        if other_user_id not in latest_by_user_id:
+            latest_by_user_id[other_user_id] = message
+        if message.recipient_id == current_user.id and message.read_at is None:
+            unread_counts[other_user_id] = unread_counts.get(other_user_id, 0) + 1
+
+    if not latest_by_user_id:
+        return []
+
+    users_by_id = {
+        user.id: user
+        for user in db.query(User).filter(User.id.in_(latest_by_user_id.keys())).all()
+    }
+    friend_ids = get_friend_ids(db, current_user.id)
+    return [
+        {
+            **message_summary(message, users_by_id[other_user_id], current_user, now),
+            "unread_count": unread_counts.get(other_user_id, 0),
+            "is_friend": other_user_id in friend_ids,
+        }
+        for other_user_id, message in latest_by_user_id.items()
+        if other_user_id in users_by_id
+    ]
+
+
+@router.get("/messages/{user_id}")
+def get_direct_messages(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    other_user = db.query(User).filter(User.id == user_id, User.email_verified.is_(True)).first()
+    if not other_user or other_user.id == current_user.id:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    messages = (
+        db.query(DirectMessage)
+        .filter(
+            or_(
+                (DirectMessage.sender_id == current_user.id) & (DirectMessage.recipient_id == other_user.id),
+                (DirectMessage.sender_id == other_user.id) & (DirectMessage.recipient_id == current_user.id),
+            )
+        )
+        .order_by(DirectMessage.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    unread = [
+        message
+        for message in messages
+        if message.recipient_id == current_user.id and message.read_at is None
+    ]
+    if unread:
+        read_at = datetime.now(timezone.utc)
+        for message in unread:
+            message.read_at = read_at
+        db.commit()
+
+    return {
+        "user": user_summary(other_user, datetime.now(timezone.utc)),
+        "messages": [
+            {
+                "id": message.id,
+                "username": current_user.username if message.sender_id == current_user.id else other_user.username,
+                "message": message.message,
+                "created_at": message.created_at,
+                "mine": message.sender_id == current_user.id,
+            }
+            for message in reversed(messages)
+        ],
+    }
+
+
+@router.post("/messages")
+def send_direct_message(
+    payload: DirectMessagePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    message_text = payload.message.strip()
+    if not message_text:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    recipient = None
+    if payload.recipient_id is not None:
+        recipient = db.query(User).filter(User.id == payload.recipient_id, User.email_verified.is_(True)).first()
+    elif payload.recipient_username:
+        recipient_username = payload.recipient_username.strip()
+        recipient = (
+            db.query(User)
+            .filter(func.lower(User.username) == recipient_username.lower(), User.email_verified.is_(True))
+            .first()
+        )
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Player not found")
+    if recipient.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot message yourself")
+
+    message = DirectMessage(sender_id=current_user.id, recipient_id=recipient.id, message=message_text)
+    db.add(message)
+    db.query(DirectMessage).filter(
+        DirectMessage.created_at < datetime.now(timezone.utc) - timedelta(days=90)
+    ).delete(synchronize_session=False)
+    db.commit()
+    db.refresh(message)
+    return {
+        "id": message.id,
+        "username": current_user.username,
+        "message": message.message,
+        "created_at": message.created_at,
+        "mine": True,
+        "recipient": user_summary(recipient, datetime.now(timezone.utc)),
+    }
+
+
+@router.get("/players/{username}")
+def get_player_by_username(
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    player = db.query(User).filter(func.lower(User.username) == username.strip().lower(), User.email_verified.is_(True)).first()
+    if not player or player.id == current_user.id:
+        raise HTTPException(status_code=404, detail="Player not found")
+    return user_summary(player, datetime.now(timezone.utc))
 
 
 @router.post("/heartbeat", status_code=204)

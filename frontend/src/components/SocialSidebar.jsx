@@ -10,7 +10,7 @@ const EMPTY_SOCIAL = {
   room_invites: [],
 };
 
-export default function SocialSidebar({ roomCode = '', allowInvites = false, showOnline = true }) {
+export default function SocialSidebar({ roomCode = '', allowInvites = false, showOnline = true, onMessagePlayer = null }) {
   const navigate = useNavigate();
   const [social, setSocial] = useState(EMPTY_SOCIAL);
   const [friendUsername, setFriendUsername] = useState('');
@@ -141,6 +141,16 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false, sho
             <div className="social-player" key={player.id}>
               <span className="online-dot" aria-label="Online" />
               <strong>{player.username}</strong>
+              {onMessagePlayer ? (
+                <button
+                  className="secondary social-action"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onMessagePlayer(player)}
+                >
+                  Message
+                </button>
+              ) : null}
               {player.is_friend ? <small>Friend</small> : player.request_pending ? <small>Pending</small> : (
                 <button
                   className="secondary social-action"
@@ -208,6 +218,16 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false, sho
             <div className="social-player" key={friend.id}>
               <span className={friend.is_online ? 'online-dot' : 'offline-dot'} aria-label={friend.is_online ? 'Online' : 'Offline'} />
               <strong>{friend.username}</strong>
+              {onMessagePlayer ? (
+                <button
+                  className="secondary social-action"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onMessagePlayer(friend)}
+                >
+                  Message
+                </button>
+              ) : null}
               {allowInvites ? (
                 <button
                   className="social-action"

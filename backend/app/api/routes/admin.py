@@ -9,7 +9,7 @@ from app.api.routes.auth import is_admin_user, is_super_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotification
-from app.models.friendship import Friendship, LobbyMessage, RoomInvite
+from app.models.friendship import DirectMessage, Friendship, LobbyMessage, RoomInvite
 from app.models.room import Room, RoomActivity
 from app.models.user import AccountToken, User
 
@@ -189,6 +189,9 @@ def delete_user(
         (RoomActivity.user_id == user.id) | RoomActivity.room_id.in_(owned_room_ids)
     ).delete(synchronize_session=False)
     db.query(LobbyMessage).filter(LobbyMessage.sender_id == user.id).delete(synchronize_session=False)
+    db.query(DirectMessage).filter(
+        (DirectMessage.sender_id == user.id) | (DirectMessage.recipient_id == user.id)
+    ).delete(synchronize_session=False)
     db.query(Room).filter(Room.owner_user_id == user.id).delete(synchronize_session=False)
     db.query(AccountToken).filter(AccountToken.user_id == user.id).delete(synchronize_session=False)
     db.delete(user)
