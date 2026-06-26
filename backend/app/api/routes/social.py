@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user, is_super_admin_user
+from app.api.routes.auth import get_current_user
 from app.core.database import get_db
-from app.models.friendship import DirectMessage, Friendship, LobbyMessage, RoomInvite
+from app.models.friendship import DirectMessage, Friendship, RoomInvite
 from app.models.room import Room
 from app.models.user import User
 
@@ -17,10 +17,6 @@ ONLINE_WINDOW = timedelta(seconds=90)
 
 class FriendRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
-
-
-class LobbyChatMessage(BaseModel):
-    message: str = Field(min_length=1, max_length=300)
 
 
 class DirectMessagePayload(BaseModel):
@@ -80,64 +76,6 @@ def message_summary(message: DirectMessage, other_user: User, current_user: User
     }
 
 
-@router.get("/chat")
-def get_lobby_chat(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    filters = [
-        LobbyMessage.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
-    ]
-    if not is_super_admin_user(current_user):
-        visible_sender_ids = get_friend_ids(db, current_user.id) | {current_user.id}
-        filters.append(LobbyMessage.sender_id.in_(visible_sender_ids))
-
-    messages = (
-        db.query(LobbyMessage, User)
-        .join(User, User.id == LobbyMessage.sender_id)
-        .filter(*filters)
-        .order_by(LobbyMessage.created_at.desc())
-        .limit(100)
-        .all()
-    )
-    return [
-        {
-            "id": message.id,
-            "username": sender.username,
-            "message": message.message,
-            "created_at": message.created_at,
-            "mine": sender.id == current_user.id,
-        }
-        for message, sender in reversed(messages)
-    ]
-
-
-@router.post("/chat")
-def send_lobby_chat_message(
-    payload: LobbyChatMessage,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    message_text = payload.message.strip()
-    if not message_text:
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
-
-    message = LobbyMessage(sender_id=current_user.id, message=message_text)
-    db.add(message)
-    db.query(LobbyMessage).filter(
-        LobbyMessage.created_at < datetime.now(timezone.utc) - timedelta(days=30)
-    ).delete(synchronize_session=False)
-    db.commit()
-    db.refresh(message)
-    return {
-        "id": message.id,
-        "username": current_user.username,
-        "message": message.message,
-        "created_at": message.created_at,
-        "mine": True,
-    }
-
-
 @router.get("/messages")
 def get_message_conversations(
     db: Session = Depends(get_db),
@@ -178,6 +116,20 @@ def get_message_conversations(
         for other_user_id, message in latest_by_user_id.items()
         if other_user_id in users_by_id
     ]
+
+
+@router.get("/messages/unread")
+def get_unread_message_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    unread_count = (
+        db.query(func.count(DirectMessage.id))
+        .filter(DirectMessage.recipient_id == current_user.id, DirectMessage.read_at.is_(None))
+        .scalar()
+        or 0
+    )
+    return {"unread_count": unread_count}
 
 
 @router.get("/messages/{user_id}")

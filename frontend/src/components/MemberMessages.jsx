@@ -5,7 +5,12 @@ function messageTime(createdAt) {
   return new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function MemberMessages({ targetUser = null, onTargetHandled = () => {} }) {
+export default function MemberMessages({
+  targetUser = null,
+  targetUserId = null,
+  onTargetHandled = () => {},
+  layout = 'panel',
+}) {
   const [conversations, setConversations] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
   const [thread, setThread] = useState([]);
@@ -80,6 +85,11 @@ export default function MemberMessages({ targetUser = null, onTargetHandled = ()
   }, [targetUser, onTargetHandled]);
 
   useEffect(() => {
+    if (!targetUserId) return;
+    loadThread(targetUserId).catch((err) => setError(err.message));
+  }, [targetUserId]);
+
+  useEffect(() => {
     if (activeUserId) {
       loadThread(activeUserId).catch((err) => setError(err.message));
     }
@@ -127,7 +137,7 @@ export default function MemberMessages({ targetUser = null, onTargetHandled = ()
   }
 
   return (
-    <section className="member-messages" aria-label="Member messages">
+    <section className={`member-messages ${layout === 'page' ? 'member-messages-page' : ''}`} aria-label="Member messages">
       <div className="room-chat-head member-messages-head">
         <div>
           <h2>Messages</h2>
@@ -199,7 +209,7 @@ export default function MemberMessages({ targetUser = null, onTargetHandled = ()
         </div>
       </div>
 
-      {error ? <p className="error lobby-chat-error">{error}</p> : null}
+      {error ? <p className="error member-message-error">{error}</p> : null}
     </section>
   );
 }

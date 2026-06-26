@@ -7,6 +7,7 @@ import LobbyPage from './pages/LobbyPage';
 import RoomPage from './pages/RoomPage';
 import AdminPage from './pages/AdminPage';
 import FeedbackPage from './pages/FeedbackPage';
+import MessagesPage from './pages/MessagesPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
@@ -68,6 +69,14 @@ export default function App() {
         element={(
           <PrivateRoute>
             <FeedbackPage />
+          </PrivateRoute>
+        )}
+      />
+      <Route
+        path="/messages"
+        element={(
+          <PrivateRoute>
+            <MessagesPage />
           </PrivateRoute>
         )}
       />

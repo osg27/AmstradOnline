@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
-import MemberMessages from '../components/MemberMessages';
 import SocialSidebar from '../components/SocialSidebar';
 
 const PLAY_MODES = {
@@ -342,7 +341,7 @@ export default function LobbyPage() {
   const [selectedMode, setSelectedMode] = useState('hosted');
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
-  const [messageTarget, setMessageTarget] = useState(null);
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const canUsePreviewSystems = isAdmin || isTester;
 
   const visibleShelves = useMemo(() => PLATFORM_SHELVES.map((platform) => ({
@@ -401,12 +400,15 @@ export default function LobbyPage() {
           const notifications = await apiFetch('/auth/feedback/notifications');
           setFeedbackNotificationCount(notifications.filter((notification) => !notification.is_read).length);
         }
+        const messageStatus = await apiFetch('/auth/social/messages/unread');
+        setMessageUnreadCount(Number(messageStatus.unread_count) || 0);
       } catch {
         setIsAdmin(false);
         setIsSuperAdmin(false);
         setIsTester(false);
         setIsXyphoe(false);
         setFeedbackNotificationCount(0);
+        setMessageUnreadCount(0);
         localStorage.removeItem('isAdmin');
         localStorage.removeItem('isSuperAdmin');
         localStorage.removeItem('isTester');
@@ -415,6 +417,21 @@ export default function LobbyPage() {
     }
 
     loadSession();
+  }, []);
+
+  useEffect(() => {
+    async function loadUnreadMessages() {
+      try {
+        const messageStatus = await apiFetch('/auth/social/messages/unread');
+        setMessageUnreadCount(Number(messageStatus.unread_count) || 0);
+      } catch {
+        setMessageUnreadCount(0);
+      }
+    }
+
+    loadUnreadMessages();
+    const timer = window.setInterval(loadUnreadMessages, 15000);
+    return () => window.clearInterval(timer);
   }, []);
 
   function pickFirstSystem(era) {
@@ -521,6 +538,15 @@ export default function LobbyPage() {
                 Feedback{feedbackNotificationCount ? ` (${feedbackNotificationCount})` : ''}
               </button>
             ) : null}
+            <button
+              className="secondary mail-button"
+              onClick={() => navigate('/messages')}
+              aria-label={messageUnreadCount ? `${messageUnreadCount} unread messages` : 'Messages'}
+            >
+              <span className="mail-icon" aria-hidden="true" />
+              <span>Messages</span>
+              {messageUnreadCount ? <strong>{messageUnreadCount}</strong> : null}
+            </button>
             {isAdmin ? (
               <button className="secondary" onClick={() => navigate('/admin')}>Admin</button>
             ) : null}
@@ -681,8 +707,7 @@ export default function LobbyPage() {
         </main>
         </div>
         <div className="lobby-side-rail">
-          <MemberMessages targetUser={messageTarget} onTargetHandled={() => setMessageTarget(null)} />
-          <SocialSidebar onMessagePlayer={setMessageTarget} />
+          <SocialSidebar onMessagePlayer={(player) => navigate(`/messages?user=${player.id}`)} />
         </div>
       </div>
     </div>
