@@ -7,3 +7,40 @@ __pycache__/
 .env
 
 puae-wasm-build/
+
+# Local/temp emulator build folders
+.tmp-*/
+.tmp-*
+EmulatorJS/
+MameWasm/
+mamejs/
+vAmigaWeb/
+vice.js/
+vice32.js/
+flycast-wasm/
+wasm-genplus/
+zpz/
+beetle-pce-fast-libretro/
+fceumm-verify/
+fceumm-wasm-patched.data
+amstrad_controls/
+
+# Build outputs
+frontend/dist/
+dist/
+build/
+
+# Logs
+*.log
+*.err
+*.out
+
+# Large generated emulator assets
+*.wasm
+*.data
+
+# VS Code local settings
+.vscode/
+
+# Accidental/temp folder
+$temp/
