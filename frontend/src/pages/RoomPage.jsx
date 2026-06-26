@@ -3951,7 +3951,7 @@ export default function RoomPage() {
         <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
 
         <div className="room-layout">
-          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
+          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isArcade ? 'arcade-fullscreen' : ''} ${isScreenFullscreen && isCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
             <div className="play-header">
               <h2>{isSoloMode || isAmigaLink ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
@@ -4018,6 +4018,7 @@ export default function RoomPage() {
               <>
                 <iframe
                   ref={emulatorFrameRef}
+                  className={isArcade ? 'arcade-emulator-frame' : undefined}
                   title={emulatorTitle}
                   src={emulatorSrc}
                   onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}

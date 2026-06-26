@@ -2187,6 +2187,33 @@ input:focus {
   width: min(calc(100vw - var(--fullscreen-chat-width) - 3rem), calc((100vh - 8.5rem) * 1.333));
 }
 
+.video-panel.fullscreen-screen.arcade-fullscreen {
+  justify-content: flex-start;
+  gap: 0.55rem;
+}
+
+.video-panel.fullscreen-screen.arcade-fullscreen .capture-state,
+.video-panel.fullscreen-screen.arcade-fullscreen .host-control-bar,
+.video-panel.fullscreen-screen.arcade-fullscreen .arcade-rom-browser {
+  display: none !important;
+}
+
+.video-panel.fullscreen-screen.arcade-fullscreen .arcade-emulator-frame {
+  flex: 1 1 auto;
+  align-self: center;
+  width: min(100%, calc((100vh - 4.4rem) * 1.333)) !important;
+  height: min(calc(100vh - 4.4rem), calc(100vw * 0.75)) !important;
+  max-width: 100%;
+  max-height: calc(100vh - 4.4rem);
+  margin: 0 auto !important;
+  border-radius: 0 !important;
+}
+
+.video-panel.fullscreen-screen.arcade-fullscreen.fullscreen-with-chat .arcade-emulator-frame {
+  width: min(calc(100vw - var(--fullscreen-chat-width) - 3rem), calc((100vh - 4.4rem) * 1.333)) !important;
+  height: min(calc(100vh - 4.4rem), calc((100vw - var(--fullscreen-chat-width) - 3rem) * 0.75)) !important;
+}
+
 .video-panel.fullscreen-screen.party-fullscreen {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
