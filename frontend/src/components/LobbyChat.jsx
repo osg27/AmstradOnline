@@ -5,7 +5,7 @@ function messageTime(createdAt) {
   return new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function LobbyChat() {
+export default function LobbyChat({ showAllMessages = false }) {
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -112,11 +112,11 @@ export default function LobbyChat() {
   }
 
   return (
-    <section className={`room-chat lobby-chat ${collapsed ? 'collapsed' : ''}`} aria-label="Friends lobby chat">
+    <section className={`room-chat lobby-chat ${collapsed ? 'collapsed' : ''}`} aria-label={showAllMessages ? 'All lobby chat' : 'Friends lobby chat'}>
       <div className="room-chat-head">
         <div>
-          <h2>Friends lobby chat</h2>
-          <p>Only accepted friends can see your messages</p>
+          <h2>{showAllMessages ? 'All lobby chat' : 'Friends lobby chat'}</h2>
+          <p>{showAllMessages ? 'Super admin view includes everyone' : 'Only accepted friends can see your messages'}</p>
         </div>
         <div className="lobby-chat-head-actions">
           {hasUnread ? <span className="lobby-chat-unread">New</span> : null}

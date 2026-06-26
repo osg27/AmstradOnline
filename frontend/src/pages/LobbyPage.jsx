@@ -680,7 +680,7 @@ export default function LobbyPage() {
         </main>
         </div>
         <div className="lobby-side-rail">
-          <LobbyChat />
+          <LobbyChat showAllMessages={isSuperAdmin} />
           <SocialSidebar />
         </div>
       </div>

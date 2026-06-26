@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user
+from app.api.routes.auth import get_current_user, is_super_admin_user
 from app.core.database import get_db
 from app.models.friendship import Friendship, LobbyMessage, RoomInvite
 from app.models.room import Room
@@ -68,14 +68,17 @@ def get_lobby_chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    visible_sender_ids = get_friend_ids(db, current_user.id) | {current_user.id}
+    filters = [
+        LobbyMessage.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
+    ]
+    if not is_super_admin_user(current_user):
+        visible_sender_ids = get_friend_ids(db, current_user.id) | {current_user.id}
+        filters.append(LobbyMessage.sender_id.in_(visible_sender_ids))
+
     messages = (
         db.query(LobbyMessage, User)
         .join(User, User.id == LobbyMessage.sender_id)
-        .filter(
-            LobbyMessage.sender_id.in_(visible_sender_ids),
-            LobbyMessage.created_at >= datetime.now(timezone.utc) - timedelta(days=7),
-        )
+        .filter(*filters)
         .order_by(LobbyMessage.created_at.desc())
         .limit(100)
         .all()
