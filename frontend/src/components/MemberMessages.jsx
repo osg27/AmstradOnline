@@ -132,6 +132,12 @@ export default function MemberMessages({
     }
   }
 
+  async function openPlayer(player) {
+    setActiveUser(player);
+    setRecipientUsername('');
+    await loadThread(player.id);
+  }
+
   async function sendMessage(event) {
     event.preventDefault();
     const trimmed = message.trim();
@@ -174,67 +180,80 @@ export default function MemberMessages({
 
   return (
     <section className={`member-messages ${layout === 'page' ? 'member-messages-page' : ''}`} aria-label="Member messages">
-      <div className="room-chat-head member-messages-head">
-        <div>
-          <h2>Messages</h2>
-          <p>{totalUnread ? `${totalUnread} unread` : 'Direct member chat'}</p>
-        </div>
-      </div>
-
-      <form className="member-message-start" onSubmit={startConversation}>
-        <input
-          value={recipientUsername}
-          onChange={(event) => setRecipientUsername(event.target.value)}
-          placeholder="Find a member"
-          maxLength={50}
-          disabled={sending}
-        />
-        <button type="submit" disabled={sending || !recipientUsername.trim()}>Open</button>
-      </form>
-
-      {memberResults.length ? (
-        <div className="member-search-results" aria-label="Member search results">
-          {memberResults.map((player) => (
-            <div className="member-search-result" key={player.id}>
-              <span className={player.is_online ? 'online-dot' : 'offline-dot'} aria-label={player.is_online ? 'Online' : 'Offline'} />
-              <strong>{player.username}</strong>
-              <small>{player.is_friend ? 'Friend' : player.request_pending ? 'Pending' : player.is_online ? 'Online' : 'Member'}</small>
-              <button type="button" className="secondary social-action" disabled={sending} onClick={() => setActiveUser(player)}>
-                Message
-              </button>
-              {!player.is_friend && !player.request_pending ? (
-                <button type="button" className="secondary social-action" disabled={sending} onClick={() => sendFriendRequest(player)}>
-                  Add
-                </button>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-
       <div className="member-message-body">
-        <div className="member-conversation-list" aria-label="Conversations">
-          {conversations.length ? conversations.map((item) => (
-            <button
-              key={item.user.id}
-              type="button"
-              className={activeUserId === item.user.id ? 'active' : 'secondary'}
-              onClick={() => setActiveUser(item.user)}
-            >
-              <span>
-                <strong>{item.user.username}</strong>
-                <small>{item.mine ? 'You: ' : ''}{item.message}</small>
-              </span>
-              {item.unread_count ? <em>{item.unread_count}</em> : null}
-            </button>
-          )) : (
-            <p className="room-chat-empty">Pick someone online and say hello.</p>
-          )}
-        </div>
+        <aside className="member-message-sidebar">
+          <div className="member-messages-head">
+            <div>
+              <h2>Messages</h2>
+              <p>{totalUnread ? `${totalUnread} unread` : 'Direct member chat'}</p>
+            </div>
+          </div>
+
+          <form className="member-message-start" onSubmit={startConversation}>
+            <i className="bi bi-search" aria-hidden="true" />
+            <input
+              value={recipientUsername}
+              onChange={(event) => setRecipientUsername(event.target.value)}
+              placeholder="Find or start a DM"
+              maxLength={50}
+              disabled={sending}
+            />
+          </form>
+
+          <div className="member-sidebar-scroll">
+            <section className="member-search-results" aria-label="Member search results">
+              <div className="member-list-label">{recipientUsername.trim() ? 'Search results' : 'Members'}</div>
+              {memberResults.length ? memberResults.map((player) => (
+                <div className="member-search-result" key={player.id}>
+                  <button type="button" className="member-person" disabled={sending} onClick={() => openPlayer(player)}>
+                    <span className={player.is_online ? 'online-dot' : 'offline-dot'} aria-label={player.is_online ? 'Online' : 'Offline'} />
+                    <span>
+                      <strong>{player.username}</strong>
+                      <small>{player.is_friend ? 'Friend' : player.request_pending ? 'Pending' : player.is_online ? 'Online' : 'Member'}</small>
+                    </span>
+                  </button>
+                  {!player.is_friend && !player.request_pending ? (
+                    <button type="button" className="secondary icon-action" disabled={sending} onClick={() => sendFriendRequest(player)} title="Add friend" aria-label={`Add ${player.username} as a friend`}>
+                      <i className="bi bi-person-plus-fill" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
+              )) : (
+                <p className="member-empty">No members found.</p>
+              )}
+            </section>
+
+            <section className="member-conversation-section">
+              <div className="member-list-label">Direct messages</div>
+              <div className="member-conversation-list" aria-label="Conversations">
+                {conversations.length ? conversations.map((item) => (
+                  <button
+                    key={item.user.id}
+                    type="button"
+                    className={activeUserId === item.user.id ? 'active' : 'secondary'}
+                    onClick={() => setActiveUser(item.user)}
+                  >
+                    <span className={item.user.is_online ? 'online-dot' : 'offline-dot'} aria-label={item.user.is_online ? 'Online' : 'Offline'} />
+                    <span>
+                      <strong>{item.user.username}</strong>
+                      <small>{item.mine ? 'You: ' : ''}{item.message}</small>
+                    </span>
+                    {item.unread_count ? <em>{item.unread_count}</em> : null}
+                  </button>
+                )) : (
+                  <p className="member-empty">Search for a member to start a DM.</p>
+                )}
+              </div>
+            </section>
+          </div>
+        </aside>
 
         <div className="member-thread">
           <div className="member-thread-title">
-            <strong>{activeUser?.username || 'No conversation selected'}</strong>
+            <div>
+              <strong>{activeUser?.username || 'Select a conversation'}</strong>
+              <small>{activeUser ? (activeUser.is_online ? 'Online' : 'Offline') : 'Search members or choose a DM'}</small>
+            </div>
             {activeUser ? <span className={activeUser.is_online ? 'online-dot' : 'offline-dot'} aria-label={activeUser.is_online ? 'Online' : 'Offline'} /> : null}
           </div>
 
