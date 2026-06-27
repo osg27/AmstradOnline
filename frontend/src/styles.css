@@ -743,26 +743,39 @@ input:focus {
   display: grid;
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
 }
 
 .member-message-sidebar {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(120px, 0.42fr) minmax(0, 1fr);
   min-height: 0;
   border-right: 1px solid var(--line);
   background: #101313;
 }
 
 .member-sidebar-scroll {
+  display: contents;
+}
+
+.member-conversation-section,
+.member-search-results {
   min-height: 0;
   overflow-y: auto;
 }
 
 .member-conversation-section {
   display: grid;
+  align-content: start;
   gap: 0.4rem;
   padding: 0.45rem 0.6rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.member-search-results {
+  align-content: start;
+  padding: 0.6rem 0.6rem 0.7rem;
 }
 
 .member-conversation-list {
@@ -817,7 +830,9 @@ input:focus {
 .member-thread {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .member-thread-title {
@@ -847,8 +862,9 @@ input:focus {
 }
 
 .member-messages-page {
-  min-height: min(700px, calc(100vh - 220px));
-  max-height: none;
+  height: min(700px, calc(100vh - 220px));
+  min-height: 460px;
+  max-height: calc(100vh - 220px);
 }
 
 .member-messages-page .member-thread {
