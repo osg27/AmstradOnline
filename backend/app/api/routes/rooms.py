@@ -177,7 +177,7 @@ def room_heartbeat(
         db.add(RoomActivity(room_id=room.id, user_id=user_id, last_seen_at=now))
 
     if room.owner_user_id == user_id:
-        room.current_game = payload.game_name.strip() if payload.game_name else None
+        room.current_game = payload.game_name.strip()[:240] if payload.game_name else None
 
     db.commit()
 

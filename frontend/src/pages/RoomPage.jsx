@@ -252,6 +252,7 @@ export default function RoomPage() {
   const [roomCodeCopied, setRoomCodeCopied] = useState(false);
   const [emulatorFrameLoadCount, setEmulatorFrameLoadCount] = useState(0);
   const [roomSessionKey, setRoomSessionKey] = useState(0);
+  const [emulatorSessionKey, setEmulatorSessionKey] = useState(0);
   const [selectedRoomSystem, setSelectedRoomSystem] = useState('cpc');
   const [switchingSystem, setSwitchingSystem] = useState(false);
   const [inputDebug, setInputDebug] = useState({
@@ -444,7 +445,7 @@ export default function RoomPage() {
   useEffect(() => {
     setEmulatorFrameLoadCount(0);
     sentStoredKickstartFrameRef.current = 0;
-  }, [emulatorSrc, roomSessionKey]);
+  }, [emulatorSrc, emulatorSessionKey]);
 
   useEffect(() => {
     if (isCpcParty || !navigator.mediaDevices?.addEventListener) {
@@ -501,7 +502,7 @@ export default function RoomPage() {
     context.fillText(message, canvas.width / 2, canvas.height / 2);
   }
 
-  function resetLiveRoomSession(message = 'Room session reset') {
+  function resetLiveRoomSession(message = 'Room session reset', { preservePeer = false } = {}) {
     if (mirrorLoopRef.current) {
       cancelAnimationFrame(mirrorLoopRef.current);
       mirrorLoopRef.current = null;
@@ -509,50 +510,58 @@ export default function RoomPage() {
 
     clearMirrorCanvas(message);
 
-    dataChannelRef.current?.close();
-    serialChannelRef.current?.close();
-    dataChannelRef.current = null;
-    serialChannelRef.current = null;
-    serialOfferStartedRef.current = false;
-    localOfferRef.current = null;
-    pendingIceCandidatesRef.current = [];
-    activeGuestSignalIdRef.current = '';
-    activePeerSignalIdRef.current = '';
-    remoteMediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    remoteVoiceStreamRef.current?.getTracks().forEach((track) => track.stop());
-    remoteMediaStreamRef.current = null;
-    remoteVoiceStreamRef.current = null;
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
-    if (remoteVoiceAudioRef.current) {
-      remoteVoiceAudioRef.current.pause();
-      remoteVoiceAudioRef.current.srcObject = null;
-    }
+    if (!preservePeer) {
+      dataChannelRef.current?.close();
+      serialChannelRef.current?.close();
+      dataChannelRef.current = null;
+      serialChannelRef.current = null;
+      serialOfferStartedRef.current = false;
+      localOfferRef.current = null;
+      pendingIceCandidatesRef.current = [];
+      activeGuestSignalIdRef.current = '';
+      activePeerSignalIdRef.current = '';
+      remoteMediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      remoteVoiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      remoteMediaStreamRef.current = null;
+      remoteVoiceStreamRef.current = null;
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+      }
+      if (remoteVoiceAudioRef.current) {
+        remoteVoiceAudioRef.current.pause();
+        remoteVoiceAudioRef.current.srcObject = null;
+      }
 
-    for (const [guestId] of partyHostPeersRef.current) {
-      closePartyPeer(guestId);
+      for (const [guestId] of partyHostPeersRef.current) {
+        closePartyPeer(guestId);
+      }
+      partyHostPeersRef.current.clear();
+      pendingPartyGuestsRef.current.clear();
+      pcRef.current?.close();
+      pcRef.current = null;
     }
-    partyHostPeersRef.current.clear();
-    pendingPartyGuestsRef.current.clear();
-    pcRef.current?.close();
-    pcRef.current = null;
 
     setHostStarted(false);
     hostStartedRef.current = false;
     hostStartingRef.current = false;
-    setGuestPrepared(false);
-    guestPreparedRef.current = false;
-    setRemoteConnected(false);
+    if (!preservePeer) {
+      setGuestPrepared(false);
+      guestPreparedRef.current = false;
+      setRemoteConnected(false);
+    }
     setLoadedDiskName('');
     setInputCaptured(false);
     setEmulatorFrameLoadCount(0);
     sentStoredKickstartFrameRef.current = 0;
-    setPartyPlayerNumber(null);
-    setPartyRoster([]);
+    if (!preservePeer) {
+      setPartyPlayerNumber(null);
+      setPartyRoster([]);
+      setGuestDisplayName('');
+      setRemoteConnected(false);
+      setRoomSessionKey((key) => key + 1);
+    }
     setActivePartyPlayer(1);
-    setGuestDisplayName('');
-    setRoomSessionKey((key) => key + 1);
+    setEmulatorSessionKey((key) => key + 1);
     setStatus(message);
     addLog(message);
   }
@@ -561,7 +570,7 @@ export default function RoomPage() {
     if (!nextRoom?.system) return;
     setRoom(nextRoom);
     setSelectedRoomSystem(nextRoom.system);
-    resetLiveRoomSession(`${messagePrefix} to ${roomSystemLabel(nextRoom.system)}`);
+    resetLiveRoomSession(`${messagePrefix} to ${roomSystemLabel(nextRoom.system)}`, { preservePeer: true });
   }
 
   const addInputDebug = useCallback((message, mask = null, source = null) => {
@@ -1281,7 +1290,7 @@ export default function RoomPage() {
       window.clearTimeout(timer);
       timers.forEach((retryTimer) => window.clearTimeout(retryTimer));
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isHost, isPlayStation, kickstartStorageKey, roomSessionKey, roomSystem]);
+  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isHost, isPlayStation, kickstartStorageKey, emulatorSessionKey, roomSystem]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -2946,7 +2955,7 @@ export default function RoomPage() {
 
   async function waitForEmulatorCanvas(iframe) {
     const startedAt = Date.now();
-    const canvasTimeout = isAmigaAga ? 30000 : 8000;
+    const canvasTimeout = isAmigaFamily ? 30000 : 8000;
 
     while (Date.now() - startedAt < canvasTimeout) {
       const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
@@ -3410,6 +3419,18 @@ export default function RoomPage() {
 
       if (!pc) {
         throw new Error('Peer connection is not ready');
+      }
+
+      const hasExistingHostVideoSender = !isSoloMode
+        && !isMultiPeerParty
+        && pc.getSenders?.().some((sender) => sender.track?.kind === 'video');
+
+      if (hasExistingHostVideoSender) {
+        await replaceHostMediaStreams(stream, audioStream);
+        addLog(`Replaced room stream with ${stream.getVideoTracks().length} video track(s) and ${audioStream?.getAudioTracks().length || 0} audio track(s)`);
+        setStatus('Room stream switched');
+        hostStartedRef.current = true;
+        return;
       }
 
       if (isMultiPeerParty) {
@@ -4221,7 +4242,7 @@ export default function RoomPage() {
             {canControlLocalEmulator ? (
               <>
                 <iframe
-                  key={`${roomSystem}-${roomSessionKey}`}
+                  key={`${roomSystem}-${emulatorSessionKey}`}
                   ref={emulatorFrameRef}
                   className={isArcade ? 'arcade-emulator-frame' : undefined}
                   title={emulatorTitle}
