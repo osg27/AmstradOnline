@@ -201,6 +201,29 @@ export default function MemberMessages({
           </form>
 
           <div className="member-sidebar-scroll">
+            <section className="member-conversation-section">
+              <div className="member-list-label">Direct messages</div>
+              <div className="member-conversation-list" aria-label="Conversations">
+                {conversations.length ? conversations.map((item) => (
+                  <button
+                    key={item.user.id}
+                    type="button"
+                    className={activeUserId === item.user.id ? 'active' : 'secondary'}
+                    onClick={() => setActiveUser(item.user)}
+                  >
+                    <span className={item.user.is_online ? 'online-dot' : 'offline-dot'} aria-label={item.user.is_online ? 'Online' : 'Offline'} />
+                    <span>
+                      <strong>{item.user.username}</strong>
+                      <small>{item.mine ? 'You: ' : ''}{item.message}</small>
+                    </span>
+                    {item.unread_count ? <em>{item.unread_count}</em> : null}
+                  </button>
+                )) : (
+                  <p className="member-empty">No DMs yet. Pick a member below.</p>
+                )}
+              </div>
+            </section>
+
             <section className="member-search-results" aria-label="Member search results">
               <div className="member-list-label">{recipientUsername.trim() ? 'Search results' : 'Members'}</div>
               {memberResults.length ? memberResults.map((player) => (
@@ -221,29 +244,6 @@ export default function MemberMessages({
               )) : (
                 <p className="member-empty">No members found.</p>
               )}
-            </section>
-
-            <section className="member-conversation-section">
-              <div className="member-list-label">Direct messages</div>
-              <div className="member-conversation-list" aria-label="Conversations">
-                {conversations.length ? conversations.map((item) => (
-                  <button
-                    key={item.user.id}
-                    type="button"
-                    className={activeUserId === item.user.id ? 'active' : 'secondary'}
-                    onClick={() => setActiveUser(item.user)}
-                  >
-                    <span className={item.user.is_online ? 'online-dot' : 'offline-dot'} aria-label={item.user.is_online ? 'Online' : 'Offline'} />
-                    <span>
-                      <strong>{item.user.username}</strong>
-                      <small>{item.mine ? 'You: ' : ''}{item.message}</small>
-                    </span>
-                    {item.unread_count ? <em>{item.unread_count}</em> : null}
-                  </button>
-                )) : (
-                  <p className="member-empty">Search for a member to start a DM.</p>
-                )}
-              </div>
             </section>
           </div>
         </aside>
