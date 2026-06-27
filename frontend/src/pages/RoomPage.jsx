@@ -174,6 +174,20 @@ function roomSystemLabel(system) {
   return ROOM_SYSTEM_OPTIONS.find(([value]) => value === system)?.[1] || 'Amstrad CPC';
 }
 
+function buildAmigaKickstartPayload(system, fileName, bytes) {
+  if (system === 'amiga_aga') {
+    return {
+      type: 'amiga_kickstart',
+      fileName,
+      bytes,
+    };
+  }
+
+  return {
+    kickstart_rom: bytes,
+  };
+}
+
 async function saveStoredKickstart(key, fileName, bytes) {
   const db = await openKickstartDb();
 
@@ -426,7 +440,7 @@ export default function RoomPage() {
   useEffect(() => {
     setEmulatorFrameLoadCount(0);
     sentStoredKickstartFrameRef.current = 0;
-  }, [emulatorSrc]);
+  }, [emulatorSrc, roomSessionKey]);
 
   useEffect(() => {
     if (isCpcParty || !navigator.mediaDevices?.addEventListener) {
@@ -911,11 +925,10 @@ export default function RoomPage() {
 
     const storedKickstart = await loadStoredKickstart(AMIGA_AGA_KICKSTART_KEY);
     if (storedKickstart) {
-      frame.contentWindow?.postMessage({
-        type: 'amiga_kickstart',
-        fileName: storedKickstart.fileName,
-        bytes: storedKickstart.bytes,
-      }, window.location.origin);
+      frame.contentWindow?.postMessage(
+        buildAmigaKickstartPayload('amiga_aga', storedKickstart.fileName, storedKickstart.bytes),
+        window.location.origin,
+      );
     }
 
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
@@ -1195,11 +1208,21 @@ export default function RoomPage() {
 
         if (cancelled || !storedKickstart) return;
 
-        forwardInputToEmulator({
-          type: isPlayStation ? 'playstation_bios' : isAtariSt ? 'atarist_tos' : 'amiga_kickstart',
-          fileName: storedKickstart.fileName,
-          bytes: storedKickstart.bytes,
-        });
+        if (isPlayStation) {
+          forwardInputToEmulator({
+            type: 'playstation_bios',
+            fileName: storedKickstart.fileName,
+            bytes: storedKickstart.bytes,
+          });
+        } else if (isAtariSt) {
+          forwardInputToEmulator({
+            type: 'atarist_tos',
+            fileName: storedKickstart.fileName,
+            bytes: storedKickstart.bytes,
+          });
+        } else {
+          forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes));
+        }
         if (isPlayStation) {
           setPlaystationBiosName(`${storedKickstart.fileName} (saved locally)`);
           addLog(`Loaded saved PlayStation BIOS: ${storedKickstart.fileName}`);
@@ -1221,7 +1244,7 @@ export default function RoomPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isHost, isPlayStation, kickstartStorageKey]);
+  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isHost, isPlayStation, kickstartStorageKey, roomSessionKey, roomSystem]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -3902,11 +3925,7 @@ export default function RoomPage() {
         }
       }
 
-      forwardInputToEmulator({
-        type: 'amiga_kickstart',
-        fileName: file.name,
-        bytes,
-      });
+      forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, file.name, bytes));
 
       setKickstartRomName(file.name);
       addLog(`Loaded Kickstart ROM for this session: ${file.name}`);

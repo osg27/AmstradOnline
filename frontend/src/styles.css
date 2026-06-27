@@ -393,6 +393,7 @@ input:focus {
   min-height: 34px;
   padding: 0.35rem 0.55rem;
   font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .social-list,
@@ -414,6 +415,8 @@ input:focus {
 }
 
 .social-player {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   min-height: 38px;
   padding: 0.3rem 0.45rem;
   border: 1px solid #292f2d;
@@ -423,15 +426,17 @@ input:focus {
 
 .social-player strong {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .social-player small {
-  margin-left: auto;
+  white-space: nowrap;
 }
 
 .social-player > .social-action:first-of-type {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .social-invite {
