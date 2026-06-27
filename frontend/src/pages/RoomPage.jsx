@@ -307,6 +307,7 @@ export default function RoomPage() {
   const activeGuestSignalIdRef = useRef('');
   const activePeerSignalIdRef = useRef('');
   const sentStoredKickstartFrameRef = useRef(0);
+  const savedSystemMediaRef = useRef(new Map());
   const [micEnabled, setMicEnabled] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
   const [micStatus, setMicStatus] = useState('Mic off');
@@ -484,11 +485,26 @@ export default function RoomPage() {
 
   const sendSignalRef = useRef(() => false);
 
+  function clearMirrorCanvas(message = 'Loading emulator...') {
+    const canvas = mirrorCanvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+
+    context.fillStyle = '#000';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#d8d8d4';
+    context.font = '20px sans-serif';
+    context.textAlign = 'center';
+    context.fillText(message, canvas.width / 2, canvas.height / 2);
+  }
+
   function resetLiveRoomSession(message = 'Room session reset') {
     if (mirrorLoopRef.current) {
       cancelAnimationFrame(mirrorLoopRef.current);
       mirrorLoopRef.current = null;
     }
+
+    clearMirrorCanvas(message);
 
     dataChannelRef.current?.close();
     serialChannelRef.current?.close();
@@ -527,6 +543,8 @@ export default function RoomPage() {
     setRemoteConnected(false);
     setLoadedDiskName('');
     setInputCaptured(false);
+    setEmulatorFrameLoadCount(0);
+    sentStoredKickstartFrameRef.current = 0;
     setPartyPlayerNumber(null);
     setPartyRoster([]);
     setActivePartyPlayer(1);
@@ -1201,28 +1219,43 @@ export default function RoomPage() {
     if (sentStoredKickstartFrameRef.current === emulatorFrameLoadCount) return undefined;
 
     let cancelled = false;
+    const timers = [];
     sentStoredKickstartFrameRef.current = emulatorFrameLoadCount;
     const timer = window.setTimeout(async () => {
       try {
-        const storedKickstart = await loadStoredKickstart(kickstartStorageKey);
+        let storedKickstart = savedSystemMediaRef.current.get(kickstartStorageKey);
+        if (!storedKickstart) {
+          storedKickstart = await loadStoredKickstart(kickstartStorageKey);
+          if (storedKickstart) {
+            savedSystemMediaRef.current.set(kickstartStorageKey, storedKickstart);
+          }
+        }
 
         if (cancelled || !storedKickstart) return;
 
-        if (isPlayStation) {
-          forwardInputToEmulator({
+        const payload = isPlayStation
+          ? {
             type: 'playstation_bios',
             fileName: storedKickstart.fileName,
             bytes: storedKickstart.bytes,
-          });
-        } else if (isAtariSt) {
-          forwardInputToEmulator({
-            type: 'atarist_tos',
-            fileName: storedKickstart.fileName,
-            bytes: storedKickstart.bytes,
-          });
-        } else {
-          forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes));
-        }
+          }
+          : isAtariSt
+            ? {
+              type: 'atarist_tos',
+              fileName: storedKickstart.fileName,
+              bytes: storedKickstart.bytes,
+            }
+            : buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes);
+
+        [0, 350, 900, 1600].forEach((delay) => {
+          const retryTimer = window.setTimeout(() => {
+            if (!cancelled) {
+              forwardInputToEmulator(payload);
+            }
+          }, delay);
+          timers.push(retryTimer);
+        });
+
         if (isPlayStation) {
           setPlaystationBiosName(`${storedKickstart.fileName} (saved locally)`);
           addLog(`Loaded saved PlayStation BIOS: ${storedKickstart.fileName}`);
@@ -1243,6 +1276,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      timers.forEach((retryTimer) => window.clearTimeout(retryTimer));
     };
   }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isHost, isPlayStation, kickstartStorageKey, roomSessionKey, roomSystem]);
 
@@ -3915,6 +3949,9 @@ export default function RoomPage() {
 
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
+      if (kickstartStorageKey) {
+        savedSystemMediaRef.current.set(kickstartStorageKey, { fileName: file.name, bytes });
+      }
 
       if (kickstartStorageKey) {
         try {
