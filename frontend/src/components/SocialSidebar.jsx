@@ -240,18 +240,7 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false, sho
                 >
                   Invite
                 </button>
-              ) : <small>{friend.is_online ? 'Online' : 'Offline'}</small>}
-              <button
-                className="secondary social-action"
-                type="button"
-                disabled={busy}
-                onClick={() => runAction(
-                  () => apiFetch(`/auth/social/friends/${friend.id}`, { method: 'DELETE' }),
-                  `${friend.username} removed from friends.`,
-                )}
-              >
-                Remove
-              </button>
+              ) : null}
             </div>
           )) : <p className="social-empty">Add someone by username to start your friends list.</p>}
         </div>

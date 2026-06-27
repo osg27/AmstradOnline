@@ -416,7 +416,8 @@ input:focus {
 
 .social-player {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
   min-height: 38px;
   padding: 0.3rem 0.45rem;
   border: 1px solid #292f2d;
@@ -426,9 +427,9 @@ input:focus {
 
 .social-player strong {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .social-player small {
