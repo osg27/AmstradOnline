@@ -248,8 +248,16 @@ function resetAmiga() {
   }
 }
 
+function normalizeBytes(bytes) {
+  if (!bytes) return null;
+  return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+}
+
 function loadKickstartRom(bytes) {
-  customKickstartRom = bytes;
+  const normalizedBytes = normalizeBytes(bytes);
+  if (!normalizedBytes?.length) return;
+
+  customKickstartRom = normalizedBytes;
   sentKickstartRom = null;
   sentFileLoadId = 0;
 
@@ -497,8 +505,8 @@ window.addEventListener("message", (event) => {
     return;
   }
 
-  if (data.type === "amiga_kickstart") {
-    loadKickstartRom(data.bytes);
+  if (data.type === "amiga_kickstart" || data.kickstart_rom) {
+    loadKickstartRom(data.bytes || data.kickstart_rom);
     return;
   }
 
