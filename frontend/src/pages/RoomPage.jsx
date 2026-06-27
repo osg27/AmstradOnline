@@ -16,6 +16,24 @@ const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 const ATARI_ST_TOS_KEY = 'atari-st-tos';
 const CONTROL_MATCH_LIMIT = 6;
+const ROOM_SYSTEM_OPTIONS = [
+  ['cpc', 'Amstrad CPC'],
+  ['cpc_party', 'Amstrad CPC Party'],
+  ['cpc_pinball', 'Amstrad Pinball Dreams'],
+  ['spectrum', 'ZX Spectrum'],
+  ['c64', 'Commodore 64'],
+  ['atarist', 'Atari ST'],
+  ['amiga', 'Amiga'],
+  ['amiga_link', 'Amiga Link Play'],
+  ['amiga_aga', 'Amiga AGA'],
+  ['mastersystem', 'Sega Master System'],
+  ['megadrive', 'Mega Drive'],
+  ['nes', 'NES'],
+  ['snes', 'SNES'],
+  ['pcengine', 'PC Engine / TurboGrafx-16'],
+  ['playstation', 'Sony PlayStation'],
+  ['arcade', 'MAME Arcade'],
+];
 
 const CONTROL_ACTION_LABELS = {
   up: 'Up',
@@ -152,6 +170,10 @@ function requestToPromise(request) {
   });
 }
 
+function roomSystemLabel(system) {
+  return ROOM_SYSTEM_OPTIONS.find(([value]) => value === system)?.[1] || 'Amstrad CPC';
+}
+
 async function saveStoredKickstart(key, fileName, bytes) {
   const db = await openKickstartDb();
 
@@ -212,6 +234,9 @@ export default function RoomPage() {
   const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
   const [roomCodeCopied, setRoomCodeCopied] = useState(false);
   const [emulatorFrameLoadCount, setEmulatorFrameLoadCount] = useState(0);
+  const [roomSessionKey, setRoomSessionKey] = useState(0);
+  const [selectedRoomSystem, setSelectedRoomSystem] = useState('cpc');
+  const [switchingSystem, setSwitchingSystem] = useState(false);
   const [inputDebug, setInputDebug] = useState({
     mask: 0,
     source: 'none',
@@ -324,6 +349,10 @@ export default function RoomPage() {
   const isMultiPeerParty = isCpcParty || isArcadeParty;
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isCpcPinball ? 'Amstrad Pinball Dreams' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  useEffect(() => {
+    setSelectedRoomSystem(roomSystem);
+  }, [roomSystem]);
+
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
@@ -440,6 +469,65 @@ export default function RoomPage() {
   }, []);
 
   const sendSignalRef = useRef(() => false);
+
+  function resetLiveRoomSession(message = 'Room session reset') {
+    if (mirrorLoopRef.current) {
+      cancelAnimationFrame(mirrorLoopRef.current);
+      mirrorLoopRef.current = null;
+    }
+
+    dataChannelRef.current?.close();
+    serialChannelRef.current?.close();
+    dataChannelRef.current = null;
+    serialChannelRef.current = null;
+    serialOfferStartedRef.current = false;
+    localOfferRef.current = null;
+    pendingIceCandidatesRef.current = [];
+    activeGuestSignalIdRef.current = '';
+    activePeerSignalIdRef.current = '';
+    remoteMediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    remoteVoiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    remoteMediaStreamRef.current = null;
+    remoteVoiceStreamRef.current = null;
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+    if (remoteVoiceAudioRef.current) {
+      remoteVoiceAudioRef.current.pause();
+      remoteVoiceAudioRef.current.srcObject = null;
+    }
+
+    for (const [guestId] of partyHostPeersRef.current) {
+      closePartyPeer(guestId);
+    }
+    partyHostPeersRef.current.clear();
+    pendingPartyGuestsRef.current.clear();
+    pcRef.current?.close();
+    pcRef.current = null;
+
+    setHostStarted(false);
+    hostStartedRef.current = false;
+    hostStartingRef.current = false;
+    setGuestPrepared(false);
+    guestPreparedRef.current = false;
+    setRemoteConnected(false);
+    setLoadedDiskName('');
+    setInputCaptured(false);
+    setPartyPlayerNumber(null);
+    setPartyRoster([]);
+    setActivePartyPlayer(1);
+    setGuestDisplayName('');
+    setRoomSessionKey((key) => key + 1);
+    setStatus(message);
+    addLog(message);
+  }
+
+  function applyRoomSystemUpdate(nextRoom, messagePrefix = 'Room switched') {
+    if (!nextRoom?.system) return;
+    setRoom(nextRoom);
+    setSelectedRoomSystem(nextRoom.system);
+    resetLiveRoomSession(`${messagePrefix} to ${roomSystemLabel(nextRoom.system)}`);
+  }
 
   const addInputDebug = useCallback((message, mask = null, source = null) => {
     setInputDebug((prev) => ({
@@ -1870,6 +1958,11 @@ export default function RoomPage() {
       return;
     }
 
+    if (message.type === 'room-system-changed' && message.room) {
+      applyRoomSystemUpdate(message.room, `${message.username || 'Host'} switched the room`);
+      return;
+    }
+
     if (message.type === 'party-room-full') {
       setStatus('Party room full');
       setError('This party room has no free live player slots.');
@@ -2095,6 +2188,40 @@ export default function RoomPage() {
     sendSignal(chatMessage);
     setChatMessages((items) => [...items.slice(-99), { ...chatMessage, mine: true }]);
   }
+
+  async function switchRoomSystem() {
+    if (!room || !isHost || isSoloMode || switchingSystem || selectedRoomSystem === roomSystem) return;
+
+    setSwitchingSystem(true);
+    try {
+      setError('');
+      const nextPartyMax = selectedRoomSystem === 'cpc_party'
+        ? Math.max(3, partyMaxPlayers || 4)
+        : selectedRoomSystem === 'arcade'
+          ? partyMaxPlayers || 2
+          : 2;
+      const nextRoom = await apiFetch(`/rooms/${roomCode}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          system: selectedRoomSystem,
+          party_max_players: nextPartyMax,
+        }),
+      });
+
+      applyRoomSystemUpdate(nextRoom, 'Room switched');
+      sendSignal({
+        type: 'room-system-changed',
+        username: username || 'Host',
+        room: nextRoom,
+      });
+    } catch (err) {
+      setError(err.message);
+      addLog(`Room switch failed: ${err.message}`);
+    } finally {
+      setSwitchingSystem(false);
+    }
+  }
+
   const displayedPlayers = isSoloMode
     ? [
       {
@@ -2312,6 +2439,24 @@ export default function RoomPage() {
 
       if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
         setRemoteConnected(false);
+        if (isHostRef.current && !isMultiPeerParty) {
+          activeGuestSignalIdRef.current = '';
+          activePeerSignalIdRef.current = '';
+          pendingIceCandidatesRef.current = [];
+          localOfferRef.current = null;
+          setGuestDisplayName('');
+          setGuestPrepared(false);
+          guestPreparedRef.current = false;
+          if (pc.connectionState === 'failed') {
+            pcRef.current?.close();
+            pcRef.current = null;
+            setHostStarted(false);
+            hostStartedRef.current = false;
+            hostStartingRef.current = false;
+            setRoomSessionKey((key) => key + 1);
+            setStatus('Guest left. Start host session again when the next player joins.');
+          }
+        }
       }
     };
 
@@ -2401,7 +2546,7 @@ export default function RoomPage() {
       serialOfferStartedRef.current = false;
       pc.close();
     };
-  }, [addLog, configureSerialChannel, isAmigaLink, isSoloMode]);
+  }, [addLog, configureSerialChannel, isAmigaLink, isMultiPeerParty, isSoloMode, roomSessionKey]);
 
   useEffect(() => {
     if (!isAmigaLink || !isHost || !signalingOpen || !room || serialOfferStartedRef.current) return;
@@ -4017,6 +4162,7 @@ export default function RoomPage() {
             {canControlLocalEmulator ? (
               <>
                 <iframe
+                  key={`${roomSystem}-${roomSessionKey}`}
                   ref={emulatorFrameRef}
                   className={isArcade ? 'arcade-emulator-frame' : undefined}
                   title={emulatorTitle}
@@ -4120,6 +4266,31 @@ export default function RoomPage() {
                     flexWrap: 'wrap',
                   }}
                 >
+                  {isHost && !isSoloMode ? (
+                    <div className="room-system-switch">
+                      <label>
+                        <span>System</span>
+                        <select
+                          value={selectedRoomSystem}
+                          onChange={(event) => setSelectedRoomSystem(event.target.value)}
+                          disabled={switchingSystem}
+                        >
+                          {ROOM_SYSTEM_OPTIONS.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={switchRoomSystem}
+                        disabled={switchingSystem || selectedRoomSystem === roomSystem}
+                      >
+                        {switchingSystem ? 'Switching...' : 'Switch system'}
+                      </button>
+                    </div>
+                  ) : null}
+
                   {!isAtariSt ? (
                     <button type="button" onClick={startHostSession} disabled={hostStarted || (isAmigaAga && !loadedDiskName)}>
                       {isAmigaAga && !loadedDiskName

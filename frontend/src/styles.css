@@ -1796,6 +1796,34 @@ input:focus {
   font-size: 0.88rem;
 }
 
+.room-system-switch {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.room-system-switch label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.room-system-switch select {
+  width: min(260px, 70vw);
+  min-height: 40px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-strong);
+  color: #efeae0;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .arcade-config {
   display: grid;
   grid-template-columns: minmax(150px, 0.8fr) minmax(130px, 0.7fr) minmax(180px, 1fr);

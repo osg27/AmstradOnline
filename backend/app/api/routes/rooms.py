@@ -11,7 +11,7 @@ from app.core.security import decode_access_token
 from app.models.room import Room, RoomActivity
 from app.models.friendship import RoomInvite
 from app.models.user import User
-from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomHeartbeatRequest, RoomJoinRequest, RoomResponse
+from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomHeartbeatRequest, RoomJoinRequest, RoomResponse, RoomUpdateRequest
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", "playstation", "atarist", "mastersystem", "arcade"}
@@ -69,6 +69,16 @@ def require_system_access(db: Session, user_id: int, system: str, *, creating: b
             raise HTTPException(status_code=403, detail="This system is currently being tested")
 
 
+def serialize_room(room: Room) -> RoomResponse:
+    return RoomResponse(
+        room_code=room.room_code,
+        status=room.status,
+        owner_user_id=room.owner_user_id,
+        system=room.system or "cpc",
+        party_max_players=room.party_max_players or 2,
+    )
+
+
 @router.post("/create", response_model=RoomCreateResponse)
 def create_room(
     payload: RoomCreateRequest | None = None,
@@ -118,13 +128,30 @@ def join_room(
     ).delete(synchronize_session=False)
     db.commit()
 
-    return RoomResponse(
-        room_code=room.room_code,
-        status=room.status,
-        owner_user_id=room.owner_user_id,
-        system=room.system or "cpc",
-        party_max_players=room.party_max_players or 2,
-    )
+    return serialize_room(room)
+
+
+@router.patch("/{room_code}", response_model=RoomResponse)
+def update_room(
+    room_code: str,
+    payload: RoomUpdateRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room.owner_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Only the room host can change the system")
+
+    require_system_access(db, user_id, payload.system, creating=True)
+    room.system = payload.system
+    room.party_max_players = payload.party_max_players if payload.system in {"cpc_party", "arcade"} else 2
+    room.current_game = None
+    db.commit()
+    db.refresh(room)
+
+    return serialize_room(room)
 
 
 @router.post("/{room_code}/heartbeat", status_code=204)
@@ -185,10 +212,4 @@ def get_room(
         raise HTTPException(status_code=404, detail="Room not found")
     require_system_access(db, user_id, room.system or "cpc")
 
-    return RoomResponse(
-        room_code=room.room_code,
-        status=room.status,
-        owner_user_id=room.owner_user_id,
-        system=room.system or "cpc",
-        party_max_players=room.party_max_players or 2,
-    )
+    return serialize_room(room)
