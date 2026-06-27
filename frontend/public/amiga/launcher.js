@@ -180,6 +180,16 @@ function sendKickstartToEmulator() {
     cmd: "load",
     kickstart_rom: customKickstartRom,
   });
+  [200, 700, 1400].forEach((delay) => {
+    window.setTimeout(() => {
+      if (customKickstartRom) {
+        postToEmulator({
+          cmd: "load",
+          kickstart_rom: customKickstartRom,
+        });
+      }
+    }, delay);
+  });
 
   sentFileLoadId = 0;
   window.setTimeout(sendPendingFileToEmulator, 600);
@@ -198,6 +208,7 @@ function startEmulator() {
 
   const config = {
     AROS: !customKickstartRom,
+    wait_for_kickstart_injection: Boolean(customKickstartRom),
     navbar: false,
     wide: true,
     border: 0.3,
