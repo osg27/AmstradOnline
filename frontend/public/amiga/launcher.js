@@ -180,19 +180,8 @@ function sendKickstartToEmulator() {
     cmd: "load",
     kickstart_rom: customKickstartRom,
   });
-  [200, 700, 1400].forEach((delay) => {
-    window.setTimeout(() => {
-      if (customKickstartRom) {
-        postToEmulator({
-          cmd: "load",
-          kickstart_rom: customKickstartRom,
-        });
-      }
-    }, delay);
-  });
 
   sentFileLoadId = 0;
-  window.setTimeout(sendPendingFileToEmulator, 600);
 }
 
 function startEmulator() {
@@ -236,7 +225,7 @@ function loadAmigaFile(fileName, bytes) {
   }
 
   resetAmiga();
-  window.setTimeout(sendPendingFileToEmulator, 600);
+  window.setTimeout(sendPendingFileToEmulator, 1200);
 }
 
 function swapAmigaDisk(fileName, bytes) {
@@ -484,9 +473,8 @@ window.addEventListener("message", (event) => {
   if (data.msg === "render_run_state") {
     if (customKickstartRom) {
       sendKickstartToEmulator();
-    } else {
-      sendPendingFileToEmulator();
     }
+    sendPendingFileToEmulator();
     connectNestedAmigaAudio();
     return;
   }
