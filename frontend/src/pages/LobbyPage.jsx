@@ -114,6 +114,21 @@ const PLATFORM_SHELVES = [
               link: { enabled: false, note: 'Not available yet' },
             },
           },
+          {
+            id: 'atari8',
+            name: 'Atari 400/800 XL',
+            shortName: 'A8',
+            accent: 'ruby',
+            summary: 'Atari 8-bit games with disk, executable, cartridge and joystick support.',
+            formats: '.atr .xex .car .rom .cas .zip',
+            testing: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
         ],
       },
       {

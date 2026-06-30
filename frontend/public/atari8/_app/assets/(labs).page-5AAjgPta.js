@@ -1,0 +1,1 @@
+import{i as e,r as t,t as n}from"./index-DKhXWaQL.js";import{n as r,t as i}from"./placeholder-DF-vmrsZ.js";function a(){let a=t.pages.labs;return e({title:a.title}),n(r,{heading:a.heading,children:n(i,{href:`/labs/keyboard`,children:a.keyboard})})}export{a as default};
