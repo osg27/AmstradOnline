@@ -4,7 +4,7 @@ import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import SocialSidebar from '../components/SocialSidebar';
 import amstradLogoUrl from '../../assets/AmstradLogo.png';
-import c64LogoUrl from '../../assets/Commodore_64.png';
+import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
 import megaDriveLogoUrl from '../../assets/sega-mega-drive-log.png';
 import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
@@ -642,7 +642,12 @@ export default function LobbyPage() {
                     <span className="system-identity">
                       <span className="system-logo-wrap">
                         {system.logo ? (
-                          <img src={system.logo} alt="" className="system-logo" aria-hidden="true" />
+                          <img
+                            src={system.logo}
+                            alt=""
+                            className={`system-logo system-logo-${system.id}`}
+                            aria-hidden="true"
+                          />
                         ) : (
                           <span className="system-logo-fallback">{system.shortName}</span>
                         )}
