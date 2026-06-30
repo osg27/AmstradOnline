@@ -104,7 +104,7 @@ const PLATFORM_SHELVES = [
             shortName: 'C64',
             accent: 'amber',
             logo: c64LogoUrl,
-            summary: 'Commodore 64 games powered by a local VICE WASM runtime.',
+            summary: 'Classic C64 games with joystick and keyboard support.',
             formats: '.d64 .t64 .tap .prg .crt .zip',
             testing: true,
             modes: {
@@ -127,7 +127,7 @@ const PLATFORM_SHELVES = [
             shortName: 'ST',
             accent: 'ruby',
             logo: atariStLogoUrl,
-            summary: 'Atari ST games powered by Hatari with keyboard, mouse, joystick, and multi-disk support.',
+            summary: 'Atari ST games with keyboard, mouse, joystick, and multi-disk support.',
             formats: '.st .msa .stx .ipf',
             superAdminOnly: true,
             modes: {
@@ -212,7 +212,7 @@ const PLATFORM_SHELVES = [
             shortName: 'NES',
             accent: 'ruby',
             logo: nesLogoUrl,
-            summary: 'NES games powered by the EmulatorJS FCEUmm core.',
+            summary: 'NES games with classic pad controls.',
             formats: '.nes',
             testing: true,
             modes: {
@@ -307,12 +307,12 @@ const PLATFORM_SHELVES = [
     id: 'arcade',
     label: 'Arcade',
     kicker: 'Cabinets, coins, chaos',
-    strapline: 'MAME rooms for one-on-one and party cabinet games.',
+    strapline: 'Arcade rooms for one-on-one and party cabinet games.',
     eras: [
       {
         id: 'mame',
         label: 'MAME',
-        strapline: 'Arcade boards powered by MAME 2003-Plus.',
+        strapline: 'Cabinet classics ready for online play.',
         systems: [
           {
             id: 'arcade',
@@ -320,7 +320,7 @@ const PLATFORM_SHELVES = [
             shortName: 'MAME',
             accent: 'gold',
             logo: arcadeLogoUrl,
-            summary: 'Arcade games using the MAME 2003-Plus ROM set.',
+            summary: 'Arcade cabinet games for solo, online, and party play.',
             formats: '.zip',
             testing: true,
             modes: {
@@ -690,9 +690,20 @@ export default function LobbyPage() {
 
           <aside className="mode-panel" aria-label="Play modes">
             <div className="mode-head">
-              <span>{selectedSystem?.shortName || selectedGroup?.label}</span>
+              {selectedSystem?.logo ? (
+                <div className="mode-logo-wrap">
+                  <img
+                    src={selectedSystem.logo}
+                    alt=""
+                    className="mode-logo"
+                    aria-hidden="true"
+                  />
+                </div>
+              ) : (
+                <span className="mode-system-pill">{selectedSystem?.shortName || selectedGroup?.label}</span>
+              )}
               <h2>{selectedSystem?.name || 'Choose a system'}</h2>
-              <p>{selectedSystem?.summary || 'Pick a shelf with available systems to start a room.'}</p>
+              {!selectedSystem ? <p>Pick a shelf with available systems to start a room.</p> : null}
             </div>
 
             {selectedSystem ? (
