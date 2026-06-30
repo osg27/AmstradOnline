@@ -84,15 +84,6 @@ const SINCLAIR_KEYS = {
   },
 };
 
-const CURSOR_KEYS = {
-  up: "ArrowUp",
-  down: "ArrowDown",
-  left: "ArrowLeft",
-  right: "ArrowRight",
-  fire: "0",
-  extra: "n",
-};
-
 function getKeyName(key) {
   if (key === " ") return "Space";
   if (key === "ArrowUp") return "ArrowUp";
@@ -133,14 +124,6 @@ function getQaopKeys(player) {
     fire: "m",
     extra: null,
   };
-}
-
-function getLiveJoystickKeys(player) {
-  if (player === 2) {
-    return getJoystickKeys(2);
-  }
-
-  return CURSOR_KEYS;
 }
 
 function getInputKeys(key, player) {
@@ -225,15 +208,16 @@ function applyInput(key, action, player) {
 }
 
 function getJoystickMaskKeys(player) {
-  const joystickKeys = getLiveJoystickKeys(player);
+  const joystickKeys = getJoystickKeys(player);
+  const qaopKeys = getQaopKeys(player);
 
   return [
-    { bit: 1, keys: [joystickKeys.up] },
-    { bit: 2, keys: [joystickKeys.down] },
-    { bit: 4, keys: [joystickKeys.left] },
-    { bit: 8, keys: [joystickKeys.right] },
-    { bit: 16, keys: [joystickKeys.fire, "m"] },
-    { bit: 32, keys: [joystickKeys.extra] },
+    { bit: 1, keys: [qaopKeys.up, joystickKeys.up] },
+    { bit: 2, keys: [qaopKeys.down, joystickKeys.down] },
+    { bit: 4, keys: [qaopKeys.left, joystickKeys.left] },
+    { bit: 8, keys: [qaopKeys.right, joystickKeys.right] },
+    { bit: 16, keys: [qaopKeys.fire, joystickKeys.fire] },
+    { bit: 32, keys: [qaopKeys.extra, joystickKeys.extra] },
   ];
 }
 
