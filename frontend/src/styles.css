@@ -1204,8 +1204,10 @@ input:focus {
 .system-logo-amiga,
 .system-logo-amiga_aga,
 .system-logo-arcade,
+.system-logo-nes,
 .system-logo-pcengine,
-.system-logo-playstation {
+.system-logo-playstation,
+.system-logo-snes {
   width: min(190px, 100%);
   max-height: 50px;
 }

@@ -4,15 +4,17 @@ import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import SocialSidebar from '../components/SocialSidebar';
 import amiga500LogoUrl from '../../assets/amiga500.svg';
-import amiga1200LogoUrl from '../../assets/Commodore-Amiga-1200-pi-edition-Logo-Vector.svg-.png';
+import amiga1200LogoUrl from '../../assets/amiga1200.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
 import arcadeLogoUrl from '../../assets/MAMELogo.svg';
 import atariStLogoUrl from '../../assets/atari-st.webp';
 import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
 import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
+import nesLogoUrl from '../../assets/NES_logo.svg.webp';
 import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
 import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
+import snesLogoUrl from '../../assets/SNES_logo.svg.webp';
 import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
 
 const PLAY_MODES = {
@@ -209,6 +211,7 @@ const PLATFORM_SHELVES = [
             name: 'Nintendo Entertainment System',
             shortName: 'NES',
             accent: 'ruby',
+            logo: nesLogoUrl,
             summary: 'NES games powered by the EmulatorJS FCEUmm core.',
             formats: '.nes',
             testing: true,
@@ -246,6 +249,7 @@ const PLATFORM_SHELVES = [
             name: 'SNES',
             shortName: 'SNES',
             accent: 'amber',
+            logo: snesLogoUrl,
             summary: 'SNES games with two-player controls.',
             formats: '.sfc .smc',
             testing: true,
