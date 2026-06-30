@@ -110,7 +110,7 @@ const PLATFORM_SHELVES = [
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available yet' },
+              party: { enabled: true },
               link: { enabled: false, note: 'Not available yet' },
             },
           },
@@ -505,7 +505,7 @@ export default function LobbyPage() {
       }
 
       const roomSystem = modeConfig.system || selectedSystem.id;
-      const isPartyRoom = mode === 'party' && (roomSystem === 'cpc_party' || roomSystem === 'arcade');
+      const isPartyRoom = mode === 'party' && ['cpc_party', 'c64', 'arcade'].includes(roomSystem);
       const nextPartyMaxPlayers = roomSystem === 'arcade'
         ? Math.min(4, Math.max(3, partyMaxPlayers))
         : partyMaxPlayers;
@@ -732,7 +732,7 @@ export default function LobbyPage() {
               </div>
             ) : null}
 
-            {selectedMode === 'party' && ['cpc_party', 'arcade'].includes(selectedSystem?.modes.party?.system) ? (
+            {selectedMode === 'party' && ['cpc_party', 'c64', 'arcade'].includes(selectedSystem?.modes.party?.system || selectedSystem?.id) ? (
               <label className="party-player-select mode-party-select">
                 <span>Party players</span>
                 <select

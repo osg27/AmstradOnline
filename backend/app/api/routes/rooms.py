@@ -97,7 +97,7 @@ def create_room(
         owner_user_id=user_id,
         status="waiting",
         system=system,
-        party_max_players=payload.party_max_players if system in {"cpc_party", "arcade"} and payload else 2,
+        party_max_players=payload.party_max_players if system in {"cpc_party", "c64", "arcade"} and payload else 2,
     )
     db.add(room)
     db.commit()
@@ -146,7 +146,7 @@ def update_room(
 
     require_system_access(db, user_id, payload.system, creating=True)
     room.system = payload.system
-    room.party_max_players = payload.party_max_players if payload.system in {"cpc_party", "arcade"} else 2
+    room.party_max_players = payload.party_max_players if payload.system in {"cpc_party", "c64", "arcade"} else 2
     room.current_game = None
     db.commit()
     db.refresh(room)
