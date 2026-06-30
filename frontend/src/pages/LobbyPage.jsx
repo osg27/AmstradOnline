@@ -3,10 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import SocialSidebar from '../components/SocialSidebar';
-import amstradLogoUrl from '../../assets/AmstradLogo.png';
+import amiga500LogoUrl from '../../assets/amiga500.svg';
+import amiga1200LogoUrl from '../../assets/Commodore-Amiga-1200-pi-edition-Logo-Vector.svg-.png';
+import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
+import arcadeLogoUrl from '../../assets/MAMELogo.svg';
+import atariStLogoUrl from '../../assets/atari-st.webp';
 import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
-import megaDriveLogoUrl from '../../assets/sega-mega-drive-log.png';
+import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
+import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
+import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
 import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
 
 const PLAY_MODES = {
@@ -64,6 +70,7 @@ const PLATFORM_SHELVES = [
             name: 'Amstrad Pinball Dreams',
             shortName: 'CPC PD',
             accent: 'violet',
+            logo: amstradLogoUrl,
             summary: 'A separate CPC compatibility room for Pinball Dreams experiments.',
             formats: '.dsk',
             superAdminOnly: true,
@@ -117,6 +124,7 @@ const PLATFORM_SHELVES = [
             name: 'Atari ST',
             shortName: 'ST',
             accent: 'ruby',
+            logo: atariStLogoUrl,
             summary: 'Atari ST games powered by Hatari with keyboard, mouse, joystick, and multi-disk support.',
             formats: '.st .msa .stx .ipf',
             superAdminOnly: true,
@@ -132,6 +140,7 @@ const PLATFORM_SHELVES = [
             name: 'Commodore Amiga',
             shortName: 'A500',
             accent: 'blue',
+            logo: amiga500LogoUrl,
             summary: 'Amiga 500 games with joystick and mouse support.',
             formats: '.adf .zip',
             modes: {
@@ -153,6 +162,7 @@ const PLATFORM_SHELVES = [
             name: 'Amiga AGA',
             shortName: 'A1200',
             accent: 'blue',
+            logo: amiga1200LogoUrl,
             summary: 'Amiga 1200 and AGA games. Multi-disk games are supported.',
             formats: '.adf .zip',
             testing: true,
@@ -251,6 +261,7 @@ const PLATFORM_SHELVES = [
             name: 'PC Engine / TurboGrafx-16',
             shortName: 'PCE',
             accent: 'gold',
+            logo: pcEngineLogoUrl,
             summary: 'PC Engine and TurboGrafx-16 HuCard games.',
             formats: '.pce .sgx .zip',
             testing: true,
@@ -273,6 +284,7 @@ const PLATFORM_SHELVES = [
             name: 'Sony PlayStation',
             shortName: 'PS1',
             accent: 'violet',
+            logo: playStationLogoUrl,
             summary: 'Original PlayStation games using a locally supplied BIOS.',
             formats: '.cue/.bin .chd .pbp .iso .zip .7z',
             testing: true,
@@ -303,6 +315,7 @@ const PLATFORM_SHELVES = [
             name: 'MAME Arcade',
             shortName: 'MAME',
             accent: 'gold',
+            logo: arcadeLogoUrl,
             summary: 'Arcade games using the MAME 2003-Plus ROM set.',
             formats: '.zip',
             testing: true,
