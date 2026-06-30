@@ -11,7 +11,7 @@ import atariStLogoUrl from '../../assets/atari-st.webp';
 import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
 import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
-import nesLogoUrl from '../../assets/NES_logo.svg.webp';
+import nesLogoUrl from '../../assets/59db13187bf21468ce403a95096fbd14.png';
 import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
 import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
 import snesLogoUrl from '../../assets/SNES_logo.svg.webp';
