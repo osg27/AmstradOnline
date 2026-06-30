@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import SocialSidebar from '../components/SocialSidebar';
+import amstradLogoUrl from '../../assets/AmstradLogo.png';
+import c64LogoUrl from '../../assets/Commodore_64.png';
+import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
+import megaDriveLogoUrl from '../../assets/sega-mega-drive-log.png';
+import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
 
 const PLAY_MODES = {
   solo: {
@@ -44,6 +49,7 @@ const PLATFORM_SHELVES = [
             name: 'Amstrad CPC',
             shortName: 'CPC',
             accent: 'green',
+            logo: amstradLogoUrl,
             summary: 'Load a disk and play. Party Mode is also available.',
             formats: '.dsk',
             modes: {
@@ -73,6 +79,7 @@ const PLATFORM_SHELVES = [
             name: 'ZX Spectrum',
             shortName: 'ZX',
             accent: 'ruby',
+            logo: spectrumLogoUrl,
             summary: 'Load a Spectrum game and play.',
             formats: '.tap .tzx .z80 .sna .szx',
             modes: {
@@ -87,6 +94,7 @@ const PLATFORM_SHELVES = [
             name: 'Commodore 64',
             shortName: 'C64',
             accent: 'amber',
+            logo: c64LogoUrl,
             summary: 'Commodore 64 games powered by a local VICE WASM runtime.',
             formats: '.d64 .t64 .tap .prg .crt .zip',
             testing: true,
@@ -175,6 +183,7 @@ const PLATFORM_SHELVES = [
             name: 'Sega Master System',
             shortName: 'SMS',
             accent: 'violet',
+            logo: masterSystemLogoUrl,
             summary: 'Master System games with two-player controls.',
             formats: '.sms',
             testing: true,
@@ -212,6 +221,7 @@ const PLATFORM_SHELVES = [
             name: 'Mega Drive',
             shortName: 'MD',
             accent: 'violet',
+            logo: megaDriveLogoUrl,
             summary: 'Mega Drive games with two-player controls.',
             formats: '.bin .gen .md .smd',
             modes: {
@@ -629,7 +639,16 @@ export default function LobbyPage() {
                     onClick={() => chooseSystem(system)}
                     aria-disabled={system.locked}
                   >
-                    <span className="system-short">{system.shortName}</span>
+                    <span className="system-identity">
+                      <span className="system-logo-wrap">
+                        {system.logo ? (
+                          <img src={system.logo} alt="" className="system-logo" aria-hidden="true" />
+                        ) : (
+                          <span className="system-logo-fallback">{system.shortName}</span>
+                        )}
+                      </span>
+                      <span className="system-short">{system.shortName}</span>
+                    </span>
                     <span className="system-name">{system.name}</span>
                     <span className="system-summary">{system.summary}</span>
                     <span className="system-foot">
