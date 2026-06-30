@@ -104,54 +104,31 @@ function getJoystickKeys(player) {
   return SINCLAIR_KEYS[player === 2 ? 2 : 1];
 }
 
-function getQaopKeys(player) {
-  if (player === 2) {
-    return {
-      up: null,
-      down: null,
-      left: null,
-      right: null,
-      fire: null,
-      extra: null,
-    };
-  }
-
-  return {
-    up: "q",
-    down: "a",
-    left: "o",
-    right: "p",
-    fire: "m",
-    extra: null,
-  };
-}
-
 function getInputKeys(key, player) {
   const keyName = getKeyName(key);
   if (!keyName) return [];
 
   const joystickKeys = getJoystickKeys(player);
-  const qaopKeys = getQaopKeys(player);
 
   switch (keyName) {
     case "ArrowUp":
     case "q":
-      return [qaopKeys.up, joystickKeys.up];
+      return [joystickKeys.up];
     case "ArrowDown":
     case "a":
-      return [qaopKeys.down, joystickKeys.down];
+      return [joystickKeys.down];
     case "ArrowLeft":
     case "o":
-      return [qaopKeys.left, joystickKeys.left];
+      return [joystickKeys.left];
     case "ArrowRight":
     case "p":
-      return [qaopKeys.right, joystickKeys.right];
-    case "m":
+      return [joystickKeys.right];
+    case "x":
     case "f":
-      return [qaopKeys.fire, joystickKeys.fire];
+      return [joystickKeys.fire];
     case "z":
     case "g":
-      return [qaopKeys.extra, joystickKeys.extra];
+      return [joystickKeys.extra];
     default:
       return [keyName];
   }
@@ -209,15 +186,14 @@ function applyInput(key, action, player) {
 
 function getJoystickMaskKeys(player) {
   const joystickKeys = getJoystickKeys(player);
-  const qaopKeys = getQaopKeys(player);
 
   return [
-    { bit: 1, keys: [qaopKeys.up, joystickKeys.up] },
-    { bit: 2, keys: [qaopKeys.down, joystickKeys.down] },
-    { bit: 4, keys: [qaopKeys.left, joystickKeys.left] },
-    { bit: 8, keys: [qaopKeys.right, joystickKeys.right] },
-    { bit: 16, keys: [qaopKeys.fire, joystickKeys.fire] },
-    { bit: 32, keys: [qaopKeys.extra, joystickKeys.extra] },
+    { bit: 1, keys: [joystickKeys.up] },
+    { bit: 2, keys: [joystickKeys.down] },
+    { bit: 4, keys: [joystickKeys.left] },
+    { bit: 8, keys: [joystickKeys.right] },
+    { bit: 16, keys: [joystickKeys.fire] },
+    { bit: 32, keys: [joystickKeys.extra] },
   ];
 }
 
