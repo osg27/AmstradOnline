@@ -695,7 +695,7 @@ export default function LobbyPage() {
                   <img
                     src={selectedSystem.logo}
                     alt=""
-                    className="mode-logo"
+                    className={`mode-logo mode-logo-${selectedSystem.id}`}
                     aria-hidden="true"
                   />
                 </div>
