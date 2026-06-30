@@ -109,23 +109,24 @@ function getInputKeys(key, player) {
   if (!keyName) return [];
 
   const joystickKeys = getJoystickKeys(player);
+  const qaopKeys = player === 2 ? [] : ["q", "a", "o", "p", "m"];
 
   switch (keyName) {
     case "ArrowUp":
     case "q":
-      return [joystickKeys.up];
+      return [qaopKeys[0], joystickKeys.up];
     case "ArrowDown":
     case "a":
-      return [joystickKeys.down];
+      return [qaopKeys[1], joystickKeys.down];
     case "ArrowLeft":
     case "o":
-      return [joystickKeys.left];
+      return [qaopKeys[2], joystickKeys.left];
     case "ArrowRight":
     case "p":
-      return [joystickKeys.right];
+      return [qaopKeys[3], joystickKeys.right];
     case "x":
     case "f":
-      return [joystickKeys.fire];
+      return [qaopKeys[4], joystickKeys.fire, player === 2 ? null : "Space", player === 2 ? null : " "];
     case "z":
     case "g":
       return [joystickKeys.extra];
@@ -186,14 +187,17 @@ function applyInput(key, action, player) {
 
 function getJoystickMaskKeys(player) {
   const joystickKeys = getJoystickKeys(player);
+  const qaopKeys = player === 2
+    ? { up: null, down: null, left: null, right: null, fire: null, extra: null }
+    : { up: "q", down: "a", left: "o", right: "p", fire: "m", extra: null };
 
   return [
-    { bit: 1, keys: [joystickKeys.up] },
-    { bit: 2, keys: [joystickKeys.down] },
-    { bit: 4, keys: [joystickKeys.left] },
-    { bit: 8, keys: [joystickKeys.right] },
-    { bit: 16, keys: [joystickKeys.fire] },
-    { bit: 32, keys: [joystickKeys.extra] },
+    { bit: 1, keys: [qaopKeys.up, joystickKeys.up] },
+    { bit: 2, keys: [qaopKeys.down, joystickKeys.down] },
+    { bit: 4, keys: [qaopKeys.left, joystickKeys.left] },
+    { bit: 8, keys: [qaopKeys.right, joystickKeys.right] },
+    { bit: 16, keys: [qaopKeys.fire, joystickKeys.fire, player === 2 ? null : "Space", player === 2 ? null : " "] },
+    { bit: 32, keys: [qaopKeys.extra, joystickKeys.extra] },
   ];
 }
 
