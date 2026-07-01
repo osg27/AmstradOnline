@@ -1,0 +1,1 @@
+import{i as e,r as t,t as n}from"./index-BRqtpgCJ.js";import{n as r,t as i}from"./placeholder-gLVnz3qc.js";function a(){let a=t.pages.atari;return e({title:a.title}),n(r,{heading:a.heading,children:[n(i,{href:`/a8/emu`,children:a.emu}),n(i,{href:`/a8/reference`,children:a.reference})]})}export{a as default};
