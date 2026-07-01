@@ -1,1 +1,0 @@
-import{i as e,r as t,t as n}from"./index-DKhXWaQL.js";import{n as r,t as i}from"./placeholder-DF-vmrsZ.js";function a(){let a=t.pages.reference;return e({title:a.title}),n(r,{heading:a.heading,children:n(i,{href:`/a8/reference/atascii-and-keyboard`,children:a.atasciiKeyboard})})}export{a as default};
