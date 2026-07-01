@@ -67,6 +67,7 @@ const CONTROL_DIRECTIONS = [
 
 const CONTROL_UTILITY_ACTIONS = ['fire2', 'pause', 'start', 'quit'];
 const ATARI8_ZIP_EXTENSIONS = ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas'];
+const ATARI8_ZIP_EXTENSION_PRIORITY = ['.xex', '.com', '.car', '.rom', '.bin', '.atr', '.xfd', '.atx', '.cas'];
 
 function normaliseSearchText(value) {
   return String(value || '')
@@ -138,6 +139,12 @@ function shouldAutoSelectControlMatch(matches) {
   return best.score >= 110 || (best.score >= 92 && (!next || best.score - next.score >= 12));
 }
 
+function atari8ZipEntryPriority(entryName) {
+  const lowerName = entryName.toLowerCase();
+  const index = ATARI8_ZIP_EXTENSION_PRIORITY.findIndex((extension) => lowerName.endsWith(extension));
+  return index === -1 ? ATARI8_ZIP_EXTENSION_PRIORITY.length : index;
+}
+
 function formatControlAction(action) {
   return CONTROL_ACTION_LABELS[action] || action.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
 }
@@ -184,7 +191,11 @@ async function expandAtari8ZipFile(file) {
       const lowerName = entryName.toLowerCase();
       return !lowerName.endsWith('/') && ATARI8_ZIP_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
     })
-    .sort(([leftName], [rightName]) => leftName.localeCompare(rightName, undefined, { numeric: true, sensitivity: 'base' }));
+    .sort(([leftName], [rightName]) => {
+      const leftPriority = atari8ZipEntryPriority(leftName);
+      const rightPriority = atari8ZipEntryPriority(rightName);
+      return leftPriority - rightPriority || leftName.localeCompare(rightName, undefined, { numeric: true, sensitivity: 'base' });
+    });
 
   if (!entries.length) {
     throw new Error('Atari 8-bit zip files need to contain an .atr, .xex, .car, .rom, .bin, or .cas file');
