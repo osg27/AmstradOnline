@@ -16,7 +16,7 @@
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
   const nativeFetch = window.fetch.bind(window);
-  const coreCacheVersion = '2026-07-01-1';
+  const coreCacheVersion = '2026-07-01-2';
 
   if (!window.__oldStyleNesCanvasContextPatched) {
     window.__oldStyleNesCanvasContextPatched = true;
