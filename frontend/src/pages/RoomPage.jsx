@@ -1050,6 +1050,17 @@ export default function RoomPage() {
     hostAudioStreamRef.current = nextAudioStream || null;
   }, [emulatorSrc, isPcEngine, isSoloMode]);
 
+  const reloadNesFrame = useCallback(async () => {
+    const frame = emulatorFrameRef.current;
+    if (!frame || !isNes) return;
+
+    await new Promise((resolve) => {
+      frame.addEventListener('load', resolve, { once: true });
+      const separator = emulatorSrc.includes('?') ? '&' : '?';
+      frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
+    });
+  }, [emulatorSrc, isNes]);
+
   const reloadPlayStationFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
     if (!frame || !isPlayStation) return;
@@ -4015,6 +4026,10 @@ export default function RoomPage() {
       if (isPcEngine && loadedDiskName) {
         setStatus('Preparing a clean PC Engine runtime');
         await reloadPcEngineFrame();
+      }
+      if (isNes && loadedDiskName) {
+        setStatus('Preparing a clean NES runtime');
+        await reloadNesFrame();
       }
       if (isPlayStation && loadedDiskName) {
         setStatus('Preparing a clean PlayStation runtime');
