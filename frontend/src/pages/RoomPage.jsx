@@ -1052,13 +1052,20 @@ export default function RoomPage() {
 
   const reloadNesFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
-    if (!frame || !isNes) return;
+    if (!frame || !isNes) return null;
+
+    if (mirrorLoopRef.current) {
+      cancelAnimationFrame(mirrorLoopRef.current);
+      mirrorLoopRef.current = null;
+    }
 
     await new Promise((resolve) => {
       frame.addEventListener('load', resolve, { once: true });
       const separator = emulatorSrc.includes('?') ? '&' : '?';
       frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
     });
+
+    return frame;
   }, [emulatorSrc, isNes]);
 
   const reloadPlayStationFrame = useCallback(async () => {
@@ -4027,9 +4034,11 @@ export default function RoomPage() {
         setStatus('Preparing a clean PC Engine runtime');
         await reloadPcEngineFrame();
       }
+      let reloadedNesFrame = null;
+
       if (isNes && loadedDiskName) {
         setStatus('Preparing a clean NES runtime');
-        await reloadNesFrame();
+        reloadedNesFrame = await reloadNesFrame();
       }
       if (isPlayStation && loadedDiskName) {
         setStatus('Preparing a clean PlayStation runtime');
@@ -4043,6 +4052,11 @@ export default function RoomPage() {
         await reloadAtariStFrame();
       }
       forwardInputToEmulator(loadMessage);
+
+      if (reloadedNesFrame) {
+        const emulatorCanvas = await waitForEmulatorCanvas(reloadedNesFrame);
+        startMirrorLoop(emulatorCanvas);
+      }
 
       if (isArcade || isAmigaAga || isAtariSt) {
         if (!hostStartedRef.current && !hostStartingRef.current) {
