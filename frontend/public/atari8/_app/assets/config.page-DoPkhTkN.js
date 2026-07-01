@@ -1,0 +1,1 @@
+import{r as e,t}from"./index-Bpxm0n2r.js";import{n}from"./emu-context-CwBjvn2M.js";import{t as r}from"./sidebar-C4T8AiWB.js";import{t as i}from"./panel-frame-Dtgb1aF2.js";function a(){let{host:a}=n();return t(i,{title:e.sidebar.titleConfig,children:t(r,{host:a})})}export{a as default};
