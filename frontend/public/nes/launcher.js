@@ -16,7 +16,27 @@
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
   const nativeFetch = window.fetch.bind(window);
-  const coreCacheVersion = '2026-06-19-3';
+  const coreCacheVersion = '2026-07-01-1';
+
+  if (!window.__oldStyleNesCanvasContextPatched) {
+    window.__oldStyleNesCanvasContextPatched = true;
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function patchedGetContext(type, attributes) {
+      const contextType = String(type || '').toLowerCase();
+      const isWebGl = contextType === 'webgl' || contextType === 'webgl2' || contextType === 'experimental-webgl';
+
+      if (isWebGl && (this.classList?.contains('ejs_canvas') || this.closest?.('#game'))) {
+        return originalGetContext.call(this, type, {
+          ...(attributes || {}),
+          alpha: false,
+          desynchronized: false,
+          preserveDrawingBuffer: true,
+        });
+      }
+
+      return originalGetContext.call(this, type, attributes);
+    };
+  }
 
   window.fetch = (input, options) => {
     const inputUrl = typeof input === 'string' || input instanceof URL ? input : input?.url;
@@ -394,8 +414,22 @@
     drawStatus('NES error', event.reason?.message || 'Check browser console');
   });
 
+  function getEmulatorCanvas() {
+    const directCanvas = window.EJS_emulator?.canvas;
+    if (directCanvas?.width && directCanvas?.height) {
+      return directCanvas;
+    }
+
+    const canvases = Array.from(gameContainer.querySelectorAll('canvas'));
+    return canvases.find((canvas) => (
+      canvas.classList.contains('ejs_canvas')
+      && canvas.width
+      && canvas.height
+    )) || canvases.find((canvas) => canvas.width && canvas.height) || null;
+  }
+
   function mirrorEmulatorCanvas() {
-    const gameCanvas = gameContainer.querySelector('canvas');
+    const gameCanvas = getEmulatorCanvas();
 
     if (gameCanvas && gameCanvas.width && gameCanvas.height) {
       context.fillStyle = '#000';
