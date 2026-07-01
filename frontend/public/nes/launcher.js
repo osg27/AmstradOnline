@@ -13,11 +13,10 @@
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
   let statusText = 'NES ready';
-  let stableFrameSize = null;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
   const nativeFetch = window.fetch.bind(window);
-  const coreCacheVersion = '2026-07-01-3';
+  const coreCacheVersion = '2026-07-01-4';
 
   if (!window.__oldStyleNesCanvasContextPatched) {
     window.__oldStyleNesCanvasContextPatched = true;
@@ -258,7 +257,6 @@
 
     gameContainer.innerHTML = '';
     window.EJS_emulator = null;
-    stableFrameSize = null;
     lastSimulatedMasks = [0, 0];
     if (loaderScript) {
       loaderScript.remove();
@@ -434,15 +432,8 @@
     const gameCanvas = getEmulatorCanvas();
 
     if (gameCanvas && gameCanvas.width && gameCanvas.height) {
-      if (!stableFrameSize) {
-        stableFrameSize = {
-          width: gameCanvas.width,
-          height: gameCanvas.height,
-        };
-      }
-
-      const sourceWidth = Math.min(stableFrameSize.width, gameCanvas.width);
-      const sourceHeight = Math.min(stableFrameSize.height, gameCanvas.height);
+      const sourceWidth = gameCanvas.width;
+      const sourceHeight = gameCanvas.height;
       const scale = Math.min(screen.width / sourceWidth, screen.height / sourceHeight);
       const width = Math.max(1, Math.floor(sourceWidth * scale));
       const height = Math.max(1, Math.floor(sourceHeight * scale));
@@ -453,7 +444,7 @@
         context.fillStyle = '#000';
         context.fillRect(0, 0, screen.width, screen.height);
         context.imageSmoothingEnabled = false;
-        context.drawImage(gameCanvas, 0, 0, sourceWidth, sourceHeight, x, y, width, height);
+        context.drawImage(gameCanvas, x, y, width, height);
       } catch {
         // Keep the last completed frame rather than flashing black.
       }
