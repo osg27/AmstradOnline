@@ -415,7 +415,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-27-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtari8 ? '/atari8/?v=2026-07-01-1' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-23-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-06-19-3' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtari8 ? '/atari8/?v=2026-07-01-2' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-23-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -1900,6 +1900,16 @@ export default function RoomPage() {
         }
 
         addInputDebug(`forward to emulator ${formatInputPayload(parsed)}`);
+        if (isAtari8) {
+          forwardInputToEmulator({
+            type: 'atari8_keyboard',
+            action: parsed.action,
+            key: parsed.key,
+            code: parsed.code || '',
+          });
+          return;
+        }
+
         forwardInputToEmulator({
           type: 'amstrad_remote_control',
           key: parsed.key,
@@ -2044,7 +2054,7 @@ export default function RoomPage() {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
-  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isCpcParty, isDirectJoystickSystem, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAtari8, isCpcParty, isDirectJoystickSystem, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     handleGuestPayloadOnHostRef.current = handleGuestPayloadOnHost;
@@ -2720,6 +2730,24 @@ export default function RoomPage() {
         return;
       }
 
+      if (isAtari8) {
+        if (event.repeat) {
+          event.preventDefault();
+          return;
+        }
+
+        addInputDebug(`host Atari key ${event.code} down`, null, 'host keyboard');
+        forwardInputToEmulator({
+          type: 'atari8_keyboard',
+          action: 'down',
+          key: event.key,
+          code: event.code,
+        });
+
+        event.preventDefault();
+        return;
+      }
+
       const mappedKey = hostKeyToCpcKeyboardKey(key);
 
       if (mappedKey || isMenuKey(key)) {
@@ -2759,6 +2787,19 @@ export default function RoomPage() {
         return;
       }
 
+      if (isAtari8) {
+        addInputDebug(`host Atari key ${event.code} up`, null, 'host keyboard');
+        forwardInputToEmulator({
+          type: 'atari8_keyboard',
+          action: 'up',
+          key: event.key,
+          code: event.code,
+        });
+
+        event.preventDefault();
+        return;
+      }
+
       const mappedKey = hostKeyToCpcKeyboardKey(key);
 
       if (mappedKey || isMenuKey(key)) {
@@ -2786,7 +2827,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown, true);
       window.removeEventListener('keyup', handleHostKeyUp, true);
     };
-  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isCpcParty, isHost]);
+  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isAtari8, isCpcParty, isHost]);
 
   useEffect(() => {
     if (isHost !== false || isAmigaLink) return undefined;
@@ -2832,6 +2873,7 @@ export default function RoomPage() {
           type: 'key',
           player: 2,
           key,
+          code: event.code,
           action: 'down',
         };
 
@@ -2864,6 +2906,7 @@ export default function RoomPage() {
           type: 'key',
           player: 2,
           key,
+          code: event.code,
           action: 'up',
         };
 
