@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { unzipSync } from 'fflate';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
@@ -65,6 +66,7 @@ const CONTROL_DIRECTIONS = [
 ];
 
 const CONTROL_UTILITY_ACTIONS = ['fire2', 'pause', 'start', 'quit'];
+const ATARI8_ZIP_EXTENSIONS = ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas'];
 
 function normaliseSearchText(value) {
   return String(value || '')
@@ -173,6 +175,24 @@ function requestToPromise(request) {
 
 function roomSystemLabel(system) {
   return ROOM_SYSTEM_OPTIONS.find(([value]) => value === system)?.[1] || 'Amstrad CPC';
+}
+
+async function expandAtari8ZipFile(file) {
+  const archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  const entries = Object.entries(archive)
+    .filter(([entryName]) => {
+      const lowerName = entryName.toLowerCase();
+      return !lowerName.endsWith('/') && ATARI8_ZIP_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+    })
+    .sort(([leftName], [rightName]) => leftName.localeCompare(rightName, undefined, { numeric: true, sensitivity: 'base' }));
+
+  if (!entries.length) {
+    throw new Error('Atari 8-bit zip files need to contain an .atr, .xex, .car, .rom, .bin, or .cas file');
+  }
+
+  const [entryName, bytes] = entries[0];
+  const fileName = entryName.split(/[\\/]/).pop() || entryName;
+  return { fileName, bytes };
 }
 
 function clearAtari8SessionStorage() {
@@ -3909,13 +3929,16 @@ export default function RoomPage() {
         return;
       }
 
+      const atari8ZipFile = isAtari8 && file.name.toLowerCase().endsWith('.zip');
       const filesToLoad = (isAmigaAga || isPlayStation || isC64 || isAtariSt) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
-      const loadedFiles = await Promise.all(filesToLoad.map(async (selectedFile) => ({
-        fileName: selectedFile.name,
-        bytes: new Uint8Array(await selectedFile.arrayBuffer()),
-      })));
+      const loadedFiles = atari8ZipFile
+        ? [await expandAtari8ZipFile(file)]
+        : await Promise.all(filesToLoad.map(async (selectedFile) => ({
+          fileName: selectedFile.name,
+          bytes: new Uint8Array(await selectedFile.arrayBuffer()),
+        })));
       const bytes = loadedFiles[0].bytes;
 
       const loadMessage = {
@@ -3970,7 +3993,9 @@ export default function RoomPage() {
         setAtariStMediaIndex(0);
       }
 
-      const loadedLabel = loadedFiles.length > 1
+      const loadedLabel = atari8ZipFile
+        ? `${loadedFiles[0].fileName} from ${file.name}`
+        : loadedFiles.length > 1
         ? `${loadedFiles[0].fileName} + ${loadedFiles.length - 1} disk${loadedFiles.length === 2 ? '' : 's'}`
         : file.name;
       setLoadedDiskName(loadedLabel);
