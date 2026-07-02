@@ -85,7 +85,7 @@ const DEFAULT_ATARI8_CONFIG = {
   memory: 320,
   basicDisabled: true,
   tv: 'pal',
-  separateAnticAccess: true,
+  separateAnticAccess: false,
 };
 const ATARI8_ROOM_VERSION = '2026-07-02-3';
 const ATARI8_AUTO_PROFILES = [
@@ -4669,7 +4669,7 @@ export default function RoomPage() {
                         </select>
                       </label>
                       {atari8Config.memory > 64 ? (
-                        <label className="inline-toggle">
+                        <label className="inline-toggle" title="Separate ANTIC access is only needed by some memory upgrades; leave off if a game corrupts after loading.">
                           <span>ANTIC</span>
                           <input
                             type="checkbox"
