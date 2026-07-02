@@ -86,13 +86,14 @@ const DEFAULT_ATARI8_CONFIG = {
   basicDisabled: true,
   tv: 'pal',
   separateAnticAccess: false,
+  os: 'altirra',
 };
 const ATARI8_ROOM_VERSION = '2026-07-02-3';
 const ATARI8_AUTO_PROFILES = [
   {
     pattern: /(^|[^a-z0-9])yoomp([^a-z0-9]|$)/i,
-    label: 'Yoomp high-RAM PAL profile',
-    config: DEFAULT_ATARI8_CONFIG,
+    label: 'Yoomp high-RAM PAL Atari++ profile',
+    config: { ...DEFAULT_ATARI8_CONFIG, os: 'atarixx' },
   },
 ];
 
@@ -109,6 +110,7 @@ function normalizeAtari8Config(config) {
     basicDisabled: Boolean(config.basicDisabled),
     tv: config.tv === 'pal' ? 'pal' : 'ntsc',
     separateAnticAccess: memory > 64 && Boolean(config.separateAnticAccess),
+    os: config.os === 'atarixx' ? 'atarixx' : 'altirra',
   };
 }
 
@@ -121,6 +123,7 @@ function buildAtari8EmulatorSrc(config) {
     basic: normalizedConfig.basicDisabled ? 'off' : 'on',
     tv: normalizedConfig.tv,
     antic: normalizedConfig.separateAnticAccess ? '1' : '0',
+    os: normalizedConfig.os,
   });
   return `/atari8/?${params.toString()}`;
 }
