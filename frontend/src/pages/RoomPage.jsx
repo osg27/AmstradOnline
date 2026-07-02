@@ -87,6 +87,14 @@ const DEFAULT_ATARI8_CONFIG = {
   tv: 'pal',
   separateAnticAccess: true,
 };
+const ATARI8_ROOM_VERSION = '2026-07-02-3';
+const ATARI8_AUTO_PROFILES = [
+  {
+    pattern: /(^|[^a-z0-9])yoomp([^a-z0-9]|$)/i,
+    label: 'Yoomp high-RAM PAL profile',
+    config: DEFAULT_ATARI8_CONFIG,
+  },
+];
 
 function normalizeAtari8Config(config) {
   const model = ATARI8_RAM_OPTIONS[config.model] ? config.model : DEFAULT_ATARI8_CONFIG.model;
@@ -102,6 +110,24 @@ function normalizeAtari8Config(config) {
     tv: config.tv === 'pal' ? 'pal' : 'ntsc',
     separateAnticAccess: memory > 64 && Boolean(config.separateAnticAccess),
   };
+}
+
+function buildAtari8EmulatorSrc(config) {
+  const normalizedConfig = normalizeAtari8Config(config);
+  const params = new URLSearchParams({
+    v: ATARI8_ROOM_VERSION,
+    model: normalizedConfig.model,
+    memory: String(normalizedConfig.memory),
+    basic: normalizedConfig.basicDisabled ? 'off' : 'on',
+    tv: normalizedConfig.tv,
+    antic: normalizedConfig.separateAnticAccess ? '1' : '0',
+  });
+  return `/atari8/?${params.toString()}`;
+}
+
+function findAtari8AutoProfile(fileNames) {
+  const joinedNames = fileNames.filter(Boolean).join(' ');
+  return ATARI8_AUTO_PROFILES.find((profile) => profile.pattern.test(joinedNames)) || null;
 }
 
 function normaliseSearchText(value) {
@@ -460,16 +486,7 @@ export default function RoomPage() {
 
   const atari8RamOptions = ATARI8_RAM_OPTIONS[atari8Config.model] || ATARI8_RAM_OPTIONS[DEFAULT_ATARI8_CONFIG.model];
   const atari8EmulatorSrc = useMemo(() => {
-    const config = normalizeAtari8Config(atari8Config);
-    const params = new URLSearchParams({
-      v: '2026-07-02-2',
-      model: config.model,
-      memory: String(config.memory),
-      basic: config.basicDisabled ? 'off' : 'on',
-      tv: config.tv,
-      antic: config.separateAnticAccess ? '1' : '0',
-    });
-    return `/atari8/?${params.toString()}`;
+    return buildAtari8EmulatorSrc(atari8Config);
   }, [atari8Config]);
 
   const emulatorSrc = isAmigaAga
@@ -1032,6 +1049,30 @@ export default function RoomPage() {
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
     startMirrorLoop(emulatorCanvas);
   }, [emulatorSrc, isC64, isSoloMode]);
+
+  const reloadAtari8Frame = useCallback(async (configOverride = atari8Config) => {
+    const frame = emulatorFrameRef.current;
+    if (!frame || !isAtari8) return null;
+
+    if (mirrorLoopRef.current) {
+      cancelAnimationFrame(mirrorLoopRef.current);
+      mirrorLoopRef.current = null;
+    }
+
+    const src = buildAtari8EmulatorSrc(configOverride);
+    await new Promise((resolve) => {
+      frame.addEventListener('load', resolve, { once: true });
+      const separator = src.includes('?') ? '&' : '?';
+      frame.src = `${src}${separator}runtime=${Date.now()}`;
+    });
+
+    if (hostStartedRef.current) {
+      const emulatorCanvas = await waitForEmulatorCanvas(frame);
+      startMirrorLoop(emulatorCanvas);
+    }
+
+    return frame;
+  }, [atari8Config, isAtari8]);
 
   const reloadAtariStFrame = useCallback(async ({ start = false } = {}) => {
     const frame = emulatorFrameRef.current;
@@ -4073,6 +4114,15 @@ export default function RoomPage() {
           bytes: new Uint8Array(await selectedFile.arrayBuffer()),
         })));
       const bytes = loadedFiles[0].bytes;
+      const atari8AutoProfile = isAtari8
+        ? findAtari8AutoProfile([file.name, ...loadedFiles.map((loadedFile) => loadedFile.fileName)])
+        : null;
+      const atari8ProfileConfig = atari8AutoProfile
+        ? normalizeAtari8Config({ ...atari8Config, ...atari8AutoProfile.config })
+        : null;
+      const shouldApplyAtari8Profile = Boolean(
+        atari8ProfileConfig && JSON.stringify(atari8ProfileConfig) !== JSON.stringify(normalizeAtari8Config(atari8Config)),
+      );
 
       const loadMessage = {
         type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga || isAmigaLink ? 'amiga_autoload' : isSegaConsole ? 'megadrive_autoload' : isNes ? 'nes_autoload' : isSnes ? 'snes_autoload' : isPcEngine ? 'pcengine_autoload' : isPlayStation ? 'playstation_autoload' : isC64 ? 'c64_autoload' : isAtari8 ? 'atari8_autoload' : isAtariSt ? 'atarist_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
@@ -4094,6 +4144,12 @@ export default function RoomPage() {
       if (isPcEngine && loadedDiskName) {
         setStatus('Preparing a clean PC Engine runtime');
         await reloadPcEngineFrame();
+      }
+      if (shouldApplyAtari8Profile) {
+        setStatus(`Applying ${atari8AutoProfile.label}`);
+        setAtari8Config(atari8ProfileConfig);
+        await reloadAtari8Frame(atari8ProfileConfig);
+        addLog(`Applied Atari profile: ${atari8AutoProfile.label}`);
       }
       let reloadedNesFrame = null;
 
