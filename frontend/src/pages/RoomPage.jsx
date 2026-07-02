@@ -86,9 +86,13 @@ const DEFAULT_ATARI8_CONFIG = {
   basicDisabled: true,
   tv: 'pal',
   separateAnticAccess: false,
-  os: 'altirra',
+  os: 'atarixx',
 };
-const ATARI8_ROOM_VERSION = '2026-07-02-3';
+const ATARI8_OS_OPTIONS = [
+  ['atarixx', 'Atari++'],
+  ['altirra', 'Altirra'],
+];
+const ATARI8_ROOM_VERSION = '2026-07-02-4';
 const ATARI8_AUTO_PROFILES = [
   {
     pattern: /(^|[^a-z0-9])yoomp([^a-z0-9]|$)/i,
@@ -110,7 +114,7 @@ function normalizeAtari8Config(config) {
     basicDisabled: Boolean(config.basicDisabled),
     tv: config.tv === 'pal' ? 'pal' : 'ntsc',
     separateAnticAccess: memory > 64 && Boolean(config.separateAnticAccess),
-    os: config.os === 'atarixx' ? 'atarixx' : 'altirra',
+    os: config.os === 'altirra' ? 'altirra' : 'atarixx',
   };
 }
 
@@ -4669,6 +4673,17 @@ export default function RoomPage() {
                         >
                           <option value="ntsc">NTSC</option>
                           <option value="pal">PAL</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>OS</span>
+                        <select
+                          value={atari8Config.os}
+                          onChange={(event) => updateAtari8Config({ os: event.target.value })}
+                        >
+                          {ATARI8_OS_OPTIONS.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
                         </select>
                       </label>
                       {atari8Config.memory > 64 ? (
