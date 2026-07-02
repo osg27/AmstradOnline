@@ -84,7 +84,7 @@ const DEFAULT_ATARI8_CONFIG = {
   model: 'xl/xe',
   memory: 320,
   basicDisabled: true,
-  tv: 'ntsc',
+  tv: 'pal',
   separateAnticAccess: true,
 };
 
@@ -462,7 +462,7 @@ export default function RoomPage() {
   const atari8EmulatorSrc = useMemo(() => {
     const config = normalizeAtari8Config(atari8Config);
     const params = new URLSearchParams({
-      v: '2026-07-02-1',
+      v: '2026-07-02-2',
       model: config.model,
       memory: String(config.memory),
       basic: config.basicDisabled ? 'off' : 'on',
