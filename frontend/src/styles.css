@@ -1985,6 +1985,22 @@ input:focus {
   font-weight: 700;
 }
 
+.atari8-machine-switch select {
+  width: auto;
+  min-width: 88px;
+}
+
+.atari8-machine-switch .inline-toggle {
+  min-height: 40px;
+  justify-content: flex-end;
+}
+
+.atari8-machine-switch .inline-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
 .arcade-config {
   display: grid;
   grid-template-columns: minmax(150px, 0.8fr) minmax(130px, 0.7fr) minmax(180px, 1fr);

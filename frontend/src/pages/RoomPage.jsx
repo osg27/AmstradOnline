@@ -68,6 +68,41 @@ const CONTROL_DIRECTIONS = [
 const CONTROL_UTILITY_ACTIONS = ['fire2', 'pause', 'start', 'quit'];
 const ATARI8_ZIP_EXTENSIONS = ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas'];
 const ATARI8_ZIP_EXTENSION_PRIORITY = ['.xex', '.com', '.car', '.rom', '.bin', '.atr', '.xfd', '.atx', '.cas'];
+const ATARI8_MODEL_OPTIONS = [
+  ['400/800', '400/800'],
+  ['1200xl', '1200XL'],
+  ['xl/xe', 'XL/XE'],
+  ['xegs', 'XEGS'],
+];
+const ATARI8_RAM_OPTIONS = {
+  '400/800': [16, 48],
+  '1200xl': [16, 64, 128, 192, 320, 576, 1088],
+  'xl/xe': [16, 64, 128, 192, 320, 576, 1088],
+  xegs: [16, 64, 128, 192, 320, 576, 1088],
+};
+const DEFAULT_ATARI8_CONFIG = {
+  model: 'xl/xe',
+  memory: 320,
+  basicDisabled: true,
+  tv: 'ntsc',
+  separateAnticAccess: true,
+};
+
+function normalizeAtari8Config(config) {
+  const model = ATARI8_RAM_OPTIONS[config.model] ? config.model : DEFAULT_ATARI8_CONFIG.model;
+  const ramOptions = ATARI8_RAM_OPTIONS[model];
+  const memory = ramOptions.includes(Number(config.memory))
+    ? Number(config.memory)
+    : model === '400/800' ? 48 : 64;
+
+  return {
+    model,
+    memory,
+    basicDisabled: Boolean(config.basicDisabled),
+    tv: config.tv === 'pal' ? 'pal' : 'ntsc',
+    separateAnticAccess: memory > 64 && Boolean(config.separateAnticAccess),
+  };
+}
 
 function normaliseSearchText(value) {
   return String(value || '')
@@ -368,6 +403,7 @@ export default function RoomPage() {
   const [c64JoystickPortsSwapped, setC64JoystickPortsSwapped] = useState(false);
   const [c64MediaCount, setC64MediaCount] = useState(0);
   const [c64MediaIndex, setC64MediaIndex] = useState(0);
+  const [atari8Config, setAtari8Config] = useState(DEFAULT_ATARI8_CONFIG);
   const [atariTosName, setAtariTosName] = useState('');
   const [atariStMediaCount, setAtariStMediaCount] = useState(0);
   const [atariStMediaIndex, setAtariStMediaIndex] = useState(0);
@@ -422,11 +458,25 @@ export default function RoomPage() {
     setSelectedRoomSystem(roomSystem);
   }, [roomSystem]);
 
+  const atari8RamOptions = ATARI8_RAM_OPTIONS[atari8Config.model] || ATARI8_RAM_OPTIONS[DEFAULT_ATARI8_CONFIG.model];
+  const atari8EmulatorSrc = useMemo(() => {
+    const config = normalizeAtari8Config(atari8Config);
+    const params = new URLSearchParams({
+      v: '2026-07-02-1',
+      model: config.model,
+      memory: String(config.memory),
+      basic: config.basicDisabled ? 'off' : 'on',
+      tv: config.tv,
+      antic: config.separateAnticAccess ? '1' : '0',
+    });
+    return `/atari8/?${params.toString()}`;
+  }, [atari8Config]);
+
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-27-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-07-01-4' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtari8 ? '/atari8/?v=2026-07-01-5' : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-23-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-07-01-4' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-23-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -626,6 +676,17 @@ export default function RoomPage() {
     setRoom(nextRoom);
     setSelectedRoomSystem(nextRoom.system);
     resetLiveRoomSession(`${messagePrefix} to ${roomSystemLabel(nextRoom.system)}`, { preservePeer: true });
+  }
+
+  function updateAtari8Config(patch) {
+    const next = normalizeAtari8Config({ ...atari8Config, ...patch });
+    const changed = JSON.stringify(next) !== JSON.stringify(atari8Config);
+    if (!changed) return;
+
+    setAtari8Config(next);
+    if (isAtari8) {
+      resetLiveRoomSession('Atari machine settings changed', { preservePeer: true });
+    }
   }
 
   const addInputDebug = useCallback((message, mask = null, source = null) => {
@@ -4504,6 +4565,63 @@ export default function RoomPage() {
                       >
                         {switchingSystem ? 'Switching...' : 'Switch system'}
                       </button>
+                    </div>
+                  ) : null}
+
+                  {isAtari8 && canControlLocalEmulator ? (
+                    <div className="room-system-switch atari8-machine-switch">
+                      <label>
+                        <span>Atari model</span>
+                        <select
+                          value={atari8Config.model}
+                          onChange={(event) => updateAtari8Config({ model: event.target.value })}
+                        >
+                          {ATARI8_MODEL_OPTIONS.map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>RAM</span>
+                        <select
+                          value={String(atari8Config.memory)}
+                          onChange={(event) => updateAtari8Config({ memory: Number(event.target.value) })}
+                        >
+                          {atari8RamOptions.map((memory) => (
+                            <option key={memory} value={memory}>{memory}K</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>BASIC</span>
+                        <select
+                          value={atari8Config.basicDisabled ? 'off' : 'on'}
+                          onChange={(event) => updateAtari8Config({ basicDisabled: event.target.value === 'off' })}
+                        >
+                          <option value="off">Off</option>
+                          <option value="on">On</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>TV</span>
+                        <select
+                          value={atari8Config.tv}
+                          onChange={(event) => updateAtari8Config({ tv: event.target.value })}
+                        >
+                          <option value="ntsc">NTSC</option>
+                          <option value="pal">PAL</option>
+                        </select>
+                      </label>
+                      {atari8Config.memory > 64 ? (
+                        <label className="inline-toggle">
+                          <span>ANTIC</span>
+                          <input
+                            type="checkbox"
+                            checked={atari8Config.separateAnticAccess}
+                            onChange={(event) => updateAtari8Config({ separateAnticAccess: event.target.checked })}
+                          />
+                        </label>
+                      ) : null}
                     </div>
                   ) : null}
 
