@@ -1000,7 +1000,7 @@ export default function RoomPage() {
     const width = canvas.width;
     const height = canvas.height;
     const cropTop = 0;
-    const cropHeight = Math.min(Math.max(44, Math.round(height * 0.16)), 92);
+    const cropHeight = Math.min(Math.max(38, Math.round(height * 0.075)), 52);
     const image = context.getImageData(0, cropTop, width, cropHeight);
     const columnHits = new Array(width).fill(0);
 
@@ -1008,7 +1008,7 @@ export default function RoomPage() {
       const r = image.data[index];
       const g = image.data[index + 1];
       const b = image.data[index + 2];
-      return r > 130 && g > 70 && g > b * 1.35;
+      return r > 145 && g > 95 && b < 115 && g > b * 1.5;
     }
 
     for (let y = 0; y < cropHeight; y += 1) {
@@ -1097,11 +1097,13 @@ export default function RoomPage() {
       return digitMap.get(signature) || '';
     }
 
-    return runs
+    const digits = runs
       .filter(([start, end]) => end - start >= 5 && end - start <= 32)
       .map(([start, end]) => sampleDigit(start, end))
       .join('')
       .replace(/^0+(?=\d)/, '');
+
+    return digits.replace(/[^\d]/g, '');
   }
 
   function hostKeyToCpcKeyboardKey(key) {
@@ -2644,10 +2646,12 @@ export default function RoomPage() {
       return;
     }
 
-    const nextScoreValue = (scoreInputRef.current?.value ?? scoreValue).trim();
+    const manualScoreValue = (scoreInputRef.current?.value ?? scoreValue).trim();
+    const readScoreValue = manualScoreValue ? '' : extractPinballScoreFromCanvas(canvas);
+    const nextScoreValue = manualScoreValue || readScoreValue;
     const parsedScore = Number.parseInt(String(nextScoreValue).replace(/[^\d]/g, ''), 10);
     if (!Number.isFinite(parsedScore)) {
-      setScoreError('Enter the score first, then save the screenshot.');
+      setScoreError('Could not read the score from the top strip. Type it in if the display is unclear.');
       return;
     }
 
@@ -4825,11 +4829,11 @@ export default function RoomPage() {
                         inputMode="numeric"
                         value={scoreValue}
                         onChange={(event) => setScoreValue(event.target.value)}
-                        placeholder="Enter score"
+                        placeholder="Auto-read"
                       />
                     </label>
                     <button type="button" onClick={savePinballScore} disabled={scoreSaving || !hostStarted}>
-                      {scoreSaving ? 'Saving...' : 'Save score screenshot'}
+                      {scoreSaving ? 'Saving...' : 'Take score screenshot'}
                     </button>
                     <button type="button" className="secondary" onClick={readPinballScore} disabled={!hostStarted}>
                       Read score
