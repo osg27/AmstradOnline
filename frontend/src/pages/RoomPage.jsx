@@ -394,6 +394,7 @@ export default function RoomPage() {
   const remoteVoiceAudioRef = useRef(null);
   const emulatorFrameRef = useRef(null);
   const mirrorCanvasRef = useRef(null);
+  const scoreInputRef = useRef(null);
   const mirrorLoopRef = useRef(null);
   const mirrorKeepaliveTimerRef = useRef(null);
   const mirrorCaptureTrackRef = useRef(null);
@@ -612,6 +613,13 @@ export default function RoomPage() {
       setGuestDisplayName(username);
     }
   }, [isHost, room, username]);
+
+  useEffect(() => {
+    if (!isPinballParty) return;
+
+    setScoreValue('');
+    setScoreError('');
+  }, [activePartyPlayer, isPinballParty]);
 
   useEffect(() => {
     if (!isMultiPeerParty || !isHost) {
@@ -2636,10 +2644,10 @@ export default function RoomPage() {
       return;
     }
 
-    const nextScoreValue = scoreValue.trim() || extractPinballScoreFromCanvas(canvas);
+    const nextScoreValue = (scoreInputRef.current?.value ?? scoreValue).trim();
     const parsedScore = Number.parseInt(String(nextScoreValue).replace(/[^\d]/g, ''), 10);
     if (!Number.isFinite(parsedScore)) {
-      setScoreError('Could not read the score. Enter it manually and save again.');
+      setScoreError('Enter the score first, then save the screenshot.');
       return;
     }
 
@@ -4808,6 +4816,27 @@ export default function RoomPage() {
                   height={544}
                 />
 
+                {isPinballParty && isHost ? (
+                  <div className="pinball-score-capture screen-score-capture">
+                    <label>
+                      <span>Score for P{activePartyPlayer}</span>
+                      <input
+                        ref={scoreInputRef}
+                        inputMode="numeric"
+                        value={scoreValue}
+                        onChange={(event) => setScoreValue(event.target.value)}
+                        placeholder="Enter score"
+                      />
+                    </label>
+                    <button type="button" onClick={savePinballScore} disabled={scoreSaving || !hostStarted}>
+                      {scoreSaving ? 'Saving...' : 'Save score screenshot'}
+                    </button>
+                    <button type="button" className="secondary" onClick={readPinballScore} disabled={!hostStarted}>
+                      Read score
+                    </button>
+                  </div>
+                ) : null}
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -5143,25 +5172,6 @@ export default function RoomPage() {
                     </p>
                     {isPinballParty ? (
                       <div className="pinball-scoreboard">
-                        {isHost ? (
-                          <div className="pinball-score-capture">
-                            <label>
-                              <span>Score for P{activePartyPlayer}</span>
-                              <input
-                                inputMode="numeric"
-                                value={scoreValue}
-                                onChange={(event) => setScoreValue(event.target.value)}
-                                placeholder="Score"
-                              />
-                            </label>
-                            <button type="button" onClick={savePinballScore} disabled={scoreSaving || !hostStarted}>
-                              {scoreSaving ? 'Saving...' : 'Save score screenshot'}
-                            </button>
-                            <button type="button" className="secondary" onClick={readPinballScore} disabled={!hostStarted}>
-                              Read score
-                            </button>
-                          </div>
-                        ) : null}
                         {scoreError ? <p className="error">{scoreError}</p> : null}
                         <div className="pinball-score-list" aria-label="Pinball Dreams scoreboard">
                           <div className="party-turn-header">

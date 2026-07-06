@@ -2479,6 +2479,11 @@ input:focus {
   align-items: end;
 }
 
+.screen-score-capture {
+  grid-template-columns: minmax(150px, 220px) minmax(280px, 1fr) minmax(130px, 180px);
+  margin-top: 0.65rem;
+}
+
 .pinball-score-capture label {
   display: grid;
   gap: 0.25rem;
@@ -2492,6 +2497,10 @@ input:focus {
 
 .pinball-score-capture input {
   min-height: 42px;
+}
+
+.pinball-score-capture button {
+  min-height: 46px;
 }
 
 .pinball-score-list {
