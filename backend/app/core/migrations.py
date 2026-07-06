@@ -58,6 +58,26 @@ def ensure_runtime_columns(engine):
         if "current_game" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN current_game VARCHAR(512)"))
 
+        if "room_scores" not in table_names:
+            id_type = "SERIAL PRIMARY KEY" if dialect == "postgresql" else "INTEGER PRIMARY KEY AUTOINCREMENT"
+            connection.execute(text(
+                "CREATE TABLE room_scores ("
+                f"id {id_type}, "
+                "room_id INTEGER NOT NULL, "
+                "submitted_by_user_id INTEGER NOT NULL, "
+                "system VARCHAR(32) NOT NULL DEFAULT 'cpc_pinball', "
+                "player_number INTEGER NOT NULL, "
+                "player_name VARCHAR(80) NOT NULL, "
+                "score INTEGER NOT NULL, "
+                "screenshot_data_url TEXT NOT NULL, "
+                f"created_at {timestamp_type} NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                "FOREIGN KEY(room_id) REFERENCES rooms(id), "
+                "FOREIGN KEY(submitted_by_user_id) REFERENCES users(id)"
+                ")"
+            ))
+            connection.execute(text("CREATE INDEX ix_room_scores_room_id ON room_scores (room_id)"))
+            connection.execute(text("CREATE INDEX ix_room_scores_score ON room_scores (score)"))
+
         if "feedback_items" in table_names:
             connection.execute(text("UPDATE feedback_items SET status = 'unstarted' WHERE status = 'open'"))
             connection.execute(text("UPDATE feedback_items SET status = 'in_review' WHERE status = 'reviewing'"))

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 
 from app.core.database import Base
 
@@ -24,3 +24,17 @@ class RoomActivity(Base):
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     last_seen_at = Column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class RoomScore(Base):
+    __tablename__ = "room_scores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
+    submitted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    system = Column(String(32), nullable=False, default="cpc_pinball", server_default="cpc_pinball")
+    player_number = Column(Integer, nullable=False)
+    player_name = Column(String(80), nullable=False)
+    score = Column(Integer, nullable=False)
+    screenshot_data_url = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -381,6 +381,10 @@ export default function RoomPage() {
   const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
   const [partyRoster, setPartyRoster] = useState([]);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
+  const [scoreEntries, setScoreEntries] = useState([]);
+  const [scoreValue, setScoreValue] = useState('');
+  const [scoreSaving, setScoreSaving] = useState(false);
+  const [scoreError, setScoreError] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
 
@@ -977,6 +981,119 @@ export default function RoomPage() {
       [keys.fire, 16, Boolean(mask & 16)],
       [keys.extra, 32, Boolean(mask & 32)],
     ];
+  }
+
+  function extractPinballScoreFromCanvas(canvas) {
+    if (!canvas) return '';
+
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return '';
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const cropTop = 0;
+    const cropHeight = Math.min(Math.max(44, Math.round(height * 0.16)), 92);
+    const image = context.getImageData(0, cropTop, width, cropHeight);
+    const columnHits = new Array(width).fill(0);
+
+    function isScorePixel(index) {
+      const r = image.data[index];
+      const g = image.data[index + 1];
+      const b = image.data[index + 2];
+      return r > 130 && g > 70 && g > b * 1.35;
+    }
+
+    for (let y = 0; y < cropHeight; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (isScorePixel((y * width + x) * 4)) {
+          columnHits[x] += 1;
+        }
+      }
+    }
+
+    const rawRuns = [];
+    let runStart = -1;
+    for (let x = 0; x < width; x += 1) {
+      const active = columnHits[x] >= 2;
+      if (active && runStart < 0) runStart = x;
+      if ((!active || x === width - 1) && runStart >= 0) {
+        const end = active && x === width - 1 ? x : x - 1;
+        if (end - runStart >= 3) rawRuns.push([runStart, end]);
+        runStart = -1;
+      }
+    }
+
+    const runs = [];
+    rawRuns.forEach(([start, end]) => {
+      const previous = runs[runs.length - 1];
+      if (previous && start - previous[1] <= 3) {
+        previous[1] = end;
+      } else {
+        runs.push([start, end]);
+      }
+    });
+
+    const digitMap = new Map([
+      ['1111110', '0'],
+      ['0110000', '1'],
+      ['1101101', '2'],
+      ['1111001', '3'],
+      ['0110011', '4'],
+      ['1011011', '5'],
+      ['1011111', '6'],
+      ['1110000', '7'],
+      ['1111111', '8'],
+      ['1111011', '9'],
+    ]);
+    const sampleRegions = [
+      [0.28, 0.02, 0.72, 0.18],
+      [0.68, 0.16, 0.94, 0.46],
+      [0.68, 0.54, 0.94, 0.84],
+      [0.28, 0.82, 0.72, 0.98],
+      [0.06, 0.54, 0.32, 0.84],
+      [0.06, 0.16, 0.32, 0.46],
+      [0.28, 0.42, 0.72, 0.58],
+    ];
+
+    function sampleDigit(start, end) {
+      let top = cropHeight;
+      let bottom = 0;
+      for (let y = 0; y < cropHeight; y += 1) {
+        for (let x = start; x <= end; x += 1) {
+          if (isScorePixel((y * width + x) * 4)) {
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+          }
+        }
+      }
+      if (bottom <= top) return '';
+
+      const digitWidth = Math.max(1, end - start + 1);
+      const digitHeight = Math.max(1, bottom - top + 1);
+      const signature = sampleRegions.map(([x1, y1, x2, y2]) => {
+        const sx1 = Math.max(start, Math.floor(start + digitWidth * x1));
+        const sx2 = Math.min(end, Math.ceil(start + digitWidth * x2));
+        const sy1 = Math.max(top, Math.floor(top + digitHeight * y1));
+        const sy2 = Math.min(bottom, Math.ceil(top + digitHeight * y2));
+        let lit = 0;
+        let total = 0;
+        for (let y = sy1; y <= sy2; y += 1) {
+          for (let x = sx1; x <= sx2; x += 1) {
+            total += 1;
+            if (isScorePixel((y * width + x) * 4)) lit += 1;
+          }
+        }
+        return total && lit / total > 0.08 ? '1' : '0';
+      }).join('');
+
+      return digitMap.get(signature) || '';
+    }
+
+    return runs
+      .filter(([start, end]) => end - start >= 5 && end - start <= 32)
+      .map(([start, end]) => sampleDigit(start, end))
+      .join('')
+      .replace(/^0+(?=\d)/, '');
   }
 
   function hostKeyToCpcKeyboardKey(key) {
@@ -2496,6 +2613,73 @@ export default function RoomPage() {
     setChatMessages((items) => [...items.slice(-99), { ...chatMessage, mine: true }]);
   }
 
+  async function loadScoreboard() {
+    if (!roomCode || !isCpcPinball) {
+      setScoreEntries([]);
+      return;
+    }
+
+    try {
+      const scores = await apiFetch(`/rooms/${roomCode}/scores`);
+      setScoreEntries(Array.isArray(scores) ? scores : []);
+    } catch (err) {
+      setScoreError(err.message);
+    }
+  }
+
+  async function savePinballScore() {
+    if (!isHost || !isCpcPinball || scoreSaving) return;
+
+    const canvas = mirrorCanvasRef.current;
+    if (!canvas) {
+      setScoreError('No screen available to capture.');
+      return;
+    }
+
+    const nextScoreValue = scoreValue.trim() || extractPinballScoreFromCanvas(canvas);
+    const parsedScore = Number.parseInt(String(nextScoreValue).replace(/[^\d]/g, ''), 10);
+    if (!Number.isFinite(parsedScore)) {
+      setScoreError('Could not read the score. Enter it manually and save again.');
+      return;
+    }
+
+    const playerName = activePartyPlayerName || (activePartyPlayer === 1 ? playerOneName : `Player ${activePartyPlayer}`);
+
+    setScoreSaving(true);
+    setScoreError('');
+    try {
+      const screenshotDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      const saved = await apiFetch(`/rooms/${roomCode}/scores`, {
+        method: 'POST',
+        body: JSON.stringify({
+          player_number: activePartyPlayer,
+          player_name: playerName,
+          score: parsedScore,
+          screenshot_data_url: screenshotDataUrl,
+        }),
+      });
+      setScoreEntries((items) => [saved, ...items]
+        .sort((left, right) => right.score - left.score || new Date(left.created_at) - new Date(right.created_at))
+        .slice(0, 100));
+      setScoreValue('');
+      addLog(`Saved Pinball Dreams score ${parsedScore} for ${playerName}`);
+    } catch (err) {
+      setScoreError(err.message);
+    } finally {
+      setScoreSaving(false);
+    }
+  }
+
+  function readPinballScore() {
+    const score = extractPinballScoreFromCanvas(mirrorCanvasRef.current);
+    if (!score) {
+      setScoreError('Could not read the score from the top strip.');
+      return;
+    }
+    setScoreError('');
+    setScoreValue(score);
+  }
+
   async function switchRoomSystem() {
     if (!room || !isHost || isSoloMode || switchingSystem || selectedRoomSystem === roomSystem) return;
 
@@ -2658,6 +2842,16 @@ export default function RoomPage() {
 
     loadRoom();
   }, [roomCode]);
+
+  useEffect(() => {
+    if (!room || !isCpcPinball) {
+      setScoreEntries([]);
+      setScoreError('');
+      return;
+    }
+
+    loadScoreboard();
+  }, [isCpcPinball, room, roomCode]);
 
   useEffect(() => {
     if (!room) return undefined;
@@ -4947,6 +5141,51 @@ export default function RoomPage() {
                         ? 'Guests can join the stream room, watch the table, and only the selected player can control their run.'
                         : 'Guests appear here as they join, so the host can pick the right player turn before the game starts.'}
                     </p>
+                    {isPinballParty ? (
+                      <div className="pinball-scoreboard">
+                        {isHost ? (
+                          <div className="pinball-score-capture">
+                            <label>
+                              <span>Score for P{activePartyPlayer}</span>
+                              <input
+                                inputMode="numeric"
+                                value={scoreValue}
+                                onChange={(event) => setScoreValue(event.target.value)}
+                                placeholder="Score"
+                              />
+                            </label>
+                            <button type="button" onClick={savePinballScore} disabled={scoreSaving || !hostStarted}>
+                              {scoreSaving ? 'Saving...' : 'Save score screenshot'}
+                            </button>
+                            <button type="button" className="secondary" onClick={readPinballScore} disabled={!hostStarted}>
+                              Read score
+                            </button>
+                          </div>
+                        ) : null}
+                        {scoreError ? <p className="error">{scoreError}</p> : null}
+                        <div className="pinball-score-list" aria-label="Pinball Dreams scoreboard">
+                          <div className="party-turn-header">
+                            <strong>Scoreboard</strong>
+                            <span>{scoreEntries.length ? `${scoreEntries.length} saved run${scoreEntries.length === 1 ? '' : 's'}` : 'No scores saved yet'}</span>
+                          </div>
+                          {scoreEntries.slice(0, 10).map((entry, index) => (
+                            <a
+                              key={entry.id}
+                              className="pinball-score-row"
+                              href={entry.screenshot_data_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <span>{index + 1}</span>
+                              <strong>{entry.player_name}</strong>
+                              <em>{Number(entry.score).toLocaleString()}</em>
+                              <small>{entry.created_at ? new Date(entry.created_at).toLocaleString() : ''}</small>
+                              <img src={entry.screenshot_data_url} alt="" aria-hidden="true" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 

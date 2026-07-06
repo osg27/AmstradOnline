@@ -8,10 +8,19 @@ from sqlalchemy.orm import Session
 from app.api.routes.auth import can_use_preview_systems, is_admin_user, is_super_admin_user, is_xyphoe_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.room import Room, RoomActivity
+from app.models.room import Room, RoomActivity, RoomScore
 from app.models.friendship import RoomInvite
 from app.models.user import User
-from app.schemas.room import RoomCreateRequest, RoomCreateResponse, RoomHeartbeatRequest, RoomJoinRequest, RoomResponse, RoomUpdateRequest
+from app.schemas.room import (
+    RoomCreateRequest,
+    RoomCreateResponse,
+    RoomHeartbeatRequest,
+    RoomJoinRequest,
+    RoomResponse,
+    RoomScoreCreateRequest,
+    RoomScoreResponse,
+    RoomUpdateRequest,
+)
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", "playstation", "atarist", "atari8", "mastersystem", "arcade"}
@@ -89,6 +98,19 @@ def serialize_room(room: Room) -> RoomResponse:
         owner_user_id=room.owner_user_id,
         system=room.system or "cpc",
         party_max_players=room.party_max_players or 2,
+    )
+
+
+def serialize_room_score(room: Room, score: RoomScore) -> RoomScoreResponse:
+    return RoomScoreResponse(
+        id=score.id,
+        room_code=room.room_code,
+        system=score.system,
+        player_number=score.player_number,
+        player_name=score.player_name,
+        score=score.score,
+        screenshot_data_url=score.screenshot_data_url,
+        created_at=score.created_at.isoformat() if score.created_at else "",
     )
 
 
@@ -226,3 +248,58 @@ def get_room(
     require_system_access(db, user_id, room.system or "cpc")
 
     return serialize_room(room)
+
+
+@router.get("/{room_code}/scores", response_model=list[RoomScoreResponse])
+def get_room_scores(
+    room_code: str,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_system_access(db, user_id, room.system or "cpc")
+
+    scores = (
+        db.query(RoomScore)
+        .filter(RoomScore.room_id == room.id)
+        .order_by(RoomScore.score.desc(), RoomScore.created_at.asc())
+        .limit(100)
+        .all()
+    )
+    return [serialize_room_score(room, score) for score in scores]
+
+
+@router.post("/{room_code}/scores", response_model=RoomScoreResponse)
+def create_room_score(
+    room_code: str,
+    payload: RoomScoreCreateRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    require_system_access(db, user_id, room.system or "cpc")
+    if room.owner_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Only the room host can save tournament scores")
+    if (room.system or "cpc") != "cpc_pinball":
+        raise HTTPException(status_code=400, detail="Scores are only available for Pinball Dreams rooms")
+    if not payload.screenshot_data_url.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Screenshot must be an image data URL")
+
+    score = RoomScore(
+        room_id=room.id,
+        submitted_by_user_id=user_id,
+        system=room.system,
+        player_number=payload.player_number,
+        player_name=payload.player_name.strip()[:80],
+        score=payload.score,
+        screenshot_data_url=payload.screenshot_data_url,
+    )
+    db.add(score)
+    db.commit()
+    db.refresh(score)
+
+    return serialize_room_score(room, score)
