@@ -391,6 +391,8 @@ export default function RoomPage() {
   const emulatorFrameRef = useRef(null);
   const mirrorCanvasRef = useRef(null);
   const mirrorLoopRef = useRef(null);
+  const mirrorKeepaliveTimerRef = useRef(null);
+  const mirrorCaptureTrackRef = useRef(null);
   const fileInputRef = useRef(null);
   const swapDiskInputRef = useRef(null);
   const kickstartInputRef = useRef(null);
@@ -656,11 +658,20 @@ export default function RoomPage() {
     context.fillText(message, canvas.width / 2, canvas.height / 2);
   }
 
-  function resetLiveRoomSession(message = 'Room session reset', { preservePeer = false } = {}) {
+  function stopMirrorLoop() {
     if (mirrorLoopRef.current) {
       cancelAnimationFrame(mirrorLoopRef.current);
       mirrorLoopRef.current = null;
     }
+    if (mirrorKeepaliveTimerRef.current) {
+      window.clearInterval(mirrorKeepaliveTimerRef.current);
+      mirrorKeepaliveTimerRef.current = null;
+    }
+    mirrorCaptureTrackRef.current = null;
+  }
+
+  function resetLiveRoomSession(message = 'Room session reset', { preservePeer = false } = {}) {
+    stopMirrorLoop();
 
     clearMirrorCanvas(message);
 
@@ -843,13 +854,16 @@ export default function RoomPage() {
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
     if (system === 'cpc_pinball') {
       let pinballMask = 0;
+      const leftTrigger = pad.buttons[4]?.pressed || pad.buttons[6]?.pressed || (pad.buttons[6]?.value ?? 0) > 0.35;
+      const rightTrigger = pad.buttons[5]?.pressed || pad.buttons[7]?.pressed || (pad.buttons[7]?.value ?? 0) > 0.35;
+      const launch = down || pad.buttons[0]?.pressed;
+      const tilt = pad.buttons[1]?.pressed;
       if (up) pinballMask |= 1;
-      if (left) pinballMask |= 4;
-      if (right) pinballMask |= 8;
-      if (down) pinballMask |= 2;
-      if (pad.buttons[0]?.pressed) pinballMask |= 16;
-      if (pad.buttons[1]?.pressed) pinballMask |= 64;
-      if (pad.buttons[2]?.pressed || pad.buttons[3]?.pressed) pinballMask |= 32;
+      if (left || leftTrigger) pinballMask |= 4;
+      if (right || rightTrigger) pinballMask |= 8;
+      if (launch) pinballMask |= 2;
+      if (tilt) pinballMask |= 32;
+      if (pad.buttons[8]?.pressed || pad.buttons[9]?.pressed) pinballMask |= 64;
       return pinballMask;
     }
     const isMultiButtonSystem = system === 'mastersystem' || system === 'megadrive' || system === 'nes' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'arcade';
@@ -973,6 +987,12 @@ export default function RoomPage() {
       case 'ArrowRight':
       case ' ':
         return key;
+      case 'z':
+      case 'Z':
+        return 'z';
+      case 'm':
+      case 'M':
+        return 'm';
       case 'q':
       case 'Q':
         return 'q';
@@ -1092,10 +1112,7 @@ export default function RoomPage() {
     const frame = emulatorFrameRef.current;
     if (!frame || !isC64) return;
 
-    if (mirrorLoopRef.current) {
-      cancelAnimationFrame(mirrorLoopRef.current);
-      mirrorLoopRef.current = null;
-    }
+    stopMirrorLoop();
 
     await new Promise((resolve) => {
       frame.addEventListener('load', resolve, { once: true });
@@ -1114,10 +1131,7 @@ export default function RoomPage() {
     const frame = emulatorFrameRef.current;
     if (!frame || !isAtari8) return null;
 
-    if (mirrorLoopRef.current) {
-      cancelAnimationFrame(mirrorLoopRef.current);
-      mirrorLoopRef.current = null;
-    }
+    stopMirrorLoop();
 
     const src = buildAtari8EmulatorSrc(configOverride);
     await new Promise((resolve) => {
@@ -1138,10 +1152,7 @@ export default function RoomPage() {
     const frame = emulatorFrameRef.current;
     if (!frame || !isAtariSt) return;
 
-    if (mirrorLoopRef.current) {
-      cancelAnimationFrame(mirrorLoopRef.current);
-      mirrorLoopRef.current = null;
-    }
+    stopMirrorLoop();
 
     await new Promise((resolve) => {
       frame.addEventListener('load', resolve, { once: true });
@@ -1159,10 +1170,7 @@ export default function RoomPage() {
     const frame = emulatorFrameRef.current;
     if (!frame || !isAmigaAga) return;
 
-    if (mirrorLoopRef.current) {
-      cancelAnimationFrame(mirrorLoopRef.current);
-      mirrorLoopRef.current = null;
-    }
+    stopMirrorLoop();
 
     await new Promise((resolve) => {
       frame.addEventListener('load', resolve, { once: true });
@@ -1186,10 +1194,7 @@ export default function RoomPage() {
     const frame = emulatorFrameRef.current;
     if (!frame || !isPcEngine) return;
 
-    if (mirrorLoopRef.current) {
-      cancelAnimationFrame(mirrorLoopRef.current);
-      mirrorLoopRef.current = null;
-    }
+    stopMirrorLoop();
 
     await new Promise((resolve) => {
       frame.addEventListener('load', resolve, { once: true });
@@ -1216,10 +1221,7 @@ export default function RoomPage() {
     const frame = emulatorFrameRef.current;
     if (!frame || !isNes) return null;
 
-    if (mirrorLoopRef.current) {
-      cancelAnimationFrame(mirrorLoopRef.current);
-      mirrorLoopRef.current = null;
-    }
+    stopMirrorLoop();
 
     await new Promise((resolve) => {
       frame.addEventListener('load', resolve, { once: true });
@@ -1234,10 +1236,7 @@ export default function RoomPage() {
     const frame = emulatorFrameRef.current;
     if (!frame || !isPlayStation) return;
 
-    if (mirrorLoopRef.current) {
-      cancelAnimationFrame(mirrorLoopRef.current);
-      mirrorLoopRef.current = null;
-    }
+    stopMirrorLoop();
 
     await new Promise((resolve) => {
       frame.addEventListener('load', resolve, { once: true });
@@ -1273,10 +1272,7 @@ export default function RoomPage() {
     const frame = emulatorFrameRef.current;
     if (!frame || !isArcade) return null;
 
-    if (mirrorLoopRef.current) {
-      cancelAnimationFrame(mirrorLoopRef.current);
-      mirrorLoopRef.current = null;
-    }
+    stopMirrorLoop();
 
     await new Promise((resolve) => {
       frame.addEventListener('load', resolve, { once: true });
@@ -1323,6 +1319,7 @@ export default function RoomPage() {
     previousVideoStream?.getTracks?.().forEach((track) => track.stop());
     previousAudioStream?.getTracks?.().forEach((track) => track.stop());
     hostVideoStreamRef.current = nextVideoStream;
+    mirrorCaptureTrackRef.current = nextVideoTrack;
     hostAudioStreamRef.current = nextAudioStream || null;
   }
 
@@ -2713,9 +2710,7 @@ export default function RoomPage() {
     if (isSoloMode) {
       pcRef.current = null;
       return () => {
-        if (mirrorLoopRef.current) {
-          cancelAnimationFrame(mirrorLoopRef.current);
-        }
+        stopMirrorLoop();
 
         localMicStreamRef.current?.getTracks().forEach((track) => track.stop());
         localMicStreamRef.current = null;
@@ -2836,9 +2831,7 @@ export default function RoomPage() {
     };
 
     return () => {
-      if (mirrorLoopRef.current) {
-        cancelAnimationFrame(mirrorLoopRef.current);
-      }
+      stopMirrorLoop();
 
       localMicStreamRef.current?.getTracks().forEach((track) => track.stop());
       localMicStreamRef.current = null;
@@ -3123,6 +3116,8 @@ export default function RoomPage() {
       throw new Error('Mirror canvas not found');
     }
 
+    stopMirrorLoop();
+
     if (isArcade) {
       mirrorCanvas.width = 768;
       mirrorCanvas.height = 576;
@@ -3165,13 +3160,16 @@ export default function RoomPage() {
       );
     }
 
-    const draw = () => {
+    const requestCapturedFrame = () => {
+      mirrorCaptureTrackRef.current?.requestFrame?.();
+    };
+
+    const drawOnce = () => {
       try {
         const sourceWidth = sourceCanvas.width || sourceCanvas.clientWidth;
         const sourceHeight = sourceCanvas.height || sourceCanvas.clientHeight;
         if (!sourceWidth || !sourceHeight) {
-          mirrorLoopRef.current = requestAnimationFrame(draw);
-          return;
+          return false;
         }
 
         if (isArcade) {
@@ -3179,14 +3177,26 @@ export default function RoomPage() {
         } else {
           ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
         }
+        requestCapturedFrame();
+        return true;
       } catch {
         // ignore transient draw issues
+        return false;
       }
+    };
+
+    const draw = () => {
+      drawOnce();
 
       mirrorLoopRef.current = requestAnimationFrame(draw);
     };
 
     draw();
+    mirrorKeepaliveTimerRef.current = window.setInterval(() => {
+      if (document.visibilityState === 'hidden' || !document.hasFocus()) {
+        drawOnce();
+      }
+    }, 250);
     addLog('Mirror canvas loop started');
   }
 
@@ -3687,6 +3697,7 @@ export default function RoomPage() {
       }
 
       hostVideoStreamRef.current = stream;
+      mirrorCaptureTrackRef.current = stream.getVideoTracks?.()[0] || null;
 
       const audioStream = await waitForHostAudioStream(iframe);
       hostAudioStreamRef.current = audioStream || null;
