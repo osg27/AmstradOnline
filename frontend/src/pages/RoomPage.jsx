@@ -380,6 +380,7 @@ export default function RoomPage() {
   const [activePartyPlayer, setActivePartyPlayer] = useState(1);
   const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
   const [partyRoster, setPartyRoster] = useState([]);
+  const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
 
@@ -480,10 +481,13 @@ export default function RoomPage() {
   const isMouseComputer = isAmigaFamily || isAtariSt;
   const isArcade = roomSystem === 'arcade';
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
-  const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
+  const partyMaxLimit = isCpcPinball ? 20 : 8;
+  const partyMaxPlayers = Math.min(partyMaxLimit, Math.max(2, Number(room?.party_max_players) || 2));
+  const isPinballParty = isCpcPinball && !isSoloMode && partyMaxPlayers > 2;
   const isC64Party = isC64 && !isSoloMode && partyMaxPlayers > 2;
   const isArcadeParty = isArcade && !isSoloMode && partyMaxPlayers > 2;
-  const isMultiPeerParty = isCpcParty || isC64Party || isArcadeParty;
+  const isSharedCpcParty = isCpcParty || isPinballParty;
+  const isMultiPeerParty = isSharedCpcParty || isC64Party || isArcadeParty;
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isAtari8 || isAtariSt || isArcade;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isCpcPinball ? 'Amstrad Pinball Dreams' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
@@ -511,10 +515,10 @@ export default function RoomPage() {
     : isSoloMode
       ? isAmigaFamily
         ? 'P1 Amiga controls + keyboard/mouse'
-        : isMasterSystem ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isAtari8 ? 'P1 Atari joystick + keyboard' : isAtariSt ? 'P1 Atari ST joystick + keyboard/mouse' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Z / M flippers, Down plunger, Space nudge' : isCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
+        : isMasterSystem ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isAtari8 ? 'P1 Atari joystick + keyboard' : isAtariSt ? 'P1 Atari ST joystick + keyboard/mouse' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Z / M flippers, Down plunger, Space nudge' : isSharedCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
       : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
-      : isMasterSystem ? (isHost ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : 'P2 controller 2 / Button 1 / Button 2') : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64Party ? `P${currentPartyPlayerNumber} C64 joystick` : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isAtari8 ? (isHost ? 'P1 Atari joystick + keyboard' : 'P2 Atari joystick') : isAtariSt ? (isHost ? 'P1 Atari ST joystick + keyboard/mouse' : 'P2 Atari ST joystick') : isArcadeParty ? `P${currentPartyPlayerNumber} arcade controls` : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+      : isMasterSystem ? (isHost ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : 'P2 controller 2 / Button 1 / Button 2') : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64Party ? `P${currentPartyPlayerNumber} C64 joystick` : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isAtari8 ? (isHost ? 'P1 Atari joystick + keyboard' : 'P2 Atari joystick') : isAtariSt ? (isHost ? 'P1 Atari ST joystick + keyboard/mouse' : 'P2 Atari ST joystick') : isArcadeParty ? `P${currentPartyPlayerNumber} arcade controls` : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isSharedCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isSoloMode ? 'Solo' : isHost ? 'Host' : 'Guest';
@@ -523,7 +527,7 @@ export default function RoomPage() {
   const normalPlayerSummary = `P1: ${playerOneName} / P2: ${playerTwoName}`;
   const assignedControlLabel = isSoloMode
     ? `P1: ${username || playerOneName}`
-    : isCpcParty
+    : isSharedCpcParty
     ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}`
     : isC64Party
       ? `P${currentPartyPlayerNumber}: ${isHost ? playerOneName : username || playerTwoName} / C64 joystick`
@@ -577,7 +581,7 @@ export default function RoomPage() {
   }, [emulatorSrc, emulatorSessionKey]);
 
   useEffect(() => {
-    if (isCpcParty || !navigator.mediaDevices?.addEventListener) {
+    if (isSharedCpcParty || !navigator.mediaDevices?.addEventListener) {
       return undefined;
     }
 
@@ -591,7 +595,7 @@ export default function RoomPage() {
     return () => {
       navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
     };
-  }, [isCpcParty]);
+  }, [isSharedCpcParty]);
 
   useEffect(() => {
     if (!room || !username) return;
@@ -615,6 +619,27 @@ export default function RoomPage() {
   const addLog = useCallback((message) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${message}`, ...prev].slice(0, 80));
   }, []);
+
+  const playRemoteVideo = useCallback(() => {
+    const video = remoteVideoRef.current;
+    if (!video?.srcObject) return;
+
+    video.playsInline = true;
+    video.muted = false;
+    video.volume = 1;
+    const playPromise = video.play?.();
+    if (!playPromise?.catch) {
+      setRemotePlaybackBlocked(false);
+      return;
+    }
+
+    playPromise
+      .then(() => setRemotePlaybackBlocked(false))
+      .catch(() => {
+        setRemotePlaybackBlocked(true);
+        addLog('Remote video is ready; tap Capture to start playback');
+      });
+  }, [addLog]);
 
   const sendSignalRef = useRef(() => false);
 
@@ -656,6 +681,7 @@ export default function RoomPage() {
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = null;
       }
+      setRemotePlaybackBlocked(false);
       if (remoteVoiceAudioRef.current) {
         remoteVoiceAudioRef.current.pause();
         remoteVoiceAudioRef.current.srcObject = null;
@@ -756,6 +782,33 @@ export default function RoomPage() {
   }
 
   function keyToJoystickBit(key) {
+    if (isCpcPinball) {
+      switch (key) {
+        case 'ArrowUp':
+          return 1;
+        case 'ArrowDown':
+          return 2;
+        case 'ArrowLeft':
+        case 'z':
+        case 'Z':
+          return 4;
+        case 'ArrowRight':
+        case 'm':
+        case 'M':
+          return 8;
+        case 'Control':
+        case 'f':
+        case 'F':
+          return 16;
+        case ' ':
+          return 32;
+        case 'Enter':
+          return 64;
+        default:
+          return 0;
+      }
+    }
+
     switch (key) {
       case 'q':
       case 'Q':
@@ -1512,7 +1565,7 @@ export default function RoomPage() {
   }, [addInputDebug, forwardInputToEmulator]);
 
   const releaseCpcPartySharedInput = useCallback((previousMask = 63) => {
-    if (!isCpcParty) return;
+    if (!isSharedCpcParty) return;
 
     forwardJoystickMaskAsKeys(0, 1, previousMask);
     forwardInputToEmulator({
@@ -1525,7 +1578,7 @@ export default function RoomPage() {
       player: 2,
       mask: 0,
     });
-  }, [forwardInputToEmulator, forwardJoystickMaskAsKeys, isCpcParty]);
+  }, [forwardInputToEmulator, forwardJoystickMaskAsKeys, isSharedCpcParty]);
 
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : isMultiPeerParty ? currentPartyPlayerNumber : 2;
@@ -1550,7 +1603,7 @@ export default function RoomPage() {
     }
 
     if (isHost) {
-      if (isCpcParty && activePartyPlayer !== 1) {
+      if (isSharedCpcParty && activePartyPlayer !== 1) {
         if (previousMask) {
           releaseCpcPartySharedInput(previousMask);
         }
@@ -1559,7 +1612,7 @@ export default function RoomPage() {
         return;
       }
 
-      if (isCpcParty) {
+      if (isSharedCpcParty) {
         forwardInputToEmulator({
           type: 'amstrad_remote_joystick',
           player: 1,
@@ -1600,7 +1653,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, currentPartyPlayerNumber, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaLink, isCpcParty, isCpcPinball, isDirectJoystickSystem, isHost, isMultiPeerParty, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, currentPartyPlayerNumber, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaLink, isCpcPinball, isDirectJoystickSystem, isHost, isMultiPeerParty, isSharedCpcParty, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -1634,12 +1687,8 @@ export default function RoomPage() {
       channel.send(JSON.stringify({ type: 'audio_unlock' }));
     }
 
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.muted = false;
-      remoteVideoRef.current.volume = 1;
-      remoteVideoRef.current.play().catch(() => {});
-    }
-  }, [forwardInputToEmulator, isAmigaFamily, isHost]);
+    playRemoteVideo();
+  }, [forwardInputToEmulator, isAmigaFamily, isHost, playRemoteVideo]);
 
   const forwardAmigaMouse = useCallback((payload) => {
     if (!isMouseComputer) return;
@@ -1738,7 +1787,7 @@ export default function RoomPage() {
   }, [addInputDebug, captureInput, forwardAmigaMouse, isHost, isMouseComputer]);
 
   const setPartyTurn = useCallback((playerNumber) => {
-    if (!isCpcParty || !isHost) return;
+    if (!isSharedCpcParty || !isHost) return;
 
     const nextPlayer = Math.min(partyMaxPlayers, Math.max(1, playerNumber));
 
@@ -1766,7 +1815,7 @@ export default function RoomPage() {
     });
     addInputDebug(`party turn switched to P${nextPlayer}`, 0, 'party turn');
     addLog(`Party turn switched to player ${nextPlayer}`);
-  }, [addInputDebug, addLog, isCpcParty, isHost, partyMaxPlayers, releaseCpcPartySharedInput]);
+  }, [addInputDebug, addLog, isHost, isSharedCpcParty, partyMaxPlayers, releaseCpcPartySharedInput]);
 
   const nextPartyTurn = useCallback(() => {
     setPartyTurn(activePartyPlayer >= partyMaxPlayers ? 1 : activePartyPlayer + 1);
@@ -1884,7 +1933,7 @@ export default function RoomPage() {
           if (performance.now() - peer.lastInputAt < 180) continue;
 
           addInputDebug(`P${peer.playerNumber} input timed out, releasing held input`, 0, 'guest remote');
-          if (isCpcParty) {
+          if (isSharedCpcParty) {
             releaseCpcPartySharedInput(peer.joystickMask);
           } else {
             forwardInputToEmulator({
@@ -1912,7 +1961,7 @@ export default function RoomPage() {
           mask: 0,
         });
       } else {
-        forwardJoystickMaskAsKeys(0, isCpcParty ? 1 : 2, previousMask);
+        forwardJoystickMaskAsKeys(0, isSharedCpcParty ? 1 : 2, previousMask);
       }
       remoteJoystickMaskRef.current = 0;
     }, 90);
@@ -1920,7 +1969,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(staleRemoteInputTimer);
     };
-  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isCpcParty, isDirectJoystickSystem, isHost, isMultiPeerParty, releaseCpcPartySharedInput]);
+  }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isDirectJoystickSystem, isHost, isMultiPeerParty, isSharedCpcParty, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     if (isHost !== true || isDirectJoystickSystem) {
@@ -1928,16 +1977,16 @@ export default function RoomPage() {
     }
 
     const pumpRemoteHeldKeys = window.setInterval(() => {
-      if (isCpcParty) {
+      if (isSharedCpcParty) {
         const activePeer = Array.from(partyHostPeersRef.current.values()).find((peer) => peer.playerNumber === activePartyPlayer);
-        const mask = activePeer?.joystickMask || 0;
+        const mask = activePartyPlayer === 1 ? localJoystickMaskRef.current : activePeer?.joystickMask || 0;
 
         if (!mask) return;
 
         forwardInputToEmulator({
           type: 'amstrad_remote_joystick',
           player: 1,
-          mask: mask & 31,
+          mask: isPinballParty ? mask : mask & 31,
         });
         return;
       }
@@ -1961,7 +2010,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
     };
-  }, [activePartyPlayer, forwardInputToEmulator, isCpcParty, isDirectJoystickSystem, isHost]);
+  }, [activePartyPlayer, forwardInputToEmulator, isDirectJoystickSystem, isHost, isPinballParty, isSharedCpcParty]);
 
   useEffect(() => {
     if (isHost !== false) {
@@ -2025,14 +2074,14 @@ export default function RoomPage() {
       };
       const getInputPlayer = (fallbackPlayer = parsed.player) => {
         if (partyPeerState) return partyPlayerOverride || 2;
-        if (isCpcParty) return partyPlayerOverride || 2;
+        if (isSharedCpcParty) return partyPlayerOverride || 2;
         return fallbackPlayer;
       };
 
       if (parsed.type === 'key') {
         const player = getInputPlayer(parsed.player);
 
-        if (isCpcParty && activePartyPlayer !== player) {
+        if (isSharedCpcParty && activePartyPlayer !== player) {
           addInputDebug(`ignored guest key, party turn is P${activePartyPlayer}`, null, 'party turn');
           return;
         }
@@ -2052,14 +2101,14 @@ export default function RoomPage() {
           type: 'amstrad_remote_control',
           key: parsed.key,
           action: parsed.action,
-          player: isCpcParty ? 1 : player,
+          player: isSharedCpcParty ? 1 : player,
         });
       }
 
       if (parsed.type === 'control') {
         const player = getInputPlayer(parsed.player);
 
-        if (isCpcParty && activePartyPlayer !== player) {
+        if (isSharedCpcParty && activePartyPlayer !== player) {
           addInputDebug(`ignored guest control, party turn is P${activePartyPlayer}`, null, 'party turn');
           return;
         }
@@ -2069,7 +2118,7 @@ export default function RoomPage() {
           type: 'amstrad_remote_control',
           key: parsed.key,
           action: parsed.action,
-          player: isCpcParty ? 1 : player,
+          player: isSharedCpcParty ? 1 : player,
         });
       }
 
@@ -2095,7 +2144,7 @@ export default function RoomPage() {
           const previousMask = getRemoteMask();
 
           if (previousMask) {
-            if (isCpcParty) {
+            if (isSharedCpcParty) {
               releaseCpcPartySharedInput(previousMask);
             } else if (isDirectJoystickSystem) {
               forwardInputToEmulator({
@@ -2126,7 +2175,7 @@ export default function RoomPage() {
         if (mask !== previousMask) {
           addInputDebug(`host received P${player} state ${mask} #${seq}`, mask, 'guest remote');
         }
-        if (isCpcParty && activePartyPlayer !== player) {
+        if (isSharedCpcParty && activePartyPlayer !== player) {
           if (previousMask) {
             releaseCpcPartySharedInput(previousMask);
           }
@@ -2135,11 +2184,11 @@ export default function RoomPage() {
           return;
         }
 
-        if (isCpcParty) {
+        if (isSharedCpcParty) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player: 1,
-            mask: mask & 31,
+            mask: isPinballParty ? mask : mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
         } else if (isDirectJoystickSystem) {
@@ -2149,7 +2198,7 @@ export default function RoomPage() {
             mask,
           });
         } else {
-          forwardJoystickMaskAsKeys(mask, isCpcParty ? 1 : player, previousMask);
+          forwardJoystickMaskAsKeys(mask, isSharedCpcParty ? 1 : player, previousMask);
         }
         setRemoteMask(mask);
       }
@@ -2161,7 +2210,7 @@ export default function RoomPage() {
 
         markInputAt();
         addInputDebug(`host received P${player} held mask ${mask}`, mask, 'guest remote');
-        if (isCpcParty && activePartyPlayer !== player) {
+        if (isSharedCpcParty && activePartyPlayer !== player) {
           if (previousMask) {
             releaseCpcPartySharedInput(previousMask);
           }
@@ -2170,11 +2219,11 @@ export default function RoomPage() {
           return;
         }
 
-        if (isCpcParty) {
+        if (isSharedCpcParty) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player: 1,
-            mask: mask & 31,
+            mask: isPinballParty ? mask : mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
         } else if (isDirectJoystickSystem) {
@@ -2184,7 +2233,7 @@ export default function RoomPage() {
             mask,
           });
         } else {
-          forwardJoystickMaskAsKeys(mask, isCpcParty ? 1 : player, previousMask);
+          forwardJoystickMaskAsKeys(mask, isSharedCpcParty ? 1 : player, previousMask);
         }
         setRemoteMask(mask);
       }
@@ -2192,7 +2241,7 @@ export default function RoomPage() {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
-  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAtari8, isCpcParty, isDirectJoystickSystem, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAtari8, isDirectJoystickSystem, isPinballParty, isSharedCpcParty, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     handleGuestPayloadOnHostRef.current = handleGuestPayloadOnHost;
@@ -2458,6 +2507,8 @@ export default function RoomPage() {
       setError('');
       const nextPartyMax = selectedRoomSystem === 'cpc_party'
         ? Math.max(3, partyMaxPlayers || 4)
+        : selectedRoomSystem === 'cpc_pinball'
+          ? Math.min(20, Math.max(3, partyMaxPlayers || 20))
         : selectedRoomSystem === 'arcade'
           ? partyMaxPlayers || 2
           : 2;
@@ -2761,6 +2812,7 @@ export default function RoomPage() {
         remoteVideoRef.current.srcObject = remoteStream;
       }
 
+      playRemoteVideo();
       addLog(`Remote ${event.track.kind} track attached`);
     };
 
@@ -2889,7 +2941,7 @@ export default function RoomPage() {
       const mappedKey = hostKeyToCpcKeyboardKey(key);
 
       if (mappedKey || isMenuKey(key)) {
-        if (isCpcParty && activePartyPlayer !== 1) {
+        if (isSharedCpcParty && activePartyPlayer !== 1) {
           addInputDebug(`ignored host key, party turn is P${activePartyPlayer}`, null, 'party turn');
           event.preventDefault();
           return;
@@ -2941,7 +2993,7 @@ export default function RoomPage() {
       const mappedKey = hostKeyToCpcKeyboardKey(key);
 
       if (mappedKey || isMenuKey(key)) {
-        if (isCpcParty && activePartyPlayer !== 1) {
+        if (isSharedCpcParty && activePartyPlayer !== 1) {
           event.preventDefault();
           return;
         }
@@ -2965,7 +3017,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleHostKeyDown, true);
       window.removeEventListener('keyup', handleHostKeyUp, true);
     };
-  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isAtari8, isCpcParty, isHost]);
+  }, [activePartyPlayer, addInputDebug, canControlLocalEmulator, forwardInputToEmulator, isAmigaFamily, isAtari8, isHost, isSharedCpcParty]);
 
   useEffect(() => {
     if (isHost !== false || isAmigaLink) return undefined;
@@ -3270,7 +3322,7 @@ export default function RoomPage() {
     if (!peer) return;
 
     if (peer.joystickMask) {
-      if (isCpcParty) {
+      if (isSharedCpcParty) {
         releaseCpcPartySharedInput(peer.joystickMask);
       } else {
         forwardInputToEmulator({
@@ -3377,7 +3429,7 @@ export default function RoomPage() {
     channel.onmessage = (msg) => handleGuestPayloadOnHostRef.current?.(msg.data, playerNumber, peerState);
     channel.onclose = () => {
       if (peerState.joystickMask) {
-        if (isCpcParty) {
+        if (isSharedCpcParty) {
           releaseCpcPartySharedInput(peerState.joystickMask);
         } else {
           forwardInputToEmulator({
@@ -3539,7 +3591,7 @@ export default function RoomPage() {
   }
 
   async function toggleMicrophone() {
-    if (isCpcParty) return;
+    if (isSharedCpcParty) return;
 
     const existingStream = localMicStreamRef.current;
 
@@ -4426,7 +4478,7 @@ export default function RoomPage() {
         {showDiagnostics ? (
           <div className="session-strip diagnostics-summary">
             <span>{status}</span>
-            {!isCpcParty && !isSoloMode ? <span>{micStatus}</span> : null}
+            {!isSharedCpcParty && !isSoloMode ? <span>{micStatus}</span> : null}
             <span>{controlLabel}</span>
           </div>
         ) : null}
@@ -4436,7 +4488,7 @@ export default function RoomPage() {
         <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
 
         <div className="room-layout">
-          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isArcade ? 'arcade-fullscreen' : ''} ${isScreenFullscreen && isCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
+          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isArcade ? 'arcade-fullscreen' : ''} ${isScreenFullscreen && isSharedCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
             <div className="play-header">
               <h2>{isSoloMode || isAmigaLink ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
@@ -4445,7 +4497,7 @@ export default function RoomPage() {
                   {assignedControlLabel}
                 </div>
 
-                {!isCpcParty && !isSoloMode ? (
+                {!isSharedCpcParty && !isSoloMode ? (
                   <div className="mic-controls">
                     <button
                       type="button"
@@ -4496,7 +4548,11 @@ export default function RoomPage() {
             </div>
 
             <div className={`capture-state ${inputCaptured ? 'captured' : ''}`}>
-              {inputCaptured ? `${controlLabel} active` : 'Click the screen or press Capture to play'}
+              {inputCaptured
+                ? `${controlLabel} active`
+                : remotePlaybackBlocked
+                  ? 'Tap Capture to start stream'
+                  : 'Click the screen or press Capture to play'}
             </div>
 
             {canControlLocalEmulator ? (
@@ -4840,13 +4896,13 @@ export default function RoomPage() {
                   </div>
                 ) : null}
 
-                {isCpcParty ? (
+                {isSharedCpcParty ? (
                   <div className="party-turn-panel">
                     <div className="party-turn-header">
-                      <strong>Party turn</strong>
+                      <strong>{isPinballParty ? 'Pinball turn' : 'Party turn'}</strong>
                       <span>
                         {activePartyPlayerName
-                          ? `P${activePartyPlayer}: ${activePartyPlayerName} controls the shared joystick`
+                          ? `P${activePartyPlayer}: ${activePartyPlayerName} controls the ${isPinballParty ? 'table' : 'shared joystick'}`
                           : `P${activePartyPlayer}: waiting for assigned player`}
                       </span>
                     </div>
@@ -4875,7 +4931,11 @@ export default function RoomPage() {
                         </div>
                       ))}
                     </div>
-                    <p className="muted">Guests appear here as they join, so the host can pick the right player turn before the game starts.</p>
+                    <p className="muted">
+                      {isPinballParty
+                        ? 'Guests can join the stream room, watch the table, and only the selected player can control their run.'
+                        : 'Guests appear here as they join, so the host can pick the right player turn before the game starts.'}
+                    </p>
                   </div>
                 ) : null}
 
@@ -4906,6 +4966,8 @@ export default function RoomPage() {
                   muted={false}
                   className="video"
                   onClick={captureInput}
+                  onLoadedMetadata={playRemoteVideo}
+                  onCanPlay={playRemoteVideo}
                   onPointerDown={handleAmigaPointerDown}
                   onPointerUp={handleAmigaPointerUp}
                   onPointerMove={handleAmigaPointerMove}

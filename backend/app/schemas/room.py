@@ -6,7 +6,7 @@ VALID_SYSTEMS = {"cpc", "cpc_party", "cpc_pinball", "spectrum", "c64", "atari8",
 
 class RoomCreateRequest(BaseModel):
     system: str = "cpc"
-    party_max_players: int = Field(default=2, ge=2, le=8)
+    party_max_players: int = Field(default=2, ge=2, le=20)
 
     @field_validator("system")
     @classmethod
@@ -19,7 +19,7 @@ class RoomCreateRequest(BaseModel):
 
 class RoomUpdateRequest(BaseModel):
     system: str
-    party_max_players: int = Field(default=2, ge=2, le=8)
+    party_max_players: int = Field(default=2, ge=2, le=20)
 
     @field_validator("system")
     @classmethod

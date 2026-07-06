@@ -80,7 +80,7 @@ const PLATFORM_SHELVES = [
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available' },
+              party: { enabled: true, system: 'cpc_pinball' },
               link: { enabled: false, note: 'Not available' },
             },
           },
@@ -522,9 +522,11 @@ export default function LobbyPage() {
       }
 
       const roomSystem = modeConfig.system || selectedSystem.id;
-      const isPartyRoom = mode === 'party' && ['cpc_party', 'c64', 'arcade'].includes(roomSystem);
+      const isPartyRoom = mode === 'party' && ['cpc_party', 'c64', 'arcade', 'cpc_pinball'].includes(roomSystem);
       const nextPartyMaxPlayers = roomSystem === 'arcade'
         ? Math.min(4, Math.max(3, partyMaxPlayers))
+        : roomSystem === 'cpc_pinball'
+          ? Math.min(20, Math.max(3, partyMaxPlayers))
         : partyMaxPlayers;
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
@@ -749,14 +751,18 @@ export default function LobbyPage() {
               </div>
             ) : null}
 
-            {selectedMode === 'party' && ['cpc_party', 'c64', 'arcade'].includes(selectedSystem?.modes.party?.system || selectedSystem?.id) ? (
+            {selectedMode === 'party' && ['cpc_party', 'c64', 'arcade', 'cpc_pinball'].includes(selectedSystem?.modes.party?.system || selectedSystem?.id) ? (
               <label className="party-player-select mode-party-select">
                 <span>Party players</span>
                 <select
                   value={partyMaxPlayers}
                   onChange={(event) => setPartyMaxPlayers(Number(event.target.value))}
                 >
-                  {(selectedSystem?.modes.party?.system === 'arcade' ? [3, 4] : [2, 3, 4, 5, 6, 7, 8]).map((count) => (
+                  {(selectedSystem?.modes.party?.system === 'arcade'
+                    ? [3, 4]
+                    : selectedSystem?.modes.party?.system === 'cpc_pinball'
+                      ? [3, 4, 5, 6, 7, 8, 10, 12, 16, 20]
+                      : [2, 3, 4, 5, 6, 7, 8]).map((count) => (
                     <option key={count} value={count}>{count}</option>
                   ))}
                 </select>

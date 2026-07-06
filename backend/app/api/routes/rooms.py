@@ -20,6 +20,19 @@ ADMIN_ONLY_SYSTEMS = set()
 SUPER_ADMIN_ONLY_SYSTEMS = set()
 XYPHOE_SYSTEMS = {"cpc_pinball"}
 PRIVATE_SUPER_ADMIN_SYSTEMS = set()
+PARTY_SYSTEMS = {"cpc_party", "c64", "arcade", "cpc_pinball"}
+
+
+def normalize_party_max_players(system: str, requested: int | None) -> int:
+    if system not in PARTY_SYSTEMS:
+        return 2
+
+    requested_players = requested or 2
+    if system == "arcade":
+        return min(4, max(3, requested_players))
+    if system == "cpc_pinball":
+        return min(20, max(3, requested_players))
+    return min(8, max(2, requested_players))
 
 
 def get_current_user_id(authorization: str | None = Header(default=None)) -> int:
@@ -97,7 +110,7 @@ def create_room(
         owner_user_id=user_id,
         status="waiting",
         system=system,
-        party_max_players=payload.party_max_players if system in {"cpc_party", "c64", "arcade"} and payload else 2,
+        party_max_players=normalize_party_max_players(system, payload.party_max_players if payload else None),
     )
     db.add(room)
     db.commit()
@@ -146,7 +159,7 @@ def update_room(
 
     require_system_access(db, user_id, payload.system, creating=True)
     room.system = payload.system
-    room.party_max_players = payload.party_max_players if payload.system in {"cpc_party", "c64", "arcade"} else 2
+    room.party_max_players = normalize_party_max_players(payload.system, payload.party_max_players)
     room.current_game = None
     db.commit()
     db.refresh(room)
