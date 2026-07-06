@@ -1000,7 +1000,7 @@ export default function RoomPage() {
     const width = canvas.width;
     const height = canvas.height;
     const cropTop = 0;
-    const cropHeight = Math.min(Math.max(38, Math.round(height * 0.075)), 52);
+    const cropHeight = Math.min(Math.max(44, Math.round(height * 0.09)), 62);
     const image = context.getImageData(0, cropTop, width, cropHeight);
     const columnHits = new Array(width).fill(0);
 
@@ -1008,7 +1008,7 @@ export default function RoomPage() {
       const r = image.data[index];
       const g = image.data[index + 1];
       const b = image.data[index + 2];
-      return r > 145 && g > 95 && b < 115 && g > b * 1.5;
+      return r > 140 && g > 100 && b < 130 && r > b * 1.35 && g > b * 1.35;
     }
 
     for (let y = 0; y < cropHeight; y += 1) {
@@ -1022,11 +1022,11 @@ export default function RoomPage() {
     const rawRuns = [];
     let runStart = -1;
     for (let x = 0; x < width; x += 1) {
-      const active = columnHits[x] >= 2;
+      const active = columnHits[x] >= 1;
       if (active && runStart < 0) runStart = x;
       if ((!active || x === width - 1) && runStart >= 0) {
         const end = active && x === width - 1 ? x : x - 1;
-        if (end - runStart >= 3) rawRuns.push([runStart, end]);
+        if (end - runStart >= 1) rawRuns.push([runStart, end]);
         runStart = -1;
       }
     }
@@ -1034,7 +1034,7 @@ export default function RoomPage() {
     const runs = [];
     rawRuns.forEach(([start, end]) => {
       const previous = runs[runs.length - 1];
-      if (previous && start - previous[1] <= 3) {
+      if (previous && start - previous[1] <= 10) {
         previous[1] = end;
       } else {
         runs.push([start, end]);
@@ -1063,22 +1063,33 @@ export default function RoomPage() {
       [0.28, 0.42, 0.72, 0.58],
     ];
 
-    function sampleDigit(start, end) {
+    function digitBounds(start, end) {
       let top = cropHeight;
       let bottom = 0;
+      let left = end;
+      let right = start;
       for (let y = 0; y < cropHeight; y += 1) {
         for (let x = start; x <= end; x += 1) {
           if (isScorePixel((y * width + x) * 4)) {
             top = Math.min(top, y);
             bottom = Math.max(bottom, y);
+            left = Math.min(left, x);
+            right = Math.max(right, x);
           }
         }
       }
-      if (bottom <= top) return '';
+      return bottom > top ? { top, bottom, left, right } : null;
+    }
+
+    function sampleDigit(start, end, forcedBounds = null) {
+      const bounds = forcedBounds || digitBounds(start, end);
+      if (!bounds) return { digit: '', confidence: 0 };
+      const { top, bottom } = bounds;
+      if (bottom <= top) return { digit: '', confidence: 0 };
 
       const digitWidth = Math.max(1, end - start + 1);
       const digitHeight = Math.max(1, bottom - top + 1);
-      const signature = sampleRegions.map(([x1, y1, x2, y2]) => {
+      const samples = sampleRegions.map(([x1, y1, x2, y2]) => {
         const sx1 = Math.max(start, Math.floor(start + digitWidth * x1));
         const sx2 = Math.min(end, Math.ceil(start + digitWidth * x2));
         const sy1 = Math.max(top, Math.floor(top + digitHeight * y1));
@@ -1091,17 +1102,53 @@ export default function RoomPage() {
             if (isScorePixel((y * width + x) * 4)) lit += 1;
           }
         }
-        return total && lit / total > 0.08 ? '1' : '0';
-      }).join('');
+        const ratio = total ? lit / total : 0;
+        return { lit: ratio > 0.055, ratio };
+      });
+      const signature = samples.map((sample) => (sample.lit ? '1' : '0')).join('');
+      const confidence = samples.reduce((sum, sample) => sum + (sample.lit ? sample.ratio : 1 - sample.ratio), 0) / samples.length;
 
-      return digitMap.get(signature) || '';
+      return { digit: digitMap.get(signature) || '', confidence };
     }
 
-    const digits = runs
-      .filter(([start, end]) => end - start >= 5 && end - start <= 32)
-      .map(([start, end]) => sampleDigit(start, end))
-      .join('')
-      .replace(/^0+(?=\d)/, '');
+    function decodeRun(start, end) {
+      const bounds = digitBounds(start, end);
+      if (!bounds) return null;
+
+      let best = null;
+      const runWidth = end - start + 1;
+      for (let count = 1; count <= 9; count += 1) {
+        const cellWidth = runWidth / count;
+        if (cellWidth < 7 || cellWidth > 28) continue;
+
+        let value = '';
+        let confidence = 0;
+        let misses = 0;
+        for (let index = 0; index < count; index += 1) {
+          const cellStart = Math.round(start + cellWidth * index);
+          const cellEnd = Math.round(start + cellWidth * (index + 1)) - 1;
+          const sampled = sampleDigit(cellStart, cellEnd, bounds);
+          if (!sampled.digit) misses += 1;
+          value += sampled.digit;
+          confidence += sampled.confidence;
+        }
+        if (misses > 0 || !value) continue;
+
+        const score = confidence / count + count * 0.06;
+        if (!best || score > best.score) {
+          best = { value, score, count };
+        }
+      }
+      return best;
+    }
+
+    const candidates = runs
+      .filter(([start, end]) => end - start >= 10)
+      .map(([start, end]) => decodeRun(start, end))
+      .filter(Boolean)
+      .sort((left, right) => right.count - left.count || right.score - left.score);
+
+    const digits = candidates[0]?.value?.replace(/^0+(?=\d)/, '') || '';
 
     return digits.replace(/[^\d]/g, '');
   }
