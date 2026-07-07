@@ -17,6 +17,7 @@ const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 const ATARI_ST_TOS_KEY = 'atari-st-tos';
 const CONTROL_MATCH_LIMIT = 6;
+const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
 const ROOM_SYSTEM_OPTIONS = [
   ['cpc', 'Amstrad CPC'],
   ['cpc_party', 'Amstrad CPC Party'],
@@ -405,6 +406,10 @@ export default function RoomPage() {
   const localOfferRef = useRef(null);
   const hostVideoStreamRef = useRef(null);
   const hostAudioStreamRef = useRef(null);
+  const hostRawAudioStreamRef = useRef(null);
+  const hostAudioGraphRef = useRef(null);
+  const hostVolumeRef = useRef(1);
+  const emulatorPausedRef = useRef(false);
   const partyHostPeersRef = useRef(new Map());
   const pendingPartyGuestsRef = useRef(new Map());
   const hostStartingRef = useRef(false);
@@ -434,6 +439,11 @@ export default function RoomPage() {
   const [micStatus, setMicStatus] = useState('Mic off');
   const [micDevices, setMicDevices] = useState([]);
   const [selectedMicDeviceId, setSelectedMicDeviceId] = useState('');
+  const [hostVolume, setHostVolume] = useState(() => {
+    const storedVolume = Number(window.localStorage?.getItem(HOST_VOLUME_STORAGE_KEY));
+    return Number.isFinite(storedVolume) ? Math.min(1, Math.max(0, storedVolume)) : 1;
+  });
+  const [emulatorPaused, setEmulatorPaused] = useState(false);
   const [c64WarpEnabled, setC64WarpEnabled] = useState(false);
   const [c64JoystickPortsSwapped, setC64JoystickPortsSwapped] = useState(false);
   const [c64MediaCount, setC64MediaCount] = useState(0);
@@ -571,6 +581,18 @@ export default function RoomPage() {
   }, [isHost]);
 
   useEffect(() => {
+    hostVolumeRef.current = hostVolume;
+    window.localStorage?.setItem(HOST_VOLUME_STORAGE_KEY, String(hostVolume));
+    applyHostVolume(hostVolume);
+  }, [hostVolume]);
+
+  useEffect(() => {
+    return () => {
+      cleanupHostAudioGraph({ stopInput: true });
+    };
+  }, []);
+
+  useEffect(() => {
     setEmulatorFrameLoadCount(0);
     sentStoredKickstartFrameRef.current = 0;
     if (isAtari8) {
@@ -666,8 +688,90 @@ export default function RoomPage() {
     mirrorCaptureTrackRef.current = null;
   }
 
+  function cleanupHostAudioGraph({ stopInput = false } = {}) {
+    const graph = hostAudioGraphRef.current;
+    hostAudioGraphRef.current = null;
+
+    graph?.output?.getTracks?.().forEach((track) => track.stop());
+    if (stopInput) {
+      graph?.input?.getTracks?.().forEach((track) => track.stop());
+    }
+    graph?.context?.close?.().catch(() => {});
+
+    if (stopInput) {
+      hostRawAudioStreamRef.current = null;
+    }
+  }
+
+  function applyHostVolume(value = hostVolumeRef.current) {
+    hostVolumeRef.current = Math.min(1, Math.max(0, Number(value) || 0));
+    const graph = hostAudioGraphRef.current;
+
+    if (graph?.gain && graph?.context) {
+      graph.gain.gain.setValueAtTime(hostVolumeRef.current, graph.context.currentTime);
+    }
+  }
+
+  function buildHostAudioStream(rawAudioStream) {
+    cleanupHostAudioGraph({ stopInput: true });
+    hostRawAudioStreamRef.current = rawAudioStream || null;
+
+    if (!rawAudioStream?.getAudioTracks?.().length) {
+      return null;
+    }
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      rawAudioStream.getAudioTracks().forEach((track) => {
+        track.enabled = !emulatorPausedRef.current;
+      });
+      return rawAudioStream;
+    }
+
+    try {
+      const context = new AudioContextClass();
+      const source = context.createMediaStreamSource(rawAudioStream);
+      const gain = context.createGain();
+      const destination = context.createMediaStreamDestination();
+
+      gain.gain.value = hostVolumeRef.current;
+      source.connect(gain);
+      gain.connect(destination);
+      destination.stream.getAudioTracks().forEach((track) => {
+        track.enabled = !emulatorPausedRef.current;
+      });
+      hostAudioGraphRef.current = {
+        context,
+        source,
+        gain,
+        output: destination.stream,
+        input: rawAudioStream,
+      };
+      return destination.stream;
+    } catch (err) {
+      addLog(`Volume control unavailable: ${err.message}`);
+      rawAudioStream.getAudioTracks().forEach((track) => {
+        track.enabled = !emulatorPausedRef.current;
+      });
+      return rawAudioStream;
+    }
+  }
+
+  function setHostPaused(nextPaused) {
+    emulatorPausedRef.current = nextPaused;
+    setEmulatorPaused(nextPaused);
+    hostAudioStreamRef.current?.getAudioTracks?.().forEach((track) => {
+      track.enabled = !nextPaused;
+    });
+    hostRawAudioStreamRef.current?.getAudioTracks?.().forEach((track) => {
+      track.enabled = !nextPaused;
+    });
+  }
+
   function resetLiveRoomSession(message = 'Room session reset', { preservePeer = false } = {}) {
     stopMirrorLoop();
+    cleanupHostAudioGraph({ stopInput: true });
+    setHostPaused(false);
 
     clearMirrorCanvas(message);
 
@@ -1161,7 +1265,8 @@ export default function RoomPage() {
     startMirrorLoop(emulatorCanvas);
 
     const previousAudioTrack = hostAudioStreamRef.current?.getAudioTracks?.()[0] || null;
-    const nextAudioStream = await waitForHostAudioStream(frame);
+    const rawAudioStream = await waitForHostAudioStream(frame);
+    const nextAudioStream = buildHostAudioStream(rawAudioStream);
     const nextAudioTrack = nextAudioStream?.getAudioTracks?.()[0] || null;
 
     if (!isSoloMode && previousAudioTrack && nextAudioTrack) {
@@ -1212,7 +1317,8 @@ export default function RoomPage() {
     startMirrorLoop(emulatorCanvas);
 
     const previousAudioTrack = hostAudioStreamRef.current?.getAudioTracks?.()[0] || null;
-    const nextAudioStream = await waitForHostAudioStream(frame);
+    const rawAudioStream = await waitForHostAudioStream(frame);
+    const nextAudioStream = buildHostAudioStream(rawAudioStream);
     const nextAudioTrack = nextAudioStream?.getAudioTracks?.()[0] || null;
 
     if (!isSoloMode && previousAudioTrack && nextAudioTrack) {
@@ -1241,8 +1347,9 @@ export default function RoomPage() {
   async function replaceHostMediaStreams(nextVideoStream, nextAudioStream = null) {
     const previousVideoStream = hostVideoStreamRef.current;
     const previousAudioStream = hostAudioStreamRef.current;
+    const controlledAudioStream = buildHostAudioStream(nextAudioStream);
     const nextVideoTrack = nextVideoStream?.getVideoTracks?.()[0] || null;
-    const nextAudioTrack = nextAudioStream?.getAudioTracks?.()[0] || null;
+    const nextAudioTrack = controlledAudioStream?.getAudioTracks?.()[0] || null;
 
     if (!nextVideoTrack) {
       throw new Error('New arcade video stream missing');
@@ -1266,7 +1373,7 @@ export default function RoomPage() {
         if (audioSender) {
           await audioSender.replaceTrack(nextAudioTrack);
         } else if (!isSoloMode) {
-          pc.addTrack(nextAudioTrack, nextAudioStream);
+          pc.addTrack(nextAudioTrack, controlledAudioStream);
         }
       }
     }
@@ -1275,7 +1382,7 @@ export default function RoomPage() {
     previousAudioStream?.getTracks?.().forEach((track) => track.stop());
     hostVideoStreamRef.current = nextVideoStream;
     mirrorCaptureTrackRef.current = nextVideoTrack;
-    hostAudioStreamRef.current = nextAudioStream || null;
+    hostAudioStreamRef.current = controlledAudioStream || null;
   }
 
   const configureSerialChannel = useCallback((channel) => {
@@ -2664,12 +2771,14 @@ export default function RoomPage() {
       pcRef.current = null;
       return () => {
         stopMirrorLoop();
+        cleanupHostAudioGraph({ stopInput: true });
 
         localMicStreamRef.current?.getTracks().forEach((track) => track.stop());
         localMicStreamRef.current = null;
         localMicSenderRef.current = null;
         hostVideoStreamRef.current = null;
         hostAudioStreamRef.current = null;
+        hostRawAudioStreamRef.current = null;
         dataChannelRef.current?.close();
       };
     }
@@ -2785,6 +2894,7 @@ export default function RoomPage() {
 
     return () => {
       stopMirrorLoop();
+      cleanupHostAudioGraph({ stopInput: true });
 
       localMicStreamRef.current?.getTracks().forEach((track) => track.stop());
       localMicStreamRef.current = null;
@@ -2799,6 +2909,7 @@ export default function RoomPage() {
       pendingPartyGuestsRef.current.clear();
       hostVideoStreamRef.current = null;
       hostAudioStreamRef.current = null;
+      hostRawAudioStreamRef.current = null;
       dataChannelRef.current?.close();
       serialChannelRef.current?.close();
       serialChannelRef.current = null;
@@ -3139,14 +3250,16 @@ export default function RoomPage() {
     };
 
     const draw = () => {
-      drawOnce();
+      if (!emulatorPausedRef.current) {
+        drawOnce();
+      }
 
       mirrorLoopRef.current = requestAnimationFrame(draw);
     };
 
     draw();
     mirrorKeepaliveTimerRef.current = window.setInterval(() => {
-      if (document.visibilityState === 'hidden' || !document.hasFocus()) {
+      if (!emulatorPausedRef.current && (document.visibilityState === 'hidden' || !document.hasFocus())) {
         drawOnce();
       }
     }, 250);
@@ -3581,6 +3694,7 @@ export default function RoomPage() {
 
     try {
       setError('');
+      setHostPaused(false);
       const pc = pcRef.current;
       const iframe = emulatorFrameRef.current;
 
@@ -3652,10 +3766,11 @@ export default function RoomPage() {
       hostVideoStreamRef.current = stream;
       mirrorCaptureTrackRef.current = stream.getVideoTracks?.()[0] || null;
 
-      const audioStream = await waitForHostAudioStream(iframe);
-      hostAudioStreamRef.current = audioStream || null;
+      const rawAudioStream = await waitForHostAudioStream(iframe);
 
       if (isSoloMode) {
+        const audioStream = buildHostAudioStream(rawAudioStream);
+        hostAudioStreamRef.current = audioStream || null;
         addLog('Local emulator ready');
         setStatus('Local emulator ready');
         hostStartedRef.current = true;
@@ -3671,12 +3786,15 @@ export default function RoomPage() {
         && pc.getSenders?.().some((sender) => sender.track?.kind === 'video');
 
       if (hasExistingHostVideoSender) {
-        await replaceHostMediaStreams(stream, audioStream);
-        addLog(`Replaced room stream with ${stream.getVideoTracks().length} video track(s) and ${audioStream?.getAudioTracks().length || 0} audio track(s)`);
+        await replaceHostMediaStreams(stream, rawAudioStream);
+        addLog(`Replaced room stream with ${stream.getVideoTracks().length} video track(s) and ${hostAudioStreamRef.current?.getAudioTracks().length || 0} audio track(s)`);
         setStatus('Room stream switched');
         hostStartedRef.current = true;
         return;
       }
+
+      const audioStream = buildHostAudioStream(rawAudioStream);
+      hostAudioStreamRef.current = audioStream || null;
 
       if (isMultiPeerParty) {
         addLog(`Party stream ready with ${stream.getVideoTracks().length} video track(s) and ${audioStream?.getAudioTracks().length || 0} audio track(s)`);
@@ -3957,8 +4075,26 @@ export default function RoomPage() {
     setStatus(`Inserting AGA disk ${index + 1}`);
   }
 
+  function handleHostVolumeChange(event) {
+    const nextVolume = Math.min(1, Math.max(0, Number(event.target.value) / 100));
+    setHostVolume(nextVolume);
+  }
+
+  function toggleEmulatorPause() {
+    if (!canControlLocalEmulator || !hostStarted) return;
+
+    const nextPaused = !emulatorPausedRef.current;
+    setHostPaused(nextPaused);
+    forwardInputToEmulator({ type: nextPaused ? 'emulator_pause' : 'emulator_resume', paused: nextPaused });
+    forwardInputToEmulator({ type: 'emulator_set_paused', paused: nextPaused });
+    addLog(nextPaused ? 'Emulator stream paused' : 'Emulator stream resumed');
+    setStatus(nextPaused ? 'Emulator paused' : 'Emulator resumed');
+  }
+
   async function resetHostEmulator() {
     if (!canControlLocalEmulator || !hostStarted) return;
+
+    setHostPaused(false);
 
     if (isC64) {
       setError('');
@@ -4774,6 +4910,31 @@ export default function RoomPage() {
                   {isMouseComputer ? (
                     <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>
                       Right click
+                    </button>
+                  ) : null}
+
+                  {canControlLocalEmulator ? (
+                    <label className="host-volume-control">
+                      <span>Volume {Math.round(hostVolume * 100)}%</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={Math.round(hostVolume * 100)}
+                        onChange={handleHostVolumeChange}
+                      />
+                    </label>
+                  ) : null}
+
+                  {canControlLocalEmulator ? (
+                    <button
+                      type="button"
+                      className={emulatorPaused ? 'active' : 'secondary'}
+                      onClick={toggleEmulatorPause}
+                      disabled={!hostStarted}
+                    >
+                      {emulatorPaused ? 'Resume emulator' : 'Pause emulator'}
                     </button>
                   ) : null}
 
