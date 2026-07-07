@@ -69,22 +69,6 @@ const PLATFORM_SHELVES = [
             },
           },
           {
-            id: 'cpc_pinball',
-            name: 'Amstrad Pinball Dreams',
-            shortName: 'CPC PD',
-            accent: 'violet',
-            logo: amstradLogoUrl,
-            summary: 'A separate CPC compatibility room for Pinball Dreams experiments.',
-            formats: '.dsk',
-            superAdminOnly: true,
-            modes: {
-              solo: { enabled: true },
-              hosted: { enabled: true },
-              party: { enabled: true, system: 'cpc_pinball' },
-              link: { enabled: false, note: 'Not available' },
-            },
-          },
-          {
             id: 'spectrum',
             name: 'ZX Spectrum',
             shortName: 'ZX',
@@ -393,7 +377,7 @@ export default function LobbyPage() {
     eras: platform.eras.map((era) => ({
       ...era,
       systems: era.systems.filter((system) => (
-        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin || (system.id === 'cpc_pinball' && (isAdmin || isTester || isXyphoe)) || (system.id === 'atarist' && canUsePreviewSystems))
+        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin || (system.id === 'atarist' && canUsePreviewSystems))
       )).map((system) => {
         const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
         const locked = lockedForTesting || Boolean(system.underConstruction);
@@ -408,7 +392,7 @@ export default function LobbyPage() {
         };
       }),
     })),
-  })), [canUsePreviewSystems, isAdmin, isSuperAdmin, isXyphoe]);
+  })), [canUsePreviewSystems, isAdmin, isSuperAdmin]);
 
   const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];
@@ -517,16 +501,14 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin && !(selectedSystem.id === 'cpc_pinball' && (isAdmin || isTester || isXyphoe)) && !(selectedSystem.id === 'atarist' && canUsePreviewSystems)) || (modeConfig.testing && !canUsePreviewSystems)) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin && !(selectedSystem.id === 'atarist' && canUsePreviewSystems)) || (modeConfig.testing && !canUsePreviewSystems)) {
         throw new Error('That play mode is not ready yet.');
       }
 
       const roomSystem = modeConfig.system || selectedSystem.id;
-      const isPartyRoom = mode === 'party' && ['cpc_party', 'c64', 'arcade', 'cpc_pinball'].includes(roomSystem);
+      const isPartyRoom = mode === 'party' && ['cpc_party', 'c64', 'arcade'].includes(roomSystem);
       const nextPartyMaxPlayers = roomSystem === 'arcade'
         ? Math.min(4, Math.max(3, partyMaxPlayers))
-        : roomSystem === 'cpc_pinball'
-          ? Math.min(20, Math.max(3, partyMaxPlayers))
         : partyMaxPlayers;
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
@@ -751,7 +733,7 @@ export default function LobbyPage() {
               </div>
             ) : null}
 
-            {selectedMode === 'party' && ['cpc_party', 'c64', 'arcade', 'cpc_pinball'].includes(selectedSystem?.modes.party?.system || selectedSystem?.id) ? (
+            {selectedMode === 'party' && ['cpc_party', 'c64', 'arcade'].includes(selectedSystem?.modes.party?.system || selectedSystem?.id) ? (
               <label className="party-player-select mode-party-select">
                 <span>Party players</span>
                 <select
@@ -760,9 +742,7 @@ export default function LobbyPage() {
                 >
                   {(selectedSystem?.modes.party?.system === 'arcade'
                     ? [3, 4]
-                    : selectedSystem?.modes.party?.system === 'cpc_pinball'
-                      ? [3, 4, 5, 6, 7, 8, 10, 12, 16, 20]
-                      : [2, 3, 4, 5, 6, 7, 8]).map((count) => (
+                    : [2, 3, 4, 5, 6, 7, 8]).map((count) => (
                     <option key={count} value={count}>{count}</option>
                   ))}
                 </select>

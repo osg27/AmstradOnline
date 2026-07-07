@@ -20,7 +20,6 @@ const CONTROL_MATCH_LIMIT = 6;
 const ROOM_SYSTEM_OPTIONS = [
   ['cpc', 'Amstrad CPC'],
   ['cpc_party', 'Amstrad CPC Party'],
-  ['cpc_pinball', 'Amstrad Pinball Dreams'],
   ['spectrum', 'ZX Spectrum'],
   ['c64', 'Commodore 64'],
   ['atari8', 'Atari 400/800 XL'],
@@ -381,10 +380,6 @@ export default function RoomPage() {
   const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
   const [partyRoster, setPartyRoster] = useState([]);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
-  const [scoreEntries, setScoreEntries] = useState([]);
-  const [scoreValue, setScoreValue] = useState('');
-  const [scoreSaving, setScoreSaving] = useState(false);
-  const [scoreError, setScoreError] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
 
@@ -394,7 +389,6 @@ export default function RoomPage() {
   const remoteVoiceAudioRef = useRef(null);
   const emulatorFrameRef = useRef(null);
   const mirrorCanvasRef = useRef(null);
-  const scoreInputRef = useRef(null);
   const mirrorLoopRef = useRef(null);
   const mirrorKeepaliveTimerRef = useRef(null);
   const mirrorCaptureTrackRef = useRef(null);
@@ -467,8 +461,7 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const roomSystem = room?.system || 'cpc';
   const isCpcParty = roomSystem === 'cpc_party';
-  const isCpcPinball = roomSystem === 'cpc_pinball';
-  const isCpcSystem = roomSystem === 'cpc' || roomSystem === 'cpc_party' || isCpcPinball;
+  const isCpcSystem = roomSystem === 'cpc' || roomSystem === 'cpc_party';
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const isAmigaLink = roomSystem === 'amiga_link';
@@ -488,16 +481,14 @@ export default function RoomPage() {
   const isMouseComputer = isAmigaFamily || isAtariSt;
   const isArcade = roomSystem === 'arcade';
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
-  const partyMaxLimit = isCpcPinball ? 20 : 8;
-  const partyMaxPlayers = Math.min(partyMaxLimit, Math.max(2, Number(room?.party_max_players) || 2));
-  const isPinballParty = isCpcPinball && !isSoloMode && partyMaxPlayers > 2;
+  const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const isC64Party = isC64 && !isSoloMode && partyMaxPlayers > 2;
   const isArcadeParty = isArcade && !isSoloMode && partyMaxPlayers > 2;
-  const isSharedCpcParty = isCpcParty || isPinballParty;
+  const isSharedCpcParty = isCpcParty;
   const isMultiPeerParty = isSharedCpcParty || isC64Party || isArcadeParty;
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isAtari8 || isAtariSt || isArcade;
-  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isCpcPinball ? 'Amstrad Pinball Dreams' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   useEffect(() => {
     setSelectedRoomSystem(roomSystem);
   }, [roomSystem]);
@@ -511,7 +502,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-06-27-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-07-01-4' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-23-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcPinball ? '/emulator-pinball-cpcbox/index.html?v=2026-06-19-7' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-07-01-4' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-23-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -522,7 +513,7 @@ export default function RoomPage() {
     : isSoloMode
       ? isAmigaFamily
         ? 'P1 Amiga controls + keyboard/mouse'
-        : isMasterSystem ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isAtari8 ? 'P1 Atari joystick + keyboard' : isAtariSt ? 'P1 Atari ST joystick + keyboard/mouse' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isCpcPinball ? 'Z / M flippers, Down plunger, Space nudge' : isSharedCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
+        : isMasterSystem ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isPlayStation ? 'P1 PlayStation controller' : isC64 ? 'P1 C64 joystick + keyboard' : isAtari8 ? 'P1 Atari joystick + keyboard' : isAtariSt ? 'P1 Atari ST joystick + keyboard/mouse' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isSharedCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
       : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
       : isMasterSystem ? (isHost ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : 'P2 controller 2 / Button 1 / Button 2') : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isPlayStation ? (isHost ? 'P1 PlayStation controller' : 'P2 PlayStation controller') : isC64Party ? `P${currentPartyPlayerNumber} C64 joystick` : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isAtari8 ? (isHost ? 'P1 Atari joystick + keyboard' : 'P2 Atari joystick') : isAtariSt ? (isHost ? 'P1 Atari ST joystick + keyboard/mouse' : 'P2 Atari ST joystick') : isArcadeParty ? `P${currentPartyPlayerNumber} arcade controls` : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isSharedCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
@@ -613,13 +604,6 @@ export default function RoomPage() {
       setGuestDisplayName(username);
     }
   }, [isHost, room, username]);
-
-  useEffect(() => {
-    if (!isPinballParty) return;
-
-    setScoreValue('');
-    setScoreError('');
-  }, [activePartyPlayer, isPinballParty]);
 
   useEffect(() => {
     if (!isMultiPeerParty || !isHost) {
@@ -805,33 +789,6 @@ export default function RoomPage() {
   }
 
   function keyToJoystickBit(key) {
-    if (isCpcPinball) {
-      switch (key) {
-        case 'ArrowUp':
-          return 1;
-        case 'ArrowDown':
-          return 2;
-        case 'ArrowLeft':
-        case 'z':
-        case 'Z':
-          return 4;
-        case 'ArrowRight':
-        case 'm':
-        case 'M':
-          return 8;
-        case 'Control':
-        case 'f':
-        case 'F':
-          return 16;
-        case ' ':
-          return 32;
-        case 'Enter':
-          return 64;
-        default:
-          return 0;
-      }
-    }
-
     switch (key) {
       case 'q':
       case 'Q':
@@ -864,20 +821,6 @@ export default function RoomPage() {
     const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone;
     const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
-    if (system === 'cpc_pinball') {
-      let pinballMask = 0;
-      const leftTrigger = pad.buttons[4]?.pressed || pad.buttons[6]?.pressed || (pad.buttons[6]?.value ?? 0) > 0.35;
-      const rightTrigger = pad.buttons[5]?.pressed || pad.buttons[7]?.pressed || (pad.buttons[7]?.value ?? 0) > 0.35;
-      const launch = down || pad.buttons[0]?.pressed;
-      const tilt = pad.buttons[1]?.pressed;
-      if (up) pinballMask |= 1;
-      if (left || leftTrigger) pinballMask |= 4;
-      if (right || rightTrigger) pinballMask |= 8;
-      if (launch) pinballMask |= 2;
-      if (tilt) pinballMask |= 32;
-      if (pad.buttons[8]?.pressed || pad.buttons[9]?.pressed) pinballMask |= 64;
-      return pinballMask;
-    }
     const isMultiButtonSystem = system === 'mastersystem' || system === 'megadrive' || system === 'nes' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'arcade';
     const fire = isMultiButtonSystem
       ? pad.buttons[0]?.pressed
@@ -989,168 +932,6 @@ export default function RoomPage() {
       [keys.fire, 16, Boolean(mask & 16)],
       [keys.extra, 32, Boolean(mask & 32)],
     ];
-  }
-
-  function extractPinballScoreFromCanvas(canvas) {
-    if (!canvas) return '';
-
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return '';
-
-    const width = canvas.width;
-    const height = canvas.height;
-    const cropTop = 0;
-    const cropHeight = Math.min(Math.max(44, Math.round(height * 0.09)), 62);
-    const image = context.getImageData(0, cropTop, width, cropHeight);
-    const columnHits = new Array(width).fill(0);
-
-    function isScorePixel(index) {
-      const r = image.data[index];
-      const g = image.data[index + 1];
-      const b = image.data[index + 2];
-      return r > 140 && g > 100 && b < 130 && r > b * 1.35 && g > b * 1.35;
-    }
-
-    for (let y = 0; y < cropHeight; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        if (isScorePixel((y * width + x) * 4)) {
-          columnHits[x] += 1;
-        }
-      }
-    }
-
-    const rawRuns = [];
-    let runStart = -1;
-    for (let x = 0; x < width; x += 1) {
-      const active = columnHits[x] >= 1;
-      if (active && runStart < 0) runStart = x;
-      if ((!active || x === width - 1) && runStart >= 0) {
-        const end = active && x === width - 1 ? x : x - 1;
-        if (end - runStart >= 1) rawRuns.push([runStart, end]);
-        runStart = -1;
-      }
-    }
-
-    const runs = [];
-    rawRuns.forEach(([start, end]) => {
-      const previous = runs[runs.length - 1];
-      if (previous && start - previous[1] <= 10) {
-        previous[1] = end;
-      } else {
-        runs.push([start, end]);
-      }
-    });
-
-    const digitMap = new Map([
-      ['1111110', '0'],
-      ['0110000', '1'],
-      ['1101101', '2'],
-      ['1111001', '3'],
-      ['0110011', '4'],
-      ['1011011', '5'],
-      ['1011111', '6'],
-      ['1110000', '7'],
-      ['1111111', '8'],
-      ['1111011', '9'],
-    ]);
-    const sampleRegions = [
-      [0.28, 0.02, 0.72, 0.18],
-      [0.68, 0.16, 0.94, 0.46],
-      [0.68, 0.54, 0.94, 0.84],
-      [0.28, 0.82, 0.72, 0.98],
-      [0.06, 0.54, 0.32, 0.84],
-      [0.06, 0.16, 0.32, 0.46],
-      [0.28, 0.42, 0.72, 0.58],
-    ];
-
-    function digitBounds(start, end) {
-      let top = cropHeight;
-      let bottom = 0;
-      let left = end;
-      let right = start;
-      for (let y = 0; y < cropHeight; y += 1) {
-        for (let x = start; x <= end; x += 1) {
-          if (isScorePixel((y * width + x) * 4)) {
-            top = Math.min(top, y);
-            bottom = Math.max(bottom, y);
-            left = Math.min(left, x);
-            right = Math.max(right, x);
-          }
-        }
-      }
-      return bottom > top ? { top, bottom, left, right } : null;
-    }
-
-    function sampleDigit(start, end, forcedBounds = null) {
-      const bounds = forcedBounds || digitBounds(start, end);
-      if (!bounds) return { digit: '', confidence: 0 };
-      const { top, bottom } = bounds;
-      if (bottom <= top) return { digit: '', confidence: 0 };
-
-      const digitWidth = Math.max(1, end - start + 1);
-      const digitHeight = Math.max(1, bottom - top + 1);
-      const samples = sampleRegions.map(([x1, y1, x2, y2]) => {
-        const sx1 = Math.max(start, Math.floor(start + digitWidth * x1));
-        const sx2 = Math.min(end, Math.ceil(start + digitWidth * x2));
-        const sy1 = Math.max(top, Math.floor(top + digitHeight * y1));
-        const sy2 = Math.min(bottom, Math.ceil(top + digitHeight * y2));
-        let lit = 0;
-        let total = 0;
-        for (let y = sy1; y <= sy2; y += 1) {
-          for (let x = sx1; x <= sx2; x += 1) {
-            total += 1;
-            if (isScorePixel((y * width + x) * 4)) lit += 1;
-          }
-        }
-        const ratio = total ? lit / total : 0;
-        return { lit: ratio > 0.055, ratio };
-      });
-      const signature = samples.map((sample) => (sample.lit ? '1' : '0')).join('');
-      const confidence = samples.reduce((sum, sample) => sum + (sample.lit ? sample.ratio : 1 - sample.ratio), 0) / samples.length;
-
-      return { digit: digitMap.get(signature) || '', confidence };
-    }
-
-    function decodeRun(start, end) {
-      const bounds = digitBounds(start, end);
-      if (!bounds) return null;
-
-      let best = null;
-      const runWidth = end - start + 1;
-      for (let count = 1; count <= 9; count += 1) {
-        const cellWidth = runWidth / count;
-        if (cellWidth < 7 || cellWidth > 28) continue;
-
-        let value = '';
-        let confidence = 0;
-        let misses = 0;
-        for (let index = 0; index < count; index += 1) {
-          const cellStart = Math.round(start + cellWidth * index);
-          const cellEnd = Math.round(start + cellWidth * (index + 1)) - 1;
-          const sampled = sampleDigit(cellStart, cellEnd, bounds);
-          if (!sampled.digit) misses += 1;
-          value += sampled.digit;
-          confidence += sampled.confidence;
-        }
-        if (misses > 0 || !value) continue;
-
-        const score = confidence / count + count * 0.06;
-        if (!best || score > best.score) {
-          best = { value, score, count };
-        }
-      }
-      return best;
-    }
-
-    const candidates = runs
-      .filter(([start, end]) => end - start >= 10)
-      .map(([start, end]) => decodeRun(start, end))
-      .filter(Boolean)
-      .sort((left, right) => right.count - left.count || right.score - left.score);
-
-    const digits = candidates[0]?.value?.replace(/^0+(?=\d)/, '') || '';
-
-    return digits.replace(/[^\d]/g, '');
   }
 
   function hostKeyToCpcKeyboardKey(key) {
@@ -1753,7 +1534,7 @@ export default function RoomPage() {
 
   const sendLocalJoystickMask = useCallback((mask) => {
     const player = isHost ? 1 : isMultiPeerParty ? currentPartyPlayerNumber : 2;
-    const joystickMask = isDirectJoystickSystem || isCpcPinball ? mask : mask & 31;
+    const joystickMask = isDirectJoystickSystem ? mask : mask & 31;
     const previousMask = localJoystickMaskRef.current;
     const payload = {
       type: 'joystick',
@@ -1799,7 +1580,7 @@ export default function RoomPage() {
         player,
         mask: joystickMask,
       });
-      if (!isDirectJoystickSystem && !isCpcPinball) {
+      if (!isDirectJoystickSystem) {
         forwardExtraButtonAsKey(mask, player, previousMask);
       }
       localJoystickMaskRef.current = mask;
@@ -1824,18 +1605,18 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, currentPartyPlayerNumber, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaLink, isCpcPinball, isDirectJoystickSystem, isHost, isMultiPeerParty, isSharedCpcParty, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, currentPartyPlayerNumber, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaLink, isDirectJoystickSystem, isHost, isMultiPeerParty, isSharedCpcParty, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
-    if (isCpcPinball) {
+    if (isCpcSystem) {
       forwardInputToEmulator({ type: 'amstrad_release_all' });
     }
     setInputCaptured(false);
     if (document.pointerLockElement && document.exitPointerLock) {
       document.exitPointerLock();
     }
-  }, [forwardInputToEmulator, isCpcPinball, sendLocalJoystickMask]);
+  }, [forwardInputToEmulator, isCpcSystem, sendLocalJoystickMask]);
 
   const captureInput = useCallback((event = null) => {
     setInputCaptured(true);
@@ -2157,7 +1938,7 @@ export default function RoomPage() {
         forwardInputToEmulator({
           type: 'amstrad_remote_joystick',
           player: 1,
-          mask: isPinballParty ? mask : mask & 31,
+          mask: mask & 31,
         });
         return;
       }
@@ -2181,7 +1962,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
     };
-  }, [activePartyPlayer, forwardInputToEmulator, isDirectJoystickSystem, isHost, isPinballParty, isSharedCpcParty]);
+  }, [activePartyPlayer, forwardInputToEmulator, isDirectJoystickSystem, isHost, isSharedCpcParty]);
 
   useEffect(() => {
     if (isHost !== false) {
@@ -2359,7 +2140,7 @@ export default function RoomPage() {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player: 1,
-            mask: isPinballParty ? mask : mask & 31,
+            mask: mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
         } else if (isDirectJoystickSystem) {
@@ -2394,7 +2175,7 @@ export default function RoomPage() {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
             player: 1,
-            mask: isPinballParty ? mask : mask & 31,
+            mask: mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
         } else if (isDirectJoystickSystem) {
@@ -2412,7 +2193,7 @@ export default function RoomPage() {
       addLog(`Input parse error: ${err.message}`);
       addInputDebug(`parse error ${err.message}`);
     }
-  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAtari8, isDirectJoystickSystem, isPinballParty, isSharedCpcParty, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, addLog, forwardExtraButtonAsKey, forwardInputToEmulator, forwardJoystickMaskAsKeys, isAtari8, isDirectJoystickSystem, isSharedCpcParty, releaseCpcPartySharedInput]);
 
   useEffect(() => {
     handleGuestPayloadOnHostRef.current = handleGuestPayloadOnHost;
@@ -2670,75 +2451,6 @@ export default function RoomPage() {
     setChatMessages((items) => [...items.slice(-99), { ...chatMessage, mine: true }]);
   }
 
-  async function loadScoreboard() {
-    if (!roomCode || !isCpcPinball) {
-      setScoreEntries([]);
-      return;
-    }
-
-    try {
-      const scores = await apiFetch(`/rooms/${roomCode}/scores`);
-      setScoreEntries(Array.isArray(scores) ? scores : []);
-    } catch (err) {
-      setScoreError(err.message);
-    }
-  }
-
-  async function savePinballScore() {
-    if (!isHost || !isCpcPinball || scoreSaving) return;
-
-    const canvas = mirrorCanvasRef.current;
-    if (!canvas) {
-      setScoreError('No screen available to capture.');
-      return;
-    }
-
-    const manualScoreValue = (scoreInputRef.current?.value ?? scoreValue).trim();
-    const readScoreValue = manualScoreValue ? '' : extractPinballScoreFromCanvas(canvas);
-    const nextScoreValue = manualScoreValue || readScoreValue;
-    const parsedScore = Number.parseInt(String(nextScoreValue).replace(/[^\d]/g, ''), 10);
-    if (!Number.isFinite(parsedScore)) {
-      setScoreError('Could not read the score from the top strip. Type it in if the display is unclear.');
-      return;
-    }
-
-    const playerName = activePartyPlayerName || (activePartyPlayer === 1 ? playerOneName : `Player ${activePartyPlayer}`);
-
-    setScoreSaving(true);
-    setScoreError('');
-    try {
-      const screenshotDataUrl = canvas.toDataURL('image/jpeg', 0.82);
-      const saved = await apiFetch(`/rooms/${roomCode}/scores`, {
-        method: 'POST',
-        body: JSON.stringify({
-          player_number: activePartyPlayer,
-          player_name: playerName,
-          score: parsedScore,
-          screenshot_data_url: screenshotDataUrl,
-        }),
-      });
-      setScoreEntries((items) => [saved, ...items]
-        .sort((left, right) => right.score - left.score || new Date(left.created_at) - new Date(right.created_at))
-        .slice(0, 100));
-      setScoreValue('');
-      addLog(`Saved Pinball Dreams score ${parsedScore} for ${playerName}`);
-    } catch (err) {
-      setScoreError(err.message);
-    } finally {
-      setScoreSaving(false);
-    }
-  }
-
-  function readPinballScore() {
-    const score = extractPinballScoreFromCanvas(mirrorCanvasRef.current);
-    if (!score) {
-      setScoreError('Could not read the score from the top strip.');
-      return;
-    }
-    setScoreError('');
-    setScoreValue(score);
-  }
-
   async function switchRoomSystem() {
     if (!room || !isHost || isSoloMode || switchingSystem || selectedRoomSystem === roomSystem) return;
 
@@ -2747,8 +2459,6 @@ export default function RoomPage() {
       setError('');
       const nextPartyMax = selectedRoomSystem === 'cpc_party'
         ? Math.max(3, partyMaxPlayers || 4)
-        : selectedRoomSystem === 'cpc_pinball'
-          ? Math.min(20, Math.max(3, partyMaxPlayers || 20))
         : selectedRoomSystem === 'arcade'
           ? partyMaxPlayers || 2
           : 2;
@@ -2901,16 +2611,6 @@ export default function RoomPage() {
 
     loadRoom();
   }, [roomCode]);
-
-  useEffect(() => {
-    if (!room || !isCpcPinball) {
-      setScoreEntries([]);
-      setScoreError('');
-      return;
-    }
-
-    loadScoreboard();
-  }, [isCpcPinball, room, roomCode]);
 
   useEffect(() => {
     if (!room) return undefined;
@@ -3374,7 +3074,7 @@ export default function RoomPage() {
     if (isArcade) {
       mirrorCanvas.width = 768;
       mirrorCanvas.height = 576;
-    } else if (isCpcPinball) {
+    } else if (isCpcSystem) {
       // CPCBox renders double-height CPC pixels into a 768x272 framebuffer.
       // Restore their display aspect in the room mirror and outgoing stream.
       mirrorCanvas.width = 768;
@@ -4867,27 +4567,6 @@ export default function RoomPage() {
                   height={544}
                 />
 
-                {isPinballParty && isHost ? (
-                  <div className="pinball-score-capture screen-score-capture">
-                    <label>
-                      <span>Score for P{activePartyPlayer}</span>
-                      <input
-                        ref={scoreInputRef}
-                        inputMode="numeric"
-                        value={scoreValue}
-                        onChange={(event) => setScoreValue(event.target.value)}
-                        placeholder="Auto-read"
-                      />
-                    </label>
-                    <button type="button" onClick={savePinballScore} disabled={scoreSaving || !hostStarted}>
-                      {scoreSaving ? 'Saving...' : 'Take score screenshot'}
-                    </button>
-                    <button type="button" className="secondary" onClick={readPinballScore} disabled={!hostStarted}>
-                      Read score
-                    </button>
-                  </div>
-                ) : null}
-
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -5184,10 +4863,10 @@ export default function RoomPage() {
                 {isSharedCpcParty ? (
                   <div className="party-turn-panel">
                     <div className="party-turn-header">
-                      <strong>{isPinballParty ? 'Pinball turn' : 'Party turn'}</strong>
+                      <strong>Party turn</strong>
                       <span>
                         {activePartyPlayerName
-                          ? `P${activePartyPlayer}: ${activePartyPlayerName} controls the ${isPinballParty ? 'table' : 'shared joystick'}`
+                          ? `P${activePartyPlayer}: ${activePartyPlayerName} controls the shared joystick`
                           : `P${activePartyPlayer}: waiting for assigned player`}
                       </span>
                     </div>
@@ -5217,36 +4896,8 @@ export default function RoomPage() {
                       ))}
                     </div>
                     <p className="muted">
-                      {isPinballParty
-                        ? 'Guests can join the stream room, watch the table, and only the selected player can control their run.'
-                        : 'Guests appear here as they join, so the host can pick the right player turn before the game starts.'}
+                      Guests appear here as they join, so the host can pick the right player turn before the game starts.
                     </p>
-                    {isPinballParty ? (
-                      <div className="pinball-scoreboard">
-                        {scoreError ? <p className="error">{scoreError}</p> : null}
-                        <div className="pinball-score-list" aria-label="Pinball Dreams scoreboard">
-                          <div className="party-turn-header">
-                            <strong>Scoreboard</strong>
-                            <span>{scoreEntries.length ? `${scoreEntries.length} saved run${scoreEntries.length === 1 ? '' : 's'}` : 'No scores saved yet'}</span>
-                          </div>
-                          {scoreEntries.slice(0, 10).map((entry, index) => (
-                            <a
-                              key={entry.id}
-                              className="pinball-score-row"
-                              href={entry.screenshot_data_url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <span>{index + 1}</span>
-                              <strong>{entry.player_name}</strong>
-                              <em>{Number(entry.score).toLocaleString()}</em>
-                              <small>{entry.created_at ? new Date(entry.created_at).toLocaleString() : ''}</small>
-                              <img src={entry.screenshot_data_url} alt="" aria-hidden="true" />
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
                 ) : null}
 

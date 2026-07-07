@@ -1199,7 +1199,6 @@ input:focus {
   max-height: 50px;
 }
 
-.system-logo-cpc_pinball,
 .system-logo-atarist,
 .system-logo-amiga,
 .system-logo-amiga_aga,
@@ -1334,8 +1333,7 @@ input:focus {
   filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.38));
 }
 
-.mode-logo-cpc,
-.mode-logo-cpc_pinball {
+.mode-logo-cpc {
   width: min(290px, 100%);
   transform: scaleX(1.18);
 }
@@ -2464,88 +2462,6 @@ input:focus {
 
 .party-roster small {
   color: var(--muted);
-}
-
-.pinball-scoreboard {
-  display: grid;
-  gap: 0.7rem;
-  padding-top: 0.2rem;
-}
-
-.pinball-score-capture {
-  display: grid;
-  grid-template-columns: minmax(160px, 220px) auto auto;
-  gap: 0.55rem;
-  align-items: end;
-}
-
-.screen-score-capture {
-  grid-template-columns: minmax(150px, 220px) minmax(280px, 1fr) minmax(130px, 180px);
-  margin-top: 0.65rem;
-}
-
-.pinball-score-capture label {
-  display: grid;
-  gap: 0.25rem;
-}
-
-.pinball-score-capture label span {
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-
-.pinball-score-capture input {
-  min-height: 42px;
-}
-
-.pinball-score-capture button {
-  min-height: 46px;
-}
-
-.pinball-score-list {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.pinball-score-row {
-  display: grid;
-  grid-template-columns: 34px minmax(120px, 1fr) minmax(90px, auto) minmax(120px, auto) 88px;
-  gap: 0.55rem;
-  align-items: center;
-  padding: 0.45rem 0.55rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #17191a;
-  color: inherit;
-  text-decoration: none;
-}
-
-.pinball-score-row > span {
-  color: var(--gold);
-  font-weight: 900;
-}
-
-.pinball-score-row em {
-  color: #fff7dd;
-  font-style: normal;
-  font-weight: 900;
-  text-align: right;
-}
-
-.pinball-score-row small {
-  color: var(--muted);
-  font-size: 0.78rem;
-  text-align: right;
-}
-
-.pinball-score-row img {
-  width: 88px;
-  height: 50px;
-  object-fit: cover;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #050606;
 }
 
 .input-debug-grid {

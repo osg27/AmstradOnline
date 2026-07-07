@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import can_use_preview_systems, is_admin_user, is_super_admin_user, is_xyphoe_user
+from app.api.routes.auth import can_use_preview_systems, is_admin_user, is_super_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.room import Room, RoomActivity, RoomScore
+from app.models.room import Room, RoomActivity
 from app.models.friendship import RoomInvite
 from app.models.user import User
 from app.schemas.room import (
@@ -17,8 +17,6 @@ from app.schemas.room import (
     RoomHeartbeatRequest,
     RoomJoinRequest,
     RoomResponse,
-    RoomScoreCreateRequest,
-    RoomScoreResponse,
     RoomUpdateRequest,
 )
 
@@ -27,9 +25,9 @@ TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", 
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
 SUPER_ADMIN_ONLY_SYSTEMS = set()
-XYPHOE_SYSTEMS = {"cpc_pinball"}
+XYPHOE_SYSTEMS = set()
 PRIVATE_SUPER_ADMIN_SYSTEMS = set()
-PARTY_SYSTEMS = {"cpc_party", "c64", "arcade", "cpc_pinball"}
+PARTY_SYSTEMS = {"cpc_party", "c64", "arcade"}
 
 
 def normalize_party_max_players(system: str, requested: int | None) -> int:
@@ -39,8 +37,6 @@ def normalize_party_max_players(system: str, requested: int | None) -> int:
     requested_players = requested or 2
     if system == "arcade":
         return min(4, max(3, requested_players))
-    if system == "cpc_pinball":
-        return min(20, max(3, requested_players))
     return min(8, max(2, requested_players))
 
 
@@ -70,11 +66,6 @@ def require_system_access(db: Session, user_id: int, system: str, *, creating: b
         if not user or not is_super_admin_user(user):
             raise HTTPException(status_code=403, detail="This system is only available to the super admin")
         return
-    if system in XYPHOE_SYSTEMS:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user or not (can_use_preview_systems(user) or is_xyphoe_user(user)):
-            raise HTTPException(status_code=403, detail="This system is only available to testers, admins, and the Xyphoe role")
-        return
     if creating and system in SUPER_ADMIN_ONLY_SYSTEMS:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not is_super_admin_user(user):
@@ -98,19 +89,6 @@ def serialize_room(room: Room) -> RoomResponse:
         owner_user_id=room.owner_user_id,
         system=room.system or "cpc",
         party_max_players=room.party_max_players or 2,
-    )
-
-
-def serialize_room_score(room: Room, score: RoomScore) -> RoomScoreResponse:
-    return RoomScoreResponse(
-        id=score.id,
-        room_code=room.room_code,
-        system=score.system,
-        player_number=score.player_number,
-        player_name=score.player_name,
-        score=score.score,
-        screenshot_data_url=score.screenshot_data_url,
-        created_at=score.created_at.isoformat() if score.created_at else "",
     )
 
 
@@ -164,7 +142,6 @@ def join_room(
     db.commit()
 
     return serialize_room(room)
-
 
 @router.patch("/{room_code}", response_model=RoomResponse)
 def update_room(
@@ -248,58 +225,3 @@ def get_room(
     require_system_access(db, user_id, room.system or "cpc")
 
     return serialize_room(room)
-
-
-@router.get("/{room_code}/scores", response_model=list[RoomScoreResponse])
-def get_room_scores(
-    room_code: str,
-    db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
-):
-    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
-    if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
-    require_system_access(db, user_id, room.system or "cpc")
-
-    scores = (
-        db.query(RoomScore)
-        .filter(RoomScore.room_id == room.id)
-        .order_by(RoomScore.score.desc(), RoomScore.created_at.asc())
-        .limit(100)
-        .all()
-    )
-    return [serialize_room_score(room, score) for score in scores]
-
-
-@router.post("/{room_code}/scores", response_model=RoomScoreResponse)
-def create_room_score(
-    room_code: str,
-    payload: RoomScoreCreateRequest,
-    db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
-):
-    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
-    if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
-    require_system_access(db, user_id, room.system or "cpc")
-    if room.owner_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Only the room host can save tournament scores")
-    if (room.system or "cpc") != "cpc_pinball":
-        raise HTTPException(status_code=400, detail="Scores are only available for Pinball Dreams rooms")
-    if not payload.screenshot_data_url.startswith("data:image/"):
-        raise HTTPException(status_code=400, detail="Screenshot must be an image data URL")
-
-    score = RoomScore(
-        room_id=room.id,
-        submitted_by_user_id=user_id,
-        system=room.system,
-        player_number=payload.player_number,
-        player_name=payload.player_name.strip()[:80],
-        score=payload.score,
-        screenshot_data_url=payload.screenshot_data_url,
-    )
-    db.add(score)
-    db.commit()
-    db.refresh(score)
-
-    return serialize_room_score(room, score)
