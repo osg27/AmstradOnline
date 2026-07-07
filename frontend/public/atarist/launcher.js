@@ -9,7 +9,10 @@
   let customTos = null;
   let sharedAudioContext = null;
   let audioDestination = null;
+  let audioCaptureGain = null;
   let keepAlive = null;
+  let emulatorVolume = 1;
+  let emulatorPaused = false;
   let localMask = 0;
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
@@ -41,6 +44,7 @@
     if (sharedAudioContext?.state === "closed") {
       sharedAudioContext = null;
       audioDestination = null;
+      audioCaptureGain = null;
       keepAlive = null;
     }
     if (!sharedAudioContext) {
@@ -48,10 +52,13 @@
     }
     if (!audioDestination) {
       audioDestination = sharedAudioContext.createMediaStreamDestination();
+      audioCaptureGain = sharedAudioContext.createGain();
+      audioCaptureGain.gain.value = emulatorVolume;
+      audioCaptureGain.connect(audioDestination);
       keepAlive = sharedAudioContext.createOscillator();
       const gain = sharedAudioContext.createGain();
       gain.gain.value = 0;
-      keepAlive.connect(gain).connect(audioDestination);
+      keepAlive.connect(gain).connect(audioCaptureGain);
       keepAlive.start();
     }
     return sharedAudioContext;
@@ -84,7 +91,7 @@
           this !== audioDestination
         ) {
           try {
-            originalConnect.call(this, audioDestination);
+            originalConnect.call(this, audioCaptureGain || audioDestination);
           } catch {
             // Some nodes only allow one output. The main audio path should keep working.
           }
@@ -99,6 +106,27 @@
     audioContext?.resume?.().catch(() => {});
     return audioDestination?.stream || null;
   };
+
+  function setEmulatorVolume(volume) {
+    emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
+    window.EJS_volume = emulatorVolume;
+    if (audioCaptureGain && sharedAudioContext) {
+      audioCaptureGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, sharedAudioContext.currentTime);
+    }
+    window.EJS_emulator?.setVolume?.(emulatorPaused ? 0 : emulatorVolume);
+  }
+
+  function setEmulatorPaused(paused) {
+    emulatorPaused = Boolean(paused);
+    setMask(1, 0);
+    setMask(2, 0);
+    if (emulatorPaused) {
+      window.EJS_emulator?.pause?.(true);
+    } else {
+      window.EJS_emulator?.play?.(true);
+    }
+    setEmulatorVolume(emulatorVolume);
+  }
 
   function maskToButtons(mask) {
     const buttons = new Array(16).fill(false);
@@ -807,6 +835,16 @@
 
     if (message.type === "amstrad_audio_unlock") {
       window.getAtariStAudioStream();
+      return;
+    }
+
+    if (message.type === "emulator_set_volume") {
+      setEmulatorVolume(message.volume);
+      return;
+    }
+
+    if (message.type === "emulator_set_paused") {
+      setEmulatorPaused(message.paused);
       return;
     }
 

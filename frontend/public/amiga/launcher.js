@@ -13,6 +13,9 @@ let sentKickstartRom = null;
 let audioContext = null;
 let audioDestination = null;
 let amigaAudioSource = null;
+let amigaAudioGain = null;
+let emulatorVolume = 1;
+let emulatorPaused = false;
 const previousJoystickMasks = new Map();
 
 function drawStatus(title, detail) {
@@ -95,12 +98,15 @@ function ensureAudioDestination() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     audioContext = new AudioContextClass();
     audioDestination = audioContext.createMediaStreamDestination();
+    amigaAudioGain = audioContext.createGain();
+    amigaAudioGain.gain.value = emulatorVolume;
+    amigaAudioGain.connect(audioDestination);
 
     const silence = audioContext.createConstantSource();
     const silenceGain = audioContext.createGain();
     silenceGain.gain.value = 0;
     silence.connect(silenceGain);
-    silenceGain.connect(audioDestination);
+    silenceGain.connect(amigaAudioGain);
     silence.start();
   }
 
@@ -119,7 +125,7 @@ function connectNestedAmigaAudio() {
   if (!nestedAudioTrack || amigaAudioSource) return;
 
   amigaAudioSource = audioContext.createMediaStreamSource(nestedStream);
-  amigaAudioSource.connect(destination);
+  amigaAudioSource.connect(amigaAudioGain || destination);
 }
 
 function getAmigaAudioStream() {
@@ -269,6 +275,33 @@ function loadKickstartRom(bytes) {
 
 function runScript(script) {
   postToEmulator({ cmd: "script", script });
+}
+
+function setEmulatorVolume(volume) {
+  emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
+  const destination = ensureAudioDestination();
+  if (amigaAudioGain && audioContext) {
+    amigaAudioGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, audioContext.currentTime);
+  }
+  if (runtimeReady && emulatorStarted) {
+    runScript(`if (typeof set_volume === 'function') set_volume(${JSON.stringify(emulatorVolume)});`);
+  }
+  return destination;
+}
+
+function setEmulatorPaused(paused) {
+  emulatorPaused = Boolean(paused);
+  previousJoystickMasks.clear();
+  setEmulatorVolume(emulatorVolume);
+
+  if (!runtimeReady || !emulatorStarted) return;
+
+  runScript(`
+    if (typeof is_running === 'function' && is_running() !== ${emulatorPaused ? 'false' : 'true'}) {
+      const runButton = document.getElementById('button_run');
+      if (runButton) runButton.click();
+    }
+  `);
 }
 
 function joystickPortForPlayer(player) {
@@ -476,6 +509,7 @@ window.addEventListener("message", (event) => {
     }
     sendPendingFileToEmulator();
     connectNestedAmigaAudio();
+    setEmulatorVolume(emulatorVolume);
     return;
   }
 
@@ -501,6 +535,16 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amiga_reset") {
     resetAmiga();
+    return;
+  }
+
+  if (data.type === "emulator_set_volume") {
+    setEmulatorVolume(data.volume);
+    return;
+  }
+
+  if (data.type === "emulator_set_paused") {
+    setEmulatorPaused(data.paused);
     return;
   }
 

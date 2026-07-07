@@ -511,8 +511,8 @@ export default function RoomPage() {
   const emulatorSrc = isAmigaAga
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
-    ? '/amiga/launcher.html?v=2026-06-27-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-06-22-3` : isNes ? '/nes/launcher.html?v=2026-07-01-4' : isSnes ? '/snes/launcher.html?v=2026-06-01-2' : isPcEngine ? '/pcengine/launcher.html?v=2026-06-14-2' : isPlayStation ? '/playstation/launcher.html?v=2026-06-14-3' : isC64 ? '/c64/launcher.html?v=2026-06-13-2' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-06-21-3' : isArcade ? '/arcade/launcher.html?v=2026-06-23-1' : isSpectrum ? '/spectrum/index.html?v=2026-06-01-2' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    ? '/amiga/launcher.html?v=2026-07-07-1'
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-07-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-07-1' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -760,12 +760,6 @@ export default function RoomPage() {
   function setHostPaused(nextPaused) {
     emulatorPausedRef.current = nextPaused;
     setEmulatorPaused(nextPaused);
-    hostAudioStreamRef.current?.getAudioTracks?.().forEach((track) => {
-      track.enabled = !nextPaused;
-    });
-    hostRawAudioStreamRef.current?.getAudioTracks?.().forEach((track) => {
-      track.enabled = !nextPaused;
-    });
   }
 
   function resetLiveRoomSession(message = 'Room session reset', { preservePeer = false } = {}) {
@@ -3250,16 +3244,14 @@ export default function RoomPage() {
     };
 
     const draw = () => {
-      if (!emulatorPausedRef.current) {
-        drawOnce();
-      }
+      drawOnce();
 
       mirrorLoopRef.current = requestAnimationFrame(draw);
     };
 
     draw();
     mirrorKeepaliveTimerRef.current = window.setInterval(() => {
-      if (!emulatorPausedRef.current && (document.visibilityState === 'hidden' || !document.hasFocus())) {
+      if (document.visibilityState === 'hidden' || !document.hasFocus()) {
         drawOnce();
       }
     }, 250);
@@ -3704,6 +3696,8 @@ export default function RoomPage() {
 
       setHostStarted(true);
       addLog('Waiting for emulator iframe');
+      iframe.contentWindow?.postMessage({ type: 'emulator_set_volume', volume: hostVolumeRef.current }, window.location.origin);
+      iframe.contentWindow?.postMessage({ type: 'emulator_set_paused', paused: false }, window.location.origin);
 
       if (isAmiga || isAmigaLink) {
         iframe.contentWindow?.postMessage({ type: 'amiga_start' }, window.location.origin);
@@ -4078,6 +4072,7 @@ export default function RoomPage() {
   function handleHostVolumeChange(event) {
     const nextVolume = Math.min(1, Math.max(0, Number(event.target.value) / 100));
     setHostVolume(nextVolume);
+    forwardInputToEmulator({ type: 'emulator_set_volume', volume: nextVolume });
   }
 
   function toggleEmulatorPause() {
@@ -4085,9 +4080,8 @@ export default function RoomPage() {
 
     const nextPaused = !emulatorPausedRef.current;
     setHostPaused(nextPaused);
-    forwardInputToEmulator({ type: nextPaused ? 'emulator_pause' : 'emulator_resume', paused: nextPaused });
     forwardInputToEmulator({ type: 'emulator_set_paused', paused: nextPaused });
-    addLog(nextPaused ? 'Emulator stream paused' : 'Emulator stream resumed');
+    addLog(nextPaused ? 'Emulator paused' : 'Emulator resumed');
     setStatus(nextPaused ? 'Emulator paused' : 'Emulator resumed');
   }
 

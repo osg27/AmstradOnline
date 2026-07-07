@@ -2,13 +2,20 @@
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   let audioContext = null;
   let audioDestination = null;
+  let audioGain = null;
   let audioScheduledAt = 0;
+  let emulatorVolume = 1;
+  let emulatorPaused = false;
 
   function ensureAudio() {
     if (!AudioContextClass) return null;
     if (!audioContext) {
       audioContext = new AudioContextClass();
       audioDestination = audioContext.createMediaStreamDestination();
+      audioGain = audioContext.createGain();
+      audioGain.gain.value = emulatorVolume;
+      audioGain.connect(audioContext.destination);
+      audioGain.connect(audioDestination);
       audioScheduledAt = audioContext.currentTime + 0.05;
     }
     audioContext.resume().catch(() => {});
@@ -42,8 +49,7 @@
 
       const source = context.createBufferSource();
       source.buffer = buffer;
-      source.connect(context.destination);
-      source.connect(audioDestination);
+      source.connect(audioGain || context.destination);
       const startAt = Math.max(audioScheduledAt, context.currentTime + 0.005);
       source.start(startAt);
       audioScheduledAt = startAt + buffer.duration;
@@ -131,6 +137,30 @@
     heldRemoteKeyCodes.forEach((code) => dispatchKey(code, 'up'));
     heldRemoteKeyCodes.clear();
     applyJoystickMask(0);
+  }
+
+  function setEmulatorVolume(volume) {
+    emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
+    ensureAudio();
+    if (audioGain && audioContext) {
+      audioGain.gain.setValueAtTime(emulatorVolume, audioContext.currentTime);
+    }
+  }
+
+  function setEmulatorPaused(paused) {
+    emulatorPaused = Boolean(paused);
+    releaseAllInput();
+    if (audioContext && audioGain) {
+      audioGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, audioContext.currentTime);
+    }
+
+    const runButton = document.getElementById('button-run');
+    if (runButton) {
+      const saysResume = /resume/i.test(runButton.textContent || '');
+      if ((emulatorPaused && !saysResume) || (!emulatorPaused && saysResume)) {
+        runButton.click();
+      }
+    }
   }
 
   function tapKey(code, duration = 55) {
@@ -230,6 +260,10 @@
       boot6128();
     } else if (data.type === 'amstrad_audio_unlock') {
       ensureAudio();
+    } else if (data.type === 'emulator_set_volume') {
+      setEmulatorVolume(data.volume);
+    } else if (data.type === 'emulator_set_paused') {
+      setEmulatorPaused(data.paused);
     } else if (data.type === 'amstrad_remote_input' || data.type === 'amstrad_remote_control') {
       if (window.oU) window.oU.g = false;
       const code = keyCodeFor(data.key);

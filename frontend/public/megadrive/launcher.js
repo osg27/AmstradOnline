@@ -27,8 +27,11 @@
   let audioR = null;
   let audioContext = null;
   let audioDestination = null;
+  let audioMasterGain = null;
   let audioKeepAlive = null;
   let audioKeepAliveGain = null;
+  let emulatorVolume = 1;
+  let emulatorPaused = false;
   let soundShedTime = 0;
   let then = Date.now();
   let targetFps = NTSC_FPS;
@@ -71,12 +74,16 @@
 
     audioContext = new AudioCtor({ sampleRate: SOUND_FREQUENCY });
     audioDestination = audioContext.createMediaStreamDestination();
+    audioMasterGain = audioContext.createGain();
+    audioMasterGain.gain.value = emulatorVolume;
+    audioMasterGain.connect(audioContext.destination);
+    audioMasterGain.connect(audioDestination);
     audioKeepAlive = audioContext.createOscillator();
     audioKeepAliveGain = audioContext.createGain();
     audioKeepAlive.frequency.value = 20;
     audioKeepAliveGain.gain.value = 0.00001;
     audioKeepAlive.connect(audioKeepAliveGain);
-    audioKeepAliveGain.connect(audioDestination);
+    audioKeepAliveGain.connect(audioMasterGain);
     audioKeepAlive.start();
 
     const silence = audioContext.createBuffer(2, SAMPLING_PER_FPS, SOUND_FREQUENCY);
@@ -89,10 +96,7 @@
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
 
-    if (audioDestination) {
-      source.connect(audioDestination);
-    }
-    source.connect(audioContext.destination);
+    source.connect(audioMasterGain || audioContext.destination);
 
     const currentSoundTime = audioContext.currentTime;
     if (currentSoundTime < soundShedTime) {
@@ -174,6 +178,7 @@
       interval = 1000 / targetFps;
       bindViews();
       started = true;
+      emulatorPaused = false;
       pendingStart = false;
       then = Date.now();
       console.info(`${systemName}: emulator started at ${targetFps} FPS`);
@@ -207,6 +212,7 @@
     interval = 1000 / targetFps;
     bindViews();
     started = true;
+    emulatorPaused = false;
     pendingStart = false;
     then = Date.now();
 
@@ -240,7 +246,7 @@
 
   function loop() {
     requestAnimationFrame(loop);
-    if (!started) return;
+    if (!started || emulatorPaused) return;
 
     const now = Date.now();
     const delta = now - then;
@@ -314,6 +320,28 @@
     }
   }
 
+  function setEmulatorVolume(volume) {
+    emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
+    ensureAudio();
+    if (audioMasterGain && audioContext) {
+      audioMasterGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, audioContext.currentTime);
+    }
+  }
+
+  function setEmulatorPaused(paused) {
+    emulatorPaused = Boolean(paused);
+    pressedKeys.clear();
+    remotePressedKeys.clear();
+    localMask = 0;
+    remoteMask = 0;
+    updateInput();
+    if (audioMasterGain && audioContext) {
+      audioMasterGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, audioContext.currentTime);
+    }
+    then = Date.now();
+    soundShedTime = 0;
+  }
+
   window.getMegaDriveAudioStream = function () {
     ensureAudio();
     return audioDestination?.stream || null;
@@ -337,6 +365,14 @@
 
     if (payload.type === 'amstrad_audio_unlock') {
       ensureAudio();
+    }
+
+    if (payload.type === 'emulator_set_volume') {
+      setEmulatorVolume(payload.volume);
+    }
+
+    if (payload.type === 'emulator_set_paused') {
+      setEmulatorPaused(payload.paused);
     }
 
     if (payload.type === 'amstrad_remote_joystick') {
