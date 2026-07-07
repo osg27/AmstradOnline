@@ -298,8 +298,9 @@ function setEmulatorPaused(paused) {
 
   runScript(`
     if (typeof is_running === 'function' && is_running() !== ${emulatorPaused ? 'false' : 'true'}) {
-      const runButton = document.getElementById('button_run');
-      if (runButton) runButton.click();
+      if (typeof app?.button_run_click === 'function') {
+        app.button_run_click();
+      }
     }
   `);
 }
