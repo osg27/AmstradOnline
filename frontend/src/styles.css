@@ -2430,6 +2430,10 @@ input:focus {
   font-size: 0.92rem;
 }
 
+.party-turn-header.compact {
+  margin-top: 0.25rem;
+}
+
 .party-turn-controls {
   display: flex;
   flex-wrap: wrap;
@@ -2479,6 +2483,18 @@ input:focus {
 
 .party-roster small {
   color: var(--muted);
+}
+
+.party-roster-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.party-roster-actions button {
+  min-height: 34px;
+  padding: 0.35rem 0.65rem;
 }
 
 .input-debug-grid {

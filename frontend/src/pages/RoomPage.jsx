@@ -380,6 +380,11 @@ export default function RoomPage() {
   const [activePartyPlayer, setActivePartyPlayer] = useState(1);
   const [partyPlayerNumber, setPartyPlayerNumber] = useState(null);
   const [partyRoster, setPartyRoster] = useState([]);
+  const [arcadeQueueStatus, setArcadeQueueStatus] = useState({
+    queued: false,
+    queuePosition: null,
+    role: 'Spectator',
+  });
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
@@ -497,6 +502,7 @@ export default function RoomPage() {
   const isSharedCpcParty = isCpcParty;
   const isMultiPeerParty = isSharedCpcParty || isC64Party || isArcadeParty;
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
+  const canSendPlayerInput = isHost || !isArcadeParty || Boolean(partyPlayerNumber);
   const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isAtari8 || isAtariSt || isArcade;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
   useEffect(() => {
@@ -540,7 +546,11 @@ export default function RoomPage() {
     : isC64Party
       ? `P${currentPartyPlayerNumber}: ${isHost ? playerOneName : username || playerTwoName} / C64 joystick`
     : isArcadeParty
-      ? `P${currentPartyPlayerNumber}: ${isHost ? playerOneName : username || playerTwoName} / controller ${currentPartyPlayerNumber}`
+      ? partyPlayerNumber || isHost
+        ? `P${currentPartyPlayerNumber}: ${isHost ? playerOneName : username || playerTwoName} / controller ${currentPartyPlayerNumber}`
+        : arcadeQueueStatus.queued
+          ? `Spectator / queue #${arcadeQueueStatus.queuePosition || '?'}`
+          : 'Spectator'
     : isDirectJoystickSystem
       ? `${isHost ? `P1: ${playerOneName}` : `P2: ${playerTwoName}`} / controller ${isHost ? '1' : '2'}`
       : isHost
@@ -1412,6 +1422,28 @@ export default function RoomPage() {
     };
   }, [addLog, forwardInputToEmulator]);
 
+  const handleHostDataMessage = useCallback((rawMessage) => {
+    try {
+      const parsed = JSON.parse(rawMessage);
+
+      if (parsed.type === 'arcade_seat_update') {
+        setPartyPlayerNumber(parsed.playerNumber || null);
+        setArcadeQueueStatus({
+          queued: Boolean(parsed.queued),
+          queuePosition: parsed.queuePosition || null,
+          role: parsed.role || (parsed.playerNumber ? `P${parsed.playerNumber}` : 'Spectator'),
+        });
+        addLog(parsed.playerNumber
+          ? `You are now P${parsed.playerNumber}`
+          : parsed.queued
+            ? `You are queue #${parsed.queuePosition || '?'}`
+            : 'You are watching as a spectator');
+      }
+    } catch (err) {
+      addLog(`Host message parse error: ${err.message}`);
+    }
+  }, [addLog]);
+
   useEffect(() => {
     if (!isAmigaLink) return undefined;
 
@@ -1634,6 +1666,11 @@ export default function RoomPage() {
   }, [forwardInputToEmulator, forwardJoystickMaskAsKeys, isSharedCpcParty]);
 
   const sendLocalJoystickMask = useCallback((mask) => {
+    if (!canSendPlayerInput && mask) {
+      addInputDebug('ignored spectator input', mask, 'spectator');
+      return;
+    }
+
     const player = isHost ? 1 : isMultiPeerParty ? currentPartyPlayerNumber : 2;
     const joystickMask = isDirectJoystickSystem ? mask : mask & 31;
     const previousMask = localJoystickMaskRef.current;
@@ -1706,7 +1743,7 @@ export default function RoomPage() {
     } else {
       addInputDebug(`not sent, channel closed ${formatInputPayload(payload)}`);
     }
-  }, [activePartyPlayer, addInputDebug, currentPartyPlayerNumber, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaLink, isDirectJoystickSystem, isHost, isMultiPeerParty, isSharedCpcParty, releaseCpcPartySharedInput]);
+  }, [activePartyPlayer, addInputDebug, canSendPlayerInput, currentPartyPlayerNumber, forwardExtraButtonAsKey, forwardInputToEmulator, isAmigaLink, isDirectJoystickSystem, isHost, isMultiPeerParty, isSharedCpcParty, releaseCpcPartySharedInput]);
 
   const releaseInputCapture = useCallback(() => {
     sendLocalJoystickMask(0);
@@ -2126,13 +2163,34 @@ export default function RoomPage() {
         }
       };
       const getInputPlayer = (fallbackPlayer = parsed.player) => {
-        if (partyPeerState) return partyPlayerOverride || 2;
+        if (partyPeerState) return partyPeerState.playerNumber || partyPlayerOverride || null;
         if (isSharedCpcParty) return partyPlayerOverride || 2;
         return fallbackPlayer;
       };
 
+      if (parsed.type === 'arcade_join_queue' && partyPeerState?.guestId) {
+        queueArcadePeer(partyPeerState.guestId, partyPeerState);
+        return;
+      }
+
+      if (parsed.type === 'arcade_leave_queue' && partyPeerState?.guestId) {
+        removeArcadePeerFromQueue(partyPeerState.guestId, partyPeerState);
+        return;
+      }
+
+      if (parsed.type === 'arcade_release_slot' && partyPeerState?.guestId) {
+        releaseArcadePlayer(partyPeerState.guestId);
+        return;
+      }
+
+      if (isArcadeParty && partyPeerState && !partyPeerState.playerNumber && parsed.type !== 'audio_unlock') {
+        addInputDebug(`ignored spectator ${parsed.type || 'input'}`, parsed.mask ?? null, 'spectator');
+        return;
+      }
+
       if (parsed.type === 'key') {
         const player = getInputPlayer(parsed.player);
+        if (!player) return;
 
         if (isSharedCpcParty && activePartyPlayer !== player) {
           addInputDebug(`ignored guest key, party turn is P${activePartyPlayer}`, null, 'party turn');
@@ -2160,6 +2218,7 @@ export default function RoomPage() {
 
       if (parsed.type === 'control') {
         const player = getInputPlayer(parsed.player);
+        if (!player) return;
 
         if (isSharedCpcParty && activePartyPlayer !== player) {
           addInputDebug(`ignored guest control, party turn is P${activePartyPlayer}`, null, 'party turn');
@@ -2189,6 +2248,7 @@ export default function RoomPage() {
 
       if (parsed.type === 'input_state') {
         const player = getInputPlayer(parsed.player === 2 ? 2 : 1);
+        if (!player) return;
         const mask = parsed.mask | 0;
         const seq = Number(parsed.seq) || 0;
         const sessionId = String(parsed.sessionId || 'legacy');
@@ -2258,6 +2318,7 @@ export default function RoomPage() {
 
       if (parsed.type === 'joystick') {
         const player = getInputPlayer(parsed.player === 2 ? 2 : 1);
+        if (!player) return;
         const mask = parsed.mask | 0;
         const previousMask = getRemoteMask();
 
@@ -2335,7 +2396,23 @@ export default function RoomPage() {
 
     if (message.type === 'party-assigned') {
       setPartyPlayerNumber(message.playerNumber || null);
-      addLog(`Assigned party player P${message.playerNumber}`);
+      setArcadeQueueStatus({
+        queued: false,
+        queuePosition: null,
+        role: message.playerNumber ? `P${message.playerNumber}` : 'Spectator',
+      });
+      addLog(message.playerNumber ? `Assigned party player P${message.playerNumber}` : 'Moved to spectator');
+      return;
+    }
+
+    if (message.type === 'party-spectator') {
+      setPartyPlayerNumber(null);
+      setArcadeQueueStatus({
+        queued: false,
+        queuePosition: null,
+        role: 'Spectator',
+      });
+      addLog('Joined as spectator');
       return;
     }
 
@@ -2592,6 +2669,15 @@ export default function RoomPage() {
         username: username || playerOneName,
         role: 'Solo',
         connected: true,
+      },
+    ]
+    : isArcadeParty && !isHost
+    ? [
+      {
+        playerNumber: partyPlayerNumber || 'spectator',
+        username: username || playerTwoName,
+        role: partyPlayerNumber ? `P${partyPlayerNumber}` : arcadeQueueStatus.queued ? `Queue #${arcadeQueueStatus.queuePosition || '?'}` : 'Spectator',
+        connected: guestPrepared,
       },
     ]
     : isMultiPeerParty
@@ -2883,7 +2969,13 @@ export default function RoomPage() {
         remoteJoystickMaskRef.current = 0;
         addLog('Input data channel open');
       };
-      channel.onmessage = (msg) => handleGuestPayloadOnHostRef.current?.(msg.data);
+      channel.onmessage = (msg) => {
+        if (isHostRef.current) {
+          handleGuestPayloadOnHostRef.current?.(msg.data);
+        } else {
+          handleHostDataMessage(msg.data);
+        }
+      };
     };
 
     return () => {
@@ -2910,7 +3002,7 @@ export default function RoomPage() {
       serialOfferStartedRef.current = false;
       pc.close();
     };
-  }, [addLog, configureSerialChannel, isAmigaLink, isMultiPeerParty, isSoloMode, roomSessionKey]);
+  }, [addLog, configureSerialChannel, handleHostDataMessage, isAmigaLink, isMultiPeerParty, isSoloMode, roomSessionKey]);
 
   useEffect(() => {
     if (!isAmigaLink || !isHost || !signalingOpen || !room || serialOfferStartedRef.current) return;
@@ -3354,7 +3446,9 @@ export default function RoomPage() {
 
   function getNextPartyPlayerNumber() {
     const usedPlayers = new Set(
-      Array.from(partyHostPeersRef.current.values()).map((peer) => peer.playerNumber),
+      Array.from(partyHostPeersRef.current.values())
+        .map((peer) => peer.playerNumber)
+        .filter(Boolean),
     );
 
     for (let playerNumber = 2; playerNumber <= partyMaxPlayers; playerNumber += 1) {
@@ -3364,46 +3458,174 @@ export default function RoomPage() {
     return null;
   }
 
+  function getArcadeQueue() {
+    return Array.from(partyHostPeersRef.current.entries())
+      .filter(([, peer]) => peer.queued && !peer.playerNumber)
+      .sort(([, left], [, right]) => (left.queuedAt || 0) - (right.queuedAt || 0));
+  }
+
+  function sendArcadeSeatUpdate(guestId, peer) {
+    if (!isArcadeParty || !peer?.channel || peer.channel.readyState !== 'open') return;
+
+    const queue = getArcadeQueue();
+    const queueIndex = queue.findIndex(([queuedGuestId]) => queuedGuestId === guestId);
+
+    peer.channel.send(JSON.stringify({
+      type: 'arcade_seat_update',
+      playerNumber: peer.playerNumber || null,
+      queued: Boolean(peer.queued && !peer.playerNumber),
+      queuePosition: queueIndex === -1 ? null : queueIndex + 1,
+      role: peer.playerNumber ? `P${peer.playerNumber}` : peer.queued ? 'Queued' : 'Spectator',
+    }));
+  }
+
+  function broadcastArcadeSeatUpdates() {
+    if (!isArcadeParty) return;
+
+    for (const [guestId, peer] of partyHostPeersRef.current.entries()) {
+      sendArcadeSeatUpdate(guestId, peer);
+    }
+  }
+
   function refreshPartyRoster() {
+    const queue = getArcadeQueue();
+    const queuePositions = new Map(queue.map(([guestId], index) => [guestId, index + 1]));
     const players = [
       {
         playerNumber: 1,
         username: username || 'Host',
         connected: true,
         role: 'Host',
+        active: true,
       },
       ...Array.from(partyHostPeersRef.current.values())
         .map((peer) => ({
-          playerNumber: peer.playerNumber,
-          username: peer.username || `Player ${peer.playerNumber}`,
+          playerNumber: peer.playerNumber || `spectator-${peer.guestId}`,
+          cabinetPlayerNumber: peer.playerNumber || null,
+          username: peer.username || (peer.playerNumber ? `Player ${peer.playerNumber}` : 'Spectator'),
           connected: ['connected', 'completed'].includes(peer.pc?.iceConnectionState) || peer.pc?.connectionState === 'connected',
-          role: 'Guest',
+          role: peer.playerNumber ? 'Playing' : peer.queued ? `Queue #${queuePositions.get(peer.guestId) || '?'}` : 'Spectator',
+          active: Boolean(peer.playerNumber),
+          queued: Boolean(peer.queued && !peer.playerNumber),
+          queuePosition: queuePositions.get(peer.guestId) || null,
+          guestId: peer.guestId,
         }))
-        .sort((a, b) => a.playerNumber - b.playerNumber),
+        .sort((a, b) => {
+          if (a.active !== b.active) return a.active ? -1 : 1;
+          if (a.active && b.active) return a.cabinetPlayerNumber - b.cabinetPlayerNumber;
+          if (a.queued !== b.queued) return a.queued ? -1 : 1;
+          return (a.queuePosition || 999) - (b.queuePosition || 999) || String(a.username).localeCompare(String(b.username));
+        }),
     ];
 
     setPartyRoster(players);
+    broadcastArcadeSeatUpdates();
+  }
+
+  function releasePartyPeerInput(peer) {
+    if (!peer?.joystickMask) return;
+
+    if (isSharedCpcParty) {
+      releaseCpcPartySharedInput(peer.joystickMask);
+    } else {
+      forwardInputToEmulator({
+        type: 'amstrad_remote_joystick',
+        player: peer.playerNumber || 2,
+        mask: 0,
+      });
+    }
+
+    peer.joystickMask = 0;
+  }
+
+  function promoteArcadeQueue() {
+    if (!isArcadeParty || !isHost) return;
+
+    let changed = false;
+    let nextPlayerNumber = getNextPartyPlayerNumber();
+    const queue = getArcadeQueue();
+
+    for (const [guestId, peer] of queue) {
+      if (!nextPlayerNumber) break;
+
+      peer.playerNumber = nextPlayerNumber;
+      peer.queued = false;
+      peer.queuedAt = 0;
+      changed = true;
+      sendSignalRef.current({
+        type: 'party-assigned',
+        to: guestId,
+        playerNumber: nextPlayerNumber,
+      });
+      addLog(`${peer.username || 'Spectator'} moved from queue to P${nextPlayerNumber}`);
+      nextPlayerNumber = getNextPartyPlayerNumber();
+    }
+
+    if (changed) {
+      refreshPartyRoster();
+    } else {
+      broadcastArcadeSeatUpdates();
+    }
+  }
+
+  function queueArcadePeer(guestId, peer) {
+    if (!isArcadeParty || !peer) return;
+
+    if (peer.playerNumber) {
+      sendArcadeSeatUpdate(guestId, peer);
+      return;
+    }
+
+    if (!peer.queued) {
+      peer.queued = true;
+      peer.queuedAt = Date.now();
+      addLog(`${peer.username || 'Spectator'} joined the arcade queue`);
+    }
+
+    promoteArcadeQueue();
+    refreshPartyRoster();
+  }
+
+  function removeArcadePeerFromQueue(guestId, peer) {
+    if (!isArcadeParty || !peer) return;
+
+    peer.queued = false;
+    peer.queuedAt = 0;
+    addLog(`${peer.username || 'Spectator'} left the arcade queue`);
+    refreshPartyRoster();
+    sendArcadeSeatUpdate(guestId, peer);
+  }
+
+  function releaseArcadePlayer(guestId, { requeue = false } = {}) {
+    if (!isArcadeParty || !isHost) return;
+
+    const peer = partyHostPeersRef.current.get(guestId);
+    if (!peer) return;
+
+    releasePartyPeerInput(peer);
+    peer.playerNumber = null;
+    peer.queued = Boolean(requeue);
+    peer.queuedAt = requeue ? Date.now() : 0;
+    sendSignalRef.current({
+      type: 'party-assigned',
+      to: guestId,
+      playerNumber: null,
+    });
+    addLog(`${peer.username || 'Player'} released their arcade controls`);
+    promoteArcadeQueue();
+    refreshPartyRoster();
   }
 
   function closePartyPeer(guestId) {
     const peer = partyHostPeersRef.current.get(guestId);
     if (!peer) return;
 
-    if (peer.joystickMask) {
-      if (isSharedCpcParty) {
-        releaseCpcPartySharedInput(peer.joystickMask);
-      } else {
-        forwardInputToEmulator({
-          type: 'amstrad_remote_joystick',
-          player: peer.playerNumber,
-          mask: 0,
-        });
-      }
-    }
+    releasePartyPeerInput(peer);
 
     peer.channel?.close();
     peer.pc?.close();
     partyHostPeersRef.current.delete(guestId);
+    if (isArcadeParty) promoteArcadeQueue();
     refreshPartyRoster();
     setRemoteConnected(Array.from(partyHostPeersRef.current.values()).some((item) => item.pc?.connectionState === 'connected'));
   }
@@ -3430,7 +3652,7 @@ export default function RoomPage() {
     }
 
     const playerNumber = getNextPartyPlayerNumber();
-    if (!playerNumber) {
+    if (!playerNumber && !isArcadeParty) {
       sendSignalRef.current({
         type: 'party-room-full',
         to: guestId,
@@ -3450,7 +3672,10 @@ export default function RoomPage() {
       lastSession: '',
       pendingIceCandidates: [],
       offer: null,
-      username: guestMessage.username || `Player ${playerNumber}`,
+      username: guestMessage.username || (playerNumber ? `Player ${playerNumber}` : 'Spectator'),
+      guestId,
+      queued: false,
+      queuedAt: 0,
     };
 
     partyHostPeersRef.current.set(guestId, peerState);
@@ -3467,7 +3692,7 @@ export default function RoomPage() {
     };
 
     pc.onconnectionstatechange = () => {
-      addLog(`P${playerNumber} connection: ${pc.connectionState}`);
+      addLog(`${peerState.playerNumber ? `P${peerState.playerNumber}` : 'Spectator'} connection: ${pc.connectionState}`);
       refreshPartyRoster();
       setRemoteConnected(Array.from(partyHostPeersRef.current.values()).some((item) => item.pc?.connectionState === 'connected'));
 
@@ -3492,22 +3717,12 @@ export default function RoomPage() {
       peerState.lastInputAt = 0;
       peerState.lastSeq = 0;
       peerState.lastSession = '';
-      addLog(`P${playerNumber} input data channel open`);
+      addLog(`${peerState.playerNumber ? `P${peerState.playerNumber}` : 'Spectator'} input data channel open`);
+      sendArcadeSeatUpdate(guestId, peerState);
     };
-    channel.onmessage = (msg) => handleGuestPayloadOnHostRef.current?.(msg.data, playerNumber, peerState);
+    channel.onmessage = (msg) => handleGuestPayloadOnHostRef.current?.(msg.data, peerState.playerNumber, peerState);
     channel.onclose = () => {
-      if (peerState.joystickMask) {
-        if (isSharedCpcParty) {
-          releaseCpcPartySharedInput(peerState.joystickMask);
-        } else {
-          forwardInputToEmulator({
-            type: 'amstrad_remote_joystick',
-            player: playerNumber,
-            mask: 0,
-          });
-        }
-      }
-      peerState.joystickMask = 0;
+      releasePartyPeerInput(peerState);
     };
 
     const offer = await pc.createOffer();
@@ -3515,11 +3730,18 @@ export default function RoomPage() {
     await waitForIceGatheringComplete(pc);
     peerState.offer = pc.localDescription;
 
-    sendSignalRef.current({
-      type: 'party-assigned',
-      to: guestId,
-      playerNumber,
-    });
+    if (playerNumber) {
+      sendSignalRef.current({
+        type: 'party-assigned',
+        to: guestId,
+        playerNumber,
+      });
+    } else {
+      sendSignalRef.current({
+        type: 'party-spectator',
+        to: guestId,
+      });
+    }
 
     sendSignalRef.current({
       type: 'offer',
@@ -3527,7 +3749,7 @@ export default function RoomPage() {
       offer: peerState.offer,
     });
 
-    addLog(`Party guest ${peerState.username} assigned P${playerNumber}`);
+    addLog(playerNumber ? `Party guest ${peerState.username} assigned P${playerNumber}` : `Party guest ${peerState.username} joined as spectator`);
     refreshPartyRoster();
     setStatus(`Party host ready: ${partyHostPeersRef.current.size} guest(s) connected`);
   }
@@ -4075,6 +4297,26 @@ export default function RoomPage() {
     forwardInputToEmulator({ type: 'emulator_set_volume', volume: nextVolume });
   }
 
+  function sendArcadeQueueAction(type) {
+    if (!isArcadeParty || isHost) return;
+
+    const channel = dataChannelRef.current;
+    if (channel?.readyState !== 'open') {
+      setError('Join the stream first, then queue for a cabinet slot.');
+      return;
+    }
+
+    channel.send(JSON.stringify({ type }));
+    setArcadeQueueStatus((statusValue) => ({
+      ...statusValue,
+      queued: type === 'arcade_join_queue' ? true : false,
+      role: type === 'arcade_join_queue' ? 'Queued' : 'Spectator',
+    }));
+    if (type === 'arcade_release_slot') {
+      setPartyPlayerNumber(null);
+    }
+  }
+
   function toggleEmulatorPause() {
     if (!canControlLocalEmulator || !hostStarted) return;
 
@@ -4532,7 +4774,7 @@ export default function RoomPage() {
                 key={player.playerNumber}
                 className={`player-card ${player.connected ? 'connected' : ''} ${player.playerNumber === currentPartyPlayerNumber ? 'you' : ''}`}
               >
-                <span>P{player.playerNumber}</span>
+                <span>{typeof player.playerNumber === 'number' ? `P${player.playerNumber}` : 'Watch'}</span>
                 <strong>{player.username}</strong>
                 <small>{player.role}</small>
               </div>
@@ -5056,13 +5298,77 @@ export default function RoomPage() {
                   </div>
                 ) : null}
 
-                {isArcadeParty || isC64Party ? (
+                {isArcadeParty ? (
+                  <div className="party-turn-panel arcade-queue-panel">
+                    <div className="party-turn-header">
+                      <strong>Arcade cabinet</strong>
+                      <span>Players hold cabinet slots. Everyone else can watch and queue.</span>
+                    </div>
+                    <div className="party-roster" aria-label="Arcade cabinet players">
+                      {partyRoster
+                        .filter((player) => player.active)
+                        .map((player) => (
+                          <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
+                            <strong>{player.cabinetPlayerNumber ? `P${player.cabinetPlayerNumber}` : 'P1'}</strong>
+                            <span>{player.username}</span>
+                            <small>{player.role}{player.connected ? ' connected' : ' joining'}</small>
+                            {isHost && player.guestId ? (
+                              <span className="party-roster-actions">
+                                <button type="button" className="secondary" onClick={() => releaseArcadePlayer(player.guestId)}>
+                                  Release
+                                </button>
+                                <button type="button" className="secondary" onClick={() => releaseArcadePlayer(player.guestId, { requeue: true })}>
+                                  Requeue
+                                </button>
+                              </span>
+                            ) : null}
+                          </div>
+                        ))}
+                    </div>
+                    {partyRoster.some((player) => player.queued) ? (
+                      <>
+                        <div className="party-turn-header compact">
+                          <strong>Queue</strong>
+                        </div>
+                        <div className="party-roster" aria-label="Arcade queue">
+                          {partyRoster
+                            .filter((player) => player.queued)
+                            .map((player) => (
+                              <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
+                                <strong>#{player.queuePosition}</strong>
+                                <span>{player.username}</span>
+                                <small>Waiting for a cabinet slot</small>
+                              </div>
+                            ))}
+                        </div>
+                      </>
+                    ) : null}
+                    {partyRoster.some((player) => !player.active && !player.queued) ? (
+                      <>
+                        <div className="party-turn-header compact">
+                          <strong>Spectators</strong>
+                        </div>
+                        <div className="party-roster" aria-label="Arcade spectators">
+                          {partyRoster
+                            .filter((player) => !player.active && !player.queued)
+                            .map((player) => (
+                              <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
+                                <strong>Watch</strong>
+                                <span>{player.username}</span>
+                                <small>{player.connected ? 'Connected' : 'Joining'}</small>
+                              </div>
+                            ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : isC64Party ? (
                   <div className="party-turn-panel">
                     <div className="party-turn-header">
-                      <strong>{isC64Party ? 'C64 players' : 'Arcade players'}</strong>
-                      <span>{isC64Party ? 'Players are assigned as they join.' : 'Players are assigned as they join and play at the same time.'}</span>
+                      <strong>C64 players</strong>
+                      <span>Players are assigned as they join.</span>
                     </div>
-                    <div className="party-roster" aria-label={isC64Party ? 'C64 party players' : 'Arcade party players'}>
+                    <div className="party-roster" aria-label="C64 party players">
                       {partyRoster.map((player) => (
                         <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
                           <strong>P{player.playerNumber}</strong>
@@ -5096,6 +5402,35 @@ export default function RoomPage() {
                 <button onClick={connectGuest} disabled={guestPrepared}>
                   {guestPrepared ? 'Guest connection ready' : 'Prepare guest connection'}
                 </button>
+                {isArcadeParty ? (
+                  <div className="party-turn-panel arcade-queue-panel guest-queue-panel">
+                    <div className="party-turn-header">
+                      <strong>{partyPlayerNumber ? `You are P${partyPlayerNumber}` : arcadeQueueStatus.queued ? `Queue #${arcadeQueueStatus.queuePosition || '?'}` : 'Spectator'}</strong>
+                      <span>{partyPlayerNumber ? 'You have cabinet controls.' : arcadeQueueStatus.queued ? 'Waiting for the next free cabinet slot.' : 'Watch the game or join the queue.'}</span>
+                    </div>
+                    <div className="party-turn-controls">
+                      {!partyPlayerNumber ? (
+                        <button
+                          type="button"
+                          className={arcadeQueueStatus.queued ? 'active' : 'secondary'}
+                          onClick={() => sendArcadeQueueAction(arcadeQueueStatus.queued ? 'arcade_leave_queue' : 'arcade_join_queue')}
+                          disabled={!guestPrepared}
+                        >
+                          {arcadeQueueStatus.queued ? 'Leave queue' : 'Join queue'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => sendArcadeQueueAction('arcade_release_slot')}
+                          disabled={!guestPrepared}
+                        >
+                          Leave cabinet
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
 
