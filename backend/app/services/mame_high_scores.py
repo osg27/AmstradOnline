@@ -14,8 +14,12 @@ from app.models.mame_leaderboard import MameHighScore, MameLeaderboardGame
 logger = logging.getLogger("oldstylegaming.mame_high_scores")
 
 DEFAULT_MAME_GAMES = [
+    ("puckman", "PuckMan / Pac-Man"),
     ("pacman", "Pac-Man"),
+    ("mspacman", "Ms. Pac-Man"),
     ("dkong", "Donkey Kong"),
+    ("dkongjr", "Donkey Kong Junior"),
+    ("dkong3", "Donkey Kong 3"),
     ("galaga", "Galaga"),
     ("frogger", "Frogger"),
     ("1942", "1942"),
@@ -37,6 +41,11 @@ def seed_default_mame_games(db: Session) -> None:
     for rom_name, display_name in DEFAULT_MAME_GAMES:
         existing = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
         if existing:
+            existing.display_name = display_name
+            existing.leaderboard_supported = True
+            existing.score_source = "hi"
+            existing.parser = "hi2txt"
+            existing.enabled = True
             continue
         db.add(MameLeaderboardGame(
             rom_name=rom_name,
@@ -44,7 +53,7 @@ def seed_default_mame_games(db: Session) -> None:
             leaderboard_supported=True,
             score_source="hi",
             parser="hi2txt",
-            enabled=False,
+            enabled=True,
         ))
     db.commit()
 

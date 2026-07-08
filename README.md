@@ -98,7 +98,7 @@ Current MAME runs in the browser through `frontend/public/arcade/launcher.js` us
 
 Backend extraction lives in `backend/app/services/mame_high_scores.py` and the API routes are under `/mame`. A transient extraction folder is created under the OS temp directory at `oldstylegaming-mame-sessions/<session>/<rom>/`, parsed, then removed after extraction.
 
-Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are created for `pacman`, `dkong`, `galaga`, `frogger`, and `1942`, but they are disabled by default. Enable a ROM only after testing that it produces parseable `.hi` or `nvram` data. Parser values are:
+Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are enabled for the first classic `.hi` parser set: `puckman`, `pacman`, `mspacman`, `dkong`, `dkongjr`, `dkong3`, `galaga`, `frogger`, and `1942`. Add more ROMs only after testing that they produce parseable `.hi` or `nvram` data. Parser values are:
 
 - `hi2txt`: runs the `hi2txt` command server-side.
 - `custom`: placeholder parser for future ROM-specific readers.
