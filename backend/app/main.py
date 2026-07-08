@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.feedback import router as feedback_router
+from app.api.routes.mame import router as mame_router
 from app.api.routes.rooms import router as rooms_router
 from app.api.routes.scores import router as scores_router
 from app.api.routes.social import router as social_router
@@ -34,6 +35,7 @@ def health_check():
 app.include_router(auth_router)
 app.include_router(rooms_router)
 app.include_router(feedback_router)
+app.include_router(mame_router)
 app.include_router(admin_router)
 app.include_router(scores_router)
 app.include_router(social_router)

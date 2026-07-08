@@ -116,6 +116,66 @@
     return audioDestination?.stream || null;
   };
 
+  function collectSaveFiles(root = '/data/saves') {
+    const manager = window.EJS_emulator?.gameManager;
+    const fs = manager?.FS;
+    const files = [];
+
+    if (!fs) return files;
+    try {
+      manager.saveSaveFiles?.();
+    } catch (error) {
+      postArcadeLog(`Could not flush MAME save files: ${error.message}`, 'error');
+    }
+
+    function walk(path) {
+      let entries = [];
+      try {
+        entries = fs.readdir(path);
+      } catch {
+        return;
+      }
+
+      entries.forEach((entry) => {
+        if (entry === '.' || entry === '..') return;
+        const childPath = `${path}/${entry}`;
+        let stat = null;
+        try {
+          stat = fs.stat(childPath);
+        } catch {
+          return;
+        }
+
+        if (fs.isDir(stat.mode)) {
+          walk(childPath);
+          return;
+        }
+
+        if (!fs.isFile(stat.mode)) return;
+        try {
+          const bytes = fs.readFile(childPath);
+          files.push({
+            path: childPath.replace(/^\/data\/saves\/?/, ''),
+            bytes,
+          });
+        } catch (error) {
+          postArcadeLog(`Could not read MAME save file ${childPath}: ${error.message}`, 'error');
+        }
+      });
+    }
+
+    walk(root);
+    return files;
+  }
+
+  window.getArcadeSaveBundle = async function getArcadeSaveBundle() {
+    const files = collectSaveFiles();
+    return {
+      romName: currentRom?.fileName || '',
+      files,
+    };
+  };
+
   function setEmulatorVolume(volume) {
     emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
     window.EJS_volume = emulatorVolume;

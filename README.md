@@ -91,3 +91,17 @@ After you confirm this runs cleanly, the next step is:
 - embed the Amstrad emulator into the host page
 - capture the emulator canvas/video
 - map data-channel keyboard events into the emulator input layer
+
+## MAME high score leaderboards
+
+Current MAME runs in the browser through `frontend/public/arcade/launcher.js` using EmulatorJS with the `mame2003_plus` core. The backend does not launch MAME or maintain native MAME session folders yet. EmulatorJS mounts save data inside the browser Emscripten filesystem at `/data/saves`, and the room page exports those MAME-generated save files to the backend before a ROM change, reset, or host leave.
+
+Backend extraction lives in `backend/app/services/mame_high_scores.py` and the API routes are under `/mame`. A transient extraction folder is created under the OS temp directory at `oldstylegaming-mame-sessions/<session>/<rom>/`, parsed, then removed after extraction.
+
+Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are created for `pacman`, `dkong`, `galaga`, `frogger`, and `1942`, but they are disabled by default. Enable a ROM only after testing that it produces parseable `.hi` or `nvram` data. Parser values are:
+
+- `hi2txt`: runs the `hi2txt` command server-side.
+- `custom`: placeholder parser for future ROM-specific readers.
+- `unsupported`: skips extraction.
+
+To add a new game, add or update its row with `rom_name`, `display_name`, `leaderboard_supported=true`, `score_source` (`hi` or `nvram`), `parser`, and `enabled=true` after verification. Install `hi2txt` on the backend host/container before enabling `hi2txt` games.

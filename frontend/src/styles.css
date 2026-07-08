@@ -2497,6 +2497,26 @@ input:focus {
   padding: 0.35rem 0.65rem;
 }
 
+.leaderboard-table {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.leaderboard-table div {
+  display: grid;
+  grid-template-columns: 44px minmax(120px, 1fr) 64px minmax(90px, auto);
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #17191a;
+}
+
+.leaderboard-table strong {
+  color: var(--gold);
+}
+
 .input-debug-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(70px, 1fr));

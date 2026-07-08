@@ -387,6 +387,9 @@ export default function RoomPage() {
     queuePosition: null,
     role: 'Spectator',
   });
+  const [mameLeaderboard, setMameLeaderboard] = useState([]);
+  const [mameLeaderboardSupported, setMameLeaderboardSupported] = useState(false);
+  const [mameScoreStatus, setMameScoreStatus] = useState('');
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
@@ -542,7 +545,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-07-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-1' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-07-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
@@ -2810,6 +2813,16 @@ export default function RoomPage() {
   }, [isHost, loadedDiskName, room, roomCode]);
 
   useEffect(() => {
+    if (!isArcade || !loadedDiskName) {
+      setMameLeaderboard([]);
+      setMameLeaderboardSupported(false);
+      return;
+    }
+
+    refreshMameLeaderboard(loadedDiskName);
+  }, [isArcade, loadedDiskName]);
+
+  useEffect(() => {
     async function loadRoom() {
       try {
         const data = await apiFetch(`/rooms/${roomCode}`);
@@ -4154,6 +4167,75 @@ export default function RoomPage() {
     };
   }
 
+  function bytesToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      const chunk = bytes.subarray(index, index + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    return window.btoa(binary);
+  }
+
+  function getArcadeRomKey(fileName = loadedDiskName) {
+    return String(fileName || '').split(' from ')[0].replace(/\.(zip|7z)$/i, '').toLowerCase();
+  }
+
+  async function refreshMameLeaderboard(fileName = loadedDiskName) {
+    if (!isArcade || !fileName) {
+      setMameLeaderboard([]);
+      setMameLeaderboardSupported(false);
+      return;
+    }
+
+    const romKey = getArcadeRomKey(fileName);
+    try {
+      const games = await apiFetch('/mame/leaderboards');
+      const game = games.find((item) => item.rom_name === romKey);
+      setMameLeaderboardSupported(Boolean(game?.enabled));
+      if (!game?.enabled) {
+        setMameLeaderboard([]);
+        return;
+      }
+      const scores = await apiFetch(`/mame/leaderboards/${encodeURIComponent(romKey)}`);
+      setMameLeaderboard(scores);
+    } catch (err) {
+      addLog(`MAME leaderboard load failed: ${err.message}`);
+    }
+  }
+
+  async function submitMameScoreExtraction(reason = 'session') {
+    if (!isArcade || !isHost || !loadedDiskNameRef.current) return null;
+
+    const frame = emulatorFrameRef.current;
+    const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.();
+    const files = (bundle?.files || []).filter((file) => file?.path && file?.bytes?.length);
+    const romName = getArcadeRomKey(bundle?.romName || loadedDiskNameRef.current);
+    const sessionId = `${roomCode}-${roomSessionKey}-${romName}`;
+
+    if (!files.length) {
+      setMameScoreStatus('No MAME save files found for extraction');
+      addLog(`MAME score extraction skipped: no save files (${reason})`);
+      return null;
+    }
+
+    setMameScoreStatus('Extracting MAME high scores...');
+    const result = await apiFetch(`/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`, {
+      method: 'POST',
+      body: JSON.stringify({
+        rom_name: romName,
+        save_files: files.map((file) => ({
+          path: file.path,
+          data: bytesToBase64(file.bytes),
+        })),
+      }),
+    });
+    setMameScoreStatus(result.message || `MAME score extraction: ${result.status}`);
+    addLog(`MAME score extraction ${result.status}: parsed ${result.scores_parsed || 0}, inserted ${result.rows_inserted || 0}`);
+    await refreshMameLeaderboard(romName);
+    return result;
+  }
+
   async function collectArcadeRomEntries(directoryHandle, prefix = '') {
     const entries = [];
 
@@ -4225,6 +4307,9 @@ export default function RoomPage() {
     }
 
     setError('');
+    if (hostStartedRef.current && loadedDiskNameRef.current) {
+      await submitMameScoreExtraction('rom change');
+    }
     const bytes = new Uint8Array(await file.arrayBuffer());
     const frame = await reloadArcadeFrame();
 
@@ -4249,6 +4334,7 @@ export default function RoomPage() {
       await replaceHostMediaStreams(nextVideoStream, nextAudioStream);
 
       setLoadedDiskName(file.name);
+      await refreshMameLeaderboard(file.name);
       addLog(`${loadedDiskName ? 'Changed' : 'Loaded'} MAME ROM: ${file.name}`);
       setStatus(`${loadedDiskName ? 'Changed' : 'Loaded'} MAME ROM: ${file.name}`);
       return;
@@ -4259,6 +4345,7 @@ export default function RoomPage() {
     }
 
     setLoadedDiskName(file.name);
+    await refreshMameLeaderboard(file.name);
     addLog(`Loaded MAME ROM: ${file.name}`);
     setStatus(`Loaded MAME ROM: ${file.name}`);
   }
@@ -4354,6 +4441,10 @@ export default function RoomPage() {
   async function resetHostEmulator() {
     if (!canControlLocalEmulator || !hostStarted) return;
 
+    if (isArcade) {
+      await submitMameScoreExtraction('reset');
+    }
+
     setHostPaused(false);
 
     if (isC64) {
@@ -4432,6 +4523,16 @@ export default function RoomPage() {
     forwardInputToEmulator({ type });
     addLog('Reset emulator');
     setStatus('Emulator reset');
+  }
+
+  async function leaveRoom() {
+    try {
+      await submitMameScoreExtraction('leave');
+    } catch (err) {
+      addLog(`MAME score extraction before leave failed: ${err.message}`);
+    } finally {
+      navigate('/lobby');
+    }
   }
 
   function swapC64JoystickPorts() {
@@ -4778,7 +4879,7 @@ export default function RoomPage() {
             <Link className="button-like secondary" to="/lobby">
               Lobby
             </Link>
-            <button className="secondary" onClick={() => navigate('/lobby')}>
+            <button className="secondary" onClick={leaveRoom}>
               Leave
             </button>
             <button
@@ -5292,6 +5393,31 @@ export default function RoomPage() {
                     </div>
                     {filteredArcadeRomEntries.length < arcadeRomEntries.length ? (
                       <p className="muted">Showing {filteredArcadeRomEntries.length} of {arcadeRomEntries.length}. Use search to narrow the list.</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {isArcade && loadedDiskName ? (
+                  <div className="party-turn-panel arcade-queue-panel">
+                    <div className="party-turn-header">
+                      <strong>MAME leaderboard</strong>
+                      <span>
+                        {mameLeaderboardSupported
+                          ? mameScoreStatus || 'Scores are extracted from MAME save files when the session ends.'
+                          : 'Online leaderboard not available for this game yet.'}
+                      </span>
+                    </div>
+                    {mameLeaderboardSupported && mameLeaderboard.length ? (
+                      <div className="leaderboard-table">
+                        {mameLeaderboard.slice(0, 10).map((entry) => (
+                          <div key={`${entry.rank}-${entry.username}-${entry.score}`}>
+                            <strong>{entry.rank}</strong>
+                            <span>{entry.username}</span>
+                            <span>{entry.initials || '-'}</span>
+                            <span>{entry.score.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
