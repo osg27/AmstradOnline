@@ -2,7 +2,6 @@ import base64
 import logging
 import re
 import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.models.mame_leaderboard import MameHighScore, MameLeaderboardGame
 
 logger = logging.getLogger("oldstylegaming.mame_high_scores")
+
+BUILTIN_HI_BCD_PARSER = "mame_hi_bcd"
 
 DEFAULT_MAME_GAMES = [
     ("puckman", "PuckMan / Pac-Man"),
@@ -44,7 +45,7 @@ def seed_default_mame_games(db: Session) -> None:
             existing.display_name = display_name
             existing.leaderboard_supported = True
             existing.score_source = "hi"
-            existing.parser = "hi2txt"
+            existing.parser = BUILTIN_HI_BCD_PARSER
             existing.enabled = True
             continue
         db.add(MameLeaderboardGame(
@@ -52,7 +53,7 @@ def seed_default_mame_games(db: Session) -> None:
             display_name=display_name,
             leaderboard_supported=True,
             score_source="hi",
-            parser="hi2txt",
+            parser=BUILTIN_HI_BCD_PARSER,
             enabled=True,
         ))
     db.commit()
@@ -100,27 +101,37 @@ def find_score_source(session_path: Path, rom_name: str, score_source: str) -> P
     return next((path for path in nvram_candidates if path.exists()), None)
 
 
-def parse_hi2txt(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
-    command = ["hi2txt", "-r", rom_name, str(source_path)]
-    logger.info("Running MAME hi2txt parser: %s", " ".join(command))
-    result = subprocess.run(command, capture_output=True, text=True, timeout=10, check=False)
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout or "hi2txt failed").strip())
+def decode_bcd_score(chunk: bytes) -> int | None:
+    digits: list[str] = []
+    for value in chunk:
+        high = value >> 4
+        low = value & 0x0f
+        if high > 9 or low > 9:
+            return None
+        digits.extend((str(high), str(low)))
+    return int("".join(digits))
 
-    scores: list[ParsedMameScore] = []
-    for line in result.stdout.splitlines():
-        numbers = re.findall(r"\b\d{2,}\b", line.replace(",", ""))
-        if not numbers:
+
+def plausible_arcade_score(score: int) -> bool:
+    return 100 <= score <= 9999990 and score % 10 == 0
+
+
+def parse_mame_hi_bcd(source_path: Path, _rom_name: str) -> list[ParsedMameScore]:
+    data = source_path.read_bytes()
+    candidates: set[int] = set()
+
+    for width in (3, 4):
+        if len(data) < width:
             continue
-        score = max(int(number) for number in numbers)
-        initials_match = re.search(r"\b[A-Z0-9]{2,4}\b", line.upper())
-        rank_match = re.match(r"\s*(\d+)[).:\s]", line)
-        scores.append(ParsedMameScore(
-            score=score,
-            initials=initials_match.group(0) if initials_match else None,
-            rank_in_game=int(rank_match.group(1)) if rank_match else len(scores) + 1,
-        ))
-    return scores
+        for offset in range(0, len(data) - width + 1):
+            chunk = data[offset:offset + width]
+            for candidate_chunk in (chunk, chunk[::-1]):
+                score = decode_bcd_score(candidate_chunk)
+                if score is not None and plausible_arcade_score(score):
+                    candidates.add(score)
+
+    scores = sorted(candidates, reverse=True)[:10]
+    return [ParsedMameScore(score=score, rank_in_game=index + 1) for index, score in enumerate(scores)]
 
 
 def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMameScore]:
@@ -130,8 +141,8 @@ def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMa
 
 
 def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMameScore]:
-    if game.parser == "hi2txt":
-        return parse_hi2txt(source_path, game.rom_name)
+    if game.parser == BUILTIN_HI_BCD_PARSER:
+        return parse_mame_hi_bcd(source_path, game.rom_name)
     if game.parser == "custom":
         return parse_custom_placeholder(source_path, game.rom_name)
     return []

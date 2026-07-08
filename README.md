@@ -100,8 +100,9 @@ Backend extraction lives in `backend/app/services/mame_high_scores.py` and the A
 
 Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are enabled for the first classic `.hi` parser set: `puckman`, `pacman`, `mspacman`, `dkong`, `dkongjr`, `dkong3`, `galaga`, `frogger`, and `1942`. Add more ROMs only after testing that they produce parseable `.hi` or `nvram` data. Parser values are:
 
-- `hi2txt`: runs the `hi2txt` command server-side.
+- `mame_hi_bcd`: built-in parser for classic MAME `.hi` files that store scores as packed BCD.
+- `hi2txt`: reserved for future server-side `hi2txt` command support.
 - `custom`: placeholder parser for future ROM-specific readers.
 - `unsupported`: skips extraction.
 
-To add a new game, add or update its row with `rom_name`, `display_name`, `leaderboard_supported=true`, `score_source` (`hi` or `nvram`), `parser`, and `enabled=true` after verification. Install `hi2txt` on the backend host/container before enabling `hi2txt` games.
+To add a new game, add or update its row with `rom_name`, `display_name`, `leaderboard_supported=true`, `score_source` (`hi` or `nvram`), `parser`, and `enabled=true` after verification.
