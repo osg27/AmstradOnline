@@ -1,7 +1,8 @@
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
-from fastapi import APIRouter, Depends, Query, Header
+from fastapi import APIRouter, Depends, Query, Header, HTTPException
 
+from app.core.security import decode_access_token
 from app.models.score import Score
 from app.models.user import User
 from app.schemas.score import LeaderboardEntry, ScoreResponse, ScoreSubmit
@@ -9,22 +10,17 @@ from app.core.database import get_db
 
 
 def get_current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
-    """Get the current authenticated user from JWT token."""
-    from app.core.security import decode_access_token
-
     if not authorization or not authorization.startswith("Bearer "):
-        raise Exception("Missing or invalid authorization header")
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
 
-    token = authorization.split(" ")[1]
+    token = authorization.split(" ", 1)[1]
     payload = decode_access_token(token)
-    user_id = payload.get("sub")
+    if not payload or "sub" not in payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-    if not user_id:
-        raise Exception("Invalid token")
-
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = db.query(User).filter(User.id == int(payload["sub"])).first()
     if not user:
-        raise Exception("User not found")
+        raise HTTPException(status_code=401, detail="User not found")
 
     return user
 
