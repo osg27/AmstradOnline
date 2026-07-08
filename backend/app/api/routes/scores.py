@@ -1,12 +1,32 @@
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Header
 
-from app.core.security import get_current_user
 from app.models.score import Score
 from app.models.user import User
 from app.schemas.score import LeaderboardEntry, ScoreResponse, ScoreSubmit
 from app.core.database import get_db
+
+
+def get_current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
+    """Get the current authenticated user from JWT token."""
+    from app.core.security import decode_access_token
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise Exception("Missing or invalid authorization header")
+
+    token = authorization.split(" ")[1]
+    payload = decode_access_token(token)
+    user_id = payload.get("sub")
+
+    if not user_id:
+        raise Exception("Invalid token")
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user:
+        raise Exception("User not found")
+
+    return user
 
 router = APIRouter(prefix="/scores", tags=["scores"])
 
