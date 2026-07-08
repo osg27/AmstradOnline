@@ -322,7 +322,7 @@ const PLATFORM_SHELVES = [
             accent: 'gold',
             logo: arcadeLogoUrl,
             summary: 'Arcade cabinet games for solo, online, and party play.',
-            formats: '.zip',
+            formats: '.zip .7z',
             testing: true,
             modes: {
               solo: { enabled: true },

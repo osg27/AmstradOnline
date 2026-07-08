@@ -449,7 +449,7 @@
 
   async function loadCurrentRom() {
     if (!currentRom) {
-      drawStatus('MAME 2003-Plus ready', 'Load a compatible arcade ROM zip from the room');
+      drawStatus('MAME 2003-Plus ready', 'Load a compatible arcade ROM archive from the room');
       return;
     }
 
@@ -463,7 +463,8 @@
     }
 
     clearGameContainer();
-    const gameFile = new File([currentRom.bytes], currentRom.fileName, { type: 'application/zip' });
+    const gameType = currentRom.fileName.toLowerCase().endsWith('.7z') ? 'application/x-7z-compressed' : 'application/zip';
+    const gameFile = new File([currentRom.bytes], currentRom.fileName, { type: gameType });
     configureEmulator(currentRom.fileName, gameFile);
     drawStatus('Loading MAME', currentRom.fileName);
 
@@ -480,6 +481,7 @@
       '/emulatorjs/data/src/emulator.js',
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extractzip.js',
+      '/emulatorjs/data/compression/extract7z.js',
       '/emulatorjs/data/cores/mame2003_plus-wasm.data',
     ];
 
@@ -558,5 +560,5 @@
     window.focus();
   });
 
-  drawStatus('MAME 2003-Plus ready', 'Load a compatible arcade ROM zip from the room');
+  drawStatus('MAME 2003-Plus ready', 'Load a compatible arcade ROM archive from the room');
 })();

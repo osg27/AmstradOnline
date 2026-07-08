@@ -542,11 +542,11 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-07-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-07-1' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-07-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-1' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.zip'
-    : isMasterSystem ? '.sms' : isMegaDrive ? '.bin,.gen,.md,.smd' : isNes ? '.nes' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2' : isPcEngine ? '.pce,.sgx,.zip' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt' : isAtari8 ? '.atr,.xfd,.atx,.xex,.com,.car,.rom,.bin,.cas,.zip' : isAtariSt ? '.st,.msa,.stx,.ipf' : isArcade ? '.zip' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
+    : isMasterSystem ? '.sms' : isMegaDrive ? '.bin,.gen,.md,.smd' : isNes ? '.nes' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2' : isPcEngine ? '.pce,.sgx,.zip' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt' : isAtari8 ? '.atr,.xfd,.atx,.xex,.com,.car,.rom,.bin,.cas,.zip' : isAtariSt ? '.st,.msa,.stx,.ipf' : isArcade ? '.zip,.7z' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
   const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMasterSystem ? 'Load Master System ROM' : isMegaDrive ? 'Load Mega Drive ROM' : isNes ? 'Load NES ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isPlayStation ? loadedDiskName ? 'Change PlayStation game' : 'Load PlayStation game' : isC64 ? 'Load C64 file' : isAtari8 ? loadedDiskName ? 'Change Atari 8-bit file' : 'Load Atari 8-bit file' : isAtariSt ? 'Load Atari ST disk' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
@@ -4133,14 +4133,14 @@ export default function RoomPage() {
 
   function fallbackArcadeRomName(fileName) {
     return fileName
-      .replace(/\.zip$/i, '')
+      .replace(/\.(zip|7z)$/i, '')
       .replace(/[_-]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
   }
 
   function getArcadeRomMetadata(fileName) {
-    const romKey = fileName.replace(/\.zip$/i, '').toLowerCase();
+    const romKey = fileName.replace(/\.(zip|7z)$/i, '').toLowerCase();
     const metadata = mame2003PlusTitles[romKey];
     const parent = metadata?.parent || '';
     const parentTitle = parent ? mame2003PlusTitles[parent]?.title || parent : '';
@@ -4161,7 +4161,7 @@ export default function RoomPage() {
       const path = prefix ? `${prefix}/${name}` : name;
 
       if (handle.kind === 'file') {
-        if (name.toLowerCase().endsWith('.zip')) {
+        if (/\.(zip|7z)$/i.test(name)) {
           const metadata = getArcadeRomMetadata(name);
           entries.push({
             name,
@@ -4203,8 +4203,8 @@ export default function RoomPage() {
       setArcadeRomFolderName(directoryHandle.name || 'MAME ROMs');
       setArcadeRomEntries(entries);
       setArcadeRomSearch('');
-      setStatus(entries.length ? `Found ${entries.length} MAME ROM zip${entries.length === 1 ? '' : 's'}` : 'No .zip ROMs found in that folder');
-      addLog(`Scanned MAME ROM folder: ${directoryHandle.name || 'selected folder'} (${entries.length} zip${entries.length === 1 ? '' : 's'})`);
+      setStatus(entries.length ? `Found ${entries.length} MAME ROM archive${entries.length === 1 ? '' : 's'}` : 'No .zip or .7z ROMs found in that folder');
+      addLog(`Scanned MAME ROM folder: ${directoryHandle.name || 'selected folder'} (${entries.length} archive${entries.length === 1 ? '' : 's'})`);
     } catch (err) {
       if (err.name !== 'AbortError') {
         setError(err.message);
@@ -4218,8 +4218,8 @@ export default function RoomPage() {
   async function loadArcadeRomFile(file) {
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.zip')) {
-      setError('Arcade rooms support MAME .zip ROM files');
+    if (!/\.(zip|7z)$/i.test(file.name)) {
+      setError('Arcade rooms support MAME .zip and .7z ROM files');
       addLog(`Rejected file: ${file.name}`);
       return;
     }
@@ -4464,7 +4464,7 @@ export default function RoomPage() {
       const isSwapDisk = isAmigaFamily && event.target.dataset.mode === 'swap';
       const allowedExtensions = isAmigaFamily
         ? ['.adf', '.zip']
-        : isMasterSystem ? ['.sms'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isNes ? ['.nes'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isPcEngine ? ['.pce', '.sgx', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf'] : isArcade ? ['.zip'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
+        : isMasterSystem ? ['.sms'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isNes ? ['.nes'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isPcEngine ? ['.pce', '.sgx', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
 
       const invalidFile = selectedFiles.find((selectedFile) => {
         const selectedLowerName = selectedFile.name.toLowerCase();
@@ -4473,12 +4473,12 @@ export default function RoomPage() {
 
       if (invalidFile) {
         if (isArcade) {
-          setError('Arcade rooms support MAME .zip ROM files');
+          setError('Arcade rooms support MAME .zip and .7z ROM files');
           addLog(`Rejected file: ${invalidFile.name}`);
           event.target.value = '';
           return;
         }
-        setError(isAmigaFamily ? 'Amiga rooms currently support .adf and .zip files' : isMasterSystem ? 'Master System rooms support .sms ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isNes ? 'NES rooms support .nes ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, and .dx2 ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, and .zip ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, and .crt files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, and .zip files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, and .ipf disk images' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
+        setError(isAmigaFamily ? 'Amiga rooms currently support .adf and .zip files' : isMasterSystem ? 'Master System rooms support .sms ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isNes ? 'NES rooms support .nes ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, and .dx2 ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, and .zip ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, and .crt files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, and .zip files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, and .ipf disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${invalidFile.name}`);
         event.target.value = '';
         return;
@@ -5256,7 +5256,7 @@ export default function RoomPage() {
                         <strong>{arcadeRomFolderName || 'MAME ROMs'}</strong>
                         <span>
                           {showArcadeCloneRoms
-                            ? `${arcadeRomEntries.length} ZIP ROM${arcadeRomEntries.length === 1 ? '' : 's'} found`
+                            ? `${arcadeRomEntries.length} ROM archive${arcadeRomEntries.length === 1 ? '' : 's'} found`
                             : `${arcadeParentRomCount} parent game${arcadeParentRomCount === 1 ? '' : 's'} shown${arcadeCloneRomCount ? ` (${arcadeCloneRomCount} clones hidden)` : ''}`}
                         </span>
                       </div>
