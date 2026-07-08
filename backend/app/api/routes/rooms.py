@@ -3,6 +3,7 @@ import string
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import can_use_preview_systems, is_admin_user, is_super_admin_user
@@ -183,15 +184,27 @@ def room_heartbeat(
         RoomActivity.user_id == user_id,
     ).first()
     now = datetime.now(timezone.utc)
-    if activity:
-        activity.last_seen_at = now
-    else:
-        db.add(RoomActivity(room_id=room.id, user_id=user_id, last_seen_at=now))
+    try:
+        if activity:
+            activity.last_seen_at = now
+        else:
+            db.add(RoomActivity(room_id=room.id, user_id=user_id, last_seen_at=now))
 
-    if room.owner_user_id == user_id:
-        room.current_game = payload.game_name.strip()[:240] if payload.game_name else None
+        if room.owner_user_id == user_id:
+            room.current_game = payload.game_name.strip()[:240] if payload.game_name else None
 
-    db.commit()
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        activity = db.query(RoomActivity).filter(
+            RoomActivity.room_id == room.id,
+            RoomActivity.user_id == user_id,
+        ).first()
+        if activity:
+            activity.last_seen_at = now
+        if room.owner_user_id == user_id:
+            room.current_game = payload.game_name.strip()[:240] if payload.game_name else None
+        db.commit()
 
 
 @router.delete("/{room_code}/heartbeat", status_code=204)

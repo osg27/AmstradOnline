@@ -20,6 +20,17 @@ const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 const ATARI_ST_TOS_KEY = 'atari-st-tos';
 const CONTROL_MATCH_LIMIT = 6;
 const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
+const BUILTIN_MAME_LEADERBOARD_ROMS = new Set([
+  'puckman',
+  'pacman',
+  'mspacman',
+  'dkong',
+  'dkongjr',
+  'dkong3',
+  'galaga',
+  'frogger',
+  '1942',
+]);
 const ROOM_SYSTEM_OPTIONS = [
   ['cpc', 'Amstrad CPC'],
   ['cpc_party', 'Amstrad CPC Party'],
@@ -4185,22 +4196,35 @@ export default function RoomPage() {
     if (!isArcade || !fileName) {
       setMameLeaderboard([]);
       setMameLeaderboardSupported(false);
+      setMameScoreStatus('');
       return;
     }
 
     const romKey = getArcadeRomKey(fileName);
+    const builtinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(romKey);
     try {
       const games = await apiFetch('/mame/leaderboards');
       const game = games.find((item) => item.rom_name === romKey);
-      setMameLeaderboardSupported(Boolean(game?.enabled));
-      if (!game?.enabled) {
+      const supported = Boolean(game?.enabled) || builtinSupported;
+      setMameLeaderboardSupported(supported);
+      if (!supported) {
         setMameLeaderboard([]);
+        setMameScoreStatus('Online leaderboard not available for this game yet.');
         return;
       }
       const scores = await apiFetch(`/mame/leaderboards/${encodeURIComponent(romKey)}`);
       setMameLeaderboard(scores);
+      setMameScoreStatus(scores.length ? '' : 'Leaderboard enabled. Scores will appear after extraction.');
     } catch (err) {
       addLog(`MAME leaderboard load failed: ${err.message}`);
+      setMameLeaderboard([]);
+      if (builtinSupported) {
+        setMameLeaderboardSupported(true);
+        setMameScoreStatus(`Leaderboard enabled locally, but API failed: ${err.message}`);
+      } else {
+        setMameLeaderboardSupported(false);
+        setMameScoreStatus(`Leaderboard API failed: ${err.message}`);
+      }
     }
   }
 
