@@ -4262,6 +4262,61 @@ export default function RoomPage() {
     return result;
   }
 
+  async function saveMameScoreNow() {
+    try {
+      const result = await submitMameScoreExtraction('manual');
+      if (!result) {
+        setMameScoreStatus('No MAME score data was available to save yet.');
+      }
+    } catch (err) {
+      setMameScoreStatus(`MAME score save failed: ${err.message}`);
+      addLog(`MAME score save failed: ${err.message}`);
+    }
+  }
+
+  function renderMameLeaderboardPanel(extraClass = '') {
+    if (!isArcade || !loadedDiskName) return null;
+
+    return (
+      <div className={`mame-score-panel ${extraClass}`}>
+        <div className="mame-score-panel-header">
+          <div>
+            <span>MAME leaderboard</span>
+            <strong>{getArcadeRomKey(loadedDiskName)}</strong>
+          </div>
+          <em>{mameLeaderboardSupported ? 'live' : 'off'}</em>
+        </div>
+        <p className="mame-score-status">
+          {mameLeaderboardSupported
+            ? mameScoreStatus || 'Scores are extracted from MAME save files.'
+            : 'Online leaderboard not available for this game yet.'}
+        </p>
+        {mameLeaderboardSupported && isHost ? (
+          <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow}>
+            Save MAME score now
+          </button>
+        ) : null}
+        {mameLeaderboardSupported && mameLeaderboard.length ? (
+          <div className="mame-score-list">
+            {mameLeaderboard.slice(0, 10).map((entry) => (
+              <div key={`${entry.rank}-${entry.username}-${entry.score}`}>
+                <strong>{entry.rank}</strong>
+                <span>{entry.username}</span>
+                <small>{entry.initials || '---'}</small>
+                <b>{entry.score.toLocaleString()}</b>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mame-score-empty">
+            <strong>No saved runs yet</strong>
+            <span>Finish a run, enter initials, then save.</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   async function collectArcadeRomEntries(directoryHandle, prefix = '') {
     const entries = [];
 
@@ -5059,51 +5114,80 @@ export default function RoomPage() {
 
             {canControlLocalEmulator ? (
               <>
-                <iframe
-                  key={`${roomSystem}-${emulatorSessionKey}`}
-                  ref={emulatorFrameRef}
-                  className={isArcade ? 'arcade-emulator-frame' : undefined}
-                  title={emulatorTitle}
-                  src={emulatorSrc}
-                  onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
-                  style={{
-                    position: isArcade ? 'relative' : 'absolute',
-                    left: isArcade ? 'auto' : '0',
-                    top: isArcade ? 'auto' : '0',
-                    display: isArcade ? 'block' : 'inline',
-                    width: isArcade ? '640px' : '768px',
-                    height: isArcade ? '480px' : '544px',
-                    maxWidth: isArcade ? '100%' : undefined,
-                    margin: isArcade ? '0 auto' : undefined,
-                    border: isArcade ? '1px solid #1f2f4a' : '0',
-                    borderRadius: isArcade ? '6px' : '0',
-                    background: '#000',
-                    opacity: isArcade ? 1 : 0,
-                    pointerEvents: isArcade ? 'auto' : 'none',
-                  }}
-                />
+                {isArcade ? (
+                  <div className={`arcade-play-layout ${isScreenFullscreen ? 'fullscreen' : ''}`}>
+                    <div className="arcade-screen-stack">
+                      <iframe
+                        key={`${roomSystem}-${emulatorSessionKey}`}
+                        ref={emulatorFrameRef}
+                        className="arcade-emulator-frame"
+                        title={emulatorTitle}
+                        src={emulatorSrc}
+                        onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
+                        style={{
+                          position: 'relative',
+                          left: 'auto',
+                          top: 'auto',
+                          display: 'block',
+                          width: '640px',
+                          height: '480px',
+                          maxWidth: '100%',
+                          margin: '0 auto',
+                          border: '1px solid #1f2f4a',
+                          borderRadius: '6px',
+                          background: '#000',
+                          opacity: 1,
+                          pointerEvents: 'auto',
+                        }}
+                      />
+                    </div>
+                    {!isScreenFullscreen ? renderMameLeaderboardPanel('side') : null}
+                  </div>
+                ) : (
+                  <>
+                    <iframe
+                      key={`${roomSystem}-${emulatorSessionKey}`}
+                      ref={emulatorFrameRef}
+                      title={emulatorTitle}
+                      src={emulatorSrc}
+                      onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
+                      style={{
+                        position: 'absolute',
+                        left: '0',
+                        top: '0',
+                        display: 'inline',
+                        width: '768px',
+                        height: '544px',
+                        border: '0',
+                        background: '#000',
+                        opacity: 0,
+                        pointerEvents: 'none',
+                      }}
+                    />
 
-                <canvas
-                  ref={mirrorCanvasRef}
-                  className="video"
-                  onClick={captureInput}
-                  onPointerDown={handleAmigaPointerDown}
-                  onPointerUp={handleAmigaPointerUp}
-                  onPointerMove={handleAmigaPointerMove}
-                  onContextMenu={(event) => {
-                    if (isMouseComputer) event.preventDefault();
-                  }}
-                  style={{
-                    width: '100%',
-                    aspectRatio: '4 / 3',
-                    border: '1px solid #1f2f4a',
-                    borderRadius: '8px',
-                    background: '#000',
-                    display: isArcade ? 'none' : 'block',
-                  }}
-                  width={768}
-                  height={544}
-                />
+                    <canvas
+                      ref={mirrorCanvasRef}
+                      className="video"
+                      onClick={captureInput}
+                      onPointerDown={handleAmigaPointerDown}
+                      onPointerUp={handleAmigaPointerUp}
+                      onPointerMove={handleAmigaPointerMove}
+                      onContextMenu={(event) => {
+                        if (isMouseComputer) event.preventDefault();
+                      }}
+                      style={{
+                        width: '100%',
+                        aspectRatio: '4 / 3',
+                        border: '1px solid #1f2f4a',
+                        borderRadius: '8px',
+                        background: '#000',
+                        display: 'block',
+                      }}
+                      width={768}
+                      height={544}
+                    />
+                  </>
+                )}
 
                 <input
                   ref={fileInputRef}
@@ -5419,31 +5503,6 @@ export default function RoomPage() {
                     </div>
                     {filteredArcadeRomEntries.length < arcadeRomEntries.length ? (
                       <p className="muted">Showing {filteredArcadeRomEntries.length} of {arcadeRomEntries.length}. Use search to narrow the list.</p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {isArcade && loadedDiskName ? (
-                  <div className="party-turn-panel arcade-queue-panel">
-                    <div className="party-turn-header">
-                      <strong>MAME leaderboard</strong>
-                      <span>
-                        {mameLeaderboardSupported
-                          ? mameScoreStatus || 'Scores are extracted from MAME save files when the session ends.'
-                          : 'Online leaderboard not available for this game yet.'}
-                      </span>
-                    </div>
-                    {mameLeaderboardSupported && mameLeaderboard.length ? (
-                      <div className="leaderboard-table">
-                        {mameLeaderboard.slice(0, 10).map((entry) => (
-                          <div key={`${entry.rank}-${entry.username}-${entry.score}`}>
-                            <strong>{entry.rank}</strong>
-                            <span>{entry.username}</span>
-                            <span>{entry.initials || '-'}</span>
-                            <span>{entry.score.toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
                     ) : null}
                   </div>
                 ) : null}

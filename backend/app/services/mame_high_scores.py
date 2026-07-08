@@ -77,7 +77,7 @@ def write_save_files(session_path: Path, save_files: list[dict]) -> None:
 
 
 def find_score_source(session_path: Path, rom_name: str, score_source: str) -> Path | None:
-    hi_candidates = [
+    exact_hi_candidates = [
         session_path / f"{rom_name}.hi",
         session_path / "hi" / f"{rom_name}.hi",
         session_path / "hiscore" / f"{rom_name}.hi",
@@ -85,10 +85,20 @@ def find_score_source(session_path: Path, rom_name: str, score_source: str) -> P
         session_path / "data" / "saves" / "hi" / f"{rom_name}.hi",
         session_path / "data" / "saves" / "hiscore" / f"{rom_name}.hi",
     ]
-    nvram_candidates = [
+    exact_nvram_candidates = [
         session_path / "nvram" / rom_name,
         session_path / "data" / "saves" / "nvram" / rom_name,
     ]
+    recursive_hi_candidates = sorted(
+        (path for path in session_path.rglob(f"{rom_name}.hi") if path.is_file()),
+        key=lambda path: len(path.parts),
+    )
+    recursive_nvram_candidates = sorted(
+        (path for path in session_path.rglob(rom_name) if path.is_dir() and path.parent.name == "nvram"),
+        key=lambda path: len(path.parts),
+    )
+    hi_candidates = exact_hi_candidates + recursive_hi_candidates
+    nvram_candidates = exact_nvram_candidates + recursive_nvram_candidates
 
     if score_source == "hi":
         return next((path for path in hi_candidates if path.exists() and path.is_file()), None)
@@ -148,6 +158,10 @@ def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMam
     return []
 
 
+def list_session_files(session_path: Path) -> list[str]:
+    return sorted(str(path.relative_to(session_path)).replace("\\", "/") for path in session_path.rglob("*") if path.is_file())
+
+
 def extract_mame_scores(
     db: Session,
     *,
@@ -174,10 +188,17 @@ def extract_mame_scores(
 
     try:
         write_save_files(session_path, save_files)
+        saved_paths = list_session_files(session_path)
+        logger.info("MAME extraction received %s save files: %s", len(saved_paths), saved_paths[:20])
         source_path = find_score_source(session_path, rom_name, game.score_source)
         if not source_path:
             logger.info("MAME score source not found: session=%s rom=%s", session_id, rom_name)
-            return {"status": "no_scores", "message": "No .hi or nvram score source found", "parser": game.parser}
+            file_hint = f" Received files: {', '.join(saved_paths[:8])}" if saved_paths else " No save files were received."
+            return {
+                "status": "no_scores",
+                "message": f"No .hi or nvram score source found.{file_hint}",
+                "parser": game.parser,
+            }
 
         logger.info("MAME score source found: %s", source_path)
         try:

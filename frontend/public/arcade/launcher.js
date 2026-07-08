@@ -116,7 +116,7 @@
     return audioDestination?.stream || null;
   };
 
-  function collectSaveFiles(root = '/data/saves') {
+  function collectSaveFiles(root = '/data/saves', prefix = '') {
     const manager = window.EJS_emulator?.gameManager;
     const fs = manager?.FS;
     const files = [];
@@ -154,8 +154,9 @@
         if (!fs.isFile(stat.mode)) return;
         try {
           const bytes = fs.readFile(childPath);
+          const relativePath = `${prefix}${childPath.slice(root.length).replace(/^\/+/, '')}`;
           files.push({
-            path: childPath.replace(/^\/data\/saves\/?/, ''),
+            path: relativePath,
             bytes,
           });
         } catch (error) {
@@ -169,7 +170,15 @@
   }
 
   window.getArcadeSaveBundle = async function getArcadeSaveBundle() {
-    const files = collectSaveFiles();
+    const seenPaths = new Set();
+    const files = [
+      ...collectSaveFiles('/data/saves'),
+      ...collectSaveFiles('/mame2003-plus', 'mame2003-plus/'),
+    ].filter((file) => {
+      if (!file.path || seenPaths.has(file.path)) return false;
+      seenPaths.add(file.path);
+      return true;
+    });
     return {
       romName: currentRom?.fileName || '',
       files,
@@ -406,6 +415,9 @@
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
+    window.EJS_defaultOptions = {
+      'mame2003-plus_autosave_hiscore': 'enabled',
+    };
     window.EJS_volume = 1;
     window.EJS_backgroundColor = '#000';
     window.EJS_color = '#2f8f76';
