@@ -13,6 +13,9 @@ let sentKickstartRom = null;
 let audioContext = null;
 let audioDestination = null;
 let amigaAudioSource = null;
+let amigaAudioGain = null;
+let emulatorVolume = 1;
+let emulatorPaused = false;
 const previousJoystickMasks = new Map();
 
 function drawStatus(title, detail) {
@@ -95,12 +98,15 @@ function ensureAudioDestination() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     audioContext = new AudioContextClass();
     audioDestination = audioContext.createMediaStreamDestination();
+    amigaAudioGain = audioContext.createGain();
+    amigaAudioGain.gain.value = emulatorVolume;
+    amigaAudioGain.connect(audioDestination);
 
     const silence = audioContext.createConstantSource();
     const silenceGain = audioContext.createGain();
     silenceGain.gain.value = 0;
     silence.connect(silenceGain);
-    silenceGain.connect(audioDestination);
+    silenceGain.connect(amigaAudioGain);
     silence.start();
   }
 
@@ -119,7 +125,7 @@ function connectNestedAmigaAudio() {
   if (!nestedAudioTrack || amigaAudioSource) return;
 
   amigaAudioSource = audioContext.createMediaStreamSource(nestedStream);
-  amigaAudioSource.connect(destination);
+  amigaAudioSource.connect(amigaAudioGain || destination);
 }
 
 function getAmigaAudioStream() {
@@ -182,7 +188,6 @@ function sendKickstartToEmulator() {
   });
 
   sentFileLoadId = 0;
-  window.setTimeout(sendPendingFileToEmulator, 600);
 }
 
 function startEmulator() {
@@ -198,6 +203,7 @@ function startEmulator() {
 
   const config = {
     AROS: !customKickstartRom,
+    wait_for_kickstart_injection: Boolean(customKickstartRom),
     navbar: false,
     wide: true,
     border: 0.3,
@@ -225,7 +231,7 @@ function loadAmigaFile(fileName, bytes) {
   }
 
   resetAmiga();
-  window.setTimeout(sendPendingFileToEmulator, 600);
+  window.setTimeout(sendPendingFileToEmulator, 1200);
 }
 
 function swapAmigaDisk(fileName, bytes) {
@@ -248,8 +254,16 @@ function resetAmiga() {
   }
 }
 
+function normalizeBytes(bytes) {
+  if (!bytes) return null;
+  return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+}
+
 function loadKickstartRom(bytes) {
-  customKickstartRom = bytes;
+  const normalizedBytes = normalizeBytes(bytes);
+  if (!normalizedBytes?.length) return;
+
+  customKickstartRom = normalizedBytes;
   sentKickstartRom = null;
   sentFileLoadId = 0;
 
@@ -261,6 +275,34 @@ function loadKickstartRom(bytes) {
 
 function runScript(script) {
   postToEmulator({ cmd: "script", script });
+}
+
+function setEmulatorVolume(volume) {
+  emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
+  const destination = ensureAudioDestination();
+  if (amigaAudioGain && audioContext) {
+    amigaAudioGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, audioContext.currentTime);
+  }
+  if (runtimeReady && emulatorStarted) {
+    runScript(`if (typeof set_volume === 'function') set_volume(${JSON.stringify(emulatorVolume)});`);
+  }
+  return destination;
+}
+
+function setEmulatorPaused(paused) {
+  emulatorPaused = Boolean(paused);
+  previousJoystickMasks.clear();
+  setEmulatorVolume(emulatorVolume);
+
+  if (!runtimeReady || !emulatorStarted) return;
+
+  runScript(`
+    if (typeof is_running === 'function' && is_running() !== ${emulatorPaused ? 'false' : 'true'}) {
+      if (typeof app?.button_run_click === 'function') {
+        app.button_run_click();
+      }
+    }
+  `);
 }
 
 function joystickPortForPlayer(player) {
@@ -465,10 +507,10 @@ window.addEventListener("message", (event) => {
   if (data.msg === "render_run_state") {
     if (customKickstartRom) {
       sendKickstartToEmulator();
-    } else {
-      sendPendingFileToEmulator();
     }
+    sendPendingFileToEmulator();
     connectNestedAmigaAudio();
+    setEmulatorVolume(emulatorVolume);
     return;
   }
 
@@ -497,8 +539,18 @@ window.addEventListener("message", (event) => {
     return;
   }
 
-  if (data.type === "amiga_kickstart") {
-    loadKickstartRom(data.bytes);
+  if (data.type === "emulator_set_volume") {
+    setEmulatorVolume(data.volume);
+    return;
+  }
+
+  if (data.type === "emulator_set_paused") {
+    setEmulatorPaused(data.paused);
+    return;
+  }
+
+  if (data.type === "amiga_kickstart" || data.kickstart_rom) {
+    loadKickstartRom(data.bytes || data.kickstart_rom);
     return;
   }
 

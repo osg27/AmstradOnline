@@ -6,13 +6,20 @@ const previousJoystickMasks = new Map();
 const heldKeyCounts = new Map();
 let audioContext = null;
 let audioDestination = null;
+let audioCaptureGain = null;
 let audioKeepAlive = null;
+let emulatorVolume = 1;
+let emulatorPaused = false;
 
 function ensureAudioBridgeForContext(context) {
   if (!context || audioDestination) return audioDestination;
 
   audioContext = context;
   audioDestination = context.createMediaStreamDestination();
+  audioCaptureGain = context.createGain();
+  audioCaptureGain.gain.value = emulatorVolume;
+  audioCaptureGain.connect(context.destination);
+  audioCaptureGain.connect(audioDestination);
 
   try {
     audioKeepAlive = context.createOscillator();
@@ -20,7 +27,7 @@ function ensureAudioBridgeForContext(context) {
     audioKeepAlive.frequency.value = 20;
     gain.gain.value = 0.00001;
     audioKeepAlive.connect(gain);
-    gain.connect(audioDestination);
+    gain.connect(audioCaptureGain);
     audioKeepAlive.start();
   } catch {
     // Keep the bridge optional if a browser blocks oscillator startup.
@@ -37,20 +44,18 @@ function installAudioBridge() {
 
   const originalConnect = audioNodePrototype.connect;
   audioNodePrototype.connect = function connectWithSpectrumBridge(destination, ...args) {
-    const result = originalConnect.call(this, destination, ...args);
-
     if (audioDestinationPrototype.isPrototypeOf(destination)) {
       const bridge = ensureAudioBridgeForContext(this.context);
       if (bridge) {
         try {
-          originalConnect.call(this, bridge);
+          return originalConnect.call(this, audioCaptureGain || bridge, ...args);
         } catch {
           // Some nodes cannot be connected twice; normal audio should still work.
         }
       }
     }
 
-    return result;
+    return originalConnect.call(this, destination, ...args);
   };
 
   audioNodePrototype.__osgSpectrumBridge = true;
@@ -58,6 +63,30 @@ function installAudioBridge() {
 
 function resumeSpectrumAudio() {
   audioContext?.resume?.().catch(() => {});
+}
+
+function setEmulatorVolume(volume) {
+  emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
+  if (audioCaptureGain && audioContext) {
+    audioCaptureGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, audioContext.currentTime);
+  }
+}
+
+function setEmulatorPaused(paused) {
+  emulatorPaused = Boolean(paused);
+  previousJoystickMasks.clear();
+  heldKeyCounts.forEach((_count, keyName) => {
+    speccy?.releaseKey?.(keyName);
+  });
+  heldKeyCounts.clear();
+
+  if (emulatorPaused) {
+    speccy?.pause?.();
+  } else {
+    speccy?.start?.();
+    speccy?.focus?.();
+  }
+  setEmulatorVolume(emulatorVolume);
 }
 
 window.getSpectrumAudioStream = function getSpectrumAudioStream() {
@@ -263,6 +292,16 @@ window.addEventListener("message", (event) => {
 
   if (data.type === "amstrad_audio_unlock") {
     resumeSpectrumAudio();
+    return;
+  }
+
+  if (data.type === "emulator_set_volume") {
+    setEmulatorVolume(data.volume);
+    return;
+  }
+
+  if (data.type === "emulator_set_paused") {
+    setEmulatorPaused(data.paused);
     return;
   }
 

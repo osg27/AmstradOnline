@@ -348,7 +348,7 @@ class EmulatorJS {
         
         // Populate downloadTypes
         this.downloadType = {
-            "rom": { "name": "ROM", "dontCache": false, "dontExtractIfCore": ["arcade", "fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2", "same_cdi", "mame", "mame2003_plus", "mame2003"] },
+            "rom": { "name": "ROM", "dontCache": this.getCore() === "flycast", "dontExtractIfCore": ["arcade", "fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2", "same_cdi", "mame", "mame2003_plus", "mame2003", "flycast"] },
             "core": { "name": "Core", "dontCache": false },
             "bios": { "name": "BIOS", "dontCache": false, "dontExtractIfCore": ["arcade", "fbneo", "fbalpha2012_cps1", "fbalpha2012_cps2", "same_cdi", "mame", "mame2003_plus", "mame2003"] },
             "parent": { "name": "Parent", "dontCache": false },
@@ -870,11 +870,12 @@ class EmulatorJS {
 
                 // check cache
                 let key = this.storageCache.generateCacheKey(inData);
-                let cachedItem = await this.storageCache.get(key);
+                let cachedItem = type.dontCache ? null : await this.storageCache.get(key);
                 if (cachedItem) {
                     if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Using cached content for " + url.name);
                     returnData = cachedItem;
                 } else {
+                    if (type.dontCache && this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Cache bypassed for " + url.name);
                     // Not in cache - decompress
                     let files = [];
                     if (dontExtract === false) {
@@ -918,7 +919,9 @@ class EmulatorJS {
                         Date.now() + 5 * 24 * 60 * 60 * 1000 // 5 days expiration
                     );
 
-                    this.storageCache.put(data);
+                    if (!type.dontCache) {
+                        this.storageCache.put(data);
+                    }
 
                     returnData = data;
                 }

@@ -5,9 +5,10 @@
   const SAMPLING_PER_FPS = 736;
   const GAMEPAD_API_INDEX = 64;
   const GAMEPAD_API_STRIDE = 32;
-  const FPS = 60;
-  const INTERVAL = 1000 / FPS;
+  const NTSC_FPS = 60;
   const SOUND_DELAY_FRAME = 8;
+  const isMasterSystem = new URLSearchParams(window.location.search).get('system') === 'mastersystem';
+  const systemName = isMasterSystem ? 'Master System' : 'Mega Drive';
 
   const canvas = document.getElementById('screen');
   const ctx = canvas.getContext('2d');
@@ -26,12 +27,17 @@
   let audioR = null;
   let audioContext = null;
   let audioDestination = null;
+  let audioMasterGain = null;
   let audioKeepAlive = null;
   let audioKeepAliveGain = null;
+  let emulatorVolume = 1;
+  let emulatorPaused = false;
   let soundShedTime = 0;
   let then = Date.now();
-  let fps = FPS;
-  let frame = FPS;
+  let targetFps = NTSC_FPS;
+  let interval = 1000 / targetFps;
+  let fps = targetFps;
+  let frame = targetFps;
   let fpsStartedAt = Date.now();
   let localMask = 0;
   let remoteMask = 0;
@@ -68,12 +74,16 @@
 
     audioContext = new AudioCtor({ sampleRate: SOUND_FREQUENCY });
     audioDestination = audioContext.createMediaStreamDestination();
+    audioMasterGain = audioContext.createGain();
+    audioMasterGain.gain.value = emulatorVolume;
+    audioMasterGain.connect(audioContext.destination);
+    audioMasterGain.connect(audioDestination);
     audioKeepAlive = audioContext.createOscillator();
     audioKeepAliveGain = audioContext.createGain();
     audioKeepAlive.frequency.value = 20;
     audioKeepAliveGain.gain.value = 0.00001;
     audioKeepAlive.connect(audioKeepAliveGain);
-    audioKeepAliveGain.connect(audioDestination);
+    audioKeepAliveGain.connect(audioMasterGain);
     audioKeepAlive.start();
 
     const silence = audioContext.createBuffer(2, SAMPLING_PER_FPS, SOUND_FREQUENCY);
@@ -86,10 +96,7 @@
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
 
-    if (audioDestination) {
-      source.connect(audioDestination);
-    }
-    source.connect(audioContext.destination);
+    source.connect(audioMasterGain || audioContext.destination);
 
     const currentSoundTime = audioContext.currentTime;
     if (currentSoundTime < soundShedTime) {
@@ -123,9 +130,9 @@
   function writePadInput(offset, mask) {
     input[offset + 6] = getAxis(mask, 4, 8);
     input[offset + 7] = getAxis(mask, 1, 2);
-    input[offset + 8 + 2] = mask & 16 ? 1 : 0; // A
-    input[offset + 8 + 3] = mask & 32 ? 1 : 0; // B
-    input[offset + 8 + 1] = mask & 128 ? 1 : 0; // C
+    input[offset + 8 + 2] = !isMasterSystem && mask & 16 ? 1 : 0; // A
+    input[offset + 8 + 3] = mask & (isMasterSystem ? 16 : 32) ? 1 : 0; // B / Button 1
+    input[offset + 8 + 1] = mask & (isMasterSystem ? 32 : 128) ? 1 : 0; // C / Button 2
     input[offset + 8 + 7] = mask & 64 ? 1 : 0; // Start
   }
 
@@ -155,20 +162,33 @@
     ensureAudio();
 
     if (!wasmReady) {
-      drawStatus('Starting Mega Drive', 'Checking genplus runtime...');
+      drawStatus(`Starting ${systemName}`, 'Checking genplus runtime...');
       return;
     }
 
     if (!romReady) {
-      drawStatus('Mega Drive ready', 'Load a ROM file');
+      drawStatus(`${systemName} ready`, 'Load a ROM file');
       return;
     }
 
-    gens._start();
-    bindViews();
-    started = true;
-    pendingStart = false;
-    then = Date.now();
+    try {
+      console.info(`${systemName}: starting ${romName}`);
+      gens._start();
+      targetFps = gens._is_pal() ? 50 : NTSC_FPS;
+      interval = 1000 / targetFps;
+      bindViews();
+      started = true;
+      emulatorPaused = false;
+      pendingStart = false;
+      then = Date.now();
+      console.info(`${systemName}: emulator started at ${targetFps} FPS`);
+    } catch (error) {
+      started = false;
+      pendingStart = false;
+      drawStatus(`${systemName} failed`, error.message || String(error));
+      console.error(`${systemName}: failed to start`, error);
+      return;
+    }
 
     if (!looping) {
       looping = true;
@@ -183,13 +203,16 @@
     remotePressedKeys.clear();
 
     if (!wasmReady || !romReady) {
-      drawStatus('Mega Drive ready', romName || 'Load a ROM file');
+      drawStatus(`${systemName} ready`, romName || 'Load a ROM file');
       return;
     }
 
     gens._start();
+    targetFps = gens._is_pal() ? 50 : NTSC_FPS;
+    interval = 1000 / targetFps;
     bindViews();
     started = true;
+    emulatorPaused = false;
     pendingStart = false;
     then = Date.now();
 
@@ -201,6 +224,7 @@
 
   function loadRom(fileName, bytes) {
     romName = fileName || 'game.bin';
+    console.info(`${systemName}: received ${romName}`);
 
     if (!wasmReady) {
       drawStatus('Loading ROM', romName);
@@ -216,21 +240,21 @@
     );
     romBuffer.set(romBytes);
     romReady = true;
-    drawStatus('Mega Drive ready', romName);
+    drawStatus(`${systemName} ready`, romName);
     startEmulator();
   }
 
   function loop() {
     requestAnimationFrame(loop);
-    if (!started) return;
+    if (!started || emulatorPaused) return;
 
     const now = Date.now();
     const delta = now - then;
-    if (delta <= INTERVAL) return;
+    if (delta <= interval) return;
 
     updateInput();
     gens._tick();
-    then = now - (delta % INTERVAL);
+    then = now - (delta % interval);
 
     imageData.data.set(vram);
     for (let index = 3; index < imageData.data.length; index += 4) {
@@ -249,7 +273,7 @@
     const sampleCount = gens._sound();
     if (!audioContext || sampleCount <= 0) return;
 
-    if (fps < FPS) {
+    if (fps < targetFps) {
       soundShedTime = 0;
       return;
     }
@@ -296,6 +320,28 @@
     }
   }
 
+  function setEmulatorVolume(volume) {
+    emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
+    ensureAudio();
+    if (audioMasterGain && audioContext) {
+      audioMasterGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, audioContext.currentTime);
+    }
+  }
+
+  function setEmulatorPaused(paused) {
+    emulatorPaused = Boolean(paused);
+    pressedKeys.clear();
+    remotePressedKeys.clear();
+    localMask = 0;
+    remoteMask = 0;
+    updateInput();
+    if (audioMasterGain && audioContext) {
+      audioMasterGain.gain.setValueAtTime(emulatorPaused ? 0 : emulatorVolume, audioContext.currentTime);
+    }
+    then = Date.now();
+    soundShedTime = 0;
+  }
+
   window.getMegaDriveAudioStream = function () {
     ensureAudio();
     return audioDestination?.stream || null;
@@ -319,6 +365,14 @@
 
     if (payload.type === 'amstrad_audio_unlock') {
       ensureAudio();
+    }
+
+    if (payload.type === 'emulator_set_volume') {
+      setEmulatorVolume(payload.volume);
+    }
+
+    if (payload.type === 'emulator_set_paused') {
+      setEmulatorPaused(payload.paused);
     }
 
     if (payload.type === 'amstrad_remote_joystick') {
@@ -347,13 +401,15 @@
     if (!started) startEmulator();
   });
 
-  drawStatus('Starting Mega Drive', 'Checking genplus runtime...');
+  drawStatus(`Starting ${systemName}`, 'Checking genplus runtime...');
 
   window.Module().then((module) => {
     gens = module;
     gens._init();
+    gens._set_system(isMasterSystem ? 1 : 0);
     wasmReady = true;
-    drawStatus('Mega Drive ready', 'Load a ROM file');
+    console.info(`${systemName}: WASM ready in ${isMasterSystem ? 'Master System II' : 'Mega Drive'} mode`);
+    drawStatus(`${systemName} ready`, 'Load a ROM file');
 
     const pendingRom = window.__pendingMegaDriveRom;
     if (pendingRom) {
@@ -365,7 +421,7 @@
       startEmulator();
     }
   }).catch((error) => {
-    drawStatus('Mega Drive failed', error.message);
+    drawStatus(`${systemName} failed`, error.message);
     console.error(error);
   });
 }());
