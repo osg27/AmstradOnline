@@ -4204,7 +4204,8 @@ export default function RoomPage() {
     const builtinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(romKey);
     try {
       const games = await apiFetch('/mame/leaderboards');
-      const game = games.find((item) => item.rom_name === romKey);
+      const gameList = Array.isArray(games) ? games : [];
+      const game = gameList.find((item) => item.rom_name === romKey);
       const supported = Boolean(game?.enabled) || builtinSupported;
       setMameLeaderboardSupported(supported);
       if (!supported) {
@@ -4213,8 +4214,9 @@ export default function RoomPage() {
         return;
       }
       const scores = await apiFetch(`/mame/leaderboards/${encodeURIComponent(romKey)}`);
-      setMameLeaderboard(scores);
-      setMameScoreStatus(scores.length ? '' : 'Leaderboard enabled. Scores will appear after extraction.');
+      const scoreList = Array.isArray(scores) ? scores : [];
+      setMameLeaderboard(scoreList);
+      setMameScoreStatus(scoreList.length ? '' : 'Leaderboard enabled. Scores will appear after extraction.');
     } catch (err) {
       addLog(`MAME leaderboard load failed: ${err.message}`);
       setMameLeaderboard([]);
