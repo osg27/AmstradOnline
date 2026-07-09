@@ -19,15 +19,7 @@ const ATARI_ST_TOS_KEY = 'atari-st-tos';
 const CONTROL_MATCH_LIMIT = 6;
 const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
 const BUILTIN_MAME_LEADERBOARD_ROMS = new Set([
-  'puckman',
-  'pacman',
-  'mspacman',
   'dkong',
-  'dkongjr',
-  'dkong3',
-  'galaga',
-  'frogger',
-  '1942',
 ]);
 const ROOM_SYSTEM_OPTIONS = [
   ['cpc', 'Amstrad CPC'],
@@ -4187,13 +4179,14 @@ export default function RoomPage() {
     }
 
     const fallbackLeaderboardKey = getArcadeLeaderboardKey(fileName);
-    const fallbackBuiltinSupported = Boolean(fallbackLeaderboardKey);
+    const fallbackBuiltinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(fallbackLeaderboardKey);
 
     try {
       const games = await apiFetch('/scores/mame/leaderboards');
       const gameList = Array.isArray(games) ? games : [];
       const romKey = getArcadeLeaderboardKey(fileName, gameList);
-      const supported = true;
+      const game = gameList.find((item) => item.rom_name === romKey);
+      const supported = Boolean(game?.enabled) || BUILTIN_MAME_LEADERBOARD_ROMS.has(romKey);
       setMameLeaderboardSupported(supported);
       if (!supported) {
         setMameLeaderboard([]);
