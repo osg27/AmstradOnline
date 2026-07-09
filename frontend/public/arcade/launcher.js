@@ -121,7 +121,17 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function flushArcadeSaveFiles() {
+  async function syncArcadeFs(manager) {
+    try {
+      if (typeof manager?.FS?.syncfs === 'function') {
+        await new Promise((resolve) => manager.FS.syncfs(false, resolve));
+      }
+    } catch {
+      // Some builds do not complete async filesystem sync; the short wait below still helps.
+    }
+  }
+
+  async function flushArcadeSaveFiles({ restartCore = false } = {}) {
     const manager = window.EJS_emulator?.gameManager;
     if (!manager?.FS) return;
 
@@ -131,12 +141,18 @@
       postArcadeLog(`Could not flush MAME save files: ${error.message}`, 'error');
     }
 
-    try {
-      if (typeof manager.FS.syncfs === 'function') {
-        await new Promise((resolve) => manager.FS.syncfs(false, resolve));
+    await syncArcadeFs(manager);
+
+    if (restartCore) {
+      try {
+        manager.restart?.();
+        postArcadeLog('MAME core restart requested to flush built-in high scores');
+        await wait(650);
+        manager.saveSaveFiles?.();
+        await syncArcadeFs(manager);
+      } catch (error) {
+        postArcadeLog(`Could not restart MAME core for high-score flush: ${error.message}`, 'error');
       }
-    } catch {
-      // Some builds do not complete async filesystem sync; the short wait below still helps.
     }
 
     await wait(250);
@@ -182,8 +198,7 @@
       || lowerPath.endsWith('.cfg')
       || lowerPath.endsWith('.fs')
       || segments.includes('hi')
-      || segments.includes('nvram')
-      || (changedSinceRomStart && !isHiscoreDat(lowerPath));
+      || segments.includes('nvram');
   }
 
   function collectSaveFiles(root = '/data/saves', prefix = '') {
@@ -345,7 +360,7 @@
         if (changedSinceRomStart) debug.changedFiles.push(fileInfo);
 
         if (isMameScoreCandidate(childPath, stat)) {
-          addUploadFile(childPath, stat, lowerPath.endsWith('.hi') ? '.hi' : segments.includes('nvram') ? 'nvram' : segments.includes('hi') ? 'hi-folder' : changedSinceRomStart ? 'changed' : 'candidate');
+          addUploadFile(childPath, stat, lowerPath.endsWith('.hi') ? '.hi' : segments.includes('nvram') ? 'nvram' : segments.includes('hi') ? 'hi-folder' : lowerPath.endsWith('.cfg') ? '.cfg' : lowerPath.endsWith('.fs') ? '.fs' : 'candidate');
         } else if (isHiscoreDat(childPath)) {
           addUploadFile(childPath, stat, 'hiscore.dat-debug');
         }
@@ -372,7 +387,7 @@
   }
 
   window.getArcadeSaveBundle = async function getArcadeSaveBundle() {
-    await flushArcadeSaveFiles();
+    await flushArcadeSaveFiles({ restartCore: true });
     const { debug, files } = buildFsDebugDump();
     postArcadeLog(`MAME FS scan: ${debug.files.length} files, ${debug.hiFiles.length} .hi, ${debug.nvramDirs.length} nvram dirs, ${debug.uploadFiles.length} upload candidates`);
     window.parent?.postMessage({
