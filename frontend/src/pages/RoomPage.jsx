@@ -4,11 +4,9 @@ import { unzipSync } from 'fflate';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
-import ScoreSubmitModal from '../components/ScoreSubmitModal';
 import SocialSidebar from '../components/SocialSidebar';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
-import { extractScoreFromCanvas } from '../utils/scoreOcr';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
 import mame2003PlusTitles from '../data/mame2003PlusTitles';
 
@@ -404,9 +402,6 @@ export default function RoomPage() {
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
-  const [showScoreModal, setShowScoreModal] = useState(false);
-  const [detectedScore, setDetectedScore] = useState(null);
-  const [isDetectingScore, setIsDetectingScore] = useState(false);
 
   const remoteMediaStreamRef = useRef(null);
   const remoteVoiceStreamRef = useRef(null);
@@ -524,24 +519,6 @@ export default function RoomPage() {
   const canSendPlayerInput = isHost || !isArcadeParty || Boolean(partyPlayerNumber);
   const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isPlayStation || isC64 || isAtari8 || isAtariSt || isArcade;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
-
-  const detectScore = useCallback(async () => {
-    if (!mirrorCanvasRef.current) return;
-
-    setIsDetectingScore(true);
-    try {
-      const score = await extractScoreFromCanvas(mirrorCanvasRef.current);
-      if (score !== null) {
-        setDetectedScore(score);
-      }
-      setShowScoreModal(true);
-    } catch (error) {
-      console.error('Score detection error:', error);
-      setShowScoreModal(true);
-    } finally {
-      setIsDetectingScore(false);
-    }
-  }, []);
 
   useEffect(() => {
     setSelectedRoomSystem(roomSystem);
@@ -4203,7 +4180,7 @@ export default function RoomPage() {
     const romKey = getArcadeRomKey(fileName);
     const builtinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(romKey);
     try {
-      const games = await apiFetch('/mame/leaderboards');
+      const games = await apiFetch('/scores/mame/leaderboards');
       const gameList = Array.isArray(games) ? games : [];
       const game = gameList.find((item) => item.rom_name === romKey);
       const supported = Boolean(game?.enabled) || builtinSupported;
@@ -4213,7 +4190,7 @@ export default function RoomPage() {
         setMameScoreStatus('Online leaderboard not available for this game yet.');
         return;
       }
-      const scores = await apiFetch(`/mame/leaderboards/${encodeURIComponent(romKey)}`);
+      const scores = await apiFetch(`/scores/mame/leaderboards/${encodeURIComponent(romKey)}`);
       const scoreList = Array.isArray(scores) ? scores : [];
       setMameLeaderboard(scoreList);
       setMameScoreStatus(scoreList.length ? '' : 'Leaderboard enabled. Scores will appear after extraction.');
@@ -4246,7 +4223,7 @@ export default function RoomPage() {
     }
 
     setMameScoreStatus('Extracting MAME high scores...');
-    const result = await apiFetch(`/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`, {
+    const result = await apiFetch(`/scores/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`, {
       method: 'POST',
       body: JSON.stringify({
         rom_name: romName,
@@ -4962,21 +4939,6 @@ export default function RoomPage() {
             </Link>
             <button className="secondary" onClick={leaveRoom}>
               Leave
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={detectScore}
-              disabled={isDetectingScore}
-            >
-              {isDetectingScore ? 'Detecting...' : 'Auto-detect Score'}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setShowScoreModal(true)}
-            >
-              Submit Score
             </button>
             <button
               type="button"
@@ -5877,17 +5839,6 @@ export default function RoomPage() {
           ) : null}
         </div>
       </div>
-      <ScoreSubmitModal
-        isOpen={showScoreModal}
-        game={loadedDiskName || 'Game'}
-        system={selectedRoomSystem}
-        onClose={() => {
-          setShowScoreModal(false);
-          setDetectedScore(null);
-        }}
-        onSubmitted={() => {}}
-        detectedScore={detectedScore}
-      />
     </div>
   );
 }

@@ -96,7 +96,7 @@ After you confirm this runs cleanly, the next step is:
 
 Current MAME runs in the browser through `frontend/public/arcade/launcher.js` using EmulatorJS with the `mame2003_plus` core. The backend does not launch MAME or maintain native MAME session folders yet. EmulatorJS mounts save data inside the browser Emscripten filesystem at `/data/saves`, and the room page exports those MAME-generated save files to the backend before a ROM change, reset, or host leave.
 
-Backend extraction lives in `backend/app/services/mame_high_scores.py` and the API routes are under `/mame`. A transient extraction folder is created under the OS temp directory at `oldstylegaming-mame-sessions/<session>/<rom>/`, parsed, then removed after extraction.
+Backend extraction lives in `backend/app/services/mame_high_scores.py` and the API routes are under `/mame`, with a production-safe alias under `/scores/mame` for deployments that already proxy `/scores` to FastAPI. A transient extraction folder is created under the OS temp directory at `oldstylegaming-mame-sessions/<session>/<rom>/`, parsed, then removed after extraction.
 
 Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are enabled for the first classic `.hi` parser set: `puckman`, `pacman`, `mspacman`, `dkong`, `dkongjr`, `dkong3`, `galaga`, `frogger`, and `1942`. Add more ROMs only after testing that they produce parseable `.hi` or `nvram` data. Parser values are:
 
