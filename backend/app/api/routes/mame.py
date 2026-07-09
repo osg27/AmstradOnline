@@ -14,6 +14,7 @@ from app.schemas.mame_leaderboard import (
     MameScoreExtractionResponse,
 )
 from app.services.mame_high_scores import (
+    cleanup_duplicate_mame_scores,
     cleanup_uncalibrated_mame_scores,
     extract_mame_scores,
     is_uncalibrated_mame_game,
@@ -59,6 +60,7 @@ def get_mame_leaderboard(
     seed_default_mame_games(db)
     rom_name = normalise_rom_name(rom_name)
     cleanup_uncalibrated_mame_scores(db)
+    cleanup_duplicate_mame_scores(db)
     if is_uncalibrated_mame_game(rom_name):
         return []
 

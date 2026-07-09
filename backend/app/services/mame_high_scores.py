@@ -79,6 +79,41 @@ def cleanup_uncalibrated_mame_scores(db: Session) -> int:
     return deleted
 
 
+def cleanup_duplicate_mame_scores(db: Session) -> int:
+    rows = (
+        db.query(MameHighScore)
+        .order_by(MameHighScore.created_at, MameHighScore.id)
+        .all()
+    )
+    seen: set[tuple[int, str, int, str, str]] = set()
+    duplicate_ids: list[int] = []
+
+    for row in rows:
+        key = (
+            row.user_id,
+            row.rom_name,
+            row.score,
+            row.initials or "",
+            row.parser,
+        )
+        if key in seen:
+            duplicate_ids.append(row.id)
+            continue
+        seen.add(key)
+
+    if not duplicate_ids:
+        return 0
+
+    deleted = (
+        db.query(MameHighScore)
+        .filter(MameHighScore.id.in_(duplicate_ids))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    logger.warning("Removed %s duplicate MAME high-score rows", deleted)
+    return deleted
+
+
 def seed_default_mame_games(db: Session) -> None:
     for rom_name, display_name in DEFAULT_MAME_GAMES:
         existing = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
@@ -99,6 +134,7 @@ def seed_default_mame_games(db: Session) -> None:
         ))
     db.commit()
     cleanup_uncalibrated_mame_scores(db)
+    cleanup_duplicate_mame_scores(db)
 
 
 def write_save_files(session_path: Path, save_files: list[dict]) -> None:
@@ -314,8 +350,7 @@ def extract_mame_scores(
                 MameHighScore.rom_name == rom_name,
                 MameHighScore.score == parsed.score,
                 MameHighScore.initials == parsed.initials,
-                MameHighScore.rank_in_game == parsed.rank_in_game,
-                MameHighScore.session_id == session_id,
+                MameHighScore.parser == game.parser,
             ).first()
             if exists:
                 continue
@@ -332,8 +367,10 @@ def extract_mame_scores(
             inserted += 1
         db.commit()
         logger.info("MAME scores parsed=%s inserted=%s", len(parsed_scores), inserted)
+        cleanup_duplicate_mame_scores(db)
         return {
             "status": "ok",
+            "message": "Score already saved." if inserted == 0 and parsed_scores else None,
             "parser": game.parser,
             "source_path": str(source_path.relative_to(session_path)),
             "saved_paths": saved_paths,
