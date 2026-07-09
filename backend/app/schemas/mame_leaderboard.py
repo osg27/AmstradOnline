@@ -20,6 +20,7 @@ class MameScoreExtractionResponse(BaseModel):
     rom_name: str
     parser: str | None = None
     source_path: str | None = None
+    saved_paths: list[str] = Field(default_factory=list)
     scores_parsed: int = 0
     rows_inserted: int = 0
     message: str | None = None

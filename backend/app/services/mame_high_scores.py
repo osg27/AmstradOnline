@@ -198,6 +198,7 @@ def extract_mame_scores(
                 "status": "no_scores",
                 "message": f"No .hi or nvram score source found.{file_hint}",
                 "parser": game.parser,
+                "saved_paths": saved_paths,
             }
 
         logger.info("MAME score source found: %s", source_path)
@@ -210,6 +211,7 @@ def extract_mame_scores(
                 "message": str(exc),
                 "parser": game.parser,
                 "source_path": str(source_path.relative_to(session_path)),
+                "saved_paths": saved_paths,
             }
         inserted = 0
         for parsed in parsed_scores:
@@ -240,6 +242,7 @@ def extract_mame_scores(
             "status": "ok",
             "parser": game.parser,
             "source_path": str(source_path.relative_to(session_path)),
+            "saved_paths": saved_paths,
             "scores_parsed": len(parsed_scores),
             "rows_inserted": inserted,
         }

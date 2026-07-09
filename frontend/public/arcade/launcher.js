@@ -116,17 +116,37 @@
     return audioDestination?.stream || null;
   };
 
+  function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function flushArcadeSaveFiles() {
+    const manager = window.EJS_emulator?.gameManager;
+    if (!manager?.FS) return;
+
+    try {
+      manager.saveSaveFiles?.();
+    } catch (error) {
+      postArcadeLog(`Could not flush MAME save files: ${error.message}`, 'error');
+    }
+
+    try {
+      if (typeof manager.FS.syncfs === 'function') {
+        await new Promise((resolve) => manager.FS.syncfs(false, resolve));
+      }
+    } catch {
+      // Some builds do not complete async filesystem sync; the short wait below still helps.
+    }
+
+    await wait(250);
+  }
+
   function collectSaveFiles(root = '/data/saves', prefix = '') {
     const manager = window.EJS_emulator?.gameManager;
     const fs = manager?.FS;
     const files = [];
 
     if (!fs) return files;
-    try {
-      manager.saveSaveFiles?.();
-    } catch (error) {
-      postArcadeLog(`Could not flush MAME save files: ${error.message}`, 'error');
-    }
 
     function walk(path) {
       let entries = [];
@@ -170,6 +190,7 @@
   }
 
   window.getArcadeSaveBundle = async function getArcadeSaveBundle() {
+    await flushArcadeSaveFiles();
     const seenPaths = new Set();
     const files = [
       ...collectSaveFiles('/data/saves'),

@@ -4233,8 +4233,12 @@ export default function RoomPage() {
         })),
       }),
     });
-    setMameScoreStatus(result.message || `MAME score extraction: ${result.status}`);
-    addLog(`MAME score extraction ${result.status}: parsed ${result.scores_parsed || 0}, inserted ${result.rows_inserted || 0}`);
+    const savedPaths = Array.isArray(result.saved_paths) ? result.saved_paths : [];
+    const savedPathHint = savedPaths.length ? ` Files: ${savedPaths.slice(0, 5).join(', ')}` : '';
+    setMameScoreStatus(`${result.message || `MAME score extraction: ${result.status}`}${savedPathHint}`);
+    addLog(
+      `MAME score extraction ${result.status}: parsed ${result.scores_parsed || 0}, inserted ${result.rows_inserted || 0}; files ${savedPaths.length ? savedPaths.join(', ') : 'none'}`
+    );
     await refreshMameLeaderboard(romName);
     return result;
   }
