@@ -2612,6 +2612,77 @@ input:focus {
   min-height: 42px;
 }
 
+.mame-fs-debug {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(109, 229, 161, 0.22);
+  border-radius: 7px;
+  background: rgba(4, 8, 8, 0.72);
+}
+
+.mame-fs-debug-grid {
+  display: grid;
+  grid-template-columns: minmax(64px, 1fr) auto;
+  gap: 0.3rem 0.6rem;
+  align-items: center;
+}
+
+.mame-fs-debug-grid span {
+  color: #9fa9a3;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.mame-fs-debug-grid strong {
+  color: #fff7dd;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.mame-fs-warning {
+  margin: 0;
+  color: #ffb39e;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.mame-fs-debug details {
+  color: #d8d8d4;
+  font-size: 0.78rem;
+}
+
+.mame-fs-debug summary {
+  cursor: pointer;
+  color: var(--mint);
+  font-weight: 900;
+}
+
+.mame-fs-section {
+  display: grid;
+  gap: 0.25rem;
+  max-height: 190px;
+  margin-top: 0.5rem;
+  overflow: auto;
+  padding: 0.45rem;
+  border: 1px solid #242a29;
+  border-radius: 6px;
+  background: #070909;
+}
+
+.mame-fs-section b {
+  color: var(--gold);
+  font-size: 0.74rem;
+}
+
+.mame-fs-section code {
+  color: #cdd7d2;
+  font-size: 0.7rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .mame-score-list {
   display: grid;
   gap: 0.35rem;

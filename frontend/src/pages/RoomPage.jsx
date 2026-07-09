@@ -399,6 +399,7 @@ export default function RoomPage() {
   const [mameLeaderboard, setMameLeaderboard] = useState([]);
   const [mameLeaderboardSupported, setMameLeaderboardSupported] = useState(false);
   const [mameScoreStatus, setMameScoreStatus] = useState('');
+  const [mameFsDebug, setMameFsDebug] = useState(null);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
@@ -1483,6 +1484,10 @@ export default function RoomPage() {
       if (event.origin !== window.location.origin) return;
 
       const message = event.data || {};
+      if (message.type === 'arcade_fs_debug') {
+        setMameFsDebug(message.debug || null);
+        return;
+      }
       if (message.type !== 'arcade_log') return;
 
       const prefix = message.level === 'error' ? 'Arcade error' : 'Arcade';
@@ -4212,13 +4217,17 @@ export default function RoomPage() {
 
     const frame = emulatorFrameRef.current;
     const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.();
+    if (bundle?.debug) {
+      setMameFsDebug(bundle.debug);
+    }
     const files = (bundle?.files || []).filter((file) => file?.path && file?.bytes?.length);
     const romName = getArcadeRomKey(bundle?.romName || loadedDiskNameRef.current);
     const sessionId = `${roomCode}-${roomSessionKey}-${romName}`;
 
     if (!files.length) {
-      setMameScoreStatus('No MAME save files found for extraction');
-      addLog(`MAME score extraction skipped: no save files (${reason})`);
+      const scannedCount = bundle?.debug?.files?.length || 0;
+      setMameScoreStatus(`No MAME score files found for extraction. Browser FS scan saw ${scannedCount} files.`);
+      addLog(`MAME score extraction skipped: no upload candidates (${reason}); scanned files ${scannedCount}`);
       return null;
     }
 
@@ -4276,6 +4285,76 @@ export default function RoomPage() {
           <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow}>
             Save MAME score now
           </button>
+        ) : null}
+        {mameFsDebug ? (
+          <div className="mame-fs-debug">
+            <div className="mame-fs-debug-grid">
+              <span>Scanned</span>
+              <strong>{mameFsDebug.files?.length || 0} files</strong>
+              <span>.hi</span>
+              <strong>{mameFsDebug.hiFiles?.length || 0}</strong>
+              <span>hi dirs</span>
+              <strong>{mameFsDebug.hiDirs?.length || 0}</strong>
+              <span>nvram dirs</span>
+              <strong>{mameFsDebug.nvramDirs?.length || 0}</strong>
+              <span>Uploading</span>
+              <strong>{mameFsDebug.uploadFiles?.length || 0}</strong>
+            </div>
+            {mameFsDebug.warning ? (
+              <p className="mame-fs-warning">{mameFsDebug.warning}</p>
+            ) : null}
+            <details>
+              <summary>Browser MAME FS dump</summary>
+              <div className="mame-fs-section">
+                <b>Top level</b>
+                {(mameFsDebug.topLevel || []).slice(0, 30).map((entry) => (
+                  <code key={entry.path}>{entry.path} {entry.type} {entry.size}b</code>
+                ))}
+              </div>
+              <div className="mame-fs-section">
+                <b>Upload candidates</b>
+                {(mameFsDebug.uploadFiles || []).length ? (mameFsDebug.uploadFiles || []).map((entry) => (
+                  <code key={entry.path}>{entry.path} {entry.size}b {entry.reason}</code>
+                )) : <code>none</code>}
+              </div>
+              <div className="mame-fs-section">
+                <b>.hi files</b>
+                {(mameFsDebug.hiFiles || []).length ? (mameFsDebug.hiFiles || []).map((entry) => (
+                  <code key={entry.path}>{entry.path} {entry.size}b</code>
+                )) : <code>none</code>}
+              </div>
+              <div className="mame-fs-section">
+                <b>hi folders</b>
+                {(mameFsDebug.hiDirs || []).length ? (mameFsDebug.hiDirs || []).map((entry) => (
+                  <code key={entry.path}>{entry.path}</code>
+                )) : <code>none</code>}
+              </div>
+              <div className="mame-fs-section">
+                <b>nvram folders</b>
+                {(mameFsDebug.nvramDirs || []).length ? (mameFsDebug.nvramDirs || []).map((entry) => (
+                  <code key={entry.path}>{entry.path}</code>
+                )) : <code>none</code>}
+              </div>
+              <div className="mame-fs-section">
+                <b>Changed files</b>
+                {(mameFsDebug.changedFiles || []).length ? (mameFsDebug.changedFiles || []).slice(0, 40).map((entry) => (
+                  <code key={entry.path}>{entry.path} {entry.size}b</code>
+                )) : <code>none</code>}
+              </div>
+              <div className="mame-fs-section">
+                <b>All files</b>
+                {(mameFsDebug.files || []).slice(0, 120).map((entry) => (
+                  <code key={entry.path}>{entry.path} {entry.size}b</code>
+                ))}
+              </div>
+              <div className="mame-fs-section">
+                <b>Searched roots</b>
+                {(mameFsDebug.searchedRoots || []).slice(0, 120).map((path) => (
+                  <code key={path}>{path}</code>
+                ))}
+              </div>
+            </details>
+          </div>
         ) : null}
         {mameLeaderboardSupported && mameLeaderboard.length ? (
           <div className="mame-score-list">

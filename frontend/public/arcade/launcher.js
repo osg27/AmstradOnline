@@ -11,6 +11,7 @@
   let keepAlive = null;
   let emulatorVolume = 1;
   let emulatorPaused = false;
+  let romStartedAt = 0;
   const playerMasks = [0, 0, 0, 0];
   let lastSimulatedMasks = [0, 0, 0, 0];
   let statusText = 'MAME 2003-Plus ready';
@@ -141,6 +142,50 @@
     await wait(250);
   }
 
+  function normaliseFsPath(path) {
+    return String(path || '').replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+  }
+
+  function safeStat(fs, path) {
+    try {
+      return fs.stat(path);
+    } catch {
+      return null;
+    }
+  }
+
+  function statMtimeMs(stat) {
+    const value = stat?.mtime;
+    if (!value) return null;
+    if (value instanceof Date) return value.getTime();
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? time : null;
+  }
+
+  function pathSegments(path) {
+    return normaliseFsPath(path).split('/').filter(Boolean).map((part) => part.toLowerCase());
+  }
+
+  function isHiscoreDat(path) {
+    return normaliseFsPath(path).toLowerCase().endsWith('/hiscore.dat')
+      || normaliseFsPath(path).toLowerCase() === 'hiscore.dat';
+  }
+
+  function isMameScoreCandidate(path, stat) {
+    const normalised = normaliseFsPath(path);
+    const lowerPath = normalised.toLowerCase();
+    const segments = pathSegments(normalised);
+    const mtimeMs = statMtimeMs(stat);
+    const changedSinceRomStart = Boolean(romStartedAt && mtimeMs && mtimeMs >= romStartedAt - 1000);
+
+    return lowerPath.endsWith('.hi')
+      || lowerPath.endsWith('.cfg')
+      || lowerPath.endsWith('.fs')
+      || segments.includes('hi')
+      || segments.includes('nvram')
+      || (changedSinceRomStart && !isHiscoreDat(lowerPath));
+  }
+
   function collectSaveFiles(root = '/data/saves', prefix = '') {
     const manager = window.EJS_emulator?.gameManager;
     const fs = manager?.FS;
@@ -189,23 +234,155 @@
     return files;
   }
 
+  function buildFsDebugDump() {
+    const manager = window.EJS_emulator?.gameManager;
+    const fs = manager?.FS;
+    const debug = {
+      core: window.EJS_core || 'unknown',
+      romName: currentRom?.fileName || '',
+      romStartedAt,
+      searchedRoots: [],
+      topLevel: [],
+      files: [],
+      folders: [],
+      hiFiles: [],
+      hiDirs: [],
+      nvramDirs: [],
+      changedFiles: [],
+      uploadFiles: [],
+      onlyHiscoreDat: false,
+      warning: '',
+    };
+
+    if (!fs) {
+      debug.warning = 'Emulator filesystem is not available yet.';
+      return { debug, files: [] };
+    }
+
+    const skipRoots = new Set(['/dev', '/proc', '/sys']);
+    const seenPaths = new Set();
+    const uploadPathSet = new Set();
+    const uploadFiles = [];
+
+    function addTopLevel() {
+      try {
+        debug.topLevel = fs.readdir('/')
+          .filter((entry) => entry !== '.' && entry !== '..')
+          .map((entry) => {
+            const fullPath = `/${entry}`;
+            const stat = safeStat(fs, fullPath);
+            return {
+              path: fullPath,
+              type: stat && fs.isDir(stat.mode) ? 'dir' : stat && fs.isFile(stat.mode) ? 'file' : 'other',
+              size: Number(stat?.size) || 0,
+            };
+          });
+      } catch (error) {
+        debug.warning = `Could not read top-level filesystem: ${error.message}`;
+      }
+    }
+
+    function addUploadFile(path, stat, reason) {
+      const normalised = normaliseFsPath(path);
+      if (uploadPathSet.has(normalised)) return;
+      uploadPathSet.add(normalised);
+      try {
+        const bytes = fs.readFile(normalised);
+        uploadFiles.push({
+          path: normalised.replace(/^\/+/, ''),
+          bytes,
+          size: bytes.length,
+          reason,
+        });
+      } catch (error) {
+        postArcadeLog(`Could not read MAME candidate ${normalised}: ${error.message}`, 'error');
+      }
+    }
+
+    function walk(root) {
+      const normalRoot = normaliseFsPath(root);
+      if (skipRoots.has(normalRoot) || seenPaths.has(normalRoot)) return;
+      seenPaths.add(normalRoot);
+      debug.searchedRoots.push(normalRoot);
+
+      let entries = [];
+      try {
+        entries = fs.readdir(normalRoot);
+      } catch {
+        return;
+      }
+
+      entries.forEach((entry) => {
+        if (entry === '.' || entry === '..') return;
+        const childPath = normalRoot === '/' ? `/${entry}` : `${normalRoot}/${entry}`;
+        const stat = safeStat(fs, childPath);
+        if (!stat) return;
+
+        const lowerPath = childPath.toLowerCase();
+        const segments = pathSegments(childPath);
+        const mtimeMs = statMtimeMs(stat);
+        const changedSinceRomStart = Boolean(romStartedAt && mtimeMs && mtimeMs >= romStartedAt - 1000);
+
+        if (fs.isDir(stat.mode)) {
+          const folderInfo = { path: childPath, size: 0, mtimeMs };
+          debug.folders.push(folderInfo);
+          if (segments.includes('hi')) debug.hiDirs.push(folderInfo);
+          if (segments.includes('nvram')) debug.nvramDirs.push(folderInfo);
+          walk(childPath);
+          return;
+        }
+
+        if (!fs.isFile(stat.mode)) return;
+
+        const fileInfo = {
+          path: childPath,
+          size: Number(stat.size) || 0,
+          mtimeMs,
+          changedSinceRomStart,
+        };
+        debug.files.push(fileInfo);
+        if (lowerPath.endsWith('.hi')) debug.hiFiles.push(fileInfo);
+        if (changedSinceRomStart) debug.changedFiles.push(fileInfo);
+
+        if (isMameScoreCandidate(childPath, stat)) {
+          addUploadFile(childPath, stat, lowerPath.endsWith('.hi') ? '.hi' : segments.includes('nvram') ? 'nvram' : segments.includes('hi') ? 'hi-folder' : changedSinceRomStart ? 'changed' : 'candidate');
+        } else if (isHiscoreDat(childPath)) {
+          addUploadFile(childPath, stat, 'hiscore.dat-debug');
+        }
+      });
+    }
+
+    addTopLevel();
+    walk('/');
+
+    debug.files.sort((left, right) => left.path.localeCompare(right.path));
+    debug.folders.sort((left, right) => left.path.localeCompare(right.path));
+    debug.uploadFiles = uploadFiles.map((file) => ({
+      path: file.path,
+      size: file.size,
+      reason: file.reason,
+    }));
+    debug.onlyHiscoreDat = uploadFiles.length > 0 && uploadFiles.every((file) => isHiscoreDat(file.path));
+    if (debug.onlyHiscoreDat) {
+      debug.warning = 'Only hiscore.dat was found. That is the support definition file, not a generated score file.';
+      postArcadeLog(debug.warning, 'error');
+    }
+
+    return { debug, files: uploadFiles };
+  }
+
   window.getArcadeSaveBundle = async function getArcadeSaveBundle() {
     await flushArcadeSaveFiles();
-    const seenPaths = new Set();
-    const files = [
-      ...collectSaveFiles('/data/saves'),
-      ...collectSaveFiles('/mame2003-plus', 'mame2003-plus/'),
-      ...collectSaveFiles('/home/web_user/retroarch/system/mame2003-plus', 'system/mame2003-plus/'),
-      ...collectSaveFiles('/home/web_user/retroarch/userdata/system/mame2003-plus', 'userdata/system/mame2003-plus/'),
-      ...collectSaveFiles('/home/web_user/retroarch/userdata/saves/MAME 2003-Plus', 'userdata/saves/MAME 2003-Plus/'),
-    ].filter((file) => {
-      if (!file.path || seenPaths.has(file.path)) return false;
-      seenPaths.add(file.path);
-      return true;
-    });
+    const { debug, files } = buildFsDebugDump();
+    postArcadeLog(`MAME FS scan: ${debug.files.length} files, ${debug.hiFiles.length} .hi, ${debug.nvramDirs.length} nvram dirs, ${debug.uploadFiles.length} upload candidates`);
+    window.parent?.postMessage({
+      type: 'arcade_fs_debug',
+      debug,
+    }, window.location.origin);
     return {
       romName: currentRom?.fileName || '',
       files,
+      debug,
     };
   };
 
@@ -576,6 +753,7 @@
     }
 
     clearGameContainer();
+    romStartedAt = Date.now();
     const gameType = currentRom.fileName.toLowerCase().endsWith('.7z') ? 'application/x-7z-compressed' : 'application/zip';
     const gameFile = new File([currentRom.bytes], currentRom.fileName, { type: gameType });
     configureEmulator(currentRom.fileName, gameFile);
