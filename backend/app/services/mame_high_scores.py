@@ -35,6 +35,12 @@ ROM_SCORE_LIMITS = {
     "dkong3": 999990,
 }
 
+UNCALIBRATED_RAW_HI_GAMES = {
+    "dkong",
+    "dkongjr",
+    "dkong3",
+}
+
 STATIC_MAME_FILES = {
     "hiscore.dat",
     "retroarch.cfg",
@@ -73,14 +79,13 @@ def seed_default_mame_games(db: Session) -> None:
     deleted = (
         db.query(MameHighScore)
         .filter(
-            MameHighScore.rom_name.in_(ROM_SCORE_LIMITS.keys()),
+            MameHighScore.rom_name.in_(UNCALIBRATED_RAW_HI_GAMES),
             MameHighScore.parser == BUILTIN_HI_BCD_PARSER,
-            MameHighScore.score > 999990,
         )
         .delete(synchronize_session=False)
     )
     if deleted:
-        logger.warning("Removed %s impossible MAME high-score rows from earlier loose parsing", deleted)
+        logger.warning("Removed %s uncalibrated MAME high-score rows from earlier loose parsing", deleted)
     db.commit()
 
 
@@ -170,6 +175,9 @@ def plausible_arcade_score(score: int, rom_name: str) -> bool:
 def parse_mame_hi_bcd(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
     if not is_mame_hi_source(source_path, rom_name):
         raise ValueError(f"Refusing to parse non-score MAME file: {source_path.name}")
+    if rom_name in UNCALIBRATED_RAW_HI_GAMES:
+        logger.warning("MAME .hi source found for %s, but exact parser is not calibrated yet", rom_name)
+        return []
 
     data = source_path.read_bytes()
     candidates: set[int] = set()
@@ -256,6 +264,17 @@ def extract_mame_scores(
                 "parser": game.parser,
                 "source_path": str(source_path.relative_to(session_path)),
                 "saved_paths": saved_paths,
+            }
+        if not parsed_scores:
+            logger.info("MAME score source was found but no calibrated scores were parsed: session=%s rom=%s", session_id, rom_name)
+            return {
+                "status": "no_scores",
+                "message": "Score file found, but this game needs an exact .hi parser before scores can be trusted.",
+                "parser": game.parser,
+                "source_path": str(source_path.relative_to(session_path)),
+                "saved_paths": saved_paths,
+                "scores_parsed": 0,
+                "rows_inserted": 0,
             }
         inserted = 0
         for parsed in parsed_scores:
