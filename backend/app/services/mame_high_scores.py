@@ -15,6 +15,23 @@ logger = logging.getLogger("oldstylegaming.mame_high_scores")
 
 BUILTIN_HI_BCD_PARSER = "mame_hi_bcd"
 
+MAME_CANONICAL_ROM_ALIASES = {
+    # Donkey Kong sets share the same high-score memory layout. Store all of
+    # them on the parent leaderboard, but still look for the actual clone .hi.
+    "dkongjo": "dkong",
+    "dkongjo1": "dkong",
+    "dkongj": "dkong",
+    "dkongjp": "dkong",
+    "dkongjpo": "dkong",
+    "dkongo": "dkong",
+    "dkongf": "dkong",
+    "dkonghrd": "dkong",
+    "dkongpe": "dkong",
+    "dkongx": "dkong",
+    "dkremix": "dkong",
+    "dkchrmx": "dkong",
+}
+
 DEFAULT_MAME_GAMES = [
     ("puckman", "PuckMan / Pac-Man"),
     ("pacman", "Pac-Man"),
@@ -63,8 +80,13 @@ def normalise_rom_name(value: str) -> str:
     return re.sub(r"[^a-z0-9_+-]", "", (value or "").lower().replace(".zip", "").replace(".7z", ""))[:64]
 
 
+def canonical_mame_rom_name(value: str) -> str:
+    rom_name = normalise_rom_name(value)
+    return MAME_CANONICAL_ROM_ALIASES.get(rom_name, rom_name)
+
+
 def is_uncalibrated_mame_game(rom_name: str) -> bool:
-    return normalise_rom_name(rom_name) in UNCALIBRATED_RAW_HI_GAMES
+    return canonical_mame_rom_name(rom_name) in UNCALIBRATED_RAW_HI_GAMES
 
 
 def cleanup_uncalibrated_mame_scores(db: Session) -> int:
@@ -158,7 +180,9 @@ def is_mame_hi_source(path: Path, rom_name: str) -> bool:
     name = path.name.lower()
     if name in STATIC_MAME_FILES:
         return False
-    return path.is_file() and name == f"{rom_name}.hi"
+    if not path.is_file() or not name.endswith(".hi"):
+        return False
+    return canonical_mame_rom_name(name[:-3]) == canonical_mame_rom_name(rom_name)
 
 
 def is_nvram_source(path: Path, rom_name: str) -> bool:
@@ -289,8 +313,15 @@ def extract_mame_scores(
     user_id: int,
     save_files: list[dict],
 ) -> dict:
-    rom_name = normalise_rom_name(rom_name)
-    logger.info("MAME high score extraction started: session=%s rom=%s user=%s", session_id, rom_name, user_id)
+    source_rom_name = normalise_rom_name(rom_name)
+    rom_name = canonical_mame_rom_name(source_rom_name)
+    logger.info(
+        "MAME high score extraction started: session=%s rom=%s canonical=%s user=%s",
+        session_id,
+        source_rom_name,
+        rom_name,
+        user_id,
+    )
     seed_default_mame_games(db)
 
     game = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
@@ -299,7 +330,7 @@ def extract_mame_scores(
         return {"status": "skipped", "message": "ROM leaderboard is not enabled", "parser": game.parser if game else None}
 
     root = Path(tempfile.gettempdir()) / "oldstylegaming-mame-sessions"
-    session_path = root / re.sub(r"[^a-zA-Z0-9_.-]", "_", session_id) / rom_name
+    session_path = root / re.sub(r"[^a-zA-Z0-9_.-]", "_", session_id) / source_rom_name
     if session_path.exists():
         shutil.rmtree(session_path)
     session_path.mkdir(parents=True, exist_ok=True)
@@ -309,7 +340,7 @@ def extract_mame_scores(
         write_save_files(session_path, save_files)
         saved_paths = list_session_files(session_path)
         logger.info("MAME extraction received %s save files: %s", len(saved_paths), saved_paths[:20])
-        source_path = find_score_source(session_path, rom_name, game.score_source)
+        source_path = find_score_source(session_path, source_rom_name, game.score_source)
         if not source_path:
             logger.info("MAME score source not found: session=%s rom=%s", session_id, rom_name)
             file_hint = f" Received files: {', '.join(saved_paths[:8])}" if saved_paths else " No save files were received."
@@ -370,6 +401,7 @@ def extract_mame_scores(
         cleanup_duplicate_mame_scores(db)
         return {
             "status": "ok",
+            "rom_name": rom_name,
             "message": "Score already saved." if inserted == 0 and parsed_scores else None,
             "parser": game.parser,
             "source_path": str(source_path.relative_to(session_path)),

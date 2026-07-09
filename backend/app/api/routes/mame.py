@@ -14,6 +14,7 @@ from app.schemas.mame_leaderboard import (
     MameScoreExtractionResponse,
 )
 from app.services.mame_high_scores import (
+    canonical_mame_rom_name,
     cleanup_duplicate_mame_scores,
     cleanup_uncalibrated_mame_scores,
     extract_mame_scores,
@@ -107,8 +108,9 @@ def extract_mame_session_scores(
         user_id=target_user_id,
         save_files=[item.model_dump() for item in payload.save_files],
     )
+    response_rom_name = result.pop("rom_name", canonical_mame_rom_name(payload.rom_name))
     return MameScoreExtractionResponse(
         session_id=session_id[:128],
-        rom_name=normalise_rom_name(payload.rom_name),
+        rom_name=response_rom_name,
         **result,
     )

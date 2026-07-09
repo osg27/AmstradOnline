@@ -4169,6 +4169,18 @@ export default function RoomPage() {
     return String(fileName || '').split(' from ')[0].replace(/\.(zip|7z)$/i, '').toLowerCase();
   }
 
+  function getArcadeLeaderboardKey(fileName = loadedDiskName, supportedGames = null) {
+    const romKey = getArcadeRomKey(fileName);
+    const parent = mame2003PlusTitles[romKey]?.parent || '';
+    if (!parent) return romKey;
+
+    if (BUILTIN_MAME_LEADERBOARD_ROMS.has(parent)) return parent;
+    if (Array.isArray(supportedGames) && supportedGames.some((item) => item.rom_name === parent && item.enabled)) {
+      return parent;
+    }
+    return romKey;
+  }
+
   async function refreshMameLeaderboard(fileName = loadedDiskName) {
     if (!isSoloMode || !isArcade || !fileName) {
       setMameLeaderboard([]);
@@ -4177,11 +4189,14 @@ export default function RoomPage() {
       return;
     }
 
-    const romKey = getArcadeRomKey(fileName);
-    const builtinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(romKey);
+    const fallbackLeaderboardKey = getArcadeLeaderboardKey(fileName);
+    const fallbackBuiltinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(fallbackLeaderboardKey);
+
     try {
       const games = await apiFetch('/scores/mame/leaderboards');
       const gameList = Array.isArray(games) ? games : [];
+      const romKey = getArcadeLeaderboardKey(fileName, gameList);
+      const builtinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(romKey);
       const game = gameList.find((item) => item.rom_name === romKey);
       const supported = Boolean(game?.enabled) || builtinSupported;
       setMameLeaderboardSupported(supported);
@@ -4197,7 +4212,7 @@ export default function RoomPage() {
     } catch (err) {
       addLog(`MAME leaderboard load failed: ${err.message}`);
       setMameLeaderboard([]);
-      if (builtinSupported) {
+      if (fallbackBuiltinSupported) {
         setMameLeaderboardSupported(true);
         setMameScoreStatus(`Leaderboard enabled locally, but API failed: ${err.message}`);
       } else {
@@ -4240,7 +4255,7 @@ export default function RoomPage() {
     addLog(
       `MAME score extraction ${result.status}: parsed ${result.scores_parsed || 0}, inserted ${result.rows_inserted || 0}; files ${savedPaths.length ? savedPaths.join(', ') : 'none'}`
     );
-    await refreshMameLeaderboard(romName);
+    await refreshMameLeaderboard(result.rom_name || romName);
     return result;
   }
 
@@ -4264,7 +4279,7 @@ export default function RoomPage() {
         <div className="mame-score-panel-header">
           <div>
             <span>MAME leaderboard</span>
-            <strong>{getArcadeRomKey(loadedDiskName)}</strong>
+            <strong>{getArcadeLeaderboardKey(loadedDiskName)}</strong>
           </div>
           <em>{mameLeaderboardSupported ? 'live' : 'off'}</em>
         </div>
