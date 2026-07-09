@@ -673,7 +673,10 @@ class EmulatorJS {
                     this.repository = core.repo;
                     this.defaultCoreOpts = core.options;
                     this.enableMouseLock = core.options.supportsMouse;
-                    this.retroarchOpts = core.retroarchOpts;
+                    this.retroarchOpts = [
+                        ...((core.retroarchOpts && Array.isArray(core.retroarchOpts)) ? core.retroarchOpts : []),
+                        ...((this.config.retroarchOpts && Array.isArray(this.config.retroarchOpts)) ? this.config.retroarchOpts : []),
+                    ];
                     this.saveFileExt = core.save;
                 } else if (k === "license.txt") {
                     this.license = new TextDecoder().decode(decompressedData[k]);

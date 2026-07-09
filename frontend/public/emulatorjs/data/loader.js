@@ -188,6 +188,7 @@ const config = {
     softLoad: window.EJS_softLoad,
     capture: window.EJS_screenCapture,
     externalFiles: window.EJS_externalFiles,
+    retroarchOpts: window.EJS_retroarchOpts,
     dontExtractRom: window.EJS_dontExtractRom,
     dontExtractBIOS: window.EJS_dontExtractBIOS,
     disableLocalStorage: window.EJS_disableLocalStorage,

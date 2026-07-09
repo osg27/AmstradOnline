@@ -1,5 +1,6 @@
 import base64
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -84,6 +85,10 @@ def find_score_source(session_path: Path, rom_name: str, score_source: str) -> P
         session_path / "data" / "saves" / f"{rom_name}.hi",
         session_path / "data" / "saves" / "hi" / f"{rom_name}.hi",
         session_path / "data" / "saves" / "hiscore" / f"{rom_name}.hi",
+        session_path / "system" / "mame2003-plus" / "hi" / f"{rom_name}.hi",
+        session_path / "system" / "mame2003-plus" / f"{rom_name}.hi",
+        session_path / "userdata" / "system" / "mame2003-plus" / "hi" / f"{rom_name}.hi",
+        session_path / "userdata" / "saves" / "MAME 2003-Plus" / "mame2003-plus" / "hi" / f"{rom_name}.hi",
     ]
     exact_nvram_candidates = [
         session_path / "nvram" / rom_name,
@@ -247,4 +252,7 @@ def extract_mame_scores(
             "rows_inserted": inserted,
         }
     finally:
-        shutil.rmtree(session_path, ignore_errors=True)
+        if os.getenv("MAME_KEEP_EXTRACTION_FILES", "").lower() in {"1", "true", "yes", "on"}:
+            logger.info("Keeping MAME extraction files for debugging: %s", session_path)
+        else:
+            shutil.rmtree(session_path, ignore_errors=True)

@@ -195,6 +195,9 @@
     const files = [
       ...collectSaveFiles('/data/saves'),
       ...collectSaveFiles('/mame2003-plus', 'mame2003-plus/'),
+      ...collectSaveFiles('/home/web_user/retroarch/system/mame2003-plus', 'system/mame2003-plus/'),
+      ...collectSaveFiles('/home/web_user/retroarch/userdata/system/mame2003-plus', 'userdata/system/mame2003-plus/'),
+      ...collectSaveFiles('/home/web_user/retroarch/userdata/saves/MAME 2003-Plus', 'userdata/saves/MAME 2003-Plus/'),
     ].filter((file) => {
       if (!file.path || seenPaths.has(file.path)) return false;
       seenPaths.add(file.path);
@@ -439,6 +442,23 @@
     window.EJS_defaultOptions = {
       'mame2003-plus_autosave_hiscore': 'enabled',
     };
+    window.EJS_retroarchOpts = [
+      {
+        name: 'system_directory',
+        default: '/home/web_user/retroarch/system',
+        isString: true,
+      },
+      {
+        name: 'savefile_directory',
+        default: '/data/saves',
+        isString: true,
+      },
+      {
+        name: 'savestate_directory',
+        default: '/data/saves',
+        isString: true,
+      },
+    ];
     window.EJS_volume = 1;
     window.EJS_backgroundColor = '#000';
     window.EJS_color = '#2f8f76';
