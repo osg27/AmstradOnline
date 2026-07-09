@@ -50,6 +50,7 @@ def get_mame_leaderboard(
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
+    seed_default_mame_games(db)
     rom_name = normalise_rom_name(rom_name)
     game = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
     if not game or not game.enabled or not game.leaderboard_supported:

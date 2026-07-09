@@ -27,6 +27,19 @@ DEFAULT_MAME_GAMES = [
     ("1942", "1942"),
 ]
 
+ROM_SCORE_LIMITS = {
+    # MAME2003 DK variants use a six-digit on-screen score. Anything above this
+    # from the raw .hi scan is a false positive from unrelated bytes.
+    "dkong": 999990,
+    "dkongjr": 999990,
+    "dkong3": 999990,
+}
+
+STATIC_MAME_FILES = {
+    "hiscore.dat",
+    "retroarch.cfg",
+}
+
 
 @dataclass
 class ParsedMameScore:
@@ -57,6 +70,17 @@ def seed_default_mame_games(db: Session) -> None:
             parser=BUILTIN_HI_BCD_PARSER,
             enabled=True,
         ))
+    deleted = (
+        db.query(MameHighScore)
+        .filter(
+            MameHighScore.rom_name.in_(ROM_SCORE_LIMITS.keys()),
+            MameHighScore.parser == BUILTIN_HI_BCD_PARSER,
+            MameHighScore.score > 999990,
+        )
+        .delete(synchronize_session=False)
+    )
+    if deleted:
+        logger.warning("Removed %s impossible MAME high-score rows from earlier loose parsing", deleted)
     db.commit()
 
 
@@ -77,6 +101,17 @@ def write_save_files(session_path: Path, save_files: list[dict]) -> None:
         target.write_bytes(data)
 
 
+def is_mame_hi_source(path: Path, rom_name: str) -> bool:
+    name = path.name.lower()
+    if name in STATIC_MAME_FILES:
+        return False
+    return path.is_file() and name == f"{rom_name}.hi"
+
+
+def is_nvram_source(path: Path, rom_name: str) -> bool:
+    return path.is_dir() and path.name.lower() == rom_name and path.parent.name.lower() == "nvram"
+
+
 def find_score_source(session_path: Path, rom_name: str, score_source: str) -> Path | None:
     exact_hi_candidates = [
         session_path / f"{rom_name}.hi",
@@ -95,15 +130,15 @@ def find_score_source(session_path: Path, rom_name: str, score_source: str) -> P
         session_path / "data" / "saves" / "nvram" / rom_name,
     ]
     recursive_hi_candidates = sorted(
-        (path for path in session_path.rglob(f"{rom_name}.hi") if path.is_file()),
+        (path for path in session_path.rglob("*.hi") if is_mame_hi_source(path, rom_name)),
         key=lambda path: len(path.parts),
     )
     recursive_nvram_candidates = sorted(
-        (path for path in session_path.rglob(rom_name) if path.is_dir() and path.parent.name == "nvram"),
+        (path for path in session_path.rglob(rom_name) if is_nvram_source(path, rom_name)),
         key=lambda path: len(path.parts),
     )
-    hi_candidates = exact_hi_candidates + recursive_hi_candidates
-    nvram_candidates = exact_nvram_candidates + recursive_nvram_candidates
+    hi_candidates = [path for path in exact_hi_candidates + recursive_hi_candidates if is_mame_hi_source(path, rom_name)]
+    nvram_candidates = [path for path in exact_nvram_candidates + recursive_nvram_candidates if is_nvram_source(path, rom_name)]
 
     if score_source == "hi":
         return next((path for path in hi_candidates if path.exists() and path.is_file()), None)
@@ -127,11 +162,15 @@ def decode_bcd_score(chunk: bytes) -> int | None:
     return int("".join(digits))
 
 
-def plausible_arcade_score(score: int) -> bool:
-    return 100 <= score <= 9999990 and score % 10 == 0
+def plausible_arcade_score(score: int, rom_name: str) -> bool:
+    limit = ROM_SCORE_LIMITS.get(rom_name, 9999990)
+    return 100 <= score <= limit and score % 10 == 0
 
 
-def parse_mame_hi_bcd(source_path: Path, _rom_name: str) -> list[ParsedMameScore]:
+def parse_mame_hi_bcd(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
+    if not is_mame_hi_source(source_path, rom_name):
+        raise ValueError(f"Refusing to parse non-score MAME file: {source_path.name}")
+
     data = source_path.read_bytes()
     candidates: set[int] = set()
 
@@ -142,7 +181,7 @@ def parse_mame_hi_bcd(source_path: Path, _rom_name: str) -> list[ParsedMameScore
             chunk = data[offset:offset + width]
             for candidate_chunk in (chunk, chunk[::-1]):
                 score = decode_bcd_score(candidate_chunk)
-                if score is not None and plausible_arcade_score(score):
+                if score is not None and plausible_arcade_score(score, rom_name):
                     candidates.add(score)
 
     scores = sorted(candidates, reverse=True)[:10]
