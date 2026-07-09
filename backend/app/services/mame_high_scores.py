@@ -35,11 +35,16 @@ ROM_SCORE_LIMITS = {
     "dkong3": 999990,
 }
 
-UNCALIBRATED_RAW_HI_GAMES = {
+DKONG_HI_GAMES = {
     "dkong",
+}
+
+UNCALIBRATED_RAW_HI_GAMES = {
     "dkongjr",
     "dkong3",
 }
+
+DKONG_FACTORY_HIGH_SCORE = 7650
 
 STATIC_MAME_FILES = {
     "hiscore.dat",
@@ -56,6 +61,22 @@ class ParsedMameScore:
 
 def normalise_rom_name(value: str) -> str:
     return re.sub(r"[^a-z0-9_+-]", "", (value or "").lower().replace(".zip", "").replace(".7z", ""))[:64]
+
+
+def is_uncalibrated_mame_game(rom_name: str) -> bool:
+    return normalise_rom_name(rom_name) in UNCALIBRATED_RAW_HI_GAMES
+
+
+def cleanup_uncalibrated_mame_scores(db: Session) -> int:
+    deleted = (
+        db.query(MameHighScore)
+        .filter(MameHighScore.rom_name.in_(UNCALIBRATED_RAW_HI_GAMES))
+        .delete(synchronize_session=False)
+    )
+    if deleted:
+        logger.warning("Removed %s uncalibrated MAME high-score rows from earlier loose parsing", deleted)
+        db.commit()
+    return deleted
 
 
 def seed_default_mame_games(db: Session) -> None:
@@ -76,17 +97,8 @@ def seed_default_mame_games(db: Session) -> None:
             parser=BUILTIN_HI_BCD_PARSER,
             enabled=True,
         ))
-    deleted = (
-        db.query(MameHighScore)
-        .filter(
-            MameHighScore.rom_name.in_(UNCALIBRATED_RAW_HI_GAMES),
-            MameHighScore.parser == BUILTIN_HI_BCD_PARSER,
-        )
-        .delete(synchronize_session=False)
-    )
-    if deleted:
-        logger.warning("Removed %s uncalibrated MAME high-score rows from earlier loose parsing", deleted)
     db.commit()
+    cleanup_uncalibrated_mame_scores(db)
 
 
 def write_save_files(session_path: Path, save_files: list[dict]) -> None:
@@ -175,6 +187,8 @@ def plausible_arcade_score(score: int, rom_name: str) -> bool:
 def parse_mame_hi_bcd(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
     if not is_mame_hi_source(source_path, rom_name):
         raise ValueError(f"Refusing to parse non-score MAME file: {source_path.name}")
+    if rom_name in DKONG_HI_GAMES:
+        return parse_dkong_hi(source_path)
     if rom_name in UNCALIBRATED_RAW_HI_GAMES:
         logger.warning("MAME .hi source found for %s, but exact parser is not calibrated yet", rom_name)
         return []
@@ -194,6 +208,23 @@ def parse_mame_hi_bcd(source_path: Path, rom_name: str) -> list[ParsedMameScore]
 
     scores = sorted(candidates, reverse=True)[:10]
     return [ParsedMameScore(score=score, rank_in_game=index + 1) for index, score in enumerate(scores)]
+
+
+def parse_dkong_hi(source_path: Path) -> list[ParsedMameScore]:
+    data = source_path.read_bytes()
+
+    # mame2003-plus metadata/hiscore.dat saves dkong as:
+    # 0:6100:AA, 0:60B8:03, then six one-byte video RAM sentinels.
+    # The 0x60B8 range starts after the first 0xAA bytes. It stores the top
+    # score as little-endian BCD: factory bytes 50 76 00 => 007650.
+    if len(data) < 173:
+        return []
+
+    score = decode_bcd_score(data[170:173][::-1])
+    if score is None or score <= DKONG_FACTORY_HIGH_SCORE or not plausible_arcade_score(score, "dkong"):
+        return []
+
+    return [ParsedMameScore(score=score, rank_in_game=1)]
 
 
 def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMameScore]:

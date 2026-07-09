@@ -13,7 +13,13 @@ from app.schemas.mame_leaderboard import (
     MameScoreExtractionRequest,
     MameScoreExtractionResponse,
 )
-from app.services.mame_high_scores import extract_mame_scores, normalise_rom_name, seed_default_mame_games
+from app.services.mame_high_scores import (
+    cleanup_uncalibrated_mame_scores,
+    extract_mame_scores,
+    is_uncalibrated_mame_game,
+    normalise_rom_name,
+    seed_default_mame_games,
+)
 
 router = APIRouter(prefix="/mame", tags=["mame"])
 
@@ -52,6 +58,10 @@ def get_mame_leaderboard(
 ):
     seed_default_mame_games(db)
     rom_name = normalise_rom_name(rom_name)
+    cleanup_uncalibrated_mame_scores(db)
+    if is_uncalibrated_mame_game(rom_name):
+        return []
+
     game = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
     if not game or not game.enabled or not game.leaderboard_supported:
         return []
