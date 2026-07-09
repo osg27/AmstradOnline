@@ -4172,12 +4172,9 @@ export default function RoomPage() {
   function getArcadeLeaderboardKey(fileName = loadedDiskName, supportedGames = null) {
     const romKey = getArcadeRomKey(fileName);
     const parent = mame2003PlusTitles[romKey]?.parent || '';
-    if (!parent) return romKey;
+    if (parent) return parent;
 
-    if (BUILTIN_MAME_LEADERBOARD_ROMS.has(parent)) return parent;
-    if (Array.isArray(supportedGames) && supportedGames.some((item) => item.rom_name === parent && item.enabled)) {
-      return parent;
-    }
+    if (Array.isArray(supportedGames) && supportedGames.some((item) => item.rom_name === romKey && item.enabled)) return romKey;
     return romKey;
   }
 
@@ -4190,15 +4187,13 @@ export default function RoomPage() {
     }
 
     const fallbackLeaderboardKey = getArcadeLeaderboardKey(fileName);
-    const fallbackBuiltinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(fallbackLeaderboardKey);
+    const fallbackBuiltinSupported = Boolean(fallbackLeaderboardKey);
 
     try {
       const games = await apiFetch('/scores/mame/leaderboards');
       const gameList = Array.isArray(games) ? games : [];
       const romKey = getArcadeLeaderboardKey(fileName, gameList);
-      const builtinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(romKey);
-      const game = gameList.find((item) => item.rom_name === romKey);
-      const supported = Boolean(game?.enabled) || builtinSupported;
+      const supported = true;
       setMameLeaderboardSupported(supported);
       if (!supported) {
         setMameLeaderboard([]);
@@ -4229,6 +4224,7 @@ export default function RoomPage() {
     const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.();
     const files = (bundle?.files || []).filter((file) => file?.path && file?.bytes?.length);
     const romName = getArcadeRomKey(bundle?.romName || loadedDiskNameRef.current);
+    const leaderboardRomName = getArcadeLeaderboardKey(bundle?.romName || loadedDiskNameRef.current);
     const sessionId = `${roomCode}-${roomSessionKey}-${romName}`;
 
     if (!files.length) {
@@ -4243,6 +4239,7 @@ export default function RoomPage() {
       method: 'POST',
       body: JSON.stringify({
         rom_name: romName,
+        leaderboard_rom_name: leaderboardRomName,
         save_files: files.map((file) => ({
           path: file.path,
           data: bytesToBase64(file.bytes),

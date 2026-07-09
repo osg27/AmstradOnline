@@ -44,6 +44,10 @@ DEFAULT_MAME_GAMES = [
     ("1942", "1942"),
 ]
 
+
+def default_mame_display_name(rom_name: str) -> str:
+    return rom_name.replace("_", " ").replace("-", " ").strip().title() or rom_name
+
 ROM_SCORE_LIMITS = {
     # MAME2003 DK variants use a six-digit on-screen score. Anything above this
     # from the raw .hi scan is a false positive from unrelated bytes.
@@ -57,8 +61,6 @@ DKONG_HI_GAMES = {
 }
 
 UNCALIBRATED_RAW_HI_GAMES = {
-    "dkongjr",
-    "dkong3",
 }
 
 DKONG_FACTORY_HIGH_SCORE = 7650
@@ -245,7 +247,7 @@ def plausible_arcade_score(score: int, rom_name: str) -> bool:
 
 
 def parse_mame_hi_bcd(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
-    if not is_mame_hi_source(source_path, rom_name):
+    if not source_path.is_file() or not source_path.name.lower().endswith(".hi") or source_path.name.lower() in STATIC_MAME_FILES:
         raise ValueError(f"Refusing to parse non-score MAME file: {source_path.name}")
     if rom_name in DKONG_HI_GAMES:
         return parse_dkong_hi(source_path)
@@ -253,21 +255,80 @@ def parse_mame_hi_bcd(source_path: Path, rom_name: str) -> list[ParsedMameScore]
         logger.warning("MAME .hi source found for %s, but exact parser is not calibrated yet", rom_name)
         return []
 
-    data = source_path.read_bytes()
+    return parse_generic_initials_hi(source_path, rom_name)
+
+
+def decode_ascii_score(chunk: bytes) -> int | None:
+    if not chunk or not all(48 <= value <= 57 for value in chunk):
+        return None
+    return int(chunk.decode("ascii"))
+
+
+def score_candidates_from_window(window: bytes, rom_name: str) -> set[int]:
     candidates: set[int] = set()
 
-    for width in (3, 4):
-        if len(data) < width:
-            continue
-        for offset in range(0, len(data) - width + 1):
-            chunk = data[offset:offset + width]
-            for candidate_chunk in (chunk, chunk[::-1]):
-                score = decode_bcd_score(candidate_chunk)
-                if score is not None and plausible_arcade_score(score, rom_name):
-                    candidates.add(score)
+    for width in range(3, min(9, len(window)) + 1):
+        for offset in range(0, len(window) - width + 1):
+            ascii_score = decode_ascii_score(window[offset:offset + width])
+            if ascii_score is not None and plausible_arcade_score(ascii_score, rom_name):
+                candidates.add(ascii_score)
 
-    scores = sorted(candidates, reverse=True)[:10]
-    return [ParsedMameScore(score=score, rank_in_game=index + 1) for index, score in enumerate(scores)]
+    for width in (2, 3, 4):
+        if len(window) < width:
+            continue
+        for offset in range(0, len(window) - width + 1):
+            chunk = window[offset:offset + width]
+            for candidate_chunk in (chunk, chunk[::-1]):
+                bcd_score = decode_bcd_score(candidate_chunk)
+                if bcd_score is not None and plausible_arcade_score(bcd_score, rom_name):
+                    candidates.add(bcd_score)
+
+    return candidates
+
+
+def is_initials_byte(value: int) -> bool:
+    return value == 0x20 or value == 0x2e or 0x30 <= value <= 0x39 or 0x41 <= value <= 0x5a
+
+
+def parse_initials(chunk: bytes) -> str | None:
+    if len(chunk) != 3 or not all(is_initials_byte(value) for value in chunk):
+        return None
+    text = chunk.decode("ascii", errors="ignore").strip(" .")
+    if not text or not any("A" <= char <= "Z" for char in text):
+        return None
+    return text[:3]
+
+
+def parse_generic_initials_hi(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
+    data = source_path.read_bytes()
+    scored: dict[tuple[int, str], int] = {}
+
+    # Generic MAME .hi fallback: trust scores only when they are close to a
+    # three-character initials/name field. Raw byte scanning caused false
+    # positives; this keeps broad support conservative.
+    for initials_offset in range(0, max(0, len(data) - 2)):
+        initials = parse_initials(data[initials_offset:initials_offset + 3])
+        if not initials:
+            continue
+
+        start = max(0, initials_offset - 16)
+        end = min(len(data), initials_offset + 19)
+        window = data[start:end]
+        for score in score_candidates_from_window(window, rom_name):
+            if score <= 0:
+                continue
+            key = (score, initials)
+            scored[key] = max(scored.get(key, 0), score)
+
+    parsed = [
+        ParsedMameScore(score=score, initials=initials, rank_in_game=index + 1)
+        for index, ((score, initials), _) in enumerate(
+            sorted(scored.items(), key=lambda item: item[0][0], reverse=True)[:10]
+        )
+    ]
+    if not parsed:
+        logger.info("Generic MAME initials parser found no trusted scores for %s", rom_name)
+    return parsed
 
 
 def parse_dkong_hi(source_path: Path) -> list[ParsedMameScore]:
@@ -310,11 +371,12 @@ def extract_mame_scores(
     *,
     session_id: str,
     rom_name: str,
+    leaderboard_rom_name: str | None = None,
     user_id: int,
     save_files: list[dict],
 ) -> dict:
     source_rom_name = normalise_rom_name(rom_name)
-    rom_name = canonical_mame_rom_name(source_rom_name)
+    rom_name = canonical_mame_rom_name(leaderboard_rom_name or source_rom_name)
     logger.info(
         "MAME high score extraction started: session=%s rom=%s canonical=%s user=%s",
         session_id,
@@ -325,7 +387,21 @@ def extract_mame_scores(
     seed_default_mame_games(db)
 
     game = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
-    if not game or not game.enabled or not game.leaderboard_supported:
+    if not game:
+        game = MameLeaderboardGame(
+            rom_name=rom_name,
+            display_name=default_mame_display_name(rom_name),
+            leaderboard_supported=True,
+            score_source="hi",
+            parser=BUILTIN_HI_BCD_PARSER,
+            enabled=True,
+        )
+        db.add(game)
+        db.commit()
+        db.refresh(game)
+        logger.info("Created generic MAME leaderboard entry for %s", rom_name)
+
+    if not game.enabled or not game.leaderboard_supported:
         logger.info("MAME extraction skipped because ROM is unsupported or disabled: %s", rom_name)
         return {"status": "skipped", "message": "ROM leaderboard is not enabled", "parser": game.parser if game else None}
 
