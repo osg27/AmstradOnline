@@ -98,11 +98,13 @@ Current MAME runs in the browser through `frontend/public/arcade/launcher.js` us
 
 Backend extraction lives in `backend/app/services/mame_high_scores.py` and the API routes are under `/mame`, with a production-safe alias under `/scores/mame` for deployments that already proxy `/scores` to FastAPI. A transient extraction folder is created under the OS temp directory at `oldstylegaming-mame-sessions/<session>/<rom>/`, parsed, then removed after extraction.
 
-Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are enabled for the first classic `.hi` parser set: `puckman`, `pacman`, `mspacman`, `dkong`, `dkongjr`, `dkong3`, `galaga`, `frogger`, and `1942`. Add more ROMs only after testing that they produce parseable `.hi` or `nvram` data. Parser values are:
+Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are enabled for the first classic `.hi` set: `puckman`, `pacman`, `mspacman`, `dkong`, `dkongjr`, `dkong3`, `galaga`, `frogger`, and `1942`. New ROMs can be created automatically as `hi2txt`-backed entries the first time a score save is attempted. Parser values are:
 
-- `mame_hi_bcd`: built-in parser for classic MAME `.hi` files that store scores as packed BCD.
-- `hi2txt`: reserved for future server-side `hi2txt` command support.
+- `mame_hi_bcd`: built-in exact parser for calibrated `.hi` layouts. Currently used for Donkey Kong.
+- `hi2txt`: server-side `hi2txt` command support for broad MAME `.hi` extraction.
 - `custom`: placeholder parser for future ROM-specific readers.
 - `unsupported`: skips extraction.
 
-To add a new game, add or update its row with `rom_name`, `display_name`, `leaderboard_supported=true`, `score_source` (`hi` or `nvram`), `parser`, and `enabled=true` after verification.
+Install `hi2txt` on the backend host and make it available on `PATH`, or set `MAME_HI2TXT_PATH=/path/to/hi2txt`. If your `hi2txt` build expects different arguments, set `MAME_HI2TXT_COMMAND_TEMPLATE`, for example `"/path/to/hi2txt {rom} {file}"`. The default command is `hi2txt <rom> <hi-file>`.
+
+To add or tune a game manually, update its row with `rom_name`, `display_name`, `leaderboard_supported=true`, `score_source` (`hi` or `nvram`), `parser`, and `enabled=true`.

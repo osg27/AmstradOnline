@@ -2,7 +2,9 @@ import base64
 import logging
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,7 @@ from app.models.mame_leaderboard import MameHighScore, MameLeaderboardGame
 logger = logging.getLogger("oldstylegaming.mame_high_scores")
 
 BUILTIN_HI_BCD_PARSER = "mame_hi_bcd"
+HI2TXT_PARSER = "hi2txt"
 
 MAME_CANONICAL_ROM_ALIASES = {
     # Donkey Kong sets share the same high-score memory layout. Store all of
@@ -33,15 +36,15 @@ MAME_CANONICAL_ROM_ALIASES = {
 }
 
 DEFAULT_MAME_GAMES = [
-    ("puckman", "PuckMan / Pac-Man"),
-    ("pacman", "Pac-Man"),
-    ("mspacman", "Ms. Pac-Man"),
-    ("dkong", "Donkey Kong"),
-    ("dkongjr", "Donkey Kong Junior"),
-    ("dkong3", "Donkey Kong 3"),
-    ("galaga", "Galaga"),
-    ("frogger", "Frogger"),
-    ("1942", "1942"),
+    ("puckman", "PuckMan / Pac-Man", HI2TXT_PARSER),
+    ("pacman", "Pac-Man", HI2TXT_PARSER),
+    ("mspacman", "Ms. Pac-Man", HI2TXT_PARSER),
+    ("dkong", "Donkey Kong", BUILTIN_HI_BCD_PARSER),
+    ("dkongjr", "Donkey Kong Junior", HI2TXT_PARSER),
+    ("dkong3", "Donkey Kong 3", HI2TXT_PARSER),
+    ("galaga", "Galaga", HI2TXT_PARSER),
+    ("frogger", "Frogger", HI2TXT_PARSER),
+    ("1942", "1942", HI2TXT_PARSER),
 ]
 
 ROM_SCORE_LIMITS = {
@@ -58,16 +61,7 @@ DKONG_HI_GAMES = {
 
 SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES
 
-UNCALIBRATED_RAW_HI_GAMES = {
-    "puckman",
-    "pacman",
-    "mspacman",
-    "dkongjr",
-    "dkong3",
-    "galaga",
-    "frogger",
-    "1942",
-}
+UNCALIBRATED_RAW_HI_GAMES = set()
 
 DKONG_FACTORY_HIGH_SCORE = 7650
 
@@ -159,14 +153,14 @@ def cleanup_duplicate_mame_scores(db: Session) -> int:
 
 
 def seed_default_mame_games(db: Session) -> None:
-    for rom_name, display_name in DEFAULT_MAME_GAMES:
-        supported = rom_name in SUPPORTED_EXACT_HI_GAMES
+    for rom_name, display_name, parser in DEFAULT_MAME_GAMES:
+        supported = parser == HI2TXT_PARSER or rom_name in SUPPORTED_EXACT_HI_GAMES
         existing = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
         if existing:
             existing.display_name = display_name
             existing.leaderboard_supported = supported
             existing.score_source = "hi"
-            existing.parser = BUILTIN_HI_BCD_PARSER
+            existing.parser = parser
             existing.enabled = supported
             continue
         db.add(MameLeaderboardGame(
@@ -174,7 +168,7 @@ def seed_default_mame_games(db: Session) -> None:
             display_name=display_name,
             leaderboard_supported=supported,
             score_source="hi",
-            parser=BUILTIN_HI_BCD_PARSER,
+            parser=parser,
             enabled=supported,
         ))
     (
@@ -194,6 +188,26 @@ def seed_default_mame_games(db: Session) -> None:
     db.commit()
     cleanup_uncalibrated_mame_scores(db)
     cleanup_duplicate_mame_scores(db)
+
+
+def ensure_hi2txt_game(db: Session, rom_name: str) -> MameLeaderboardGame:
+    game = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
+    if game:
+        return game
+
+    game = MameLeaderboardGame(
+        rom_name=rom_name,
+        display_name=rom_name.replace("_", " ").replace("-", " ").strip().title() or rom_name,
+        leaderboard_supported=True,
+        score_source="hi",
+        parser=HI2TXT_PARSER,
+        enabled=True,
+    )
+    db.add(game)
+    db.commit()
+    db.refresh(game)
+    logger.info("Created hi2txt-backed MAME leaderboard entry for %s", rom_name)
+    return game
 
 
 def write_save_files(session_path: Path, save_files: list[dict]) -> None:
@@ -307,6 +321,83 @@ def parse_dkong_hi(source_path: Path) -> list[ParsedMameScore]:
     return [ParsedMameScore(score=score, rank_in_game=1)]
 
 
+def build_hi2txt_command(rom_name: str, source_path: Path) -> list[str]:
+    template = os.getenv("MAME_HI2TXT_COMMAND_TEMPLATE", "").strip()
+    if template:
+        return [
+            part.format(rom=rom_name, file=str(source_path))
+            for part in shlex.split(template, posix=os.name != "nt")
+        ]
+
+    executable = os.getenv("MAME_HI2TXT_PATH", "hi2txt").strip() or "hi2txt"
+    resolved = shutil.which(executable) if not Path(executable).exists() else executable
+    if not resolved:
+        raise FileNotFoundError(
+            "hi2txt executable not found. Set MAME_HI2TXT_PATH or MAME_HI2TXT_COMMAND_TEMPLATE."
+        )
+    return [resolved, rom_name, str(source_path)]
+
+
+def parse_hi2txt_output(output: str, rom_name: str) -> list[ParsedMameScore]:
+    parsed: list[ParsedMameScore] = []
+    seen: set[tuple[int, str]] = set()
+    ignored_words = {"RANK", "SCORE", "NAME", "INITIALS", "HI", "HIGH", "PLAYER", "ROM"}
+
+    for line in output.splitlines():
+        clean = line.strip()
+        if not clean or not any(char.isdigit() for char in clean):
+            continue
+
+        numbers = [
+            int(match.replace(",", ""))
+            for match in re.findall(r"\b\d[\d,]*\b", clean)
+            if match.replace(",", "").isdigit()
+        ]
+        scores = [score for score in numbers if plausible_arcade_score(score, rom_name)]
+        if not scores:
+            continue
+
+        initials = None
+        for token in re.findall(r"\b[A-Z0-9]{2,5}\b", clean.upper()):
+            if token not in ignored_words and not token.isdigit():
+                initials = token[:5]
+                break
+
+        score = max(scores)
+        key = (score, initials or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        parsed.append(ParsedMameScore(score=score, initials=initials, rank_in_game=len(parsed) + 1))
+
+    return parsed[:10]
+
+
+def parse_hi2txt(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
+    if not source_path.is_file() or not source_path.name.lower().endswith(".hi"):
+        raise ValueError(f"Refusing to parse non-score MAME file with hi2txt: {source_path.name}")
+
+    command = build_hi2txt_command(rom_name, source_path)
+    logger.info("Running hi2txt for %s: %s", rom_name, command)
+    result = subprocess.run(
+        command,
+        cwd=str(source_path.parent),
+        capture_output=True,
+        text=True,
+        timeout=float(os.getenv("MAME_HI2TXT_TIMEOUT", "10")),
+        check=False,
+    )
+    output = "\n".join(part for part in (result.stdout, result.stderr) if part)
+    if result.returncode != 0:
+        logger.warning("hi2txt failed for %s with code %s: %s", rom_name, result.returncode, output[:1000])
+        return []
+
+    scores = parse_hi2txt_output(output, rom_name)
+    if not scores:
+        logger.info("hi2txt returned no parseable scores for %s: %s", rom_name, output[:1000])
+    return scores
+
+
 def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMameScore]:
     text = source_path.read_bytes().decode("latin-1", errors="ignore")
     scores = sorted({int(value) for value in re.findall(r"\b\d{4,8}\b", text)}, reverse=True)
@@ -316,6 +407,8 @@ def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMa
 def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMameScore]:
     if game.parser == BUILTIN_HI_BCD_PARSER:
         return parse_mame_hi_bcd(source_path, game.rom_name)
+    if game.parser == HI2TXT_PARSER:
+        return parse_hi2txt(source_path, game.rom_name)
     if game.parser == "custom":
         return parse_custom_placeholder(source_path, game.rom_name)
     return []
@@ -346,6 +439,9 @@ def extract_mame_scores(
     seed_default_mame_games(db)
 
     game = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
+    if not game:
+        game = ensure_hi2txt_game(db, rom_name)
+
     if not game or not game.enabled or not game.leaderboard_supported:
         logger.info("MAME extraction skipped because ROM is unsupported or disabled: %s", rom_name)
         return {"status": "skipped", "message": "ROM leaderboard is not enabled", "parser": game.parser if game else None}

@@ -4179,14 +4179,13 @@ export default function RoomPage() {
     }
 
     const fallbackLeaderboardKey = getArcadeLeaderboardKey(fileName);
-    const fallbackBuiltinSupported = BUILTIN_MAME_LEADERBOARD_ROMS.has(fallbackLeaderboardKey);
+    const fallbackBuiltinSupported = Boolean(fallbackLeaderboardKey);
 
     try {
       const games = await apiFetch('/scores/mame/leaderboards');
       const gameList = Array.isArray(games) ? games : [];
       const romKey = getArcadeLeaderboardKey(fileName, gameList);
-      const game = gameList.find((item) => item.rom_name === romKey);
-      const supported = Boolean(game?.enabled) || BUILTIN_MAME_LEADERBOARD_ROMS.has(romKey);
+      const supported = true;
       setMameLeaderboardSupported(supported);
       if (!supported) {
         setMameLeaderboard([]);
