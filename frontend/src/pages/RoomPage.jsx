@@ -346,14 +346,15 @@ export default function RoomPage() {
   const [searchParams] = useSearchParams();
   const username = localStorage.getItem('username');
   const isSoloMode = searchParams.get('mode') === 'solo';
+  const [obsCaptureMode, setObsCaptureMode] = useState(false);
 
   useEffect(() => {
-    document.title = 'Old Style Gaming - Game Capture';
+    document.title = obsCaptureMode ? 'Old Style Gaming - OBS Game Window' : 'Old Style Gaming - Game Capture';
 
     return () => {
       document.title = 'Old Style Gaming';
     };
-  }, []);
+  }, [obsCaptureMode]);
 
   const [room, setRoom] = useState(null);
   const [status, setStatus] = useState('Loading room...');
@@ -4929,7 +4930,7 @@ export default function RoomPage() {
   }
 
   return (
-    <div className="page room-page">
+    <div className={`page room-page ${obsCaptureMode ? 'obs-capture-page' : ''}`}>
       <div className={`page-social-layout room-social-layout ${isSoloMode && isArcade ? 'solo-arcade-layout' : ''}`}>
         <div className="card room-card">
         <div className="room-topbar">
@@ -5025,6 +5026,11 @@ export default function RoomPage() {
 
         <div className="room-layout">
           <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isArcade ? 'arcade-fullscreen' : ''} ${isScreenFullscreen && isSharedCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
+            {obsCaptureMode ? (
+              <button type="button" className="secondary obs-capture-exit" onClick={() => setObsCaptureMode(false)}>
+                Back to room
+              </button>
+            ) : null}
             <div className="play-header">
               <h2>{isSoloMode || isAmigaLink ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
@@ -5079,6 +5085,14 @@ export default function RoomPage() {
                   onClick={() => setIsScreenFullscreen((value) => !value)}
                 >
                   {isScreenFullscreen ? 'Back to room' : 'Fullscreen'}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setObsCaptureMode(true)}
+                >
+                  OBS view
                 </button>
               </div>
             </div>

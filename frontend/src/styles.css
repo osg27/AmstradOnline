@@ -1769,6 +1769,84 @@ input:focus {
   margin-top: 0.75rem;
 }
 
+.room-page.obs-capture-page {
+  width: 100vw;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.obs-capture-page .room-social-layout,
+.obs-capture-page .room-card,
+.obs-capture-page .room-layout,
+.obs-capture-page .video-panel {
+  display: block;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.obs-capture-page .room-topbar,
+.obs-capture-page .room-summary,
+.obs-capture-page .session-strip,
+.obs-capture-page .diagnostics-summary,
+.obs-capture-page .error,
+.obs-capture-page .room-side-rail,
+.obs-capture-page .play-header,
+.obs-capture-page .capture-state,
+.obs-capture-page .host-control-bar,
+.obs-capture-page .arcade-rom-browser,
+.obs-capture-page .mame-score-panel,
+.obs-capture-page .party-turn-panel,
+.obs-capture-page .fullscreen-room-chat {
+  display: none !important;
+}
+
+.obs-capture-page .obs-capture-exit {
+  position: fixed;
+  z-index: 20;
+  top: 0.75rem;
+  right: 0.75rem;
+  opacity: 0.18;
+}
+
+.obs-capture-page .obs-capture-exit:hover,
+.obs-capture-page .obs-capture-exit:focus-visible {
+  opacity: 1;
+}
+
+.obs-capture-page .video,
+.obs-capture-page .arcade-emulator-frame {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  object-fit: contain;
+  background: #000 !important;
+}
+
+.obs-capture-page .arcade-play-layout,
+.obs-capture-page .arcade-screen-stack {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
