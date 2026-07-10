@@ -98,11 +98,10 @@ Current MAME runs in the browser through `frontend/public/arcade/launcher.js` us
 
 Backend extraction lives in `backend/app/services/mame_high_scores.py` and the API routes are under `/mame`, with a production-safe alias under `/scores/mame` for deployments that already proxy `/scores` to FastAPI. A transient extraction folder is created under the OS temp directory at `oldstylegaming-mame-sessions/<session>/<rom>/`, parsed, then removed after extraction.
 
-Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are enabled for the first classic `.hi` set: `puckman`, `pacman`, `mspacman`, `dkong`, `dkongjr`, `dkong3`, `galaga`, `frogger`, and `1942`. New ROMs can be created automatically as `hi2txt`-backed entries the first time a score save is attempted. Parser values are:
+Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are enabled for the first classic `.hi` set plus any games listed in `backend/app/data/mame_hi_rules.json`. New ROMs can be created automatically as `hi2txt`-backed entries the first time a score save is attempted. Parser values are:
 
-- `mame_hi_bcd`: built-in exact parser for calibrated `.hi` layouts. Currently used for Donkey Kong.
-- `1942_hi`: built-in exact parser for 1942. It ignores the factory default table and only saves the highest non-default player score found in `1942.hi`.
-- `truxton_hi`: built-in exact parser for Truxton. It reads the 4-byte BCD score table, multiplies stored values by 10, and ignores the factory defaults.
+- `mame_hi_bcd`: built-in exact parser for custom `.hi` layouts. Currently used for Donkey Kong.
+- `configured_hi`: data-driven `.hi` table parser backed by `backend/app/data/mame_hi_rules.json`. Currently used for 1942 and Truxton, with per-game default-score filters.
 - `hi2txt`: server-side `hi2txt` command support for broad MAME `.hi` extraction.
 - `custom`: placeholder parser for future ROM-specific readers.
 - `unsupported`: skips extraction.
@@ -116,3 +115,5 @@ For calibrating another `.hi` file from a known visible score, run:
 ```bash
 python scripts/calibrate-mame-hi.py <rom> /path/to/game.hi <known-score>
 ```
+
+When it finds a direct encoding match, the helper prints a starter JSON block for `mame_hi_rules.json`.

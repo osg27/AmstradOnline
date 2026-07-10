@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 import os
 import re
@@ -17,8 +18,7 @@ logger = logging.getLogger("oldstylegaming.mame_high_scores")
 
 BUILTIN_HI_BCD_PARSER = "mame_hi_bcd"
 HI2TXT_PARSER = "hi2txt"
-MAME_1942_HI_PARSER = "1942_hi"
-TRUXTON_HI_PARSER = "truxton_hi"
+CONFIGURED_HI_PARSER = "configured_hi"
 
 MAME_CANONICAL_ROM_ALIASES = {
     # Donkey Kong sets share the same high-score memory layout. Store all of
@@ -46,76 +46,55 @@ DEFAULT_MAME_GAMES = [
     ("dkong3", "Donkey Kong 3", HI2TXT_PARSER),
     ("galaga", "Galaga", HI2TXT_PARSER),
     ("frogger", "Frogger", HI2TXT_PARSER),
-    ("1942", "1942", MAME_1942_HI_PARSER),
-    ("truxton", "Truxton", TRUXTON_HI_PARSER),
 ]
 
-ROM_SCORE_LIMITS = {
+BASE_ROM_SCORE_LIMITS = {
     # MAME2003 DK variants use a six-digit on-screen score. Anything above this
     # from the raw .hi scan is a false positive from unrelated bytes.
     "dkong": 999990,
     "dkongjr": 999990,
     "dkong3": 999990,
-    "1942": 999990,
-    "truxton": 9999990,
 }
 
 DKONG_HI_GAMES = {
     "dkong",
 }
 
-MAME_1942_DEFAULT_SCORES = {
-    40000,
-    35000,
-    30000,
-    25000,
-    20000,
-    9999,
-    8888,
-    7777,
-    6666,
-    5555,
-    1500,
-    1400,
-    1300,
-    1200,
-    1100,
-    1000,
-    900,
-    800,
-    700,
-    600,
-    500,
-    400,
-    300,
-    200,
-    100,
-}
+MAME_HI_RULES_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_hi_rules.json"
 
-TRUXTON_DEFAULT_SCORES = {
-    50000,
-    48000,
-    46000,
-    44000,
-    42000,
-    40000,
-    38000,
-    36000,
-    34000,
-    32000,
-    30000,
-    28000,
-    26000,
-    24000,
-    22000,
-    20000,
-    18000,
-    16000,
-    14000,
-    12000,
-}
 
-SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES | {"1942", "truxton"}
+def normalise_rom_name_value(value: str) -> str:
+    return re.sub(r"[^a-z0-9_+-]", "", (value or "").lower().replace(".zip", "").replace(".7z", ""))[:64]
+
+
+def load_mame_hi_rules() -> dict[str, dict]:
+    try:
+        raw = json.loads(MAME_HI_RULES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Could not load MAME .hi rules from %s: %s", MAME_HI_RULES_PATH, exc)
+        return {}
+    return {normalise_rom_name_value(rom_name): rule for rom_name, rule in raw.items() if isinstance(rule, dict)}
+
+
+CONFIGURED_MAME_HI_RULES = load_mame_hi_rules()
+CONFIGURED_HI_GAMES = set(CONFIGURED_MAME_HI_RULES)
+ROM_SCORE_LIMITS = {
+    **BASE_ROM_SCORE_LIMITS,
+    **{
+        rom_name: int(rule["max_score"])
+        for rom_name, rule in CONFIGURED_MAME_HI_RULES.items()
+        if isinstance(rule.get("max_score"), int)
+    },
+}
+SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES | CONFIGURED_HI_GAMES
+DEFAULT_MAME_GAMES.extend(
+    (
+        rom_name,
+        str(rule.get("display_name") or rom_name).strip() or rom_name,
+        CONFIGURED_HI_PARSER,
+    )
+    for rom_name, rule in CONFIGURED_MAME_HI_RULES.items()
+)
 
 UNCALIBRATED_RAW_HI_GAMES = set()
 
@@ -143,7 +122,7 @@ class MameNoPlayerScore(RuntimeError):
 
 
 def normalise_rom_name(value: str) -> str:
-    return re.sub(r"[^a-z0-9_+-]", "", (value or "").lower().replace(".zip", "").replace(".7z", ""))[:64]
+    return normalise_rom_name_value(value)
 
 
 def canonical_mame_rom_name(value: str) -> str:
@@ -187,7 +166,7 @@ def cleanup_duplicate_mame_scores(db: Session) -> int:
         .order_by(MameHighScore.created_at, MameHighScore.id)
         .all()
     )
-    seen: set[tuple[int, str, int, str, str]] = set()
+    seen: set[tuple[int, str, int, str]] = set()
     duplicate_ids: list[int] = []
 
     for row in rows:
@@ -196,7 +175,6 @@ def cleanup_duplicate_mame_scores(db: Session) -> int:
             row.rom_name,
             row.score,
             row.initials or "",
-            row.parser,
         )
         if key in seen:
             duplicate_ids.append(row.id)
@@ -385,62 +363,59 @@ def parse_dkong_hi(source_path: Path) -> list[ParsedMameScore]:
     return [ParsedMameScore(score=score, rank_in_game=1)]
 
 
-def decode_1942_score(row: bytes) -> int | None:
-    if len(row) < 5:
-        return None
-    return decode_bcd_score(row[2:5])
+def decode_configured_hi_score(chunk: bytes, encoding: str) -> int | None:
+    if encoding == "bcd_be":
+        return decode_bcd_score(chunk)
+    if encoding == "bcd_le":
+        return decode_bcd_score(chunk[::-1])
+    if encoding == "int_be":
+        return int.from_bytes(chunk, "big", signed=False)
+    if encoding == "int_le":
+        return int.from_bytes(chunk, "little", signed=False)
+    raise ValueError(f"Unsupported MAME .hi score encoding: {encoding}")
 
 
-def parse_1942_hi(source_path: Path) -> list[ParsedMameScore]:
-    data = source_path.read_bytes()
-    if len(data) < 16:
+def parse_configured_hi(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
+    rule = CONFIGURED_MAME_HI_RULES.get(rom_name)
+    if not rule:
         return []
+
+    data = source_path.read_bytes()
+    score_offset = int(rule.get("score_offset", 0))
+    row_size = int(rule["row_size"])
+    row_count = int(rule.get("row_count") or 0)
+    score_start = int(rule.get("score_start", 0))
+    score_length = int(rule["score_length"])
+    multiplier = int(rule.get("multiplier", 1))
+    encoding = str(rule.get("encoding", "bcd_be"))
+    default_scores = {int(score) for score in rule.get("default_scores", [])}
+
+    if row_size <= 0 or score_length <= 0:
+        raise ValueError(f"Invalid MAME .hi parser rule for {rom_name}: row_size and score_length must be positive")
+    if score_start < 0 or score_start + score_length > row_size:
+        raise ValueError(f"Invalid MAME .hi parser rule for {rom_name}: score bytes must fit inside row")
+
+    table = data[score_offset:]
+    if row_count > 0:
+        table = table[:row_count * row_size]
 
     parsed: list[ParsedMameScore] = []
     seen: set[int] = set()
-    for row_index in range(0, len(data) - (len(data) % 16), 16):
-        row = data[row_index:row_index + 16]
-        score = decode_1942_score(row)
-        if score is None or not plausible_arcade_score(score, "1942") or score in seen:
+    for row_index in range(0, len(table) - (len(table) % row_size), row_size):
+        row = table[row_index:row_index + row_size]
+        raw_score = decode_configured_hi_score(row[score_start:score_start + score_length], encoding)
+        if raw_score is None:
+            continue
+        score = raw_score * multiplier
+        if not plausible_arcade_score(score, rom_name) or score in seen:
             continue
         seen.add(score)
         parsed.append(ParsedMameScore(score=score, rank_in_game=len(parsed) + 1))
 
-    player_scores = [score for score in parsed if score.score not in MAME_1942_DEFAULT_SCORES]
+    player_scores = [score for score in parsed if score.score not in default_scores]
     if not player_scores:
-        raise MameNoPlayerScore("1942 high-score file found, but only default scores were detected. No player score saved.")
-
-    return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
-
-
-def decode_truxton_score(row: bytes) -> int | None:
-    if len(row) != 4:
-        return None
-    score_units = decode_bcd_score(row)
-    if score_units is None:
-        return None
-    return score_units * 10
-
-
-def parse_truxton_hi(source_path: Path) -> list[ParsedMameScore]:
-    data = source_path.read_bytes()
-    if len(data) < 4:
-        return []
-
-    parsed: list[ParsedMameScore] = []
-    seen: set[int] = set()
-    score_table = data[:84]
-    for row_index in range(0, len(score_table) - (len(score_table) % 4), 4):
-        row = score_table[row_index:row_index + 4]
-        score = decode_truxton_score(row)
-        if score is None or not plausible_arcade_score(score, "truxton") or score in seen:
-            continue
-        seen.add(score)
-        parsed.append(ParsedMameScore(score=score, rank_in_game=len(parsed) + 1))
-
-    player_scores = [score for score in parsed if score.score not in TRUXTON_DEFAULT_SCORES]
-    if not player_scores:
-        raise MameNoPlayerScore("Truxton high-score file found, but only default scores were detected. No player score saved.")
+        display_name = str(rule.get("display_name") or rom_name)
+        raise MameNoPlayerScore(f"{display_name} high-score file found, but only default scores were detected. No player score saved.")
 
     return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
 
@@ -545,10 +520,8 @@ def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMa
 def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMameScore]:
     if game.parser == BUILTIN_HI_BCD_PARSER:
         return parse_mame_hi_bcd(source_path, game.rom_name)
-    if game.parser == MAME_1942_HI_PARSER:
-        return parse_1942_hi(source_path)
-    if game.parser == TRUXTON_HI_PARSER:
-        return parse_truxton_hi(source_path)
+    if game.parser == CONFIGURED_HI_PARSER:
+        return parse_configured_hi(source_path, game.rom_name)
     if game.parser == HI2TXT_PARSER:
         return parse_hi2txt(source_path, game.rom_name)
     if game.parser == "custom":
@@ -660,7 +633,6 @@ def extract_mame_scores(
                 MameHighScore.rom_name == rom_name,
                 MameHighScore.score == parsed.score,
                 MameHighScore.initials == parsed.initials,
-                MameHighScore.parser == game.parser,
             ).first()
             if exists:
                 continue
