@@ -18,6 +18,7 @@ logger = logging.getLogger("oldstylegaming.mame_high_scores")
 BUILTIN_HI_BCD_PARSER = "mame_hi_bcd"
 HI2TXT_PARSER = "hi2txt"
 MAME_1942_HI_PARSER = "1942_hi"
+TRUXTON_HI_PARSER = "truxton_hi"
 
 MAME_CANONICAL_ROM_ALIASES = {
     # Donkey Kong sets share the same high-score memory layout. Store all of
@@ -46,6 +47,7 @@ DEFAULT_MAME_GAMES = [
     ("galaga", "Galaga", HI2TXT_PARSER),
     ("frogger", "Frogger", HI2TXT_PARSER),
     ("1942", "1942", MAME_1942_HI_PARSER),
+    ("truxton", "Truxton", TRUXTON_HI_PARSER),
 ]
 
 ROM_SCORE_LIMITS = {
@@ -55,6 +57,7 @@ ROM_SCORE_LIMITS = {
     "dkongjr": 999990,
     "dkong3": 999990,
     "1942": 999990,
+    "truxton": 9999990,
 }
 
 DKONG_HI_GAMES = {
@@ -89,7 +92,30 @@ MAME_1942_DEFAULT_SCORES = {
     100,
 }
 
-SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES | {"1942"}
+TRUXTON_DEFAULT_SCORES = {
+    50000,
+    48000,
+    46000,
+    44000,
+    42000,
+    40000,
+    38000,
+    36000,
+    34000,
+    32000,
+    30000,
+    28000,
+    26000,
+    24000,
+    22000,
+    20000,
+    18000,
+    16000,
+    14000,
+    12000,
+}
+
+SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES | {"1942", "truxton"}
 
 UNCALIBRATED_RAW_HI_GAMES = set()
 
@@ -387,6 +413,38 @@ def parse_1942_hi(source_path: Path) -> list[ParsedMameScore]:
     return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
 
 
+def decode_truxton_score(row: bytes) -> int | None:
+    if len(row) != 4:
+        return None
+    score_units = decode_bcd_score(row)
+    if score_units is None:
+        return None
+    return score_units * 10
+
+
+def parse_truxton_hi(source_path: Path) -> list[ParsedMameScore]:
+    data = source_path.read_bytes()
+    if len(data) < 4:
+        return []
+
+    parsed: list[ParsedMameScore] = []
+    seen: set[int] = set()
+    score_table = data[:84]
+    for row_index in range(0, len(score_table) - (len(score_table) % 4), 4):
+        row = score_table[row_index:row_index + 4]
+        score = decode_truxton_score(row)
+        if score is None or not plausible_arcade_score(score, "truxton") or score in seen:
+            continue
+        seen.add(score)
+        parsed.append(ParsedMameScore(score=score, rank_in_game=len(parsed) + 1))
+
+    player_scores = [score for score in parsed if score.score not in TRUXTON_DEFAULT_SCORES]
+    if not player_scores:
+        raise MameNoPlayerScore("Truxton high-score file found, but only default scores were detected. No player score saved.")
+
+    return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
+
+
 def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:
     template = os.getenv("MAME_HI2TXT_COMMAND_TEMPLATE", "").strip()
     if template:
@@ -489,6 +547,8 @@ def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMam
         return parse_mame_hi_bcd(source_path, game.rom_name)
     if game.parser == MAME_1942_HI_PARSER:
         return parse_1942_hi(source_path)
+    if game.parser == TRUXTON_HI_PARSER:
+        return parse_truxton_hi(source_path)
     if game.parser == HI2TXT_PARSER:
         return parse_hi2txt(source_path, game.rom_name)
     if game.parser == "custom":

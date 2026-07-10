@@ -102,6 +102,7 @@ Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows a
 
 - `mame_hi_bcd`: built-in exact parser for calibrated `.hi` layouts. Currently used for Donkey Kong.
 - `1942_hi`: built-in exact parser for 1942. It ignores the factory default table and only saves the highest non-default player score found in `1942.hi`.
+- `truxton_hi`: built-in exact parser for Truxton. It reads the 4-byte BCD score table, multiplies stored values by 10, and ignores the factory defaults.
 - `hi2txt`: server-side `hi2txt` command support for broad MAME `.hi` extraction.
 - `custom`: placeholder parser for future ROM-specific readers.
 - `unsupported`: skips extraction.
