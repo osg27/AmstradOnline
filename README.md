@@ -101,6 +101,7 @@ Backend extraction lives in `backend/app/services/mame_high_scores.py` and the A
 Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows are enabled for the first classic `.hi` set: `puckman`, `pacman`, `mspacman`, `dkong`, `dkongjr`, `dkong3`, `galaga`, `frogger`, and `1942`. New ROMs can be created automatically as `hi2txt`-backed entries the first time a score save is attempted. Parser values are:
 
 - `mame_hi_bcd`: built-in exact parser for calibrated `.hi` layouts. Currently used for Donkey Kong.
+- `1942_hi`: built-in exact parser for 1942. It ignores the factory default table and only saves the highest non-default player score found in `1942.hi`.
 - `hi2txt`: server-side `hi2txt` command support for broad MAME `.hi` extraction.
 - `custom`: placeholder parser for future ROM-specific readers.
 - `unsupported`: skips extraction.
@@ -108,3 +109,9 @@ Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows a
 Install `hi2txt` on the backend host and make it available on `PATH`, or set `MAME_HI2TXT_PATH=/path/to/hi2txt`. If your `hi2txt` build expects different arguments, set `MAME_HI2TXT_COMMAND_TEMPLATE`, for example `"/path/to/hi2txt {rom} {file}"`. The default command is `hi2txt <rom> <hi-file>`.
 
 To add or tune a game manually, update its row with `rom_name`, `display_name`, `leaderboard_supported=true`, `score_source` (`hi` or `nvram`), `parser`, and `enabled=true`.
+
+For calibrating another `.hi` file from a known visible score, run:
+
+```bash
+python scripts/calibrate-mame-hi.py <rom> /path/to/game.hi <known-score>
+```

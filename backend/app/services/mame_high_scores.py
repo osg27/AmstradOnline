@@ -17,6 +17,7 @@ logger = logging.getLogger("oldstylegaming.mame_high_scores")
 
 BUILTIN_HI_BCD_PARSER = "mame_hi_bcd"
 HI2TXT_PARSER = "hi2txt"
+MAME_1942_HI_PARSER = "1942_hi"
 
 MAME_CANONICAL_ROM_ALIASES = {
     # Donkey Kong sets share the same high-score memory layout. Store all of
@@ -44,7 +45,7 @@ DEFAULT_MAME_GAMES = [
     ("dkong3", "Donkey Kong 3", HI2TXT_PARSER),
     ("galaga", "Galaga", HI2TXT_PARSER),
     ("frogger", "Frogger", HI2TXT_PARSER),
-    ("1942", "1942", HI2TXT_PARSER),
+    ("1942", "1942", MAME_1942_HI_PARSER),
 ]
 
 ROM_SCORE_LIMITS = {
@@ -53,13 +54,42 @@ ROM_SCORE_LIMITS = {
     "dkong": 999990,
     "dkongjr": 999990,
     "dkong3": 999990,
+    "1942": 999990,
 }
 
 DKONG_HI_GAMES = {
     "dkong",
 }
 
-SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES
+MAME_1942_DEFAULT_SCORES = {
+    40000,
+    35000,
+    30000,
+    25000,
+    20000,
+    9999,
+    8888,
+    7777,
+    6666,
+    5555,
+    1500,
+    1400,
+    1300,
+    1200,
+    1100,
+    1000,
+    900,
+    800,
+    700,
+    600,
+    500,
+    400,
+    300,
+    200,
+    100,
+}
+
+SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES | {"1942"}
 
 UNCALIBRATED_RAW_HI_GAMES = set()
 
@@ -79,6 +109,10 @@ class ParsedMameScore:
 
 
 class Hi2txtError(RuntimeError):
+    pass
+
+
+class MameNoPlayerScore(RuntimeError):
     pass
 
 
@@ -325,6 +359,34 @@ def parse_dkong_hi(source_path: Path) -> list[ParsedMameScore]:
     return [ParsedMameScore(score=score, rank_in_game=1)]
 
 
+def decode_1942_score(row: bytes) -> int | None:
+    if len(row) < 5:
+        return None
+    return decode_bcd_score(row[2:5])
+
+
+def parse_1942_hi(source_path: Path) -> list[ParsedMameScore]:
+    data = source_path.read_bytes()
+    if len(data) < 16:
+        return []
+
+    parsed: list[ParsedMameScore] = []
+    seen: set[int] = set()
+    for row_index in range(0, len(data) - (len(data) % 16), 16):
+        row = data[row_index:row_index + 16]
+        score = decode_1942_score(row)
+        if score is None or not plausible_arcade_score(score, "1942") or score in seen:
+            continue
+        seen.add(score)
+        parsed.append(ParsedMameScore(score=score, rank_in_game=len(parsed) + 1))
+
+    player_scores = [score for score in parsed if score.score not in MAME_1942_DEFAULT_SCORES]
+    if not player_scores:
+        raise MameNoPlayerScore("1942 high-score file found, but only default scores were detected. No player score saved.")
+
+    return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
+
+
 def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:
     template = os.getenv("MAME_HI2TXT_COMMAND_TEMPLATE", "").strip()
     if template:
@@ -425,6 +487,8 @@ def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMa
 def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMameScore]:
     if game.parser == BUILTIN_HI_BCD_PARSER:
         return parse_mame_hi_bcd(source_path, game.rom_name)
+    if game.parser == MAME_1942_HI_PARSER:
+        return parse_1942_hi(source_path)
     if game.parser == HI2TXT_PARSER:
         return parse_hi2txt(source_path, game.rom_name)
     if game.parser == "custom":
@@ -489,6 +553,17 @@ def extract_mame_scores(
         logger.info("MAME score source found: %s", source_path)
         try:
             parsed_scores = parse_scores(game, source_path)
+        except MameNoPlayerScore as exc:
+            logger.info("MAME score source found but no player score was detected: session=%s rom=%s message=%s", session_id, rom_name, exc)
+            return {
+                "status": "no_scores",
+                "message": str(exc),
+                "parser": game.parser,
+                "source_path": str(source_path.relative_to(session_path)),
+                "saved_paths": saved_paths,
+                "scores_parsed": 0,
+                "rows_inserted": 0,
+            }
         except Hi2txtError as exc:
             logger.warning("hi2txt extraction failed: session=%s rom=%s error=%s", session_id, rom_name, exc)
             return {
