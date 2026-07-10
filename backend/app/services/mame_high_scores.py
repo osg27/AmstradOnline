@@ -78,6 +78,10 @@ class ParsedMameScore:
     rank_in_game: int | None = None
 
 
+class Hi2txtError(RuntimeError):
+    pass
+
+
 def normalise_rom_name(value: str) -> str:
     return re.sub(r"[^a-z0-9_+-]", "", (value or "").lower().replace(".zip", "").replace(".7z", ""))[:64]
 
@@ -321,21 +325,26 @@ def parse_dkong_hi(source_path: Path) -> list[ParsedMameScore]:
     return [ParsedMameScore(score=score, rank_in_game=1)]
 
 
-def build_hi2txt_command(rom_name: str, source_path: Path) -> list[str]:
+def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:
     template = os.getenv("MAME_HI2TXT_COMMAND_TEMPLATE", "").strip()
     if template:
-        return [
+        return [[
             part.format(rom=rom_name, file=str(source_path))
             for part in shlex.split(template, posix=os.name != "nt")
-        ]
+        ]]
 
     executable = os.getenv("MAME_HI2TXT_PATH", "hi2txt").strip() or "hi2txt"
     resolved = shutil.which(executable) if not Path(executable).exists() else executable
     if not resolved:
-        raise FileNotFoundError(
+        raise Hi2txtError(
             "hi2txt executable not found. Set MAME_HI2TXT_PATH or MAME_HI2TXT_COMMAND_TEMPLATE."
         )
-    return [resolved, rom_name, str(source_path)]
+    return [
+        [resolved, rom_name, str(source_path)],
+        [resolved, str(source_path)],
+        [resolved, "-r", rom_name, str(source_path)],
+        [resolved, "--rom", rom_name, str(source_path)],
+    ]
 
 
 def parse_hi2txt_output(output: str, rom_name: str) -> list[ParsedMameScore]:
@@ -377,25 +386,34 @@ def parse_hi2txt(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
     if not source_path.is_file() or not source_path.name.lower().endswith(".hi"):
         raise ValueError(f"Refusing to parse non-score MAME file with hi2txt: {source_path.name}")
 
-    command = build_hi2txt_command(rom_name, source_path)
-    logger.info("Running hi2txt for %s: %s", rom_name, command)
-    result = subprocess.run(
-        command,
-        cwd=str(source_path.parent),
-        capture_output=True,
-        text=True,
-        timeout=float(os.getenv("MAME_HI2TXT_TIMEOUT", "10")),
-        check=False,
-    )
-    output = "\n".join(part for part in (result.stdout, result.stderr) if part)
-    if result.returncode != 0:
-        logger.warning("hi2txt failed for %s with code %s: %s", rom_name, result.returncode, output[:1000])
-        return []
+    attempts: list[str] = []
+    timeout = float(os.getenv("MAME_HI2TXT_TIMEOUT", "10"))
+    for command in build_hi2txt_commands(rom_name, source_path):
+        logger.info("Running hi2txt for %s: %s", rom_name, command)
+        try:
+            result = subprocess.run(
+                command,
+                cwd=str(source_path.parent),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            attempts.append(f"{command!r} -> {type(exc).__name__}: {exc}")
+            continue
 
-    scores = parse_hi2txt_output(output, rom_name)
-    if not scores:
-        logger.info("hi2txt returned no parseable scores for %s: %s", rom_name, output[:1000])
-    return scores
+        output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
+        scores = parse_hi2txt_output(output, rom_name) if result.returncode == 0 else []
+        attempts.append(
+            f"{command!r} -> exit {result.returncode}, parsed {len(scores)}, output: {output[:500] or '<empty>'}"
+        )
+        if scores:
+            return scores
+
+    message = "hi2txt did not return parseable scores. Attempts: " + " | ".join(attempts)
+    logger.warning("%s", message)
+    raise Hi2txtError(message[:1800])
 
 
 def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMameScore]:
@@ -471,6 +489,15 @@ def extract_mame_scores(
         logger.info("MAME score source found: %s", source_path)
         try:
             parsed_scores = parse_scores(game, source_path)
+        except Hi2txtError as exc:
+            logger.warning("hi2txt extraction failed: session=%s rom=%s error=%s", session_id, rom_name, exc)
+            return {
+                "status": "failed",
+                "message": str(exc),
+                "parser": game.parser,
+                "source_path": str(source_path.relative_to(session_path)),
+                "saved_paths": saved_paths,
+            }
         except Exception as exc:
             logger.exception("MAME score parser failed: session=%s rom=%s", session_id, rom_name)
             return {
