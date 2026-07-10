@@ -2062,6 +2062,13 @@ input:focus {
   background: #121515;
 }
 
+.arcade-romset-note {
+  margin: 0.45rem 0 0;
+  color: #e4c156;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
 .arcade-rom-browser-head {
   display: flex;
   gap: 0.7rem;

@@ -59,6 +59,24 @@
       76000
     ]
   },
+  "sf2": {
+    "display_name": "Street Fighter II",
+    "score_offset": 0,
+    "row_size": 8,
+    "row_count": 6,
+    "score_start": 0,
+    "score_length": 4,
+    "encoding": "bcd_be",
+    "multiplier": 1,
+    "max_score": 9999990,
+    "default_scores": [
+      50000,
+      45000,
+      40000,
+      35000,
+      30000
+    ]
+  },
   "truxton": {
     "display_name": "Truxton",
     "score_offset": 0,

@@ -347,6 +347,14 @@ export default function RoomPage() {
   const username = localStorage.getItem('username');
   const isSoloMode = searchParams.get('mode') === 'solo';
 
+  useEffect(() => {
+    document.title = 'Old Style Gaming - Game Capture';
+
+    return () => {
+      document.title = 'Old Style Gaming';
+    };
+  }, []);
+
   const [room, setRoom] = useState(null);
   const [status, setStatus] = useState('Loading room...');
   const [error, setError] = useState('');
@@ -5430,6 +5438,10 @@ export default function RoomPage() {
                   ) : null}
 
                 </div>
+
+                {isArcade ? (
+                  <p className="arcade-romset-note">MAME Arcade needs a MAME 2003 / 2003-Plus romset.</p>
+                ) : null}
 
                 {isArcade && arcadeRomEntries.length > 0 ? (
                   <div className="arcade-rom-browser">

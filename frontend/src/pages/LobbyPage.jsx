@@ -321,9 +321,8 @@ const PLATFORM_SHELVES = [
             shortName: 'MAME',
             accent: 'gold',
             logo: arcadeLogoUrl,
-            summary: 'Arcade cabinet games for solo, online, and party play.',
-            formats: '.zip .7z',
-            testing: true,
+            summary: 'Arcade cabinet games for solo, online, and party play. MAME 2003 romset required.',
+            formats: 'MAME 2003 .zip .7z',
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
