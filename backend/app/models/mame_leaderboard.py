@@ -22,11 +22,7 @@ class MameHighScore(Base):
         UniqueConstraint(
             "user_id",
             "rom_name",
-            "score",
-            "initials",
-            "rank_in_game",
-            "session_id",
-            name="uq_mame_high_score_session_score",
+            name="uq_mame_high_score_user_rom",
         ),
     )
 

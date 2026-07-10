@@ -117,8 +117,8 @@ def ensure_runtime_columns(engine):
                 "parser VARCHAR(32) NOT NULL, "
                 f"created_at {timestamp_type} DEFAULT CURRENT_TIMESTAMP NOT NULL, "
                 "FOREIGN KEY(user_id) REFERENCES users (id), "
-                "CONSTRAINT uq_mame_high_score_session_score UNIQUE "
-                "(user_id, rom_name, score, initials, rank_in_game, session_id)"
+                "CONSTRAINT uq_mame_high_score_user_rom UNIQUE "
+                "(user_id, rom_name)"
                 ")"
             ))
             connection.execute(text("CREATE INDEX ix_mame_high_scores_user_id ON mame_high_scores (user_id)"))

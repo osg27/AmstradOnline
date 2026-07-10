@@ -163,19 +163,14 @@ def cleanup_uncalibrated_mame_scores(db: Session) -> int:
 def cleanup_duplicate_mame_scores(db: Session) -> int:
     rows = (
         db.query(MameHighScore)
-        .order_by(MameHighScore.created_at, MameHighScore.id)
+        .order_by(MameHighScore.user_id, MameHighScore.rom_name, MameHighScore.score.desc(), MameHighScore.created_at, MameHighScore.id)
         .all()
     )
-    seen: set[tuple[int, str, int, str]] = set()
+    seen: set[tuple[int, str]] = set()
     duplicate_ids: list[int] = []
 
     for row in rows:
-        key = (
-            row.user_id,
-            row.rom_name,
-            row.score,
-            row.initials or "",
-        )
+        key = (row.user_id, row.rom_name)
         if key in seen:
             duplicate_ids.append(row.id)
             continue
@@ -190,7 +185,7 @@ def cleanup_duplicate_mame_scores(db: Session) -> int:
         .delete(synchronize_session=False)
     )
     db.commit()
-    logger.warning("Removed %s duplicate MAME high-score rows", deleted)
+    logger.warning("Removed %s lower duplicate MAME high-score rows", deleted)
     return deleted
 
 
@@ -627,14 +622,22 @@ def extract_mame_scores(
                 "rows_inserted": 0,
             }
         inserted = 0
+        updated = 0
         for parsed in parsed_scores:
-            exists = db.query(MameHighScore).filter(
+            existing = db.query(MameHighScore).filter(
                 MameHighScore.user_id == user_id,
                 MameHighScore.rom_name == rom_name,
-                MameHighScore.score == parsed.score,
-                MameHighScore.initials == parsed.initials,
-            ).first()
-            if exists:
+            ).order_by(MameHighScore.score.desc(), MameHighScore.created_at, MameHighScore.id).first()
+            if existing and parsed.score <= existing.score:
+                continue
+            if existing:
+                existing.score = parsed.score
+                existing.initials = parsed.initials
+                existing.rank_in_game = parsed.rank_in_game
+                existing.session_id = session_id
+                existing.source_path = str(source_path.relative_to(session_path))
+                existing.parser = game.parser
+                updated += 1
                 continue
             db.add(MameHighScore(
                 user_id=user_id,
@@ -648,17 +651,17 @@ def extract_mame_scores(
             ))
             inserted += 1
         db.commit()
-        logger.info("MAME scores parsed=%s inserted=%s", len(parsed_scores), inserted)
+        logger.info("MAME scores parsed=%s inserted=%s updated=%s", len(parsed_scores), inserted, updated)
         cleanup_duplicate_mame_scores(db)
         return {
             "status": "ok",
             "rom_name": rom_name,
-            "message": "Score already saved." if inserted == 0 and parsed_scores else None,
+            "message": "Personal best unchanged." if inserted == 0 and updated == 0 and parsed_scores else None,
             "parser": game.parser,
             "source_path": str(source_path.relative_to(session_path)),
             "saved_paths": saved_paths,
             "scores_parsed": len(parsed_scores),
-            "rows_inserted": inserted,
+            "rows_inserted": inserted + updated,
         }
     finally:
         if os.getenv("MAME_KEEP_EXTRACTION_FILES", "").lower() in {"1", "true", "yes", "on"}:
