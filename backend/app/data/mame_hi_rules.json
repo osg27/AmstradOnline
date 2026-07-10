@@ -37,6 +37,28 @@
       100
     ]
   },
+  "rtype": {
+    "display_name": "R-Type",
+    "score_offset": 4,
+    "row_size": 11,
+    "row_count": 10,
+    "score_start": 0,
+    "score_length": 3,
+    "encoding": "bcd_le",
+    "multiplier": 100,
+    "max_score": 9999990,
+    "default_scores": [
+      174500,
+      168600,
+      159700,
+      117900,
+      100500,
+      98900,
+      92000,
+      80000,
+      76000
+    ]
+  },
   "truxton": {
     "display_name": "Truxton",
     "score_offset": 0,
