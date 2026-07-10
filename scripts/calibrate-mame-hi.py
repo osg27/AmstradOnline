@@ -3,8 +3,10 @@ import argparse
 from pathlib import Path
 
 
-def bcd_bytes(score: int, width: int) -> bytes:
+def bcd_bytes(score: int, width: int) -> bytes | None:
     digits = str(score).rjust(width * 2, "0")
+    if len(digits) > width * 2:
+        return None
     return bytes((int(digits[index]) << 4) | int(digits[index + 1]) for index in range(0, len(digits), 2))
 
 
@@ -35,6 +37,8 @@ def main() -> int:
     candidates.append(("ascii", score_text.encode("ascii")))
     for width in range(1, 5):
         encoded = bcd_bytes(args.known_score, width)
+        if encoded is None:
+            continue
         candidates.append((f"bcd_be_{width}b", encoded))
         candidates.append((f"bcd_le_{width}b", encoded[::-1]))
     for width in (2, 3, 4):
