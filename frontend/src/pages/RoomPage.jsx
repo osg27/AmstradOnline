@@ -366,6 +366,7 @@ export default function RoomPage() {
   const [loadedDiskName, setLoadedDiskName] = useState('');
   const [arcadeRomFolderName, setArcadeRomFolderName] = useState('');
   const [arcadeRomEntries, setArcadeRomEntries] = useState([]);
+  const [arcadeSampleCount, setArcadeSampleCount] = useState(0);
   const [arcadeRomSearch, setArcadeRomSearch] = useState('');
   const [showArcadeCloneRoms, setShowArcadeCloneRoms] = useState(false);
   const [arcadeRomScanning, setArcadeRomScanning] = useState(false);
@@ -454,6 +455,7 @@ export default function RoomPage() {
   const activePeerSignalIdRef = useRef('');
   const sentStoredKickstartFrameRef = useRef(0);
   const savedSystemMediaRef = useRef(new Map());
+  const arcadeSampleHandlesRef = useRef(new Map());
   const [micEnabled, setMicEnabled] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
   const [micStatus, setMicStatus] = useState('Mic off');
@@ -4312,35 +4314,45 @@ export default function RoomPage() {
     );
   }
 
-  async function collectArcadeRomEntries(directoryHandle, prefix = '') {
-    const entries = [];
+  async function collectArcadeFolderEntries(directoryHandle, prefix = '') {
+    const roms = [];
+    const samples = new Map();
 
     for await (const [name, handle] of directoryHandle.entries()) {
       const path = prefix ? `${prefix}/${name}` : name;
+      const pathParts = path.split(/[\\/]+/).map((part) => part.toLowerCase());
+      const inSamplesFolder = pathParts.includes('samples');
 
       if (handle.kind === 'file') {
         if (/\.(zip|7z)$/i.test(name)) {
-          const metadata = getArcadeRomMetadata(name);
-          entries.push({
-            name,
-            path,
-            ...metadata,
-            handle,
-          });
+          if (inSamplesFolder) {
+            const sampleKey = name.replace(/\.(zip|7z)$/i, '').toLowerCase();
+            samples.set(sampleKey, { name, path, handle });
+          } else {
+            const metadata = getArcadeRomMetadata(name);
+            roms.push({
+              name,
+              path,
+              ...metadata,
+              handle,
+            });
+          }
         }
         continue;
       }
 
       if (handle.kind === 'directory') {
         try {
-          entries.push(...await collectArcadeRomEntries(handle, path));
+          const childEntries = await collectArcadeFolderEntries(handle, path);
+          roms.push(...childEntries.roms);
+          childEntries.samples.forEach((sample, key) => samples.set(key, sample));
         } catch {
           // Some folders may be blocked by the browser picker. Keep scanning the rest.
         }
       }
     }
 
-    return entries;
+    return { roms, samples };
   }
 
   async function openArcadeRomFolder() {
@@ -4355,14 +4367,16 @@ export default function RoomPage() {
       setError('');
       setArcadeRomScanning(true);
       const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
-      const entries = await collectArcadeRomEntries(directoryHandle);
+      const { roms: entries, samples } = await collectArcadeFolderEntries(directoryHandle);
       entries.sort((left, right) => left.displayName.localeCompare(right.displayName, undefined, { numeric: true, sensitivity: 'base' }));
 
+      arcadeSampleHandlesRef.current = samples;
+      setArcadeSampleCount(samples.size);
       setArcadeRomFolderName(directoryHandle.name || 'MAME ROMs');
       setArcadeRomEntries(entries);
       setArcadeRomSearch('');
       setStatus(entries.length ? `Found ${entries.length} MAME ROM archive${entries.length === 1 ? '' : 's'}` : 'No .zip or .7z ROMs found in that folder');
-      addLog(`Scanned MAME ROM folder: ${directoryHandle.name || 'selected folder'} (${entries.length} archive${entries.length === 1 ? '' : 's'})`);
+      addLog(`Scanned MAME ROM folder: ${directoryHandle.name || 'selected folder'} (${entries.length} archive${entries.length === 1 ? '' : 's'}, ${samples.size} sample zip${samples.size === 1 ? '' : 's'})`);
     } catch (err) {
       if (err.name !== 'AbortError') {
         setError(err.message);
@@ -4373,7 +4387,7 @@ export default function RoomPage() {
     }
   }
 
-  async function loadArcadeRomFile(file) {
+  async function loadArcadeRomFile(file, sampleFiles = []) {
     if (!file) return;
 
     if (!/\.(zip|7z)$/i.test(file.name)) {
@@ -4397,6 +4411,7 @@ export default function RoomPage() {
       type: 'arcade_autoload',
       fileName: file.name,
       bytes,
+      samples: sampleFiles,
     }, window.location.origin);
 
     if (hostStartedRef.current) {
@@ -4432,7 +4447,21 @@ export default function RoomPage() {
     try {
       setStatus(`Loading MAME ROM: ${entry.name}`);
       const file = await entry.handle.getFile();
-      await loadArcadeRomFile(file);
+      const sampleKeys = [entry.romKey, entry.parent].filter(Boolean);
+      const sampleFiles = [];
+      for (const sampleKey of sampleKeys) {
+        const sample = arcadeSampleHandlesRef.current.get(sampleKey);
+        if (!sample) continue;
+        const sampleFile = await sample.handle.getFile();
+        sampleFiles.push({
+          fileName: sampleFile.name,
+          bytes: new Uint8Array(await sampleFile.arrayBuffer()),
+        });
+      }
+      if (sampleFiles.length) {
+        addLog(`Loaded MAME samples: ${sampleFiles.map((sample) => sample.fileName).join(', ')}`);
+      }
+      await loadArcadeRomFile(file, sampleFiles);
     } catch (err) {
       setError(err.message);
       addLog(`MAME ROM load error: ${err.message}`);
@@ -5454,7 +5483,7 @@ export default function RoomPage() {
                 </div>
 
                 {isArcade ? (
-                  <p className="arcade-romset-note">MAME Arcade needs a MAME 2003 / 2003-Plus romset.</p>
+                  <p className="arcade-romset-note">MAME Arcade needs a MAME 2003 / 2003-Plus romset. Choose the parent set folder to include samples.</p>
                 ) : null}
 
                 {isArcade && arcadeRomEntries.length > 0 ? (
@@ -5466,6 +5495,7 @@ export default function RoomPage() {
                           {showArcadeCloneRoms
                             ? `${arcadeRomEntries.length} ROM archive${arcadeRomEntries.length === 1 ? '' : 's'} found`
                             : `${arcadeParentRomCount} parent game${arcadeParentRomCount === 1 ? '' : 's'} shown${arcadeCloneRomCount ? ` (${arcadeCloneRomCount} clones hidden)` : ''}`}
+                          {arcadeSampleCount ? ` - ${arcadeSampleCount} sample zip${arcadeSampleCount === 1 ? '' : 's'} available` : ''}
                         </span>
                       </div>
                       <div className="arcade-rom-browser-actions">

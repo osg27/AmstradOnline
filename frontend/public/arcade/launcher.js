@@ -12,6 +12,7 @@
   let emulatorVolume = 1;
   let emulatorPaused = false;
   let romStartedAt = 0;
+  let currentSampleFiles = [];
   const playerMasks = [0, 0, 0, 0];
   let lastSimulatedMasks = [0, 0, 0, 0];
   let statusText = 'MAME 2003-Plus ready';
@@ -634,6 +635,13 @@
     window.EJS_defaultOptions = {
       'mame2003-plus_autosave_hiscore': 'enabled',
     };
+    window.EJS_rawFiles = {};
+    currentSampleFiles.forEach((sample) => {
+      if (!sample?.fileName || !sample?.bytes?.length) return;
+      const safeName = String(sample.fileName).split(/[\\/]/).pop();
+      if (!/\.zip$/i.test(safeName)) return;
+      window.EJS_rawFiles[`/home/web_user/retroarch/system/mame2003-plus/samples/${safeName}`] = sample.bytes;
+    });
     window.EJS_retroarchOpts = [
       {
         name: 'system_directory',
@@ -772,7 +780,7 @@
     const gameType = currentRom.fileName.toLowerCase().endsWith('.7z') ? 'application/x-7z-compressed' : 'application/zip';
     const gameFile = new File([currentRom.bytes], currentRom.fileName, { type: gameType });
     configureEmulator(currentRom.fileName, gameFile);
-    drawStatus('Loading MAME', currentRom.fileName);
+    drawStatus('Loading MAME', currentSampleFiles.length ? `${currentRom.fileName} with samples` : currentRom.fileName);
 
     loaderScript = document.createElement('script');
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
@@ -827,6 +835,12 @@
         fileName: message.fileName || 'game.zip',
         bytes: new Uint8Array(message.bytes || []),
       };
+      currentSampleFiles = Array.isArray(message.samples)
+        ? message.samples.map((sample) => ({
+          fileName: sample?.fileName || '',
+          bytes: new Uint8Array(sample?.bytes || []),
+        }))
+        : [];
       loadCurrentRom();
       return;
     }

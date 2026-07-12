@@ -125,6 +125,15 @@ class EJS_GameManager {
                     })
                 }
             }
+            if (this.EJS.config.rawFiles && this.EJS.config.rawFiles.constructor.name === "Object") {
+                for (const path in this.EJS.config.rawFiles) {
+                    try {
+                        this.writeFile(path, this.EJS.config.rawFiles[path]);
+                    } catch (e) {
+                        if (this.EJS.debug) console.warn("Failed to write raw file '" + path + "'.", e);
+                    }
+                }
+            }
             resolve();
         });
     }
