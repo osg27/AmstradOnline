@@ -5489,7 +5489,7 @@ export default function RoomPage() {
                 {isArcade && arcadeRomEntries.length > 0 ? (
                   <div className="arcade-rom-browser">
                     <div className="arcade-rom-browser-head">
-                      <div>
+                      <div className="arcade-rom-browser-title">
                         <strong>{arcadeRomFolderName || 'MAME ROMs'}</strong>
                         <span>
                           {showArcadeCloneRoms
