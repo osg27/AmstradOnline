@@ -1,4 +1,16 @@
 {
+  "galaxian": {
+    "display_name": "Galaxian",
+    "score_offset": 0,
+    "row_size": 4,
+    "row_count": 1,
+    "score_start": 0,
+    "score_length": 2,
+    "encoding": "bcd_le",
+    "multiplier": 1,
+    "max_score": 999990,
+    "default_scores": []
+  },
   "1942": {
     "display_name": "1942",
     "score_offset": 0,
