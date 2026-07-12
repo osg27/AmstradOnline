@@ -11,6 +11,20 @@
     "max_score": 999990,
     "default_scores": []
   },
+  "mrdo": {
+    "display_name": "Mr. Do!",
+    "score_offset": 0,
+    "row_size": 10,
+    "row_count": 10,
+    "score_start": 0,
+    "score_length": 3,
+    "encoding": "bcd_be",
+    "multiplier": 1,
+    "max_score": 9999990,
+    "default_scores": [
+      10000
+    ]
+  },
   "1942": {
     "display_name": "1942",
     "score_offset": 0,
