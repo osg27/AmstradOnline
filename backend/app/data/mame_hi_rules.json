@@ -2,7 +2,7 @@
   "galaxian": {
     "display_name": "Galaxian",
     "score_offset": 0,
-    "row_size": 4,
+    "row_size": 3,
     "row_count": 1,
     "score_start": 0,
     "score_length": 2,
