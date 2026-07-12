@@ -38,7 +38,7 @@
     "default_scores": []
   },
   "puckman": {
-    "display_name": "PuckMan / Pac-Man",
+    "display_name": "Pac-Man",
     "score_offset": 0,
     "row_size": 11,
     "row_count": 1,

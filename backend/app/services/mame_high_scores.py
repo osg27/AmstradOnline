@@ -38,7 +38,7 @@ MAME_CANONICAL_ROM_ALIASES = {
 }
 
 DEFAULT_MAME_GAMES = [
-    ("puckman", "PuckMan / Pac-Man", HI2TXT_PARSER),
+    ("puckman", "Pac-Man", HI2TXT_PARSER),
     ("pacman", "Pac-Man", HI2TXT_PARSER),
     ("mspacman", "Ms. Pac-Man", HI2TXT_PARSER),
     ("dkong", "Donkey Kong", BUILTIN_HI_BCD_PARSER),
