@@ -37,6 +37,18 @@
     "max_score": 9999990,
     "default_scores": []
   },
+  "puckman": {
+    "display_name": "PuckMan / Pac-Man",
+    "score_offset": 0,
+    "row_size": 11,
+    "row_count": 1,
+    "score_start": 0,
+    "score_length": 3,
+    "encoding": "bcd_le",
+    "multiplier": 1,
+    "max_score": 9999990,
+    "default_scores": []
+  },
   "1942": {
     "display_name": "1942",
     "score_offset": 0,
