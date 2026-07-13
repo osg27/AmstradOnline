@@ -113,7 +113,7 @@ def print_configured_decode(rom: str, data: bytes) -> None:
             row = data[start:start + row_size]
             if len(row) < row_size:
                 break
-            score = decode_bcd_score(row[2:8])
+            score = decode_bcd_score(row[3:6])
             if score is None:
                 continue
             marker = "default" if score == 10000 else "player?"

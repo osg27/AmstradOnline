@@ -419,7 +419,7 @@ def parse_robotron_nvram(source_path: Path) -> list[ParsedMameScore]:
 
     # Robotron stores the normal player-entered scores in the lower "All Time
     # Heroes" table, not the top "Robotron Heroes" factory table. The all-time
-    # rows are screen/NVRAM records with a six-byte big-endian BCD score.
+    # score bytes are compact three-byte big-endian BCD: 04 17 50 => 41750.
     all_time_scores: list[ParsedMameScore] = []
     seen: set[int] = set()
     all_time_offset = 0x160
@@ -429,7 +429,7 @@ def parse_robotron_nvram(source_path: Path) -> list[ParsedMameScore]:
         row = data[start:start + row_size]
         if len(row) < row_size:
             break
-        raw_score = decode_bcd_score(row[2:8])
+        raw_score = decode_bcd_score(row[3:6])
         if raw_score is None:
             continue
         score = raw_score
@@ -441,7 +441,13 @@ def parse_robotron_nvram(source_path: Path) -> list[ParsedMameScore]:
     if all_time_scores:
         return sorted(all_time_scores, key=lambda item: item.score, reverse=True)[:1]
 
-    return parse_configured_hi_table(source_path, "robotron")
+    try:
+        return parse_configured_hi_table(source_path, "robotron")
+    except MameNoPlayerScore as exc:
+        raise MameNoPlayerScore(
+            "Robotron score source was found, but MAME has not written a player high score yet. "
+            "Finish the run, enter initials on the all-time table, then save."
+        ) from exc
 
 
 def parse_configured_hi_table(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
