@@ -63,7 +63,11 @@
   function ensureAudio() {
     if (!OriginalAudioContext) return null;
     if (!sharedAudioContext) {
-      sharedAudioContext = new OriginalAudioContext();
+      try {
+        sharedAudioContext = new OriginalAudioContext({ latencyHint: 'playback' });
+      } catch {
+        sharedAudioContext = new OriginalAudioContext();
+      }
     }
     if (!audioDestination) {
       audioDestination = sharedAudioContext.createMediaStreamDestination();
@@ -82,7 +86,12 @@
   if (OriginalAudioContext) {
     function SharedAudioContext(...args) {
       if (!sharedAudioContext) {
-        sharedAudioContext = new OriginalAudioContext(...args);
+        const contextArgs = args.length ? args : [{ latencyHint: 'playback' }];
+        try {
+          sharedAudioContext = new OriginalAudioContext(...contextArgs);
+        } catch {
+          sharedAudioContext = new OriginalAudioContext(...args);
+        }
       }
       ensureAudio();
       return sharedAudioContext;
@@ -670,6 +679,11 @@
       window.EJS_rawFiles[`/home/web_user/retroarch/system/mame2003-plus/samples/${safeName}`] = sample.bytes;
     });
     window.EJS_retroarchOpts = [
+      {
+        name: 'audio_latency',
+        default: '128',
+        isString: false,
+      },
       {
         name: 'system_directory',
         default: '/home/web_user/retroarch/system',
