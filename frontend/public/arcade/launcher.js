@@ -213,6 +213,21 @@
       );
   }
 
+  function isCurrentRomGeneratedSaveFile(file) {
+    const romKey = normaliseRomKey(currentRom?.fileName);
+    if (!romKey || !file?.path) return false;
+
+    const lowerPath = normaliseFsPath(file.path).toLowerCase();
+    return lowerPath.endsWith(`/${romKey}.hi`)
+      || lowerPath.endsWith(`/${romKey}.nv`)
+      || lowerPath.endsWith(`/${romKey}/`)
+      || lowerPath.includes(`/nvram/${romKey}/`);
+  }
+
+  function hasCurrentRomGeneratedSave(files) {
+    return (files || []).some((file) => isCurrentRomGeneratedSaveFile(file));
+  }
+
   function toAbsoluteFsPath(path) {
     const normalised = normaliseFsPath(path);
     return normalised.startsWith('/') ? normalised : `/${normalised}`;
@@ -483,8 +498,14 @@
   }
 
   window.getArcadeSaveBundle = async function getArcadeSaveBundle() {
-    await flushArcadeSaveFiles({ restartCore: true });
-    const { debug, files } = buildFsDebugDump();
+    await flushArcadeSaveFiles({ restartCore: false });
+    let { debug, files } = buildFsDebugDump();
+
+    if (!hasCurrentRomGeneratedSave(files)) {
+      await flushArcadeSaveFiles({ restartCore: true });
+      ({ debug, files } = buildFsDebugDump());
+    }
+
     persistLocalMameSaveFiles(files);
     postArcadeLog(`MAME FS scan: ${debug.files.length} files, ${debug.hiFiles.length} .hi, ${debug.nvramDirs.length} nvram dirs, ${debug.uploadFiles.length} upload candidates`);
     window.parent?.postMessage({
