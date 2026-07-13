@@ -22,6 +22,14 @@ def bcd_bytes(score: int, width: int) -> bytes | None:
     return bytes((int(digits[index]) << 4) | int(digits[index + 1]) for index in range(0, len(digits), 2))
 
 
+def digit_sequences(score: int) -> list[tuple[str, str]]:
+    plain = str(score)
+    sequences = [("digits", plain)]
+    for width in range(len(plain) + 1, 9):
+        sequences.append((f"digits_zpad_{width}", plain.rjust(width, "0")))
+    return sequences
+
+
 def find_all(data: bytes, needle: bytes) -> list[int]:
     if not needle:
         return []
@@ -33,6 +41,62 @@ def find_all(data: bytes, needle: bytes) -> list[int]:
             return offsets
         offsets.append(index)
         start = index + 1
+
+
+def nibble_digit(value: int, mode: str) -> int | None:
+    if mode == "byte_digit":
+        return value if 0 <= value <= 9 else None
+    if mode == "low_nibble":
+        digit = value & 0x0f
+    elif mode == "high_nibble":
+        digit = value >> 4
+    elif mode == "low_nibble_xor_ff":
+        digit = (value ^ 0xff) & 0x0f
+    elif mode == "high_nibble_xor_ff":
+        digit = (value ^ 0xff) >> 4
+    elif mode == "low_nibble_xor_0f":
+        digit = (value ^ 0x0f) & 0x0f
+    elif mode == "high_nibble_xor_f0":
+        digit = (value ^ 0xf0) >> 4
+    elif mode == "low_nibble_9s_comp":
+        digit = 9 - (value & 0x0f)
+    elif mode == "high_nibble_9s_comp":
+        digit = 9 - (value >> 4)
+    else:
+        return None
+    return digit if 0 <= digit <= 9 else None
+
+
+def find_digit_stream_matches(data: bytes, score: int) -> list[tuple[str, list[int], str]]:
+    modes = (
+        "byte_digit",
+        "low_nibble",
+        "high_nibble",
+        "low_nibble_xor_ff",
+        "high_nibble_xor_ff",
+        "low_nibble_xor_0f",
+        "high_nibble_xor_f0",
+        "low_nibble_9s_comp",
+        "high_nibble_9s_comp",
+    )
+    matches: list[tuple[str, list[int], str]] = []
+    seen: set[tuple[str, tuple[int, ...], str]] = set()
+    for sequence_label, digits_text in digit_sequences(score):
+        target = [int(char) for char in digits_text]
+        for mode in modes:
+            for stride in range(1, 5):
+                max_start = len(data) - ((len(target) - 1) * stride)
+                for start in range(max(0, max_start)):
+                    offsets = [start + index * stride for index in range(len(target))]
+                    decoded = [nibble_digit(data[offset], mode) for offset in offsets]
+                    if decoded != target:
+                        continue
+                    key = (mode, tuple(offsets), sequence_label)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    matches.append((mode, offsets, sequence_label))
+    return matches
 
 
 def ascii_preview(chunk: bytes) -> str:
@@ -147,8 +211,22 @@ def main() -> int:
 
     if not found:
         print("No direct encoding match found.")
+
+    digit_matches = find_digit_stream_matches(data, args.known_score)
+    if digit_matches:
+        print()
+        print("Digit/nibble stream matches")
+        for mode, offsets, sequence_label in digit_matches[:40]:
+            values = " ".join(f"{data[offset]:02x}" for offset in offsets)
+            offset_text = ", ".join(f"0x{offset:04x}" for offset in offsets)
+            print(f"{sequence_label}_{mode}: bytes {values} at {offset_text}")
+        if len(digit_matches) > 40:
+            print(f"... {len(digit_matches) - 40} more digit/nibble matches omitted")
+    else:
+        print("No digit/nibble stream match found.")
+
     suggest_rules(args.rom, data, matches)
-    print_hexdump(data)
+    print_hexdump(data, limit=min(len(data), 1024))
     return 0
 
 
