@@ -280,7 +280,15 @@ def is_mame_hi_source(path: Path, rom_name: str) -> bool:
 
 
 def is_nvram_source(path: Path, rom_name: str) -> bool:
-    return path.is_dir() and path.name.lower() == rom_name and path.parent.name.lower() == "nvram"
+    name = path.name.lower()
+    expected = normalise_rom_name(rom_name)
+    if path.parent.name.lower() != "nvram":
+        return False
+    if path.is_dir():
+        return normalise_rom_name(name) == expected
+    if path.is_file() and name.endswith(".nv"):
+        return normalise_rom_name(name[:-3]) == expected
+    return False
 
 
 def find_score_source(session_path: Path, rom_name: str, score_source: str) -> Path | None:
@@ -298,21 +306,33 @@ def find_score_source(session_path: Path, rom_name: str, score_source: str) -> P
     ]
     exact_nvram_candidates = [
         session_path / "nvram" / rom_name,
+        session_path / "nvram" / f"{rom_name}.nv",
         session_path / "data" / "saves" / "nvram" / rom_name,
+        session_path / "data" / "saves" / "nvram" / f"{rom_name}.nv",
+        session_path / "data" / "saves" / "MAME 2003-Plus" / "mame2003-plus" / "nvram" / rom_name,
+        session_path / "data" / "saves" / "MAME 2003-Plus" / "mame2003-plus" / "nvram" / f"{rom_name}.nv",
     ]
     recursive_hi_candidates = sorted(
         (path for path in session_path.rglob("*.hi") if is_mame_hi_source(path, rom_name)),
         key=lambda path: len(path.parts),
     )
     recursive_nvram_candidates = sorted(
-        (path for path in session_path.rglob(rom_name) if is_nvram_source(path, rom_name)),
+        (
+            path
+            for pattern in (rom_name, f"{rom_name}.nv")
+            for path in session_path.rglob(pattern)
+            if is_nvram_source(path, rom_name)
+        ),
         key=lambda path: len(path.parts),
     )
     hi_candidates = [path for path in exact_hi_candidates + recursive_hi_candidates if is_mame_hi_source(path, rom_name)]
     nvram_candidates = [path for path in exact_nvram_candidates + recursive_nvram_candidates if is_nvram_source(path, rom_name)]
 
     if score_source == "hi":
-        return next((path for path in hi_candidates if path.exists() and path.is_file()), None)
+        hi_source = next((path for path in hi_candidates if path.exists() and path.is_file()), None)
+        if hi_source:
+            return hi_source
+        return next((path for path in nvram_candidates if path.exists()), None)
     if score_source == "nvram":
         return next((path for path in nvram_candidates if path.exists()), None)
 
@@ -528,6 +548,10 @@ def parse_custom_placeholder(source_path: Path, _rom_name: str) -> list[ParsedMa
 
 
 def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMameScore]:
+    if source_path.is_file() and source_path.name.lower().endswith(".nv") and game.parser == HI2TXT_PARSER:
+        raise MameNoPlayerScore(
+            f"{game.display_name or game.rom_name} nvram score file found, but this game needs an exact nvram parser before scores can be trusted."
+        )
     if game.parser == BUILTIN_HI_BCD_PARSER:
         return parse_mame_hi_bcd(source_path, game.rom_name)
     if game.parser == CONFIGURED_HI_PARSER:
