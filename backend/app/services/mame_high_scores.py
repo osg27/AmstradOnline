@@ -413,30 +413,61 @@ def decode_configured_hi_score(chunk: bytes, encoding: str) -> int | None:
     raise ValueError(f"Unsupported MAME .hi score encoding: {encoding}")
 
 
+def decode_robotron_text(chunk: bytes) -> str | None:
+    if len(chunk) % 2:
+        return None
+
+    chars: list[str] = []
+    for index in range(0, len(chunk), 2):
+        high = chunk[index] & 0x0f
+        low = chunk[index + 1] & 0x0f
+        value = (high << 4) | low
+        if value == 0x3a:
+            chars.append(" ")
+        elif 32 <= value <= 126:
+            chars.append(chr(value))
+        else:
+            chars.append(" ")
+
+    return "".join(chars).strip() or None
+
+
+def decode_robotron_decimal_nibbles(chunk: bytes) -> int | None:
+    digits: list[str] = []
+    for value in chunk:
+        digit = value & 0x0f
+        if digit > 9:
+            return None
+        digits.append(str(digit))
+    return int("".join(digits))
+
+
 def parse_robotron_nvram(source_path: Path) -> list[ParsedMameScore]:
     data = source_path.read_bytes()
     all_time_defaults = {10000}
 
     # Robotron stores the normal player-entered scores in the lower "All Time
-    # Heroes" table, not the top "Robotron Heroes" factory table. The all-time
-    # score bytes are compact three-byte big-endian BCD: 04 17 50 => 41750.
+    # Heroes" table. Its NVRAM fields use Williams' odd-nibble layout: each
+    # physical byte contributes its low nibble, so names are two bytes per
+    # character and scores are seven decimal nibbles.
     all_time_scores: list[ParsedMameScore] = []
     seen: set[int] = set()
-    all_time_offset = 0x160
+    all_time_offset = 0x168
     row_size = 14
     for row_index in range(37):
         start = all_time_offset + (row_index * row_size)
         row = data[start:start + row_size]
         if len(row) < row_size:
             break
-        raw_score = decode_bcd_score(row[3:6])
+        initials = decode_robotron_text(row[0:6])
+        raw_score = decode_robotron_decimal_nibbles(row[7:14])
         if raw_score is None:
             continue
         score = raw_score
         if score in all_time_defaults or not plausible_arcade_score(score, "robotron") or score in seen:
             continue
         seen.add(score)
-        all_time_scores.append(ParsedMameScore(score=score, rank_in_game=row_index + 1))
+        all_time_scores.append(ParsedMameScore(score=score, initials=initials, rank_in_game=row_index + 1))
 
     if all_time_scores:
         return sorted(all_time_scores, key=lambda item: item.score, reverse=True)[:1]
@@ -445,8 +476,8 @@ def parse_robotron_nvram(source_path: Path) -> list[ParsedMameScore]:
         return parse_configured_hi_table(source_path, "robotron")
     except MameNoPlayerScore as exc:
         raise MameNoPlayerScore(
-            "Robotron score source was found, but MAME has not written a player high score yet. "
-            "Finish the run, enter initials on the all-time table, then save."
+            "Robotron score source was found, but only the factory/default tables were detected. "
+            "No player all-time score was saved."
         ) from exc
 
 

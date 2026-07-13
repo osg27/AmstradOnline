@@ -50,6 +50,31 @@ def decode_rule_score(chunk: bytes, encoding: str) -> int | None:
     return None
 
 
+def decode_robotron_text(chunk: bytes) -> str | None:
+    if len(chunk) % 2:
+        return None
+    chars: list[str] = []
+    for index in range(0, len(chunk), 2):
+        value = ((chunk[index] & 0x0f) << 4) | (chunk[index + 1] & 0x0f)
+        if value == 0x3a:
+            chars.append(" ")
+        elif 32 <= value <= 126:
+            chars.append(chr(value))
+        else:
+            chars.append(" ")
+    return "".join(chars).strip() or None
+
+
+def decode_robotron_decimal_nibbles(chunk: bytes) -> int | None:
+    digits: list[str] = []
+    for value in chunk:
+        digit = value & 0x0f
+        if digit > 9:
+            return None
+        digits.append(str(digit))
+    return int("".join(digits))
+
+
 def normalise_rom(value: str) -> str:
     return re.sub(r"[^a-z0-9_+-]", "", value.lower().replace(".zip", "").replace(".7z", ""))
 
@@ -105,7 +130,7 @@ def print_configured_decode(rom: str, data: bytes) -> None:
     if normalise_rom(rom) == "robotron":
         print()
         print("Robotron all-time table decode")
-        all_time_offset = 0x160
+        all_time_offset = 0x168
         row_size = 14
         found_all_time = False
         for row_index in range(37):
@@ -113,11 +138,12 @@ def print_configured_decode(rom: str, data: bytes) -> None:
             row = data[start:start + row_size]
             if len(row) < row_size:
                 break
-            score = decode_bcd_score(row[3:6])
+            initials = decode_robotron_text(row[0:6]) or "---"
+            score = decode_robotron_decimal_nibbles(row[7:14])
             if score is None:
                 continue
             marker = "default" if score == 10000 else "player?"
-            print(f"row {row_index + 1}: score={score} {marker} bytes={' '.join(f'{value:02x}' for value in row)}")
+            print(f"row {row_index + 1}: initials={initials} score={score} {marker} bytes={' '.join(f'{value:02x}' for value in row)}")
             found_all_time = True
 
         if not found_all_time:
