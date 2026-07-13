@@ -17,6 +17,7 @@
   let lastSimulatedMasks = [0, 0, 0, 0];
   let statusText = 'MAME 2003-Plus ready';
   const robotronDualStickRoms = new Set(['robotron', 'robotron12', 'robotronyo', 'robotryo']);
+  const localSavePrefix = 'oldstylegaming:mame:saves:';
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
   const nativeFetch = window.fetch.bind(window);
@@ -132,6 +133,24 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  function bytesToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+      binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  function base64ToBytes(value) {
+    const binary = atob(String(value || ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
   async function syncArcadeFs(manager) {
     try {
       if (typeof manager?.FS?.syncfs === 'function') {
@@ -171,6 +190,72 @@
 
   function normaliseFsPath(path) {
     return String(path || '').replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+  }
+
+  function localSaveKey(fileName = currentRom?.fileName) {
+    return `${localSavePrefix}${normaliseRomKey(fileName)}`;
+  }
+
+  function isPersistentMameSavePath(path) {
+    const normalised = normaliseFsPath(path).replace(/^\/+/, '');
+    const lowerPath = normalised.toLowerCase();
+    const segments = pathSegments(normalised);
+
+    return !isHiscoreDat(normalised)
+      && !lowerPath.endsWith('retroarch.cfg')
+      && !lowerPath.endsWith('.zip')
+      && !lowerPath.endsWith('.7z')
+      && (
+        lowerPath.endsWith('.hi')
+        || lowerPath.endsWith('.nv')
+        || segments.includes('nvram')
+        || segments.includes('hi')
+      );
+  }
+
+  function toAbsoluteFsPath(path) {
+    const normalised = normaliseFsPath(path);
+    return normalised.startsWith('/') ? normalised : `/${normalised}`;
+  }
+
+  function loadLocalMameSaveFiles(fileName = currentRom?.fileName) {
+    const key = localSaveKey(fileName);
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || 'null');
+      if (!saved || !Array.isArray(saved.files)) return [];
+      return saved.files
+        .filter((file) => file?.path && file?.data && isPersistentMameSavePath(file.path))
+        .map((file) => ({
+          path: toAbsoluteFsPath(file.path),
+          bytes: base64ToBytes(file.data),
+        }));
+    } catch (error) {
+      postArcadeLog(`Could not load local MAME saves: ${error.message}`, 'error');
+      return [];
+    }
+  }
+
+  function persistLocalMameSaveFiles(files, fileName = currentRom?.fileName) {
+    const persistentFiles = (files || [])
+      .filter((file) => file?.path && file?.bytes?.length && isPersistentMameSavePath(file.path))
+      .map((file) => ({
+        path: normaliseFsPath(file.path).replace(/^\/+/, ''),
+        data: bytesToBase64(file.bytes),
+        size: file.bytes.length,
+      }));
+
+    if (!persistentFiles.length) return;
+
+    try {
+      localStorage.setItem(localSaveKey(fileName), JSON.stringify({
+        rom: normaliseRomKey(fileName),
+        savedAt: Date.now(),
+        files: persistentFiles,
+      }));
+      postArcadeLog(`Stored ${persistentFiles.length} local MAME save file(s) for ${fileName}`);
+    } catch (error) {
+      postArcadeLog(`Could not store local MAME saves: ${error.message}`, 'error');
+    }
   }
 
   function safeStat(fs, path) {
@@ -400,6 +485,7 @@
   window.getArcadeSaveBundle = async function getArcadeSaveBundle() {
     await flushArcadeSaveFiles({ restartCore: true });
     const { debug, files } = buildFsDebugDump();
+    persistLocalMameSaveFiles(files);
     postArcadeLog(`MAME FS scan: ${debug.files.length} files, ${debug.hiFiles.length} .hi, ${debug.nvramDirs.length} nvram dirs, ${debug.uploadFiles.length} upload candidates`);
     window.parent?.postMessage({
       type: 'arcade_fs_debug',
@@ -677,6 +763,9 @@
       const safeName = String(sample.fileName).split(/[\\/]/).pop();
       if (!/\.zip$/i.test(safeName)) return;
       window.EJS_rawFiles[`/home/web_user/retroarch/system/mame2003-plus/samples/${safeName}`] = sample.bytes;
+    });
+    loadLocalMameSaveFiles(fileName).forEach((file) => {
+      window.EJS_rawFiles[file.path] = file.bytes;
     });
     window.EJS_retroarchOpts = [
       {
