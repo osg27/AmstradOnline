@@ -5,6 +5,9 @@ import re
 from pathlib import Path
 
 
+RULES_PATH = Path(__file__).resolve().parents[1] / "backend" / "app" / "data" / "mame_hi_rules.json"
+
+
 def score_variants(score: int) -> list[tuple[str, int]]:
     variants = [("score", score)]
     divisor = 10
@@ -20,6 +23,84 @@ def bcd_bytes(score: int, width: int) -> bytes | None:
     if len(digits) > width * 2:
         return None
     return bytes((int(digits[index]) << 4) | int(digits[index + 1]) for index in range(0, len(digits), 2))
+
+
+def decode_bcd_score(chunk: bytes) -> int | None:
+    digits: list[str] = []
+    for value in chunk:
+        high = value >> 4
+        low = value & 0x0f
+        if high > 9 or low > 9:
+            return None
+        digits.extend((str(high), str(low)))
+    return int("".join(digits))
+
+
+def decode_rule_score(chunk: bytes, encoding: str) -> int | None:
+    if encoding == "bcd_be":
+        return decode_bcd_score(chunk)
+    if encoding == "bcd_le":
+        return decode_bcd_score(chunk[::-1])
+    if encoding == "int_be":
+        return int.from_bytes(chunk, "big", signed=False)
+    if encoding == "int_le":
+        return int.from_bytes(chunk, "little", signed=False)
+    if encoding == "williams_bcd_pairs":
+        return decode_bcd_score(chunk[1::2])
+    return None
+
+
+def normalise_rom(value: str) -> str:
+    return re.sub(r"[^a-z0-9_+-]", "", value.lower().replace(".zip", "").replace(".7z", ""))
+
+
+def load_configured_rule(rom: str) -> dict | None:
+    try:
+        rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return rules.get(normalise_rom(rom))
+
+
+def print_configured_decode(rom: str, data: bytes) -> None:
+    rule = load_configured_rule(rom)
+    if not rule:
+        return
+
+    score_offset = int(rule.get("score_offset", 0))
+    row_size = int(rule["row_size"])
+    row_count = int(rule.get("row_count") or 0)
+    score_start = int(rule.get("score_start", 0))
+    score_length = int(rule["score_length"])
+    multiplier = int(rule.get("multiplier", 1))
+    encoding = str(rule.get("encoding", "bcd_be"))
+    defaults = {int(score) for score in rule.get("default_scores", [])}
+    display_name = str(rule.get("display_name") or rom)
+
+    print()
+    print(f"Configured parser decode for {display_name}")
+    print(
+        f"offset={score_offset}, row_size={row_size}, rows={row_count}, "
+        f"score_start={score_start}, score_length={score_length}, encoding={encoding}, multiplier={multiplier}"
+    )
+
+    table = data[score_offset:]
+    if row_count > 0:
+        table = table[:row_count * row_size]
+
+    found = False
+    for index in range(0, len(table) - (len(table) % row_size), row_size):
+        row = table[index:index + row_size]
+        raw = decode_rule_score(row[score_start:score_start + score_length], encoding)
+        if raw is None:
+            continue
+        score = raw * multiplier
+        marker = "default" if score in defaults else "player?"
+        print(f"row {(index // row_size) + 1}: score={score} {marker} bytes={' '.join(f'{value:02x}' for value in row)}")
+        found = True
+
+    if not found:
+        print("Configured parser did not decode any rows.")
 
 
 def digit_sequences(score: int) -> list[tuple[str, str]]:
@@ -211,6 +292,8 @@ def main() -> int:
 
     if not found:
         print("No direct encoding match found.")
+
+    print_configured_decode(args.rom, data)
 
     digit_matches = find_digit_stream_matches(data, args.known_score)
     if digit_matches:
