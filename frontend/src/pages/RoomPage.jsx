@@ -973,6 +973,10 @@ export default function RoomPage() {
       if (pad.buttons[5]?.pressed) mask |= 1024;
       if (pad.buttons[6]?.pressed) mask |= 2048;
       if (pad.buttons[8]?.pressed) mask |= 4096;
+      if ((pad.axes[3] ?? 0) < -deadzone) mask |= 8192;
+      if ((pad.axes[3] ?? 0) > deadzone) mask |= 16384;
+      if ((pad.axes[2] ?? 0) < -deadzone) mask |= 32768;
+      if ((pad.axes[2] ?? 0) > deadzone) mask |= 65536;
     }
     if (system === 'playstation') {
       if (pad.buttons[3]?.pressed) mask |= 256;
@@ -1000,6 +1004,10 @@ export default function RoomPage() {
         ['Button 6', Boolean(mask & 2048)],
         ['Coin', Boolean(mask & 4096)],
         ['Start', Boolean(mask & 64)],
+        ['Fire up', Boolean(mask & 8192)],
+        ['Fire down', Boolean(mask & 16384)],
+        ['Fire left', Boolean(mask & 32768)],
+        ['Fire right', Boolean(mask & 65536)],
       ];
     }
 

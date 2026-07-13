@@ -16,6 +16,7 @@
   const playerMasks = [0, 0, 0, 0];
   let lastSimulatedMasks = [0, 0, 0, 0];
   let statusText = 'MAME 2003-Plus ready';
+  const robotronDualStickRoms = new Set(['robotron', 'robotron12', 'robotronyo', 'robotryo']);
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
   const nativeFetch = window.fetch.bind(window);
@@ -424,6 +425,18 @@
     setEmulatorVolume(emulatorVolume);
   }
 
+  function normaliseRomKey(fileName) {
+    return String(fileName || '')
+      .toLowerCase()
+      .replace(/\.(zip|7z)$/i, '')
+      .replace(/[^a-z0-9_+-]/g, '');
+  }
+
+  function isRobotronRom() {
+    const key = normaliseRomKey(currentRom?.fileName);
+    return robotronDualStickRoms.has(key) || key.startsWith('robotron');
+  }
+
   function maskToButtons(mask) {
     const buttons = new Array(16).fill(false);
     buttons[12] = Boolean(mask & 1);
@@ -444,13 +457,15 @@
 
   function buildPad(index, mask) {
     const pressedButtons = maskToButtons(mask);
+    const rightStickX = (mask & 32768) ? -1 : (mask & 65536) ? 1 : 0;
+    const rightStickY = (mask & 8192) ? -1 : (mask & 16384) ? 1 : 0;
     return {
       id: `Old Style Arcade Pad ${index + 1}`,
       index,
       connected: true,
       mapping: 'standard',
       timestamp: performance.now(),
-      axes: [0, 0, 0, 0],
+      axes: isRobotronRom() ? [0, 0, rightStickX, rightStickY] : [0, 0, 0, 0],
       buttons: pressedButtons.map((pressed) => ({
         pressed,
         touched: pressed,
@@ -501,6 +516,18 @@
         manager.simulateInput(playerIndex, button, isPressed ? 1 : 0);
       }
     });
+
+    if (isRobotronRom()) {
+      const analog = 0x7fff;
+      const fireUp = Boolean(nextMask & 8192);
+      const fireDown = Boolean(nextMask & 16384);
+      const fireLeft = Boolean(nextMask & 32768);
+      const fireRight = Boolean(nextMask & 65536);
+      manager.simulateInput(playerIndex, 20, fireRight ? analog : 0);
+      manager.simulateInput(playerIndex, 21, fireLeft ? analog : 0);
+      manager.simulateInput(playerIndex, 22, fireDown ? analog : 0);
+      manager.simulateInput(playerIndex, 23, fireUp ? analog : 0);
+    }
 
     lastSimulatedMasks[playerIndex] = nextMask;
   }
