@@ -169,6 +169,7 @@
     "score_length": 6,
     "encoding": "williams_bcd_pairs",
     "multiplier": 1,
+    "score_granularity": 1,
     "max_score": 9999990,
     "default_scores": [
       52127,

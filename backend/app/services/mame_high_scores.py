@@ -86,6 +86,11 @@ ROM_SCORE_LIMITS = {
         if isinstance(rule.get("max_score"), int)
     },
 }
+ROM_SCORE_GRANULARITY = {
+    rom_name: int(rule.get("score_granularity", 10))
+    for rom_name, rule in CONFIGURED_MAME_HI_RULES.items()
+    if int(rule.get("score_granularity", 10)) > 0
+}
 SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES | CONFIGURED_HI_GAMES
 DEFAULT_MAME_GAMES.extend(
     (
@@ -355,7 +360,8 @@ def decode_bcd_score(chunk: bytes) -> int | None:
 
 def plausible_arcade_score(score: int, rom_name: str) -> bool:
     limit = ROM_SCORE_LIMITS.get(rom_name, 9999990)
-    return 100 <= score <= limit and score % 10 == 0
+    granularity = ROM_SCORE_GRANULARITY.get(rom_name, 10)
+    return 100 <= score <= limit and score % granularity == 0
 
 
 def parse_mame_hi_bcd(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
@@ -407,7 +413,38 @@ def decode_configured_hi_score(chunk: bytes, encoding: str) -> int | None:
     raise ValueError(f"Unsupported MAME .hi score encoding: {encoding}")
 
 
-def parse_configured_hi(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
+def parse_robotron_nvram(source_path: Path) -> list[ParsedMameScore]:
+    data = source_path.read_bytes()
+    all_time_defaults = {10000}
+
+    # Robotron stores the normal player-entered scores in the lower "All Time
+    # Heroes" table, not the top "Robotron Heroes" factory table. The all-time
+    # rows are screen/NVRAM records with a six-byte big-endian BCD score.
+    all_time_scores: list[ParsedMameScore] = []
+    seen: set[int] = set()
+    all_time_offset = 0x160
+    row_size = 14
+    for row_index in range(37):
+        start = all_time_offset + (row_index * row_size)
+        row = data[start:start + row_size]
+        if len(row) < row_size:
+            break
+        raw_score = decode_bcd_score(row[2:8])
+        if raw_score is None:
+            continue
+        score = raw_score
+        if score in all_time_defaults or not plausible_arcade_score(score, "robotron") or score in seen:
+            continue
+        seen.add(score)
+        all_time_scores.append(ParsedMameScore(score=score, rank_in_game=row_index + 1))
+
+    if all_time_scores:
+        return sorted(all_time_scores, key=lambda item: item.score, reverse=True)[:1]
+
+    return parse_configured_hi_table(source_path, "robotron")
+
+
+def parse_configured_hi_table(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
     rule = CONFIGURED_MAME_HI_RULES.get(rom_name)
     if not rule:
         return []
@@ -450,6 +487,13 @@ def parse_configured_hi(source_path: Path, rom_name: str) -> list[ParsedMameScor
         raise MameNoPlayerScore(f"{display_name} high-score file found, but only default scores were detected. No player score saved.")
 
     return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
+
+
+def parse_configured_hi(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
+    if rom_name == "robotron":
+        return parse_robotron_nvram(source_path)
+
+    return parse_configured_hi_table(source_path, rom_name)
 
 
 def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:

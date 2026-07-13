@@ -102,6 +102,27 @@ def print_configured_decode(rom: str, data: bytes) -> None:
     if not found:
         print("Configured parser did not decode any rows.")
 
+    if normalise_rom(rom) == "robotron":
+        print()
+        print("Robotron all-time table decode")
+        all_time_offset = 0x160
+        row_size = 14
+        found_all_time = False
+        for row_index in range(37):
+            start = all_time_offset + (row_index * row_size)
+            row = data[start:start + row_size]
+            if len(row) < row_size:
+                break
+            score = decode_bcd_score(row[2:8])
+            if score is None:
+                continue
+            marker = "default" if score == 10000 else "player?"
+            print(f"row {row_index + 1}: score={score} {marker} bytes={' '.join(f'{value:02x}' for value in row)}")
+            found_all_time = True
+
+        if not found_all_time:
+            print("Robotron all-time table did not decode any rows.")
+
 
 def digit_sequences(score: int) -> list[tuple[str, str]]:
     plain = str(score)
