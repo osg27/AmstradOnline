@@ -402,6 +402,8 @@ def decode_configured_hi_score(chunk: bytes, encoding: str) -> int | None:
         return int.from_bytes(chunk, "big", signed=False)
     if encoding == "int_le":
         return int.from_bytes(chunk, "little", signed=False)
+    if encoding == "williams_bcd_pairs":
+        return decode_bcd_score(chunk[1::2])
     raise ValueError(f"Unsupported MAME .hi score encoding: {encoding}")
 
 

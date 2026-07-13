@@ -159,5 +159,28 @@
       14000,
       12000
     ]
+  },
+  "robotron": {
+    "display_name": "Robotron: 2084",
+    "score_offset": 878,
+    "row_size": 14,
+    "row_count": 10,
+    "score_start": 8,
+    "score_length": 6,
+    "encoding": "williams_bcd_pairs",
+    "multiplier": 10,
+    "max_score": 9999990,
+    "default_scores": [
+      521270,
+      502180,
+      412550,
+      412500,
+      319200,
+      319190,
+      266450,
+      266350,
+      252500,
+      241100
+    ]
   }
 }
