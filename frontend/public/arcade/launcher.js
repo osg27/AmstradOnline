@@ -413,7 +413,7 @@
       if (uploadPathSet.has(normalised)) return;
       uploadPathSet.add(normalised);
       try {
-        const bytes = fs.readFile(normalised);
+        const bytes = new Uint8Array(fs.readFile(normalised));
         uploadFiles.push({
           path: normalised.replace(/^\/+/, ''),
           bytes,

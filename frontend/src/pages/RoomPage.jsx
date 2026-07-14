@@ -4189,6 +4189,15 @@ export default function RoomPage() {
     return window.btoa(binary);
   }
 
+  function cloneMameSaveFiles(files) {
+    return (files || [])
+      .filter((file) => file?.path && file?.bytes?.length)
+      .map((file) => ({
+        ...file,
+        bytes: new Uint8Array(file.bytes),
+      }));
+  }
+
   function getArcadeRomKey(fileName = loadedDiskName) {
     return String(fileName || '').split(' from ')[0].replace(/\.(zip|7z)$/i, '').toLowerCase();
   }
@@ -4239,7 +4248,7 @@ export default function RoomPage() {
 
     const frame = emulatorFrameRef.current;
     const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.({ restartCore: false });
-    const files = (bundle?.files || []).filter((file) => file?.path && file?.bytes?.length);
+    const files = cloneMameSaveFiles(bundle?.files);
     const romName = getArcadeRomKey(bundle?.romName || fileName);
     mameScoreBaselineRef.current = {
       romName,
@@ -4255,7 +4264,7 @@ export default function RoomPage() {
 
     const frame = emulatorFrameRef.current;
     const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.();
-    const files = (bundle?.files || []).filter((file) => file?.path && file?.bytes?.length);
+    const files = cloneMameSaveFiles(bundle?.files);
     const romName = getArcadeRomKey(bundle?.romName || loadedDiskNameRef.current);
     const leaderboardRomName = getArcadeLeaderboardKey(bundle?.romName || loadedDiskNameRef.current);
     const sessionId = `${roomCode}-${roomSessionKey}-${romName}`;
@@ -4445,9 +4454,6 @@ export default function RoomPage() {
     }
 
     setError('');
-    if (hostStartedRef.current && loadedDiskNameRef.current) {
-      await submitMameScoreExtraction('rom change');
-    }
     const bytes = new Uint8Array(await file.arrayBuffer());
     const frame = await reloadArcadeFrame();
 
@@ -4594,10 +4600,6 @@ export default function RoomPage() {
   async function resetHostEmulator() {
     if (!canControlLocalEmulator || !hostStarted) return;
 
-    if (isArcade) {
-      await submitMameScoreExtraction('reset');
-    }
-
     setHostPaused(false);
 
     if (isC64) {
@@ -4678,14 +4680,8 @@ export default function RoomPage() {
     setStatus('Emulator reset');
   }
 
-  async function leaveRoom() {
-    try {
-      await submitMameScoreExtraction('leave');
-    } catch (err) {
-      addLog(`MAME score extraction before leave failed: ${err.message}`);
-    } finally {
-      navigate('/lobby');
-    }
+  function leaveRoom() {
+    navigate('/lobby');
   }
 
   function swapC64JoystickPorts() {

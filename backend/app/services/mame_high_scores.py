@@ -834,7 +834,8 @@ def filter_hi2txt_player_scores(
     player_scores = [score for score in current_scores if parsed_score_key(score) not in baseline_keys]
     if not player_scores:
         raise MameNoPlayerScore(
-            f"{game.display_name or game.rom_name} score table was decoded, but no new player score was found since the game started."
+            f"{game.display_name or game.rom_name} score table was decoded, but no new player score was found since the game started "
+            f"({len(current_scores)} current rows, {len(baseline_scores)} baseline rows)."
         )
 
     return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
