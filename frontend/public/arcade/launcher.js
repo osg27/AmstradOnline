@@ -499,10 +499,11 @@
 
   window.getArcadeSaveBundle = async function getArcadeSaveBundle(options = {}) {
     const allowRestart = options.restartCore !== false;
+    const forceRestart = options.forceRestart === true;
     await flushArcadeSaveFiles({ restartCore: false });
     let { debug, files } = buildFsDebugDump();
 
-    if (allowRestart && !hasCurrentRomGeneratedSave(files)) {
+    if (allowRestart && (forceRestart || !hasCurrentRomGeneratedSave(files))) {
       await flushArcadeSaveFiles({ restartCore: true });
       ({ debug, files } = buildFsDebugDump());
     }

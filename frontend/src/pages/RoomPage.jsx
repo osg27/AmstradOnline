@@ -4263,7 +4263,8 @@ export default function RoomPage() {
     if (!mameLeaderboardSupported) return null;
 
     const frame = emulatorFrameRef.current;
-    const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.();
+    setMameScoreStatus('Registering score...');
+    const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.({ forceRestart: reason === 'manual' });
     const files = cloneMameSaveFiles(bundle?.files);
     const romName = getArcadeRomKey(bundle?.romName || loadedDiskNameRef.current);
     const leaderboardRomName = getArcadeLeaderboardKey(bundle?.romName || loadedDiskNameRef.current);
@@ -4277,7 +4278,6 @@ export default function RoomPage() {
       return null;
     }
 
-    setMameScoreStatus('Registering score...');
     const result = await apiFetch(`/scores/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`, {
       method: 'POST',
       body: JSON.stringify({
