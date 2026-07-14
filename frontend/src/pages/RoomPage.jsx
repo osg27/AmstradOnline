@@ -437,6 +437,7 @@ export default function RoomPage() {
   const hostStartingRef = useRef(false);
   const hostStartedRef = useRef(false);
   const loadedDiskNameRef = useRef('');
+  const mameScoreBaselineRef = useRef(null);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
   const inputSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -2816,11 +2817,22 @@ export default function RoomPage() {
     if (!isArcade || !loadedDiskName) {
       setMameLeaderboard([]);
       setMameLeaderboardSupported(false);
+      mameScoreBaselineRef.current = null;
       return;
     }
 
+    mameScoreBaselineRef.current = null;
     refreshMameLeaderboard(loadedDiskName);
-  }, [isArcade, loadedDiskName]);
+    if (!isSoloMode || !isHost) return undefined;
+
+    const timer = window.setTimeout(() => {
+      captureMameScoreBaseline(loadedDiskName).catch((err) => {
+        addLog(`MAME score baseline failed: ${err.message}`);
+      });
+    }, 2500);
+
+    return () => window.clearTimeout(timer);
+  }, [addLog, isArcade, isHost, isSoloMode, loadedDiskName]);
 
   useEffect(() => {
     async function loadRoom() {
@@ -4222,6 +4234,21 @@ export default function RoomPage() {
     }
   }
 
+  async function captureMameScoreBaseline(fileName = loadedDiskNameRef.current) {
+    if (!isSoloMode || !isArcade || !isHost || !fileName) return;
+
+    const frame = emulatorFrameRef.current;
+    const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.({ restartCore: false });
+    const files = (bundle?.files || []).filter((file) => file?.path && file?.bytes?.length);
+    const romName = getArcadeRomKey(bundle?.romName || fileName);
+    mameScoreBaselineRef.current = {
+      romName,
+      files,
+      capturedAt: Date.now(),
+    };
+    addLog(`MAME score baseline captured for ${romName}: ${files.length} files`);
+  }
+
   async function submitMameScoreExtraction(reason = 'session') {
     if (!isSoloMode || !isArcade || !isHost || !loadedDiskNameRef.current) return null;
     if (!mameLeaderboardSupported) return null;
@@ -4232,6 +4259,7 @@ export default function RoomPage() {
     const romName = getArcadeRomKey(bundle?.romName || loadedDiskNameRef.current);
     const leaderboardRomName = getArcadeLeaderboardKey(bundle?.romName || loadedDiskNameRef.current);
     const sessionId = `${roomCode}-${roomSessionKey}-${romName}`;
+    const baseline = mameScoreBaselineRef.current?.romName === romName ? mameScoreBaselineRef.current.files || [] : [];
 
     if (!files.length) {
       const scannedCount = bundle?.debug?.files?.length || 0;
@@ -4247,6 +4275,10 @@ export default function RoomPage() {
         rom_name: romName,
         leaderboard_rom_name: leaderboardRomName,
         save_files: files.map((file) => ({
+          path: file.path,
+          data: bytesToBase64(file.bytes),
+        })),
+        baseline_save_files: baseline.map((file) => ({
           path: file.path,
           data: bytesToBase64(file.bytes),
         })),

@@ -13,6 +13,7 @@ class MameScoreExtractionRequest(BaseModel):
     leaderboard_rom_name: str | None = Field(default=None, min_length=1, max_length=64)
     user_id: int | None = None
     save_files: list[MameSaveFile] = Field(default_factory=list)
+    baseline_save_files: list[MameSaveFile] = Field(default_factory=list)
 
 
 class MameScoreExtractionResponse(BaseModel):

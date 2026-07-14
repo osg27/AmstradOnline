@@ -111,6 +111,7 @@ def extract_mame_session_scores(
         leaderboard_rom_name=payload.leaderboard_rom_name,
         user_id=target_user_id,
         save_files=[item.model_dump() for item in payload.save_files],
+        baseline_save_files=[item.model_dump() for item in payload.baseline_save_files],
     )
     response_rom_name = result.pop("rom_name", canonical_mame_rom_name(payload.leaderboard_rom_name or payload.rom_name))
     return MameScoreExtractionResponse(

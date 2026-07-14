@@ -791,6 +791,55 @@ def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMam
     return []
 
 
+def parsed_score_key(score: ParsedMameScore) -> tuple[int, str]:
+    return (score.score, (score.initials or "").strip().upper())
+
+
+def filter_hi2txt_player_scores(
+    *,
+    game: MameLeaderboardGame,
+    source_rom_name: str,
+    session_path: Path,
+    baseline_save_files: list[dict],
+    current_scores: list[ParsedMameScore],
+) -> list[ParsedMameScore]:
+    if game.parser != HI2TXT_PARSER:
+        return current_scores
+
+    if not baseline_save_files:
+        raise MameNoPlayerScore(
+            f"{game.display_name or game.rom_name} score table was decoded, but no start-of-run baseline was available. Start a fresh run and save again."
+        )
+
+    baseline_path = session_path.parent / f"{session_path.name}-baseline"
+    if baseline_path.exists():
+        shutil.rmtree(baseline_path)
+    baseline_path.mkdir(parents=True, exist_ok=True)
+
+    write_save_files(baseline_path, baseline_save_files)
+    baseline_source = find_score_source(baseline_path, source_rom_name, game.score_source)
+    if not baseline_source:
+        raise MameNoPlayerScore(
+            f"{game.display_name or game.rom_name} score table was decoded, but the start-of-run baseline score file was missing. Start a fresh run and save again."
+        )
+
+    try:
+        baseline_scores = parse_scores(game, baseline_source)
+    except Exception as exc:
+        raise MameNoPlayerScore(
+            f"{game.display_name or game.rom_name} score table was decoded, but the start-of-run baseline could not be read. Start a fresh run and save again."
+        ) from exc
+
+    baseline_keys = {parsed_score_key(score) for score in baseline_scores}
+    player_scores = [score for score in current_scores if parsed_score_key(score) not in baseline_keys]
+    if not player_scores:
+        raise MameNoPlayerScore(
+            f"{game.display_name or game.rom_name} score table was decoded, but no new player score was found since the game started."
+        )
+
+    return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
+
+
 def list_session_files(session_path: Path) -> list[str]:
     return sorted(str(path.relative_to(session_path)).replace("\\", "/") for path in session_path.rglob("*") if path.is_file())
 
@@ -803,6 +852,7 @@ def extract_mame_scores(
     leaderboard_rom_name: str | None = None,
     user_id: int,
     save_files: list[dict],
+    baseline_save_files: list[dict] | None = None,
 ) -> dict:
     source_rom_name = normalise_rom_name(rom_name)
     rom_name = canonical_mame_rom_name(leaderboard_rom_name or source_rom_name)
@@ -825,8 +875,11 @@ def extract_mame_scores(
 
     root = Path(tempfile.gettempdir()) / "oldstylegaming-mame-sessions"
     session_path = root / re.sub(r"[^a-zA-Z0-9_.-]", "_", session_id) / source_rom_name
+    baseline_path = session_path.parent / f"{session_path.name}-baseline"
     if session_path.exists():
         shutil.rmtree(session_path)
+    if baseline_path.exists():
+        shutil.rmtree(baseline_path)
     session_path.mkdir(parents=True, exist_ok=True)
     logger.info("MAME extraction session path used: %s", session_path)
 
@@ -848,6 +901,13 @@ def extract_mame_scores(
         logger.info("MAME score source found: %s", source_path)
         try:
             parsed_scores = parse_scores(game, source_path)
+            parsed_scores = filter_hi2txt_player_scores(
+                game=game,
+                source_rom_name=source_rom_name,
+                session_path=session_path,
+                baseline_save_files=baseline_save_files or [],
+                current_scores=parsed_scores,
+            )
         except MameNoPlayerScore as exc:
             logger.info("MAME score source found but no player score was detected: session=%s rom=%s message=%s", session_id, rom_name, exc)
             return {
@@ -935,3 +995,4 @@ def extract_mame_scores(
             logger.info("Keeping MAME extraction files for debugging: %s", session_path)
         else:
             shutil.rmtree(session_path, ignore_errors=True)
+            shutil.rmtree(baseline_path, ignore_errors=True)

@@ -497,11 +497,12 @@
     return { debug, files: uploadFiles };
   }
 
-  window.getArcadeSaveBundle = async function getArcadeSaveBundle() {
+  window.getArcadeSaveBundle = async function getArcadeSaveBundle(options = {}) {
+    const allowRestart = options.restartCore !== false;
     await flushArcadeSaveFiles({ restartCore: false });
     let { debug, files } = buildFsDebugDump();
 
-    if (!hasCurrentRomGeneratedSave(files)) {
+    if (allowRestart && !hasCurrentRomGeneratedSave(files)) {
       await flushArcadeSaveFiles({ restartCore: true });
       ({ debug, files } = buildFsDebugDump());
     }
