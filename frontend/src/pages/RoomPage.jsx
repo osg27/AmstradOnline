@@ -4197,14 +4197,11 @@ export default function RoomPage() {
       return;
     }
 
-    const fallbackLeaderboardKey = getArcadeLeaderboardKey(fileName);
-    const fallbackBuiltinSupported = Boolean(fallbackLeaderboardKey);
-
     try {
       const games = await apiFetch('/scores/mame/leaderboards');
       const gameList = Array.isArray(games) ? games : [];
       const romKey = getArcadeLeaderboardKey(fileName, gameList);
-      const supported = true;
+      const supported = gameList.some((item) => item.rom_name === romKey && item.enabled && item.leaderboard_supported);
       setMameLeaderboardSupported(supported);
       if (!supported) {
         setMameLeaderboard([]);
@@ -4218,18 +4215,14 @@ export default function RoomPage() {
     } catch (err) {
       addLog(`MAME leaderboard load failed: ${err.message}`);
       setMameLeaderboard([]);
-      if (fallbackBuiltinSupported) {
-        setMameLeaderboardSupported(true);
-        setMameScoreStatus(`Leaderboard enabled locally, but API failed: ${err.message}`);
-      } else {
-        setMameLeaderboardSupported(false);
-        setMameScoreStatus(`Leaderboard API failed: ${err.message}`);
-      }
+      setMameLeaderboardSupported(false);
+      setMameScoreStatus(`Leaderboard API failed: ${err.message}`);
     }
   }
 
   async function submitMameScoreExtraction(reason = 'session') {
     if (!isSoloMode || !isArcade || !isHost || !loadedDiskNameRef.current) return null;
+    if (!mameLeaderboardSupported) return null;
 
     const frame = emulatorFrameRef.current;
     const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.();

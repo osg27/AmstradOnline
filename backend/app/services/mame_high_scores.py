@@ -7,7 +7,9 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -61,6 +63,12 @@ DKONG_HI_GAMES = {
 }
 
 MAME_HI_RULES_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_hi_rules.json"
+DISABLED_MAME_SCORE_GAMES = {
+    # MAME2003-Plus writes Robotron scores to nvram in this browser setup, but
+    # the exported file has repeatedly contained only the factory/default tables.
+    # Keep the parser code for diagnostics, but do not advertise/save it.
+    "robotron",
+}
 
 
 def normalise_rom_name_value(value: str) -> str:
@@ -77,7 +85,7 @@ def load_mame_hi_rules() -> dict[str, dict]:
 
 
 CONFIGURED_MAME_HI_RULES = load_mame_hi_rules()
-CONFIGURED_HI_GAMES = set(CONFIGURED_MAME_HI_RULES)
+CONFIGURED_HI_GAMES = set(CONFIGURED_MAME_HI_RULES) - DISABLED_MAME_SCORE_GAMES
 ROM_SCORE_LIMITS = {
     **BASE_ROM_SCORE_LIMITS,
     **{
@@ -91,7 +99,7 @@ ROM_SCORE_GRANULARITY = {
     for rom_name, rule in CONFIGURED_MAME_HI_RULES.items()
     if int(rule.get("score_granularity", 10)) > 0
 }
-SUPPORTED_EXACT_HI_GAMES = DKONG_HI_GAMES | CONFIGURED_HI_GAMES
+SUPPORTED_EXACT_HI_GAMES = (DKONG_HI_GAMES | CONFIGURED_HI_GAMES) - DISABLED_MAME_SCORE_GAMES
 DEFAULT_MAME_GAMES.extend(
     (
         rom_name,
@@ -115,6 +123,64 @@ STATIC_MAME_FILES = {
     "hiscore.dat",
     "retroarch.cfg",
 }
+
+
+def hi2txt_xml_dirs() -> list[Path]:
+    raw = os.getenv("MAME_HI2TXT_XML_DIR", "").strip()
+    dirs: list[Path] = []
+    if raw:
+        dirs.extend(Path(part).expanduser() for part in raw.split(os.pathsep) if part.strip())
+
+    default_dirs = [
+        Path(__file__).resolve().parents[1] / "data" / "hi2txt-xml",
+        Path(__file__).resolve().parents[3] / "hi2txt-xml" / "src" / "main" / "db",
+        Path(__file__).resolve().parents[3] / "hi2txt-xml",
+        Path("/opt/amstrad-multiplayer/tools/hi2txt-xml"),
+        Path("/opt/amstrad-multiplayer/tools/hi2txt-xml/src/main/db"),
+        Path("/opt/amstrad-multiplayer/tools/hi2txt/xml"),
+    ]
+    dirs.extend(default_dirs)
+
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for directory in dirs:
+        key = str(directory)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(directory)
+    return unique
+
+
+def _hi2txt_display_name(xml_path: Path) -> str:
+    try:
+        root = ET.parse(xml_path).getroot()
+    except (ET.ParseError, OSError):
+        return xml_path.stem
+
+    for element in root.iter():
+        for attr_name in ("description", "display", "title", "name"):
+            value = str(element.attrib.get(attr_name) or "").strip()
+            if value and normalise_rom_name_value(value) != xml_path.stem:
+                return value
+    return xml_path.stem.replace("_", " ").replace("-", " ").strip().title() or xml_path.stem
+
+
+@lru_cache(maxsize=1)
+def load_hi2txt_xml_games() -> tuple[tuple[str, str, str], ...]:
+    games: dict[str, str] = {}
+    for directory in hi2txt_xml_dirs():
+        if not directory.is_dir():
+            continue
+        for xml_path in directory.rglob("*.xml"):
+            rom_name = normalise_rom_name_value(xml_path.stem)
+            if not rom_name or rom_name in DISABLED_MAME_SCORE_GAMES or rom_name in games:
+                continue
+            games[rom_name] = _hi2txt_display_name(xml_path)
+
+    if games:
+        logger.info("Loaded %s hi2txt XML game definitions", len(games))
+    return tuple((rom_name, display_name, HI2TXT_PARSER) for rom_name, display_name in sorted(games.items()))
 
 
 @dataclass
@@ -201,8 +267,18 @@ def cleanup_duplicate_mame_scores(db: Session) -> int:
 
 
 def seed_default_mame_games(db: Session) -> None:
-    for rom_name, display_name, parser in DEFAULT_MAME_GAMES:
-        supported = parser == HI2TXT_PARSER or rom_name in SUPPORTED_EXACT_HI_GAMES
+    seed_games = {
+        normalise_rom_name_value(rom_name): (normalise_rom_name_value(rom_name), display_name, parser)
+        for rom_name, display_name, parser in DEFAULT_MAME_GAMES
+    }
+    for rom_name, display_name, parser in load_hi2txt_xml_games():
+        seed_games.setdefault(rom_name, (rom_name, display_name, parser))
+
+    for rom_name, display_name, parser in seed_games.values():
+        supported = (
+            rom_name not in DISABLED_MAME_SCORE_GAMES
+            and (parser == HI2TXT_PARSER or rom_name in SUPPORTED_EXACT_HI_GAMES)
+        )
         existing = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
         if existing:
             existing.display_name = display_name
@@ -219,6 +295,19 @@ def seed_default_mame_games(db: Session) -> None:
             parser=parser,
             enabled=supported,
         ))
+    (
+        db.query(MameLeaderboardGame)
+        .filter(
+            MameLeaderboardGame.rom_name.in_(DISABLED_MAME_SCORE_GAMES),
+        )
+        .update(
+            {
+                MameLeaderboardGame.leaderboard_supported: False,
+                MameLeaderboardGame.enabled: False,
+            },
+            synchronize_session=False,
+        )
+    )
     (
         db.query(MameLeaderboardGame)
         .filter(
@@ -543,16 +632,31 @@ def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:
 
     executable = os.getenv("MAME_HI2TXT_PATH", "hi2txt").strip() or "hi2txt"
     resolved = shutil.which(executable) if not Path(executable).exists() else executable
-    if not resolved:
-        raise Hi2txtError(
-            "hi2txt executable not found. Set MAME_HI2TXT_PATH or MAME_HI2TXT_COMMAND_TEMPLATE."
-        )
-    return [
-        [resolved, rom_name, str(source_path)],
-        [resolved, str(source_path)],
-        [resolved, "-r", rom_name, str(source_path)],
-        [resolved, "--rom", rom_name, str(source_path)],
+    if resolved:
+        return [
+            [str(resolved), rom_name, str(source_path)],
+            [str(resolved), str(source_path)],
+            [str(resolved), "-r", rom_name, str(source_path)],
+            [str(resolved), "--rom", rom_name, str(source_path)],
+        ]
+
+    jar_candidates = [
+        Path(os.getenv("MAME_HI2TXT_JAR_PATH", "")).expanduser() if os.getenv("MAME_HI2TXT_JAR_PATH") else None,
+        Path("/opt/amstrad-multiplayer/tools/hi2txt/hi2txt.jar"),
     ]
+    java = shutil.which(os.getenv("MAME_HI2TXT_JAVA", "java"))
+    for jar_path in (candidate for candidate in jar_candidates if candidate):
+        if java and jar_path.is_file():
+            return [
+                [java, "-jar", str(jar_path), rom_name, str(source_path)],
+                [java, "-jar", str(jar_path), str(source_path)],
+                [java, "-jar", str(jar_path), "-r", rom_name, str(source_path)],
+                [java, "-jar", str(jar_path), "--rom", rom_name, str(source_path)],
+            ]
+
+    raise Hi2txtError(
+        "hi2txt executable not found. Set MAME_HI2TXT_PATH, MAME_HI2TXT_JAR_PATH, or MAME_HI2TXT_COMMAND_TEMPLATE."
+    )
 
 
 def parse_hi2txt_output(output: str, rom_name: str) -> list[ParsedMameScore]:

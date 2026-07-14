@@ -46,7 +46,10 @@ def list_mame_leaderboards(db: Session = Depends(get_db)):
     seed_default_mame_games(db)
     return (
         db.query(MameLeaderboardGame)
-        .filter(MameLeaderboardGame.leaderboard_supported == True)  # noqa: E712
+        .filter(
+            MameLeaderboardGame.leaderboard_supported == True,  # noqa: E712
+            MameLeaderboardGame.enabled == True,  # noqa: E712
+        )
         .order_by(MameLeaderboardGame.display_name)
         .all()
     )

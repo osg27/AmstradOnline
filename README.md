@@ -106,7 +106,9 @@ Supported ROMs are controlled by the `mame_leaderboard_games` table. Seed rows a
 - `custom`: placeholder parser for future ROM-specific readers.
 - `unsupported`: skips extraction.
 
-Install `hi2txt` on the backend host and make it available on `PATH`, or set `MAME_HI2TXT_PATH=/path/to/hi2txt`. If your `hi2txt` build expects different arguments, set `MAME_HI2TXT_COMMAND_TEMPLATE`, for example `"/path/to/hi2txt {rom} {file}"`. The default command is `hi2txt <rom> <hi-file>`.
+Install `hi2txt` on the backend host and make it available on `PATH`, or set `MAME_HI2TXT_PATH=/path/to/hi2txt`. If you are using a jar, put it at `/opt/amstrad-multiplayer/tools/hi2txt/hi2txt.jar` or set `MAME_HI2TXT_JAR_PATH=/path/to/hi2txt.jar`. If your `hi2txt` build expects different arguments, set `MAME_HI2TXT_COMMAND_TEMPLATE`, for example `"/path/to/hi2txt {rom} {file}"`. The default command is `hi2txt <rom> <hi-file>`, with a fallback to `java -jar /opt/amstrad-multiplayer/tools/hi2txt/hi2txt.jar <rom> <hi-file>` when that jar exists.
+
+To bulk-enable games supported by the XML definitions, keep the committed XML copy in `backend/app/data/hi2txt-xml`, keep `hi2txt-xml/src/main/db` in this repo, clone or copy `GreatStoneEx/hi2txt-xml` to `/opt/amstrad-multiplayer/tools/hi2txt-xml`, or set `MAME_HI2TXT_XML_DIR=/path/to/hi2txt-xml/src/main/db`. On backend restart the app scans `*.xml` files there and seeds those ROMs as `hi2txt` leaderboards. Calibrated games in `mame_hi_rules.json` still take priority.
 
 To add or tune a game manually, update its row with `rom_name`, `display_name`, `leaderboard_supported=true`, `score_source` (`hi` or `nvram`), `parser`, and `enabled=true`.
 
