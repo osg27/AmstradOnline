@@ -252,7 +252,7 @@
 
   function persistLocalMameSaveFiles(files, fileName = currentRom?.fileName) {
     const persistentFiles = (files || [])
-      .filter((file) => file?.path && file?.bytes?.length && isPersistentMameSavePath(file.path))
+      .filter((file) => file?.path && file?.bytes?.length && isPersistentMameSavePath(file.path) && isCurrentRomGeneratedSaveFile(file))
       .map((file) => ({
         path: normaliseFsPath(file.path).replace(/^\/+/, ''),
         data: bytesToBase64(file.bytes),

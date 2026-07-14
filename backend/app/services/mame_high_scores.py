@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -195,6 +196,7 @@ class FilteredMameScores:
     scores: list[ParsedMameScore]
     expected_initials: list[str]
     parsed_scores: list[dict]
+    baseline_scores: list[dict]
 
 
 class Hi2txtError(RuntimeError):
@@ -802,6 +804,36 @@ def normalise_initials(value: str | None) -> str:
     return re.sub(r"[^A-Z0-9]", "", (value or "").upper())[:5]
 
 
+def serialize_parsed_scores(scores: list[ParsedMameScore]) -> list[dict]:
+    return [
+        {
+            "score": score.score,
+            "initials": score.initials,
+            "rank_in_game": score.rank_in_game,
+        }
+        for score in scores
+    ]
+
+
+def parsed_score_identity(score: ParsedMameScore) -> tuple[int, str]:
+    return (score.score, normalise_initials(score.initials))
+
+
+def scores_added_since_baseline(
+    current_scores: list[ParsedMameScore],
+    baseline_scores: list[ParsedMameScore],
+) -> list[ParsedMameScore]:
+    baseline_counts = Counter(parsed_score_identity(score) for score in baseline_scores)
+    added: list[ParsedMameScore] = []
+    for score in current_scores:
+        key = parsed_score_identity(score)
+        if baseline_counts[key] > 0:
+            baseline_counts[key] -= 1
+            continue
+        added.append(score)
+    return added
+
+
 def infer_username_initials(username: str | None) -> set[str]:
     cleaned = re.sub(r"[^A-Za-z0-9]", "", username or "")
     if not cleaned:
@@ -831,17 +863,12 @@ def filter_hi2txt_player_scores(
     user_id: int,
     username: str | None,
     current_scores: list[ParsedMameScore],
+    baseline_scores: list[ParsedMameScore] | None = None,
 ) -> FilteredMameScores:
-    parsed_debug = [
-        {
-            "score": score.score,
-            "initials": score.initials,
-            "rank_in_game": score.rank_in_game,
-        }
-        for score in current_scores
-    ]
+    parsed_debug = serialize_parsed_scores(current_scores)
+    baseline_debug = serialize_parsed_scores(baseline_scores or [])
     if game.parser != HI2TXT_PARSER:
-        return FilteredMameScores(scores=current_scores, expected_initials=[], parsed_scores=parsed_debug)
+        return FilteredMameScores(scores=current_scores, expected_initials=[], parsed_scores=parsed_debug, baseline_scores=baseline_debug)
 
     existing = (
         db.query(MameHighScore)
@@ -855,6 +882,25 @@ def filter_hi2txt_player_scores(
         expected_initials.add(existing_initials)
     expected_initials_list = sorted(expected_initials)
 
+    if baseline_scores is not None:
+        added_scores = scores_added_since_baseline(current_scores, baseline_scores)
+        if added_scores:
+            preferred_added_scores = [
+                score
+                for score in added_scores
+                if not normalise_initials(score.initials) or normalise_initials(score.initials) in expected_initials
+            ]
+            candidate_scores = preferred_added_scores or added_scores
+            return FilteredMameScores(
+                scores=sorted(candidate_scores, key=lambda item: item.score, reverse=True)[:1],
+                expected_initials=expected_initials_list,
+                parsed_scores=parsed_debug,
+                baseline_scores=baseline_debug,
+            )
+        raise MameNoPlayerScore(
+            f"{game.display_name or game.rom_name} score table was decoded, but the current table matched the start-of-game snapshot."
+        )
+
     player_scores = [
         score
         for score in current_scores
@@ -865,6 +911,7 @@ def filter_hi2txt_player_scores(
             scores=sorted(player_scores, key=lambda item: item.score, reverse=True)[:1],
             expected_initials=expected_initials_list,
             parsed_scores=parsed_debug,
+            baseline_scores=baseline_debug,
         )
 
     existing_score = int(existing.score) if existing else 0
@@ -874,6 +921,7 @@ def filter_hi2txt_player_scores(
             scores=higher_than_pb,
             expected_initials=expected_initials_list,
             parsed_scores=parsed_debug,
+            baseline_scores=baseline_debug,
         )
 
     if not player_scores:
@@ -884,7 +932,7 @@ def filter_hi2txt_player_scores(
             f"{game.display_name or game.rom_name} score table was decoded, but no row matched this player's initials.{hint}"
         )
 
-    return FilteredMameScores(scores=[], expected_initials=expected_initials_list, parsed_scores=parsed_debug)
+    return FilteredMameScores(scores=[], expected_initials=expected_initials_list, parsed_scores=parsed_debug, baseline_scores=baseline_debug)
 
 
 def list_session_files(session_path: Path) -> list[str]:
@@ -948,17 +996,19 @@ def extract_mame_scores(
 
         logger.info("MAME score source found: %s", source_path)
         parsed_scores_debug: list[dict] = []
+        baseline_scores_debug: list[dict] = []
         expected_initials: list[str] = []
         try:
             parsed_scores = parse_scores(game, source_path)
-            parsed_scores_debug = [
-                {
-                    "score": score.score,
-                    "initials": score.initials,
-                    "rank_in_game": score.rank_in_game,
-                }
-                for score in parsed_scores
-            ]
+            parsed_scores_debug = serialize_parsed_scores(parsed_scores)
+            baseline_scores: list[ParsedMameScore] | None = None
+            if baseline_save_files:
+                baseline_path.mkdir(parents=True, exist_ok=True)
+                write_save_files(baseline_path, baseline_save_files)
+                baseline_source = find_score_source(baseline_path, source_rom_name, game.score_source)
+                if baseline_source:
+                    baseline_scores = parse_scores(game, baseline_source)
+                    baseline_scores_debug = serialize_parsed_scores(baseline_scores)
             filtered_scores = filter_hi2txt_player_scores(
                 db=db,
                 game=game,
@@ -966,9 +1016,11 @@ def extract_mame_scores(
                 user_id=user_id,
                 username=username,
                 current_scores=parsed_scores,
+                baseline_scores=baseline_scores,
             )
             parsed_scores = filtered_scores.scores
             parsed_scores_debug = filtered_scores.parsed_scores
+            baseline_scores_debug = filtered_scores.baseline_scores
             expected_initials = filtered_scores.expected_initials
         except MameNoPlayerScore as exc:
             logger.info("MAME score source found but no player score was detected: session=%s rom=%s message=%s", session_id, rom_name, exc)
@@ -981,6 +1033,7 @@ def extract_mame_scores(
                 "scores_parsed": 0,
                 "rows_inserted": 0,
                 "parsed_scores": parsed_scores_debug,
+                "baseline_scores": baseline_scores_debug,
                 "expected_initials": expected_initials,
             }
         except Hi2txtError as exc:
@@ -1012,6 +1065,7 @@ def extract_mame_scores(
                 "scores_parsed": 0,
                 "rows_inserted": 0,
                 "parsed_scores": parsed_scores_debug,
+                "baseline_scores": baseline_scores_debug,
                 "expected_initials": expected_initials,
             }
         inserted = 0
@@ -1056,6 +1110,7 @@ def extract_mame_scores(
             "scores_parsed": len(parsed_scores),
             "rows_inserted": inserted + updated,
             "parsed_scores": parsed_scores_debug,
+            "baseline_scores": baseline_scores_debug,
             "expected_initials": expected_initials,
         }
     finally:
