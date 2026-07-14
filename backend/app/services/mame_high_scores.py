@@ -622,6 +622,41 @@ def parse_configured_hi(source_path: Path, rom_name: str) -> list[ParsedMameScor
     return parse_configured_hi_table(source_path, rom_name)
 
 
+def find_uploaded_hiscore_dat(source_path: Path) -> Path | None:
+    for parent in source_path.parents:
+        candidates = [
+            parent / "home" / "web_user" / "retroarch" / "system" / "mame2003-plus" / "hiscore.dat",
+            parent / "system" / "mame2003-plus" / "hiscore.dat",
+            parent / "mame2003-plus" / "hiscore.dat",
+            parent / "hiscore.dat",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def build_hi2txt_descr_commands(executable: str, rom_name: str, source_path: Path) -> list[list[str]]:
+    commands: list[list[str]] = []
+    hiscore_dat = find_uploaded_hiscore_dat(source_path)
+
+    for descr_dir in hi2txt_xml_dirs():
+        if not descr_dir.is_dir():
+            continue
+
+        base = [executable, "-descr", str(descr_dir)]
+        if hiscore_dat:
+            base.extend(["-hiscoredat", str(hiscore_dat)])
+
+        # This mirrors the command style used by hi2txt-xml's own Gradle tests.
+        commands.append([*base, "-rd", "-notrace", str(source_path)])
+        commands.append([*base, "-notrace", str(source_path)])
+        commands.append([*base, str(source_path)])
+        commands.append([*base, rom_name, str(source_path)])
+
+    return commands
+
+
 def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:
     template = os.getenv("MAME_HI2TXT_COMMAND_TEMPLATE", "").strip()
     if template:
@@ -634,6 +669,7 @@ def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:
     resolved = shutil.which(executable) if not Path(executable).exists() else executable
     if resolved:
         return [
+            *build_hi2txt_descr_commands(str(resolved), rom_name, source_path),
             [str(resolved), rom_name, str(source_path)],
             [str(resolved), str(source_path)],
             [str(resolved), "-r", rom_name, str(source_path)],
@@ -647,7 +683,12 @@ def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:
     java = shutil.which(os.getenv("MAME_HI2TXT_JAVA", "java"))
     for jar_path in (candidate for candidate in jar_candidates if candidate):
         if java and jar_path.is_file():
+            jar_command = [java, "-jar", str(jar_path)]
             return [
+                *[
+                    [*jar_command, *command[1:]]
+                    for command in build_hi2txt_descr_commands("hi2txt", rom_name, source_path)
+                ],
                 [java, "-jar", str(jar_path), rom_name, str(source_path)],
                 [java, "-jar", str(jar_path), str(source_path)],
                 [java, "-jar", str(jar_path), "-r", rom_name, str(source_path)],
