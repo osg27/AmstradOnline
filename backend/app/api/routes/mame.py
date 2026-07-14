@@ -110,6 +110,7 @@ def extract_mame_session_scores(
         rom_name=payload.rom_name,
         leaderboard_rom_name=payload.leaderboard_rom_name,
         user_id=target_user_id,
+        username=current_user.username,
         save_files=[item.model_dump() for item in payload.save_files],
         baseline_save_files=[item.model_dump() for item in payload.baseline_save_files],
     )

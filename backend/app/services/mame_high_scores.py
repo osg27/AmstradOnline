@@ -791,51 +791,63 @@ def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMam
     return []
 
 
-def parsed_score_key(score: ParsedMameScore) -> tuple[int, str]:
-    return (score.score, (score.initials or "").strip().upper())
+def normalise_initials(value: str | None) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (value or "").upper())[:5]
+
+
+def infer_username_initials(username: str | None) -> set[str]:
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", username or "")
+    if not cleaned:
+        return set()
+
+    candidates: set[str] = set()
+    candidates.add(cleaned[:3].upper())
+    if cleaned.upper() == "OLDSTYLEGAMING":
+        candidates.add("OSG")
+
+    camel_parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+", cleaned)
+    if len(camel_parts) > 1:
+        candidates.add("".join(part[0] for part in camel_parts)[:5].upper())
+
+    capitals = "".join(char for char in cleaned if char.isupper())
+    if capitals:
+        candidates.add(capitals[:5].upper())
+
+    return {candidate for candidate in candidates if len(candidate) >= 2}
 
 
 def filter_hi2txt_player_scores(
     *,
+    db: Session,
     game: MameLeaderboardGame,
-    source_rom_name: str,
-    session_path: Path,
-    baseline_save_files: list[dict],
+    rom_name: str,
+    user_id: int,
+    username: str | None,
     current_scores: list[ParsedMameScore],
 ) -> list[ParsedMameScore]:
     if game.parser != HI2TXT_PARSER:
         return current_scores
 
-    if not baseline_save_files:
-        raise MameNoPlayerScore(
-            f"{game.display_name or game.rom_name} score table was decoded, but no start-of-run baseline was available. Start a fresh run and save again."
-        )
+    existing = (
+        db.query(MameHighScore)
+        .filter(MameHighScore.user_id == user_id, MameHighScore.rom_name == rom_name)
+        .order_by(MameHighScore.score.desc(), MameHighScore.created_at, MameHighScore.id)
+        .first()
+    )
+    expected_initials = infer_username_initials(username)
+    existing_initials = normalise_initials(existing.initials if existing else None)
+    if existing_initials:
+        expected_initials.add(existing_initials)
 
-    baseline_path = session_path.parent / f"{session_path.name}-baseline"
-    if baseline_path.exists():
-        shutil.rmtree(baseline_path)
-    baseline_path.mkdir(parents=True, exist_ok=True)
-
-    write_save_files(baseline_path, baseline_save_files)
-    baseline_source = find_score_source(baseline_path, source_rom_name, game.score_source)
-    if not baseline_source:
-        raise MameNoPlayerScore(
-            f"{game.display_name or game.rom_name} score table was decoded, but the start-of-run baseline score file was missing. Start a fresh run and save again."
-        )
-
-    try:
-        baseline_scores = parse_scores(game, baseline_source)
-    except Exception as exc:
-        raise MameNoPlayerScore(
-            f"{game.display_name or game.rom_name} score table was decoded, but the start-of-run baseline could not be read. Start a fresh run and save again."
-        ) from exc
-
-    baseline_keys = {parsed_score_key(score) for score in baseline_scores}
-    player_scores = [score for score in current_scores if parsed_score_key(score) not in baseline_keys]
+    player_scores = [
+        score
+        for score in current_scores
+        if normalise_initials(score.initials) and normalise_initials(score.initials) in expected_initials
+    ]
     if not player_scores:
+        hint = f" Expected initials: {', '.join(sorted(expected_initials))}." if expected_initials else ""
         raise MameNoPlayerScore(
-            f"{game.display_name or game.rom_name} score table was decoded, but no new player score was found since the game started "
-            f"({len(current_scores)} current rows, {len(baseline_scores)} baseline rows)."
+            f"{game.display_name or game.rom_name} score table was decoded, but no row matched this player's initials.{hint}"
         )
 
     return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
@@ -852,6 +864,7 @@ def extract_mame_scores(
     rom_name: str,
     leaderboard_rom_name: str | None = None,
     user_id: int,
+    username: str | None = None,
     save_files: list[dict],
     baseline_save_files: list[dict] | None = None,
 ) -> dict:
@@ -903,10 +916,11 @@ def extract_mame_scores(
         try:
             parsed_scores = parse_scores(game, source_path)
             parsed_scores = filter_hi2txt_player_scores(
+                db=db,
                 game=game,
-                source_rom_name=source_rom_name,
-                session_path=session_path,
-                baseline_save_files=baseline_save_files or [],
+                rom_name=rom_name,
+                user_id=user_id,
+                username=username,
                 current_scores=parsed_scores,
             )
         except MameNoPlayerScore as exc:
