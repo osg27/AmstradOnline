@@ -401,6 +401,7 @@ export default function RoomPage() {
   const [mameLeaderboard, setMameLeaderboard] = useState([]);
   const [mameLeaderboardSupported, setMameLeaderboardSupported] = useState(false);
   const [mameScoreStatus, setMameScoreStatus] = useState('');
+  const [mameScoreBusy, setMameScoreBusy] = useState(false);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
@@ -4198,6 +4199,7 @@ export default function RoomPage() {
     }
 
     try {
+      setMameScoreStatus('Loading scoreboard...');
       const games = await apiFetch('/scores/mame/leaderboards');
       const gameList = Array.isArray(games) ? games : [];
       const romKey = getArcadeLeaderboardKey(fileName, gameList);
@@ -4216,7 +4218,7 @@ export default function RoomPage() {
       addLog(`MAME leaderboard load failed: ${err.message}`);
       setMameLeaderboard([]);
       setMameLeaderboardSupported(false);
-      setMameScoreStatus(`Leaderboard API failed: ${err.message}`);
+      setMameScoreStatus('Scoreboard could not be loaded.');
     }
   }
 
@@ -4238,7 +4240,7 @@ export default function RoomPage() {
       return null;
     }
 
-    setMameScoreStatus('Extracting MAME high scores...');
+    setMameScoreStatus('Registering score...');
     const result = await apiFetch(`/scores/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`, {
       method: 'POST',
       body: JSON.stringify({
@@ -4251,24 +4253,35 @@ export default function RoomPage() {
       }),
     });
     const savedPaths = Array.isArray(result.saved_paths) ? result.saved_paths : [];
-    const savedPathHint = savedPaths.length ? ` Files: ${savedPaths.slice(0, 5).join(', ')}` : '';
-    setMameScoreStatus(`${result.message || `MAME score extraction: ${result.status}`}${savedPathHint}`);
     addLog(
-      `MAME score extraction ${result.status}: parsed ${result.scores_parsed || 0}, inserted ${result.rows_inserted || 0}; files ${savedPaths.length ? savedPaths.join(', ') : 'none'}`
+      `MAME score extraction ${result.status}: ${result.message || 'no message'}; parsed ${result.scores_parsed || 0}, inserted ${result.rows_inserted || 0}; files ${savedPaths.length ? savedPaths.join(', ') : 'none'}`
     );
+    if ((result.rows_inserted || 0) > 0) {
+      setMameScoreStatus('Score registered.');
+    } else if (result.status === 'no_scores') {
+      setMameScoreStatus('No new player score found yet.');
+    } else if (result.status === 'ok') {
+      setMameScoreStatus('Scoreboard checked.');
+    } else {
+      setMameScoreStatus('Score could not be registered.');
+    }
     await refreshMameLeaderboard(result.rom_name || romName);
     return result;
   }
 
   async function saveMameScoreNow() {
+    if (mameScoreBusy) return;
+    setMameScoreBusy(true);
     try {
       const result = await submitMameScoreExtraction('manual');
       if (!result) {
         setMameScoreStatus('No MAME score data was available to save yet.');
       }
     } catch (err) {
-      setMameScoreStatus(`MAME score save failed: ${err.message}`);
+      setMameScoreStatus('Score could not be registered.');
       addLog(`MAME score save failed: ${err.message}`);
+    } finally {
+      setMameScoreBusy(false);
     }
   }
 
@@ -4285,13 +4298,15 @@ export default function RoomPage() {
           <em>{mameLeaderboardSupported ? 'live' : 'off'}</em>
         </div>
         <p className="mame-score-status">
-          {mameLeaderboardSupported
+          {mameScoreStatus === 'Loading scoreboard...'
+            ? mameScoreStatus
+            : mameLeaderboardSupported
             ? mameScoreStatus || 'Scores are extracted from MAME save files.'
             : 'Online leaderboard not available for this game yet.'}
         </p>
         {mameLeaderboardSupported && isHost ? (
-          <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow}>
-            Save MAME score now
+          <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow} disabled={mameScoreBusy}>
+            {mameScoreBusy ? 'Registering score...' : 'Save MAME score now'}
           </button>
         ) : null}
         {mameLeaderboardSupported && mameLeaderboard.length ? (
@@ -4305,7 +4320,7 @@ export default function RoomPage() {
               </div>
             ))}
           </div>
-        ) : (
+        ) : mameScoreStatus === 'Loading scoreboard...' ? null : (
           <div className="mame-score-empty">
             <strong>No saved runs yet</strong>
             <span>Finish a run, enter initials, then save.</span>
