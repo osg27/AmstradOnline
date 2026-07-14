@@ -26,6 +26,8 @@ class MameScoreExtractionResponse(BaseModel):
     scores_parsed: int = 0
     rows_inserted: int = 0
     message: str | None = None
+    parsed_scores: list[dict] = Field(default_factory=list)
+    expected_initials: list[str] = Field(default_factory=list)
 
 
 class MameLeaderboardGameResponse(BaseModel):

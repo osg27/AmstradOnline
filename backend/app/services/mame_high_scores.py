@@ -190,6 +190,13 @@ class ParsedMameScore:
     rank_in_game: int | None = None
 
 
+@dataclass
+class FilteredMameScores:
+    scores: list[ParsedMameScore]
+    expected_initials: list[str]
+    parsed_scores: list[dict]
+
+
 class Hi2txtError(RuntimeError):
     pass
 
@@ -824,9 +831,17 @@ def filter_hi2txt_player_scores(
     user_id: int,
     username: str | None,
     current_scores: list[ParsedMameScore],
-) -> list[ParsedMameScore]:
+) -> FilteredMameScores:
+    parsed_debug = [
+        {
+            "score": score.score,
+            "initials": score.initials,
+            "rank_in_game": score.rank_in_game,
+        }
+        for score in current_scores
+    ]
     if game.parser != HI2TXT_PARSER:
-        return current_scores
+        return FilteredMameScores(scores=current_scores, expected_initials=[], parsed_scores=parsed_debug)
 
     existing = (
         db.query(MameHighScore)
@@ -838,19 +853,38 @@ def filter_hi2txt_player_scores(
     existing_initials = normalise_initials(existing.initials if existing else None)
     if existing_initials:
         expected_initials.add(existing_initials)
+    expected_initials_list = sorted(expected_initials)
 
     player_scores = [
         score
         for score in current_scores
         if normalise_initials(score.initials) and normalise_initials(score.initials) in expected_initials
     ]
+    if player_scores:
+        return FilteredMameScores(
+            scores=sorted(player_scores, key=lambda item: item.score, reverse=True)[:1],
+            expected_initials=expected_initials_list,
+            parsed_scores=parsed_debug,
+        )
+
+    existing_score = int(existing.score) if existing else 0
+    higher_than_pb = [score for score in current_scores if score.score > existing_score]
+    if len(higher_than_pb) == 1:
+        return FilteredMameScores(
+            scores=higher_than_pb,
+            expected_initials=expected_initials_list,
+            parsed_scores=parsed_debug,
+        )
+
     if not player_scores:
-        hint = f" Expected initials: {', '.join(sorted(expected_initials))}." if expected_initials else ""
+        hint = f" Expected initials: {', '.join(expected_initials_list)}." if expected_initials else ""
+        if len(higher_than_pb) > 1:
+            hint += f" Found {len(higher_than_pb)} scores above current PB, so refusing to guess."
         raise MameNoPlayerScore(
             f"{game.display_name or game.rom_name} score table was decoded, but no row matched this player's initials.{hint}"
         )
 
-    return sorted(player_scores, key=lambda item: item.score, reverse=True)[:1]
+    return FilteredMameScores(scores=[], expected_initials=expected_initials_list, parsed_scores=parsed_debug)
 
 
 def list_session_files(session_path: Path) -> list[str]:
@@ -913,9 +947,19 @@ def extract_mame_scores(
             }
 
         logger.info("MAME score source found: %s", source_path)
+        parsed_scores_debug: list[dict] = []
+        expected_initials: list[str] = []
         try:
             parsed_scores = parse_scores(game, source_path)
-            parsed_scores = filter_hi2txt_player_scores(
+            parsed_scores_debug = [
+                {
+                    "score": score.score,
+                    "initials": score.initials,
+                    "rank_in_game": score.rank_in_game,
+                }
+                for score in parsed_scores
+            ]
+            filtered_scores = filter_hi2txt_player_scores(
                 db=db,
                 game=game,
                 rom_name=rom_name,
@@ -923,6 +967,9 @@ def extract_mame_scores(
                 username=username,
                 current_scores=parsed_scores,
             )
+            parsed_scores = filtered_scores.scores
+            parsed_scores_debug = filtered_scores.parsed_scores
+            expected_initials = filtered_scores.expected_initials
         except MameNoPlayerScore as exc:
             logger.info("MAME score source found but no player score was detected: session=%s rom=%s message=%s", session_id, rom_name, exc)
             return {
@@ -933,6 +980,8 @@ def extract_mame_scores(
                 "saved_paths": saved_paths,
                 "scores_parsed": 0,
                 "rows_inserted": 0,
+                "parsed_scores": parsed_scores_debug,
+                "expected_initials": expected_initials,
             }
         except Hi2txtError as exc:
             logger.warning("hi2txt extraction failed: session=%s rom=%s error=%s", session_id, rom_name, exc)
@@ -962,6 +1011,8 @@ def extract_mame_scores(
                 "saved_paths": saved_paths,
                 "scores_parsed": 0,
                 "rows_inserted": 0,
+                "parsed_scores": parsed_scores_debug,
+                "expected_initials": expected_initials,
             }
         inserted = 0
         updated = 0
@@ -1004,6 +1055,8 @@ def extract_mame_scores(
             "saved_paths": saved_paths,
             "scores_parsed": len(parsed_scores),
             "rows_inserted": inserted + updated,
+            "parsed_scores": parsed_scores_debug,
+            "expected_initials": expected_initials,
         }
     finally:
         if os.getenv("MAME_KEEP_EXTRACTION_FILES", "").lower() in {"1", "true", "yes", "on"}:
