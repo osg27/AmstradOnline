@@ -1,11 +1,28 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
+VENV_PYTHON = BACKEND / ".venv" / "bin" / "python"
+
+
+def ensure_backend_python() -> None:
+    try:
+        import sqlalchemy  # noqa: F401
+    except ModuleNotFoundError:
+        if VENV_PYTHON.is_file() and Path(sys.executable).resolve() != VENV_PYTHON.resolve():
+            os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), *sys.argv])
+        raise SystemExit(
+            "Backend dependencies are not available. Run with "
+            f"{VENV_PYTHON} scripts/replay-mame-score-diff.py ..."
+        )
+
+
+ensure_backend_python()
 sys.path.insert(0, str(BACKEND))
 
 from app.services.mame_high_scores import (  # noqa: E402
@@ -64,6 +81,11 @@ def main() -> int:
     parser.add_argument("--username", default="OldStyleGaming", help="Username used for initials fallback")
     parser.add_argument("--user-id", type=int, default=1, help="Mock user id")
     args = parser.parse_args()
+
+    if not args.baseline_hi.is_file():
+        raise SystemExit(f"Baseline .hi file not found: {args.baseline_hi}")
+    if not args.current_hi.is_file():
+        raise SystemExit(f"Current .hi file not found: {args.current_hi}")
 
     baseline = parse_hi2txt(args.baseline_hi, args.rom)
     current = parse_hi2txt(args.current_hi, args.rom)
