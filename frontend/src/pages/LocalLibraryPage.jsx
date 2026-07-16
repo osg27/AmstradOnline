@@ -201,6 +201,28 @@ function titleCaseSmallWords(value) {
     .replace(/\bIv\b/g, 'IV');
 }
 
+function moveTrailingArticle(value) {
+  return value.replace(/^(.+),\s*(the|a|an)$/i, (_match, title, article) => {
+    const normalizedArticle = article.charAt(0).toUpperCase() + article.slice(1).toLowerCase();
+    return `${normalizedArticle} ${title.trim()}`;
+  });
+}
+
+function disneyVariants(value) {
+  const variants = [];
+  const withPossessive = value.replace(/^Disney(?:s|'s)?\s+/i, "Disney's ");
+  variants.push(withPossessive);
+
+  variants.push(withPossessive.replace(/^Disney's\s+Jungle Book\b/i, "Disney's The Jungle Book"));
+  variants.push(withPossessive.replace(/^Disney's\s+Lion King\b/i, "Disney's The Lion King"));
+
+  if (/^Jungle Book\b/i.test(value)) variants.push(value.replace(/^Jungle Book\b/i, "Disney's The Jungle Book"));
+  if (/^Aladdin\b/i.test(value)) variants.push(value.replace(/^Aladdin\b/i, "Disney's Aladdin"));
+  if (/^Lion King\b/i.test(value)) variants.push(value.replace(/^Lion King\b/i, "Disney's The Lion King"));
+
+  return variants;
+}
+
 function punctuationVariants(value) {
   const variants = [value];
   variants.push(value.replace(/\s+-\s+/g, ' - '));
@@ -208,6 +230,7 @@ function punctuationVariants(value) {
   variants.push(value.replace(/\s+And\s+The\s+/i, ' and the '));
   variants.push(value.replace(/\bAnd\b/g, 'and'));
   variants.push(value.replace(/\bHigh Tech\b/gi, 'High-Tech'));
+  variants.push(value.replace(/\bChase\s+H\.?\s*Q\.?\b/gi, 'Chase H.Q.'));
   variants.push(value.replace(/\bH Q\b/gi, 'H.Q.'));
   variants.push(value.replace(/\bHQ\b/gi, 'H.Q.'));
   variants.push(value.replace(/\bHang ON\b/gi, 'Hang-On'));
@@ -215,6 +238,7 @@ function punctuationVariants(value) {
   variants.push(value.replace(/\bX Men\b/gi, 'X-Men'));
   variants.push(value.replace(/\bMs Pac Man\b/gi, 'Ms. Pac-Man'));
   variants.push(value.replace(/\bPac Man\b/gi, 'Pac-Man'));
+  variants.push(...disneyVariants(value));
   return variants;
 }
 
@@ -239,10 +263,13 @@ function normalizeBoxArtKey(value) {
   return value
     .toLowerCase()
     .replace(/\.[^.]+$/, '')
+    .replace(/\bh\s*\.?\s*q\.?\b/g, 'hq')
+    .replace(/\bdisneys\b/g, "disney's")
     .replace(/&/g, ' and ')
     .replace(/\bthe\b/g, ' ')
     .replace(/\busa\b|\beurope\b|\bjapan\b|\bworld\b|\bbrazil\b|\ben\b|\brev\b|\bbeta\b|\bbios\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\bh q\b/g, 'hq')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -251,8 +278,11 @@ function normalizeExactBoxArtKey(value) {
   return value
     .toLowerCase()
     .replace(/\.[^.]+$/, '')
+    .replace(/\bh\s*\.?\s*q\.?\b/g, 'hq')
+    .replace(/\bdisneys\b/g, "disney's")
     .replace(/&/g, ' and ')
     .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\bh q\b/g, 'hq')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -328,11 +358,20 @@ function buildBoxArtNameCandidates(game) {
   const usaEuropeBrazil = revisedBase.replace(/\(USA\)/gi, '(USA, Europe, Brazil) (En)');
   const withoutBracketMeta = stripRegionAndMeta(base);
   const cleanedTitle = titleCaseSmallWords(withoutBracketMeta || game.title);
+  const articleFixed = moveTrailingArticle(withoutBracketMeta);
+  const articleFixedTitle = titleCaseSmallWords(articleFixed);
   const titleVariants = uniq([
     game.title,
     cleanedTitle,
+    articleFixed,
+    articleFixedTitle,
+    moveTrailingArticle(game.title),
+    moveTrailingArticle(cleanedTitle),
+    moveTrailingArticle(base),
+    moveTrailingArticle(expandedBase),
     ...punctuationVariants(game.title),
     ...punctuationVariants(cleanedTitle),
+    ...punctuationVariants(articleFixedTitle),
   ]);
 
   return uniq([

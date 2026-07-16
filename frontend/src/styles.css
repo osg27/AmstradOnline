@@ -1585,6 +1585,13 @@ input:focus {
     0 10px 20px rgba(0, 0, 0, 0.18);
 }
 
+.local-game-card > button {
+  align-self: end;
+  width: 100%;
+  min-height: 48px;
+  max-height: 52px;
+}
+
 .local-game-art {
   position: relative;
   display: grid;
@@ -1705,6 +1712,10 @@ input:focus {
 .local-game-card.has-box-art {
   grid-template-rows: 300px auto minmax(0, 1fr) auto;
   min-height: 410px;
+}
+
+.local-game-card.has-box-art > button {
+  grid-row: 4;
 }
 
 .empty-local-library {
