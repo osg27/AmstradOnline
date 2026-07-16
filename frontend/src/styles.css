@@ -1542,6 +1542,23 @@ input:focus {
   font-size: 1.5rem;
 }
 
+.media-progress-bar {
+  grid-column: 1 / -1;
+  height: 0.55rem;
+  overflow: hidden;
+  border: 1px solid rgba(122, 217, 155, 0.3);
+  border-radius: 999px;
+  background: rgba(6, 9, 9, 0.95);
+}
+
+.media-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f8069, #7ad99b);
+  transition: width 160ms ease;
+}
+
 .download-media-button {
   min-height: 46px;
   white-space: nowrap;
@@ -1555,9 +1572,9 @@ input:focus {
 
 .local-game-card {
   display: grid;
-  grid-template-rows: 150px auto auto auto minmax(2.7rem, 1fr) auto;
+  grid-template-rows: 260px auto auto auto minmax(2.7rem, 1fr) auto;
   gap: 0.5rem;
-  min-height: 370px;
+  min-height: 480px;
   padding: 0.85rem;
   border: 1px solid #303735;
   border-radius: 8px;
@@ -1569,6 +1586,7 @@ input:focus {
 }
 
 .local-game-art {
+  position: relative;
   display: grid;
   place-items: center;
   min-width: 0;
@@ -1579,11 +1597,15 @@ input:focus {
     linear-gradient(135deg, rgba(9, 12, 12, 0.98), rgba(22, 27, 25, 0.98));
 }
 
+.local-game-art.has-art {
+  background: #050606;
+}
+
 .local-game-art img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  padding: 0.35rem;
+  padding: 0.5rem;
 }
 
 .local-game-art span {
@@ -1597,6 +1619,38 @@ input:focus {
   color: #86e6bd;
   font-size: 1rem;
   font-weight: 950;
+}
+
+.local-game-art-overlay {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  left: 0.55rem;
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(255, 247, 221, 0.18);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(7, 9, 9, 0.72), rgba(7, 9, 9, 0.94));
+  opacity: 0;
+  transform: translateY(0.25rem);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.local-game-card:hover .local-game-art-overlay,
+.local-game-card:focus-within .local-game-art-overlay {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.local-game-art-overlay strong {
+  color: #fff7dd;
+  font-size: 0.98rem;
+  line-height: 1.12;
+}
+
+.local-game-art-overlay small {
+  color: var(--muted);
 }
 
 .local-game-card-head {
@@ -1640,6 +1694,17 @@ input:focus {
   overflow-wrap: anywhere;
   color: #8f978f;
   line-height: 1.35;
+}
+
+.local-game-card.has-box-art h3,
+.local-game-card.has-box-art > p,
+.local-game-card.has-box-art > small {
+  display: none;
+}
+
+.local-game-card.has-box-art {
+  grid-template-rows: 300px auto minmax(0, 1fr) auto;
+  min-height: 410px;
 }
 
 .empty-local-library {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import {
@@ -128,21 +128,23 @@ const EXTENSION_SYSTEMS = SUPPORTED_SYSTEMS.reduce((map, system) => {
   return map;
 }, new Map());
 
-const LIBRETRO_BOXART_SETS = {
-  arcade: ['MAME', 'Arcade - MAME'],
-  cpc: ['Amstrad - CPC'],
-  spectrum: ['Sinclair - ZX Spectrum'],
-  c64: ['Commodore - 64'],
-  atari8: ['Atari - 8-bit'],
-  nes: ['Nintendo - Nintendo Entertainment System'],
-  snes: ['Nintendo - Super Nintendo Entertainment System'],
-  mastersystem: ['Sega - Master System - Mark III'],
-  megadrive: ['Sega - Mega Drive - Genesis'],
-  pcengine: ['NEC - PC Engine - TurboGrafx 16'],
-  playstation: ['Sony - PlayStation'],
-  amiga: ['Commodore - Amiga'],
-  atarist: ['Atari - ST'],
+const LIBRETRO_BOXART_REPOS = {
+  arcade: ['MAME', 'Arcade_-_MAME'],
+  cpc: ['Amstrad_-_CPC'],
+  spectrum: ['Sinclair_-_ZX_Spectrum'],
+  c64: ['Commodore_-_64'],
+  atari8: ['Atari_-_8-bit'],
+  nes: ['Nintendo_-_Nintendo_Entertainment_System'],
+  snes: ['Nintendo_-_Super_Nintendo_Entertainment_System'],
+  mastersystem: ['Sega_-_Master_System_-_Mark_III'],
+  megadrive: ['Sega_-_Mega_Drive_-_Genesis'],
+  pcengine: ['NEC_-_PC_Engine_-_TurboGrafx_16'],
+  playstation: ['Sony_-_PlayStation'],
+  amiga: ['Commodore_-_Amiga'],
+  atarist: ['Atari_-_ST'],
 };
+
+const boxArtIndexCache = new Map();
 
 function slugify(value) {
   return value
@@ -203,7 +205,12 @@ function punctuationVariants(value) {
   const variants = [value];
   variants.push(value.replace(/\s+-\s+/g, ' - '));
   variants.push(value.replace(/\s+The\s+/i, ' - The '));
+  variants.push(value.replace(/\s+And\s+The\s+/i, ' and the '));
+  variants.push(value.replace(/\bAnd\b/g, 'and'));
   variants.push(value.replace(/\bHigh Tech\b/gi, 'High-Tech'));
+  variants.push(value.replace(/\bH Q\b/gi, 'H.Q.'));
+  variants.push(value.replace(/\bHQ\b/gi, 'H.Q.'));
+  variants.push(value.replace(/\bHang ON\b/gi, 'Hang-On'));
   variants.push(value.replace(/\bSpider Man\b/gi, 'Spider-Man'));
   variants.push(value.replace(/\bX Men\b/gi, 'X-Men'));
   variants.push(value.replace(/\bMs Pac Man\b/gi, 'Ms. Pac-Man'));
@@ -226,6 +233,90 @@ function appendRegions(title, revision = '') {
     `${title} ${suffix}`,
     revision ? `${title} ${suffix} ${revision}` : null,
   ]);
+}
+
+function normalizeBoxArtKey(value) {
+  return value
+    .toLowerCase()
+    .replace(/\.[^.]+$/, '')
+    .replace(/&/g, ' and ')
+    .replace(/\bthe\b/g, ' ')
+    .replace(/\busa\b|\beurope\b|\bjapan\b|\bworld\b|\bbrazil\b|\ben\b|\brev\b|\bbeta\b|\bbios\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeExactBoxArtKey(value) {
+  return value
+    .toLowerCase()
+    .replace(/\.[^.]+$/, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function rawGitHubBoxArtUrl(repo, path) {
+  return `https://raw.githubusercontent.com/libretro-thumbnails/${repo}/master/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+async function getBoxArtIndex(systemId) {
+  if (boxArtIndexCache.has(systemId)) return boxArtIndexCache.get(systemId);
+
+  const repos = LIBRETRO_BOXART_REPOS[systemId] || [];
+  const indexPromise = (async () => {
+    const entries = [];
+    for (const repo of repos) {
+      try {
+        const response = await fetch(`https://api.github.com/repos/libretro-thumbnails/${repo}/git/trees/master?recursive=1`, { cache: 'force-cache' });
+        if (!response.ok) continue;
+        const payload = await response.json();
+        const tree = Array.isArray(payload.tree) ? payload.tree : [];
+        tree
+          .filter((item) => item.type === 'blob' && /^Named_Boxarts\/.+\.png$/i.test(item.path))
+          .forEach((item) => {
+            const fileName = item.path.split('/').pop().replace(/\.png$/i, '');
+            entries.push({
+              title: fileName,
+              url: rawGitHubBoxArtUrl(repo, item.path),
+              exactKey: normalizeExactBoxArtKey(fileName),
+              looseKey: normalizeBoxArtKey(fileName),
+            });
+          });
+      } catch {
+        // Try the next repo; external metadata sources are best-effort.
+      }
+    }
+    return entries;
+  })();
+
+  boxArtIndexCache.set(systemId, indexPromise);
+  return indexPromise;
+}
+
+function findIndexedBoxArt(game, index) {
+  const candidates = buildBoxArtNameCandidates(game);
+  const exactKeys = candidates.map(normalizeExactBoxArtKey).filter(Boolean);
+  const looseKeys = candidates.map(normalizeBoxArtKey).filter(Boolean);
+
+  for (const key of exactKeys) {
+    const match = index.find((entry) => entry.exactKey === key);
+    if (match) return match;
+  }
+
+  for (const key of looseKeys) {
+    const match = index.find((entry) => entry.looseKey === key);
+    if (match) return match;
+  }
+
+  const baseKey = normalizeBoxArtKey(stripRegionAndMeta(fileBaseName(game.fileName)));
+  if (baseKey.length >= 4) {
+    const startsWithMatch = index.find((entry) => entry.looseKey.startsWith(baseKey) || baseKey.startsWith(entry.looseKey));
+    if (startsWithMatch) return startsWithMatch;
+  }
+
+  return null;
 }
 
 function buildBoxArtNameCandidates(game) {
@@ -283,10 +374,21 @@ function probeImageUrl(url) {
 }
 
 async function findBoxArtForGame(game) {
-  const sets = LIBRETRO_BOXART_SETS[game.system] || [];
+  const index = await getBoxArtIndex(game.system);
+  const indexedMatch = findIndexedBoxArt(game, index);
+  if (indexedMatch) {
+    return {
+      boxArtUrl: indexedMatch.url,
+      boxArtSource: indexedMatch.url,
+      boxArtFetchedAt: new Date().toISOString(),
+    };
+  }
+
+  const repos = LIBRETRO_BOXART_REPOS[game.system] || [];
   const names = buildBoxArtNameCandidates(game);
 
-  for (const setName of sets) {
+  for (const repo of repos) {
+    const setName = repo.replace(/_/g, ' ');
     for (const name of names) {
       const url = `https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/${encodeURIComponent(name)}.png`;
       const imageUrl = await probeImageUrl(url);
@@ -396,6 +498,19 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       setActiveSystem(requestedSystem);
     }
   }, [requestedSystem, requestedSystemExists]);
+
+  useEffect(() => {
+    if (!mediaProgress) return undefined;
+
+    const warnBeforeLeaving = (event) => {
+      event.preventDefault();
+      event.returnValue = 'Box art download is still running.';
+      return event.returnValue;
+    };
+
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, [mediaProgress]);
 
   const systemCounts = useMemo(() => buildSystemCounts(games), [games]);
   const visibleSystems = useMemo(() => SUPPORTED_SYSTEMS.filter((system) => selectedSystems.includes(system.id)), [selectedSystems]);
@@ -562,6 +677,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     }
   }
 
+  function leaveLibrary() {
+    if (mediaProgress && !window.confirm('Box art download is still running. Leave this page anyway?')) {
+      return;
+    }
+    navigate('/lobby');
+  }
+
   async function downloadBoxArt() {
     const targets = filteredGames.filter((game) => !game.boxArtUrl);
     if (!targets.length) {
@@ -573,27 +695,40 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     let checked = 0;
     let nextGames = games;
     setMediaProgress({ checked: 0, total: targets.length, found: 0 });
+    setStatus(`Downloading box art for ${targets.length} shown game${targets.length === 1 ? '' : 's'}... fetching artwork index.`);
+
+    await Promise.all([...new Set(targets.map((game) => game.system))].map((systemId) => getBoxArtIndex(systemId)));
     setStatus(`Downloading box art for ${targets.length} shown game${targets.length === 1 ? '' : 's'}...`);
 
-    for (const game of targets) {
-      checked += 1;
-      try {
-        const media = await findBoxArtForGame(game);
-        if (media) {
-          found += 1;
-          nextGames = nextGames.map((item) => (
-            item.id === game.id ? { ...item, ...media } : item
-          ));
-          setGames(nextGames);
+    let cursor = 0;
+    async function worker() {
+      while (cursor < targets.length) {
+        const game = targets[cursor];
+        cursor += 1;
+        try {
+          const media = await findBoxArtForGame(game);
+          if (media) {
+            found += 1;
+            nextGames = nextGames.map((item) => (
+              item.id === game.id ? { ...item, ...media } : item
+            ));
+            setGames(nextGames);
+          }
+        } catch {
+          // Missing artwork is expected for some dumps and naming variants.
+        }
+        checked += 1;
+        setMediaProgress({ checked, total: targets.length, found });
+        if (checked % 25 === 0 || checked === targets.length) {
           await saveLocalLibraryGames(nextGames);
         }
-      } catch {
-        // Missing artwork is expected for some dumps and naming variants.
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
-      setMediaProgress({ checked, total: targets.length, found });
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
     }
 
+    const workerCount = Math.min(8, targets.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    await saveLocalLibraryGames(nextGames);
     setMediaProgress(null);
     setStatus(`Box art complete: ${found} found, ${targets.length - found} missing.`);
   }
@@ -605,7 +740,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         <BrandMark />
         <div className="account-strip">
           <span>{username}</span>
-          <Link className="button-like secondary" to="/lobby">Lobby</Link>
+          <button type="button" className="secondary" onClick={leaveLibrary}>Lobby</button>
         </div>
       </header>
       ) : null}
@@ -759,6 +894,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               <strong>{filteredGames.length}</strong>
               <span>shown from {games.length} indexed files{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
+            {mediaProgress ? (
+              <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
+                <span style={{ width: `${Math.round((mediaProgress.checked / mediaProgress.total) * 100)}%` }} />
+              </div>
+            ) : null}
 
             {filteredGames.length ? (
               <div className="local-game-grid">
@@ -766,10 +906,16 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                   const system = SYSTEM_BY_ID[game.system];
                   const favourite = favouriteSet.has(game.id);
                   return (
-                    <article key={game.id} className="local-game-card">
+                    <article key={game.id} className={game.boxArtUrl ? 'local-game-card has-box-art' : 'local-game-card'}>
                       <div className={game.boxArtUrl ? 'local-game-art has-art' : 'local-game-art'}>
                         {game.boxArtUrl ? (
-                          <img src={game.boxArtUrl} alt="" loading="lazy" />
+                          <>
+                            <img src={game.boxArtUrl} alt="" loading="lazy" />
+                            <div className="local-game-art-overlay">
+                              <strong>{game.title}</strong>
+                              <small>{system?.label || 'Unknown system'}</small>
+                            </div>
+                          </>
                         ) : (
                           <span>{system?.shortLabel || game.system}</span>
                         )}
