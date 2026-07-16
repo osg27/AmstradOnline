@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
+import mame2003PlusTitles from '../data/mame2003PlusTitles';
 import {
   getLocalLibraryFolders,
   getLocalLibraryGames,
@@ -159,6 +160,16 @@ function slugify(value) {
 
 function fileBaseName(fileName) {
   return fileName.replace(/\.[^.]+$/, '');
+}
+
+function arcadeRomKey(fileName) {
+  return fileBaseName(fileName).toLowerCase();
+}
+
+function isArcadeParentRom(game) {
+  if (game.system !== 'arcade') return true;
+  const metadata = mame2003PlusTitles[arcadeRomKey(game.fileName)];
+  return !metadata?.parent;
 }
 
 function uniq(values) {
@@ -546,6 +557,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
+  const [showArcadeClones, setShowArcadeClones] = useState(false);
 
   useEffect(() => {
     async function loadLibrary() {
@@ -596,9 +608,18 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     return games
       .filter((game) => selectedSystems.includes(game.system))
       .filter((game) => activeSystem === 'all' || game.system === activeSystem || (activeSystem === 'favourites' && favouriteSet.has(game.id)))
+      .filter((game) => showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game))
       .filter((game) => !normalizedQuery || `${game.title} ${game.fileName} ${game.path}`.toLowerCase().includes(normalizedQuery))
       .sort((a, b) => a.title.localeCompare(b.title));
-  }, [activeSystem, favouriteSet, games, query, selectedSystems]);
+  }, [activeSystem, favouriteSet, games, query, selectedSystems, showArcadeClones]);
+  const hiddenArcadeCloneCount = useMemo(
+    () => games
+      .filter((game) => selectedSystems.includes(game.system))
+      .filter((game) => activeSystem === 'all' || game.system === 'arcade' || (activeSystem === 'favourites' && favouriteSet.has(game.id)))
+      .filter((game) => game.system === 'arcade' && !isArcadeParentRom(game))
+      .length,
+    [activeSystem, favouriteSet, games, selectedSystems],
+  );
 
   async function toggleSystem(systemId) {
     const next = selectedSystems.includes(systemId)
@@ -761,9 +782,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }
 
   async function downloadBoxArt() {
-    const targets = filteredGames.filter((game) => !game.boxArtUrl);
+    const skippedArcadeClones = filteredGames.filter((game) => game.system === 'arcade' && !isArcadeParentRom(game) && !game.boxArtUrl).length;
+    const targets = filteredGames.filter((game) => !game.boxArtUrl && isArcadeParentRom(game));
     if (!targets.length) {
-      setStatus('Box art is already downloaded for the shown games.');
+      setStatus(skippedArcadeClones
+        ? 'Box art is already downloaded for shown parent games. MAME clone ROMs are skipped.'
+        : 'Box art is already downloaded for the shown games.');
       return;
     }
 
@@ -771,10 +795,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     let checked = 0;
     let nextGames = games;
     setMediaProgress({ checked: 0, total: targets.length, found: 0 });
-    setStatus(`Downloading box art for ${targets.length} shown game${targets.length === 1 ? '' : 's'}... fetching artwork index.`);
+    setStatus(`Downloading box art for ${targets.length} shown game${targets.length === 1 ? '' : 's'}${skippedArcadeClones ? `, skipping ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'}` : ''}... fetching artwork index.`);
 
     await Promise.all([...new Set(targets.map((game) => game.system))].map((systemId) => getBoxArtIndex(systemId)));
-    setStatus(`Downloading box art for ${targets.length} shown game${targets.length === 1 ? '' : 's'}...`);
+    setStatus(`Downloading box art for ${targets.length} shown parent game${targets.length === 1 ? '' : 's'}...`);
 
     let cursor = 0;
     async function worker() {
@@ -806,7 +830,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
     await saveLocalLibraryGames(nextGames);
     setMediaProgress(null);
-    setStatus(`Box art complete: ${found} found, ${targets.length - found} missing.`);
+    setStatus(`Box art complete: ${found} found, ${targets.length - found} missing${skippedArcadeClones ? `, ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'} skipped` : ''}.`);
   }
 
   const content = (
@@ -961,6 +985,16 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search your games"
               />
+              {selectedSystems.includes('arcade') && hiddenArcadeCloneCount > 0 ? (
+                <label className="library-clone-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showArcadeClones}
+                    onChange={(event) => setShowArcadeClones(event.target.checked)}
+                  />
+                  <span>Show clones/children</span>
+                </label>
+              ) : null}
               <button type="button" className="secondary download-media-button" onClick={downloadBoxArt} disabled={!filteredGames.length || Boolean(mediaProgress)}>
                 {mediaProgress ? `Box art ${mediaProgress.checked}/${mediaProgress.total}` : 'Download box art'}
               </button>
@@ -968,7 +1002,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
             <div className="library-summary-strip">
               <strong>{filteredGames.length}</strong>
-              <span>shown from {games.length} indexed files{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
+              <span>shown from {games.length} indexed files{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
             {mediaProgress ? (
               <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>

@@ -1514,7 +1514,7 @@ input:focus {
 
 .local-library-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px) auto auto;
   gap: 0.75rem;
   align-items: center;
 }
@@ -1562,6 +1562,27 @@ input:focus {
 .download-media-button {
   min-height: 46px;
   white-space: nowrap;
+}
+
+.library-clone-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 46px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(68, 80, 76, 0.9);
+  border-radius: 7px;
+  background: rgba(23, 28, 27, 0.92);
+  color: #fff7dd;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.library-clone-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--gold);
 }
 
 .local-game-grid {
