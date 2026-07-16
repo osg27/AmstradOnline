@@ -1232,13 +1232,20 @@ input:focus {
 
 .welcome-home-page {
   align-items: center;
+  justify-content: flex-start;
+  width: 100%;
   gap: 1rem;
 }
 
 .welcome-home-header {
   width: 100%;
   max-width: 1280px;
+  margin-inline: auto;
   padding: 0 0.25rem;
+}
+
+.welcome-home-page .local-library-shell {
+  margin-inline: auto;
 }
 
 .welcome-library-hero {
@@ -1341,6 +1348,19 @@ input:focus {
 .local-library-main {
   display: grid;
   gap: 1rem;
+}
+
+.onboarding-library-layout {
+  grid-template-columns: 1fr;
+}
+
+.onboarding-library-layout .local-library-sidebar {
+  grid-template-columns: minmax(320px, 1.35fr) minmax(240px, 0.65fr);
+  align-items: start;
+}
+
+.onboarding-library-layout .local-library-sidebar .local-library-panel:first-child {
+  grid-row: span 2;
 }
 
 .local-library-panel,
@@ -2140,6 +2160,7 @@ input:focus {
   .library-layout,
   .local-library-hero,
   .local-library-layout,
+  .onboarding-library-layout .local-library-sidebar,
   .local-library-toolbar,
   .onboarding-finish-bar {
     grid-template-columns: 1fr;

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import {
@@ -189,11 +189,14 @@ function buildSystemCounts(games) {
 
 export default function LocalLibraryPage({ embedded = false, onboarding = false, onComplete = null }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedSystem = searchParams.get('system');
+  const requestedSystemExists = SUPPORTED_SYSTEMS.some((system) => system.id === requestedSystem);
   const username = localStorage.getItem('username');
   const [folders, setFolders] = useState([]);
   const [games, setGames] = useState([]);
   const [selectedSystems, setSelectedSystems] = useState([]);
-  const [activeSystem, setActiveSystem] = useState('all');
+  const [activeSystem, setActiveSystem] = useState(requestedSystemExists ? requestedSystem : 'all');
   const [query, setQuery] = useState('');
   const [favourites, setFavourites] = useState([]);
   const [status, setStatus] = useState('Loading library...');
@@ -221,6 +224,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
     loadLibrary();
   }, []);
+
+  useEffect(() => {
+    if (requestedSystemExists) {
+      setActiveSystem(requestedSystem);
+    }
+  }, [requestedSystem, requestedSystemExists]);
 
   const systemCounts = useMemo(() => buildSystemCounts(games), [games]);
   const visibleSystems = useMemo(() => SUPPORTED_SYSTEMS.filter((system) => selectedSystems.includes(system.id)), [selectedSystems]);
@@ -403,7 +412,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           <div>
             <p className="lobby-eyebrow">{onboarding ? 'Welcome to Old Style Gaming' : 'Your ROMs, your machine'}</p>
             <h1>{onboarding ? 'Set up your game shelves' : 'Local Game Library'}</h1>
-            <p>{onboarding ? 'Choose the systems you care about, attach local ROM folders, and your home page will become your own retro dashboard.' : 'Pick a folder once, build a searchable library, and keep the ROMs on your own drive.'}</p>
+            <p>{onboarding ? (games.length ? 'Your browser already has a scanned library. Pick the systems you want on your home page, then continue.' : 'Choose the systems you care about, attach local ROM folders, and your home page will become your own retro dashboard.') : 'Pick a folder once, build a searchable library, and keep the ROMs on your own drive.'}</p>
           </div>
           <div className="local-library-actions">
             <button type="button" onClick={() => scanFolder()}>
@@ -449,7 +458,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           </div>
         ) : null}
 
-        <main className="local-library-layout">
+        <main className={`local-library-layout ${onboarding ? 'onboarding-library-layout' : ''}`}>
           <aside className="local-library-sidebar">
             <div className="local-library-panel">
               <h2>Systems</h2>
@@ -512,6 +521,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             </div>
           </aside>
 
+          {!onboarding ? (
           <section className="local-library-main">
             <div className="local-library-toolbar">
               <div className="library-filter-tabs" aria-label="Library filters">
@@ -581,6 +591,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               </div>
             )}
           </section>
+          ) : null}
         </main>
     </div>
   );

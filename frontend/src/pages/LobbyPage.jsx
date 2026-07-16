@@ -544,6 +544,10 @@ export default function LobbyPage() {
 
   function chooseSystem(system) {
     if (system.locked) return;
+    if (filterToLocalLibrary) {
+      navigate(`/library?system=${encodeURIComponent(system.id)}`);
+      return;
+    }
     setSelectedSystemId(system.id);
     if (!system.modes[selectedMode]?.enabled) {
       setSelectedMode(system.modes.hosted?.enabled ? 'hosted' : 'solo');
