@@ -5,6 +5,7 @@ import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
+import { getLocalLibraryFolder, getLocalLibraryGame } from '../localLibraryDb';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
@@ -346,6 +347,7 @@ export default function RoomPage() {
   const [searchParams] = useSearchParams();
   const username = localStorage.getItem('username');
   const isSoloMode = searchParams.get('mode') === 'solo';
+  const localGameId = searchParams.get('localGame');
   const [obsCaptureMode, setObsCaptureMode] = useState(false);
 
   useEffect(() => {
@@ -436,6 +438,7 @@ export default function RoomPage() {
   const pendingPartyGuestsRef = useRef(new Map());
   const hostStartingRef = useRef(false);
   const hostStartedRef = useRef(false);
+  const localLibraryLoadAttemptedRef = useRef(false);
   const loadedDiskNameRef = useRef('');
   const mameScoreBaselineRef = useRef(null);
   const guestPreparedRef = useRef(false);
@@ -4876,6 +4879,115 @@ export default function RoomPage() {
       addLog(`File load error: ${err.message}`);
     }
   }
+
+  useEffect(() => {
+    if (
+      !localGameId
+      || !isSoloMode
+      || !room
+      || !canControlLocalEmulator
+      || !emulatorFrameLoadCount
+      || !emulatorFrameRef.current
+      || localLibraryLoadAttemptedRef.current
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadLocalLibraryGame() {
+      localLibraryLoadAttemptedRef.current = true;
+
+      try {
+        setError('');
+        const pendingGame = (() => {
+          try {
+            const stored = sessionStorage.getItem('oldstylegaming:pendingLocalGame');
+            return stored ? JSON.parse(stored) : null;
+          } catch {
+            return null;
+          }
+        })();
+        if (pendingGame?.id === localGameId) {
+          setLoadedDiskName(pendingGame.fileName || pendingGame.title || '');
+          setStatus(`Loading local game: ${pendingGame.title || pendingGame.fileName}`);
+        }
+
+        const game = await getLocalLibraryGame(localGameId);
+        if (!game?.handle) {
+          throw new Error('That local library game is no longer available. Re-scan your ROM folder.');
+        }
+
+        if (typeof game.handle.queryPermission === 'function') {
+          let permission = await game.handle.queryPermission({ mode: 'read' });
+          if (permission !== 'granted' && typeof game.handle.requestPermission === 'function') {
+            permission = await game.handle.requestPermission({ mode: 'read' });
+          }
+          if (permission !== 'granted') {
+            throw new Error('Browser permission is needed to read that local ROM.');
+          }
+        }
+
+        const file = await game.handle.getFile();
+        if (cancelled) return;
+
+        setLoadedDiskName(file.name);
+        setStatus(`Loading local game: ${game.title || file.name}`);
+        addLog(`Loading local library game: ${game.path || file.name}`);
+
+        if (isArcade) {
+          const folder = game.folderId ? await getLocalLibraryFolder(game.folderId) : null;
+          const samples = Array.isArray(folder?.samples) ? folder.samples : [];
+          const metadata = getArcadeRomMetadata(file.name);
+          const sampleKeys = [metadata.romKey, metadata.parent].filter(Boolean);
+          const sampleFiles = [];
+
+          for (const sampleKey of sampleKeys) {
+            const sample = samples.find((item) => item.key === sampleKey);
+            if (!sample?.handle) continue;
+            const sampleFile = await sample.handle.getFile();
+            sampleFiles.push({
+              fileName: sampleFile.name,
+              bytes: new Uint8Array(await sampleFile.arrayBuffer()),
+            });
+          }
+
+          if (sampleFiles.length) {
+            addLog(`Loaded MAME samples: ${sampleFiles.map((sample) => sample.fileName).join(', ')}`);
+          }
+          await loadArcadeRomFile(file, sampleFiles);
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          return;
+        }
+
+        if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
+          await startHostSession();
+        }
+
+        if (cancelled) return;
+
+        await handleDiskSelected({
+          target: {
+            files: [file],
+            dataset: {},
+            value: '',
+          },
+        });
+        sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+      } catch (err) {
+        if (cancelled) return;
+        setError(err.message);
+        addLog(`Local library load error: ${err.message}`);
+        setStatus('Local library game could not be loaded');
+      }
+    }
+
+    loadLocalLibraryGame();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isArcade, isAtariSt, isSoloMode, localGameId, room]);
 
   async function handleKickstartSelected(event) {
     try {

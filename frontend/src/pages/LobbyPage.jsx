@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import SocialSidebar from '../components/SocialSidebar';
+import { getLocalLibrarySetting } from '../localLibraryDb';
+import LocalLibraryPage, { SUPPORTED_SYSTEMS } from './LocalLibraryPage';
 import amiga500LogoUrl from '../../assets/amiga500.svg';
 import amiga1200LogoUrl from '../../assets/amiga1200.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
@@ -369,13 +371,19 @@ export default function LobbyPage() {
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
+  const [librarySystems, setLibrarySystems] = useState([]);
   const canUsePreviewSystems = isAdmin || isTester;
+  const allLibrarySystemIds = useMemo(() => SUPPORTED_SYSTEMS.map((system) => system.id), []);
+  const selectedLibrarySystemSet = useMemo(() => new Set(librarySystems), [librarySystems]);
+  const filterToLocalLibrary = librarySetupComplete === true && librarySystems.length > 0;
 
   const visibleShelves = useMemo(() => PLATFORM_SHELVES.map((platform) => ({
     ...platform,
     eras: platform.eras.map((era) => ({
       ...era,
       systems: era.systems.filter((system) => (
+        (!filterToLocalLibrary || selectedLibrarySystemSet.has(system.id)) &&
         (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin || (system.id === 'atarist' && canUsePreviewSystems))
       )).map((system) => {
         const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
@@ -390,14 +398,32 @@ export default function LobbyPage() {
               : null,
         };
       }),
-    })),
-  })), [canUsePreviewSystems, isAdmin, isSuperAdmin]);
+    })).filter((era) => era.systems.length > 0),
+  })).filter((platform) => platform.eras.length > 0), [canUsePreviewSystems, filterToLocalLibrary, isAdmin, isSuperAdmin, selectedLibrarySystemSet]);
 
   const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];
   const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0] || null;
   const selectedModeConfig = selectedSystem?.modes[selectedMode];
   const emptyEraCopy = EMPTY_ERA_COPY[selectedPlatform?.id] || EMPTY_ERA_COPY.micros;
+
+  useEffect(() => {
+    async function loadLibrarySetup() {
+      try {
+        const [setupComplete, savedSystems] = await Promise.all([
+          getLocalLibrarySetting('librarySetupComplete', false),
+          getLocalLibrarySetting('selectedSystems', []),
+        ]);
+        setLibrarySetupComplete(Boolean(setupComplete));
+        setLibrarySystems(Array.isArray(savedSystems) && savedSystems.length ? savedSystems : allLibrarySystemIds);
+      } catch {
+        setLibrarySetupComplete(false);
+        setLibrarySystems(allLibrarySystemIds);
+      }
+    }
+
+    loadLibrarySetup();
+  }, [allLibrarySystemIds]);
 
   useEffect(() => {
     if (selectedMode !== 'party') return;
@@ -463,6 +489,35 @@ export default function LobbyPage() {
 
   function pickFirstSystem(era) {
     return era?.systems.find((system) => !system.locked) || era?.systems[0] || null;
+  }
+
+  useEffect(() => {
+    if (!visibleShelves.length) return;
+
+    const nextPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
+    const nextGroup = nextPlatform?.eras.find((era) => era.id === selectedEra) || nextPlatform?.eras[0];
+    const nextSystem = nextGroup?.systems.find((system) => system.id === selectedSystemId && !system.locked) || pickFirstSystem(nextGroup);
+
+    if (nextPlatform?.id && nextPlatform.id !== selectedPlatformId) {
+      setSelectedPlatformId(nextPlatform.id);
+    }
+    if (nextGroup?.id && nextGroup.id !== selectedEra) {
+      setSelectedEra(nextGroup.id);
+    }
+    if (nextSystem?.id && nextSystem.id !== selectedSystemId) {
+      setSelectedSystemId(nextSystem.id);
+      setSelectedMode(nextSystem.modes.hosted?.enabled ? 'hosted' : 'solo');
+    }
+  }, [selectedEra, selectedPlatformId, selectedSystemId, visibleShelves]);
+
+  async function handleLibrarySetupComplete() {
+    try {
+      const savedSystems = await getLocalLibrarySetting('selectedSystems', []);
+      setLibrarySystems(Array.isArray(savedSystems) && savedSystems.length ? savedSystems : allLibrarySystemIds);
+    } catch {
+      setLibrarySystems(allLibrarySystemIds);
+    }
+    setLibrarySetupComplete(true);
   }
 
   function choosePlatform(platformId) {
@@ -552,6 +607,32 @@ export default function LobbyPage() {
     navigate('/login');
   }
 
+  if (librarySetupComplete === false) {
+    return (
+      <div className="page local-library-page welcome-home-page">
+        <header className="lobby-header welcome-home-header">
+          <BrandMark />
+          <div className="account-strip">
+            <span>{username}</span>
+            <button className="secondary" onClick={logout}>Logout</button>
+          </div>
+        </header>
+        <LocalLibraryPage embedded onboarding onComplete={handleLibrarySetupComplete} />
+      </div>
+    );
+  }
+
+  if (librarySetupComplete === null) {
+    return (
+      <div className="page local-library-page welcome-home-page">
+        <div className="local-library-shell loading-library-shell">
+          <BrandMark />
+          <h1>Loading your library...</h1>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page lobby-page">
       <div className="page-social-layout lobby-social-layout">
@@ -560,6 +641,7 @@ export default function LobbyPage() {
           <BrandMark />
           <div className="account-strip">
             <span>{username}</span>
+            <button className="secondary" onClick={() => navigate('/library')}>My Library</button>
             {canUsePreviewSystems ? (
               <button className="secondary" onClick={() => navigate('/feedback')}>
                 Feedback{feedbackNotificationCount ? ` (${feedbackNotificationCount})` : ''}
