@@ -128,6 +128,22 @@ const EXTENSION_SYSTEMS = SUPPORTED_SYSTEMS.reduce((map, system) => {
   return map;
 }, new Map());
 
+const LIBRETRO_BOXART_SETS = {
+  arcade: ['MAME', 'Arcade - MAME'],
+  cpc: ['Amstrad - CPC'],
+  spectrum: ['Sinclair - ZX Spectrum'],
+  c64: ['Commodore - 64'],
+  atari8: ['Atari - 8-bit'],
+  nes: ['Nintendo - Nintendo Entertainment System'],
+  snes: ['Nintendo - Super Nintendo Entertainment System'],
+  mastersystem: ['Sega - Master System - Mark III'],
+  megadrive: ['Sega - Mega Drive - Genesis'],
+  pcengine: ['NEC - PC Engine - TurboGrafx 16'],
+  playstation: ['Sony - PlayStation'],
+  amiga: ['Commodore - Amiga'],
+  atarist: ['Atari - ST'],
+};
+
 function slugify(value) {
   return value
     .toLowerCase()
@@ -136,6 +152,77 @@ function slugify(value) {
     .replace(/[_\-.]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function fileBaseName(fileName) {
+  return fileName.replace(/\.[^.]+$/, '');
+}
+
+function uniq(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function regionExpandedName(value) {
+  return value
+    .replace(/\((U)\)/gi, '(USA)')
+    .replace(/\((E)\)/gi, '(Europe)')
+    .replace(/\((J)\)/gi, '(Japan)')
+    .replace(/\[(U)\]/gi, '(USA)')
+    .replace(/\[(E)\]/gi, '(Europe)')
+    .replace(/\[(J)\]/gi, '(Japan)');
+}
+
+function buildBoxArtNameCandidates(game) {
+  const base = fileBaseName(game.fileName).replace(/_/g, ' ').trim();
+  const withoutBracketMeta = base.replace(/[\[\(].*?[\]\)]/g, ' ').replace(/\s+/g, ' ').trim();
+  const dashTitle = game.title.replace(/\s+-\s+/g, ' - ').replace(/\s+/g, ' ').trim();
+
+  return uniq([
+    base,
+    regionExpandedName(base),
+    withoutBracketMeta,
+    game.title,
+    dashTitle,
+    `${game.title} (World)`,
+    `${game.title} (USA)`,
+    `${game.title} (Europe)`,
+    game.system === 'arcade' ? fileBaseName(game.fileName).toLowerCase() : null,
+  ]);
+}
+
+async function fetchImageAsDataUrl(url) {
+  const response = await fetch(url, { cache: 'force-cache' });
+  if (!response.ok) return null;
+  const blob = await response.blob();
+  if (!blob.type.startsWith('image/')) return null;
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function findBoxArtForGame(game) {
+  const sets = LIBRETRO_BOXART_SETS[game.system] || [];
+  const names = buildBoxArtNameCandidates(game);
+
+  for (const setName of sets) {
+    for (const name of names) {
+      const url = `https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/${encodeURIComponent(name)}.png`;
+      const dataUrl = await fetchImageAsDataUrl(url);
+      if (dataUrl) {
+        return {
+          boxArtUrl: dataUrl,
+          boxArtSource: url,
+          boxArtFetchedAt: new Date().toISOString(),
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 function titleFromFileName(fileName) {
@@ -201,6 +288,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [favourites, setFavourites] = useState([]);
   const [status, setStatus] = useState('Loading library...');
   const [scanProgress, setScanProgress] = useState(null);
+  const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
 
   useEffect(() => {
@@ -396,6 +484,42 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     }
   }
 
+  async function downloadBoxArt() {
+    const targets = filteredGames.filter((game) => !game.boxArtUrl);
+    if (!targets.length) {
+      setStatus('Box art is already downloaded for the shown games.');
+      return;
+    }
+
+    let found = 0;
+    let checked = 0;
+    let nextGames = games;
+    setMediaProgress({ checked: 0, total: targets.length, found: 0 });
+    setStatus(`Downloading box art for ${targets.length} shown game${targets.length === 1 ? '' : 's'}...`);
+
+    for (const game of targets) {
+      checked += 1;
+      try {
+        const media = await findBoxArtForGame(game);
+        if (media) {
+          found += 1;
+          nextGames = nextGames.map((item) => (
+            item.id === game.id ? { ...item, ...media } : item
+          ));
+          setGames(nextGames);
+          await saveLocalLibraryGames(nextGames);
+        }
+      } catch {
+        // Missing artwork is expected for some dumps and naming variants.
+      }
+      setMediaProgress({ checked, total: targets.length, found });
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+
+    setMediaProgress(null);
+    setStatus(`Box art complete: ${found} found, ${targets.length - found} missing.`);
+  }
+
   const content = (
     <div className="local-library-shell">
       {!embedded ? (
@@ -548,11 +672,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search your games"
               />
+              <button type="button" className="secondary download-media-button" onClick={downloadBoxArt} disabled={!filteredGames.length || Boolean(mediaProgress)}>
+                {mediaProgress ? `Box art ${mediaProgress.checked}/${mediaProgress.total}` : 'Download box art'}
+              </button>
             </div>
 
             <div className="library-summary-strip">
               <strong>{filteredGames.length}</strong>
-              <span>shown from {games.length} indexed files</span>
+              <span>shown from {games.length} indexed files{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
 
             {filteredGames.length ? (
@@ -562,6 +689,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                   const favourite = favouriteSet.has(game.id);
                   return (
                     <article key={game.id} className="local-game-card">
+                      <div className={game.boxArtUrl ? 'local-game-art has-art' : 'local-game-art'}>
+                        {game.boxArtUrl ? (
+                          <img src={game.boxArtUrl} alt="" loading="lazy" />
+                        ) : (
+                          <span>{system?.shortLabel || game.system}</span>
+                        )}
+                      </div>
                       <div className="local-game-card-head">
                         <span>{system?.shortLabel || game.system}</span>
                         <button
