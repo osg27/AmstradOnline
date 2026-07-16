@@ -172,14 +172,28 @@ function regionExpandedName(value) {
     .replace(/\[(J)\]/gi, '(Japan)');
 }
 
+function normalizeRevisionTags(value) {
+  return value
+    .replace(/\(Rev[-\s]?A\)/gi, '(Rev 1)')
+    .replace(/\(Rev[-\s]?B\)/gi, '(Rev 2)')
+    .replace(/\(Rev[-\s]?C\)/gi, '(Rev 3)');
+}
+
 function buildBoxArtNameCandidates(game) {
   const base = fileBaseName(game.fileName).replace(/_/g, ' ').trim();
+  const expandedBase = regionExpandedName(base);
+  const revisedBase = normalizeRevisionTags(expandedBase);
+  const withoutRevision = expandedBase.replace(/\s*\(Rev[^)]*\)/gi, '').trim();
+  const usaEurope = expandedBase.replace(/\(USA\)/gi, '(USA, Europe)');
   const withoutBracketMeta = base.replace(/[\[\(].*?[\]\)]/g, ' ').replace(/\s+/g, ' ').trim();
   const dashTitle = game.title.replace(/\s+-\s+/g, ' - ').replace(/\s+/g, ' ').trim();
 
   return uniq([
     base,
-    regionExpandedName(base),
+    expandedBase,
+    revisedBase,
+    withoutRevision,
+    usaEurope,
     withoutBracketMeta,
     game.title,
     dashTitle,
@@ -190,17 +204,25 @@ function buildBoxArtNameCandidates(game) {
   ]);
 }
 
-async function fetchImageAsDataUrl(url) {
-  const response = await fetch(url, { cache: 'force-cache' });
-  if (!response.ok) return null;
-  const blob = await response.blob();
-  if (!blob.type.startsWith('image/')) return null;
+function probeImageUrl(url) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    const timer = window.setTimeout(() => {
+      image.onload = null;
+      image.onerror = null;
+      resolve(null);
+    }, 7000);
 
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
+    image.onload = () => {
+      window.clearTimeout(timer);
+      resolve(url);
+    };
+    image.onerror = () => {
+      window.clearTimeout(timer);
+      resolve(null);
+    };
+    image.referrerPolicy = 'no-referrer';
+    image.src = url;
   });
 }
 
@@ -211,11 +233,11 @@ async function findBoxArtForGame(game) {
   for (const setName of sets) {
     for (const name of names) {
       const url = `https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/${encodeURIComponent(name)}.png`;
-      const dataUrl = await fetchImageAsDataUrl(url);
-      if (dataUrl) {
+      const imageUrl = await probeImageUrl(url);
+      if (imageUrl) {
         return {
-          boxArtUrl: dataUrl,
-          boxArtSource: url,
+          boxArtUrl: imageUrl,
+          boxArtSource: imageUrl,
           boxArtFetchedAt: new Date().toISOString(),
         };
       }
