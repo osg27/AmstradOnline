@@ -145,6 +145,7 @@ const LIBRETRO_BOXART_REPOS = {
 };
 
 const boxArtIndexCache = new Map();
+const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 'nintendo']);
 
 function slugify(value) {
   return value
@@ -239,6 +240,8 @@ function punctuationVariants(value) {
   variants.push(value.replace(/\bMs Pac Man\b/gi, 'Ms. Pac-Man'));
   variants.push(value.replace(/\bPac Man\b/gi, 'Pac-Man'));
   variants.push(...disneyVariants(value));
+  variants.push(value.replace(/^Disney(?:s|'s)?\s+/i, ''));
+  variants.push(value.replace(/^Taito\s+/i, ''));
   return variants;
 }
 
@@ -264,10 +267,10 @@ function normalizeBoxArtKey(value) {
     .toLowerCase()
     .replace(/\.[^.]+$/, '')
     .replace(/\bh\s*\.?\s*q\.?\b/g, 'hq')
-    .replace(/\bdisneys\b/g, "disney's")
+    .replace(/\bdisney'?s?\b/g, ' ')
     .replace(/&/g, ' and ')
     .replace(/\bthe\b/g, ' ')
-    .replace(/\busa\b|\beurope\b|\bjapan\b|\bworld\b|\bbrazil\b|\ben\b|\brev\b|\bbeta\b|\bbios\b/g, ' ')
+    .replace(/\busa\b|\beurope\b|\bjapan\b|\bworld\b|\bbrazil\b|\ben\b|\brev\b|\bbeta\b|\bbios\b|\btaito\b|\bsega\b|\bnintendo\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\bh q\b/g, 'hq')
     .replace(/\s+/g, ' ')
@@ -279,7 +282,7 @@ function normalizeExactBoxArtKey(value) {
     .toLowerCase()
     .replace(/\.[^.]+$/, '')
     .replace(/\bh\s*\.?\s*q\.?\b/g, 'hq')
-    .replace(/\bdisneys\b/g, "disney's")
+    .replace(/\bdisney'?s?\b/g, 'disney')
     .replace(/&/g, ' and ')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\bh q\b/g, 'hq')
@@ -289,6 +292,20 @@ function normalizeExactBoxArtKey(value) {
 
 function rawGitHubBoxArtUrl(repo, path) {
   return `https://raw.githubusercontent.com/libretro-thumbnails/${repo}/master/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+function libretroBoxArtUrl(repo, fileName) {
+  const setName = repo.replace(/_/g, ' ');
+  return `https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/${encodeURIComponent(fileName)}.png`;
+}
+
+function makeBoxArtEntry(repo, fileName, url) {
+  return {
+    title: fileName,
+    url,
+    exactKey: normalizeExactBoxArtKey(fileName),
+    looseKey: normalizeBoxArtKey(fileName),
+  };
 }
 
 async function getBoxArtIndex(systemId) {
@@ -307,15 +324,26 @@ async function getBoxArtIndex(systemId) {
           .filter((item) => item.type === 'blob' && /^Named_Boxarts\/.+\.png$/i.test(item.path))
           .forEach((item) => {
             const fileName = item.path.split('/').pop().replace(/\.png$/i, '');
-            entries.push({
-              title: fileName,
-              url: rawGitHubBoxArtUrl(repo, item.path),
-              exactKey: normalizeExactBoxArtKey(fileName),
-              looseKey: normalizeBoxArtKey(fileName),
-            });
+            entries.push(makeBoxArtEntry(repo, fileName, rawGitHubBoxArtUrl(repo, item.path)));
           });
       } catch {
         // Try the next repo; external metadata sources are best-effort.
+      }
+
+      try {
+        const setName = repo.replace(/_/g, ' ');
+        const response = await fetch(`https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/`, { cache: 'force-cache' });
+        if (!response.ok) continue;
+        const html = await response.text();
+        const matches = [...html.matchAll(/href="([^"]+\.png)"/gi)];
+        matches.forEach((match) => {
+          const fileName = decodeURIComponent(match[1].split('/').pop().replace(/\.png$/i, '').replace(/\+/g, ' '));
+          if (!entries.some((entry) => entry.title === fileName)) {
+            entries.push(makeBoxArtEntry(repo, fileName, libretroBoxArtUrl(repo, fileName)));
+          }
+        });
+      } catch {
+        // Directory listings are a fallback for when the GitHub tree is stale or blocked.
       }
     }
     return entries;
@@ -345,6 +373,15 @@ function findIndexedBoxArt(game, index) {
     const startsWithMatch = index.find((entry) => entry.looseKey.startsWith(baseKey) || baseKey.startsWith(entry.looseKey));
     if (startsWithMatch) return startsWithMatch;
   }
+
+  const candidateTokenSets = looseKeys
+    .map((key) => key.split(' ').filter((token) => token.length > 1 && !BOX_ART_NOISE_WORDS.has(token)))
+    .filter((tokens) => tokens.length >= 2);
+  const subsetMatch = index.find((entry) => {
+    const entryTokens = new Set(entry.looseKey.split(' ').filter(Boolean));
+    return candidateTokenSets.some((tokens) => tokens.every((token) => entryTokens.has(token)));
+  });
+  if (subsetMatch) return subsetMatch;
 
   return null;
 }
