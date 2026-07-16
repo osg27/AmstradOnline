@@ -179,14 +179,70 @@ function normalizeRevisionTags(value) {
     .replace(/\(Rev[-\s]?C\)/gi, '(Rev 3)');
 }
 
+function stripRegionAndMeta(value) {
+  return value.replace(/\s*[\[\(].*?[\]\)]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function titleCaseSmallWords(value) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => {
+      if (/^(THE|A|AN|AND|OF|IN|ON|TO|FOR)$/i.test(part)) return part.toLowerCase();
+      if (/^[IVX]+$/i.test(part)) return part.toUpperCase();
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(' ')
+    .replace(/, the$/i, ', The')
+    .replace(/\bIi\b/g, 'II')
+    .replace(/\bIii\b/g, 'III')
+    .replace(/\bIv\b/g, 'IV');
+}
+
+function punctuationVariants(value) {
+  const variants = [value];
+  variants.push(value.replace(/\s+-\s+/g, ' - '));
+  variants.push(value.replace(/\s+The\s+/i, ' - The '));
+  variants.push(value.replace(/\bHigh Tech\b/gi, 'High-Tech'));
+  variants.push(value.replace(/\bSpider Man\b/gi, 'Spider-Man'));
+  variants.push(value.replace(/\bX Men\b/gi, 'X-Men'));
+  variants.push(value.replace(/\bMs Pac Man\b/gi, 'Ms. Pac-Man'));
+  variants.push(value.replace(/\bPac Man\b/gi, 'Pac-Man'));
+  return variants;
+}
+
+function appendRegions(title, revision = '') {
+  const suffixes = [
+    '(World)',
+    '(USA)',
+    '(Europe)',
+    '(USA, Europe)',
+    '(USA, Europe, Brazil) (En)',
+    '(Europe, Brazil) (En)',
+    '(Japan, Europe) (En)',
+    '(Japan, USA, Brazil) (En)',
+  ];
+  return suffixes.flatMap((suffix) => [
+    `${title} ${suffix}`,
+    revision ? `${title} ${suffix} ${revision}` : null,
+  ]);
+}
+
 function buildBoxArtNameCandidates(game) {
   const base = fileBaseName(game.fileName).replace(/_/g, ' ').trim();
   const expandedBase = regionExpandedName(base);
   const revisedBase = normalizeRevisionTags(expandedBase);
   const withoutRevision = expandedBase.replace(/\s*\(Rev[^)]*\)/gi, '').trim();
   const usaEurope = expandedBase.replace(/\(USA\)/gi, '(USA, Europe)');
-  const withoutBracketMeta = base.replace(/[\[\(].*?[\]\)]/g, ' ').replace(/\s+/g, ' ').trim();
-  const dashTitle = game.title.replace(/\s+-\s+/g, ' - ').replace(/\s+/g, ' ').trim();
+  const usaEuropeBrazil = revisedBase.replace(/\(USA\)/gi, '(USA, Europe, Brazil) (En)');
+  const withoutBracketMeta = stripRegionAndMeta(base);
+  const cleanedTitle = titleCaseSmallWords(withoutBracketMeta || game.title);
+  const titleVariants = uniq([
+    game.title,
+    cleanedTitle,
+    ...punctuationVariants(game.title),
+    ...punctuationVariants(cleanedTitle),
+  ]);
 
   return uniq([
     base,
@@ -194,12 +250,12 @@ function buildBoxArtNameCandidates(game) {
     revisedBase,
     withoutRevision,
     usaEurope,
+    usaEuropeBrazil,
     withoutBracketMeta,
-    game.title,
-    dashTitle,
-    `${game.title} (World)`,
-    `${game.title} (USA)`,
-    `${game.title} (Europe)`,
+    ...titleVariants,
+    ...titleVariants.flatMap((title) => appendRegions(title)),
+    ...titleVariants.flatMap((title) => appendRegions(title, '(Rev 1)')),
+    ...titleVariants.flatMap((title) => appendRegions(title, '(Beta)')),
     game.system === 'arcade' ? fileBaseName(game.fileName).toLowerCase() : null,
   ]);
 }
