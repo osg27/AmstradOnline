@@ -636,6 +636,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(false);
+  const [showBoxArtOnly, setShowBoxArtOnly] = useState(false);
 
   useEffect(() => {
     async function loadLibrary() {
@@ -687,9 +688,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       .filter((game) => selectedSystems.includes(game.system))
       .filter((game) => activeSystem === 'all' || game.system === activeSystem || (activeSystem === 'favourites' && favouriteSet.has(game.id)))
       .filter((game) => showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game))
+      .filter((game) => !showBoxArtOnly || Boolean(game.boxArtUrl))
       .filter((game) => !normalizedQuery || `${game.title} ${game.fileName} ${game.path}`.toLowerCase().includes(normalizedQuery))
       .sort((a, b) => a.title.localeCompare(b.title));
-  }, [activeSystem, favouriteSet, games, query, selectedSystems, showArcadeClones]);
+  }, [activeSystem, favouriteSet, games, query, selectedSystems, showArcadeClones, showBoxArtOnly]);
   const hiddenArcadeCloneCount = useMemo(
     () => games
       .filter((game) => selectedSystems.includes(game.system))
@@ -1078,6 +1080,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                   <span>Show clones/children</span>
                 </label>
               ) : null}
+              <label className="library-clone-toggle">
+                <input
+                  type="checkbox"
+                  checked={showBoxArtOnly}
+                  onChange={(event) => setShowBoxArtOnly(event.target.checked)}
+                />
+                <span>Box art only</span>
+              </label>
               <button type="button" className="secondary download-media-button" onClick={downloadBoxArt} disabled={!filteredGames.length || Boolean(mediaProgress)}>
                 {mediaProgress ? `Box art ${mediaProgress.checked}/${mediaProgress.total}` : 'Download box art'}
               </button>
@@ -1085,7 +1095,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
             <div className="library-summary-strip">
               <strong>{filteredGames.length}</strong>
-              <span>shown from {games.length} indexed files{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
+              <span>shown from {games.length} indexed files{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
             {mediaProgress ? (
               <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
