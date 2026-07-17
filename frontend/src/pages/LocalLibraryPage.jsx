@@ -637,6 +637,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [launchingId, setLaunchingId] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(false);
   const [showBoxArtOnly, setShowBoxArtOnly] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [loadingJoin, setLoadingJoin] = useState(false);
 
   useEffect(() => {
     async function loadLibrary() {
@@ -862,6 +864,26 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     }
   }
 
+  async function handleJoinRoom(event) {
+    event.preventDefault();
+    const code = joinCode.trim().toUpperCase();
+    if (!code || loadingJoin) return;
+
+    setLoadingJoin(true);
+    setStatus(`Joining room ${code}...`);
+    try {
+      const room = await apiFetch('/rooms/join', {
+        method: 'POST',
+        body: JSON.stringify({ room_code: code }),
+      });
+      navigate(`/room/${room.room_code}`);
+    } catch (err) {
+      setStatus(`Could not join room ${code}: ${err.message}`);
+    } finally {
+      setLoadingJoin(false);
+    }
+  }
+
   function leaveLibrary() {
     if (mediaProgress && !window.confirm('Box art download is still running. Leave this page anyway?')) {
       return;
@@ -942,6 +964,22 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           <div className="local-library-actions">
             <span>Choose a system below, then add its ROM folder.</span>
             <span>{folders.length ? `${folders.length} folder${folders.length === 1 ? '' : 's'} connected` : 'No folders connected yet'}</span>
+            {!onboarding ? (
+              <form className="quick-join library-quick-join" onSubmit={handleJoinRoom}>
+                <label>
+                  <span>Join room</span>
+                  <input
+                    placeholder="ABC123"
+                    value={joinCode}
+                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                    maxLength={8}
+                  />
+                </label>
+                <button type="submit" disabled={!joinCode || loadingJoin}>
+                  {loadingJoin ? 'Joining...' : 'Join'}
+                </button>
+              </form>
+            ) : null}
           </div>
         </section>
 

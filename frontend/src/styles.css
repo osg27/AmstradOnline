@@ -1230,6 +1230,14 @@ input:focus {
   font-size: 0.9rem;
 }
 
+.library-quick-join {
+  align-items: end;
+  margin-top: 0.15rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .welcome-home-page {
   align-items: center;
   justify-content: flex-start;
@@ -2788,6 +2796,30 @@ input:focus {
   align-items: flex-end;
   gap: 0.55rem;
   flex-wrap: wrap;
+}
+
+.invite-room-strip {
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.8rem;
+  border-color: rgba(226, 177, 57, 0.5);
+  background:
+    linear-gradient(135deg, rgba(226, 177, 57, 0.12), rgba(18, 22, 21, 0.94));
+}
+
+.invite-room-strip div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: min(100%, 360px);
+  flex: 1 1 360px;
+}
+
+.invite-room-strip strong {
+  color: #fff7dd;
+}
+
+.invite-room-strip span {
+  color: var(--muted);
 }
 
 .room-system-switch label {
