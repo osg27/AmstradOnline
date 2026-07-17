@@ -146,6 +146,7 @@ const LIBRETRO_BOXART_REPOS = {
 };
 
 const boxArtIndexCache = new Map();
+const arcadeParentKeyCache = new Map();
 const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 'nintendo']);
 
 function slugify(value) {
@@ -167,8 +168,14 @@ function arcadeRomKey(fileName) {
 }
 
 function canonicalArcadeParentKey(romKey) {
+  if (arcadeParentKeyCache.has(romKey)) return arcadeParentKeyCache.get(romKey);
+
   const metadata = mame2003PlusTitles[romKey];
-  if (metadata?.parent) return metadata.parent;
+  if (metadata) {
+    const parentKey = metadata.parent || romKey;
+    arcadeParentKeyCache.set(romKey, parentKey);
+    return parentKey;
+  }
 
   const parentPrefix = Object.entries(mame2003PlusTitles)
     .filter(([candidateKey, candidate]) => (
@@ -180,7 +187,9 @@ function canonicalArcadeParentKey(romKey) {
     ))
     .sort(([left], [right]) => right.length - left.length)[0]?.[0];
 
-  return parentPrefix || romKey;
+  const parentKey = parentPrefix || romKey;
+  arcadeParentKeyCache.set(romKey, parentKey);
+  return parentKey;
 }
 
 function isArcadeParentRom(game) {
@@ -336,12 +345,31 @@ function makeBoxArtEntry(repo, fileName, url) {
   };
 }
 
+function addBoxArtEntry(collection, repo, fileName, url) {
+  if (collection.seenTitles.has(fileName)) return;
+
+  const entry = makeBoxArtEntry(repo, fileName, url);
+  collection.seenTitles.add(fileName);
+  collection.entries.push(entry);
+  if (entry.exactKey && !collection.exactMap.has(entry.exactKey)) {
+    collection.exactMap.set(entry.exactKey, entry);
+  }
+  if (entry.looseKey && !collection.looseMap.has(entry.looseKey)) {
+    collection.looseMap.set(entry.looseKey, entry);
+  }
+}
+
 async function getBoxArtIndex(systemId) {
   if (boxArtIndexCache.has(systemId)) return boxArtIndexCache.get(systemId);
 
   const repos = LIBRETRO_BOXART_REPOS[systemId] || [];
   const indexPromise = (async () => {
-    const entries = [];
+    const collection = {
+      entries: [],
+      exactMap: new Map(),
+      looseMap: new Map(),
+      seenTitles: new Set(),
+    };
     for (const repo of repos) {
       try {
         const response = await fetch(`https://api.github.com/repos/libretro-thumbnails/${repo}/git/trees/master?recursive=1`, { cache: 'force-cache' });
@@ -352,7 +380,7 @@ async function getBoxArtIndex(systemId) {
           .filter((item) => item.type === 'blob' && /^Named_Boxarts\/.+\.png$/i.test(item.path))
           .forEach((item) => {
             const fileName = item.path.split('/').pop().replace(/\.png$/i, '');
-            entries.push(makeBoxArtEntry(repo, fileName, rawGitHubBoxArtUrl(repo, item.path)));
+            addBoxArtEntry(collection, repo, fileName, rawGitHubBoxArtUrl(repo, item.path));
           });
       } catch {
         // Try the next repo; external metadata sources are best-effort.
@@ -366,15 +394,13 @@ async function getBoxArtIndex(systemId) {
         const matches = [...html.matchAll(/href="([^"]+\.png)"/gi)];
         matches.forEach((match) => {
           const fileName = decodeURIComponent(match[1].split('/').pop().replace(/\.png$/i, '').replace(/\+/g, ' '));
-          if (!entries.some((entry) => entry.title === fileName)) {
-            entries.push(makeBoxArtEntry(repo, fileName, libretroBoxArtUrl(repo, fileName)));
-          }
+          addBoxArtEntry(collection, repo, fileName, libretroBoxArtUrl(repo, fileName));
         });
       } catch {
         // Directory listings are a fallback for when the GitHub tree is stale or blocked.
       }
     }
-    return entries;
+    return collection;
   })();
 
   boxArtIndexCache.set(systemId, indexPromise);
@@ -387,25 +413,25 @@ function findIndexedBoxArt(game, index) {
   const looseKeys = candidates.map(normalizeBoxArtKey).filter(Boolean);
 
   for (const key of exactKeys) {
-    const match = index.find((entry) => entry.exactKey === key);
+    const match = index.exactMap.get(key);
     if (match) return match;
   }
 
   for (const key of looseKeys) {
-    const match = index.find((entry) => entry.looseKey === key);
+    const match = index.looseMap.get(key);
     if (match) return match;
   }
 
   const baseKey = normalizeBoxArtKey(stripRegionAndMeta(fileBaseName(game.fileName)));
   if (baseKey.length >= 4) {
-    const startsWithMatch = index.find((entry) => entry.looseKey.startsWith(baseKey) || baseKey.startsWith(entry.looseKey));
+    const startsWithMatch = index.entries.find((entry) => entry.looseKey.startsWith(baseKey) || baseKey.startsWith(entry.looseKey));
     if (startsWithMatch) return startsWithMatch;
   }
 
   const candidateTokenSets = looseKeys
     .map((key) => key.split(' ').filter((token) => token.length > 1 && !BOX_ART_NOISE_WORDS.has(token)))
     .filter((tokens) => tokens.length >= 2);
-  const subsetMatch = index.find((entry) => {
+  const subsetMatch = index.entries.find((entry) => {
     const entryTokens = new Set(entry.looseKey.split(' ').filter(Boolean));
     return candidateTokenSets.some((tokens) => tokens.every((token) => entryTokens.has(token)));
   });
@@ -416,6 +442,28 @@ function findIndexedBoxArt(game, index) {
 
 function buildBoxArtNameCandidates(game) {
   const base = fileBaseName(game.fileName).replace(/_/g, ' ').trim();
+  const romKey = game.system === 'arcade' ? arcadeRomKey(game.fileName) : '';
+  const canonicalRomKey = romKey ? canonicalArcadeParentKey(romKey) : '';
+  const arcadeMetadata = romKey ? mame2003PlusTitles[romKey] : null;
+  const canonicalArcadeMetadata = canonicalRomKey ? mame2003PlusTitles[canonicalRomKey] : null;
+  const arcadeTitles = game.system === 'arcade'
+    ? uniq([
+      romKey,
+      canonicalRomKey,
+      arcadeMetadata?.title,
+      canonicalArcadeMetadata?.title,
+    ].flatMap((value) => (
+      value
+        ? [
+          value,
+          stripRegionAndMeta(value),
+          titleCaseSmallWords(stripRegionAndMeta(value)),
+          moveTrailingArticle(stripRegionAndMeta(value)),
+          ...punctuationVariants(stripRegionAndMeta(value)),
+        ]
+        : []
+    )))
+    : [];
   const expandedBase = regionExpandedName(base);
   const revisedBase = normalizeRevisionTags(expandedBase);
   const withoutRevision = expandedBase.replace(/\s*\(Rev[^)]*\)/gi, '').trim();
@@ -434,6 +482,7 @@ function buildBoxArtNameCandidates(game) {
     moveTrailingArticle(cleanedTitle),
     moveTrailingArticle(base),
     moveTrailingArticle(expandedBase),
+    ...arcadeTitles,
     ...punctuationVariants(game.title),
     ...punctuationVariants(cleanedTitle),
     ...punctuationVariants(articleFixedTitle),
@@ -447,6 +496,7 @@ function buildBoxArtNameCandidates(game) {
     usaEurope,
     usaEuropeBrazil,
     withoutBracketMeta,
+    ...arcadeTitles,
     ...titleVariants,
     ...titleVariants.flatMap((title) => appendRegions(title)),
     ...titleVariants.flatMap((title) => appendRegions(title, '(Rev 1)')),
@@ -486,6 +536,10 @@ async function findBoxArtForGame(game) {
       boxArtSource: indexedMatch.url,
       boxArtFetchedAt: new Date().toISOString(),
     };
+  }
+
+  if (game.system === 'arcade') {
+    return null;
   }
 
   const repos = LIBRETRO_BOXART_REPOS[game.system] || [];
