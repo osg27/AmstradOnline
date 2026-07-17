@@ -5524,6 +5524,21 @@ export default function RoomPage() {
                           pointerEvents: 'auto',
                         }}
                       />
+                      <canvas
+                        ref={mirrorCanvasRef}
+                        aria-hidden="true"
+                        width={768}
+                        height={576}
+                        style={{
+                          position: 'absolute',
+                          left: '-9999px',
+                          top: '0',
+                          width: '1px',
+                          height: '1px',
+                          opacity: 0,
+                          pointerEvents: 'none',
+                        }}
+                      />
                     </div>
                     {!isScreenFullscreen ? renderMameLeaderboardPanel('side') : null}
                   </div>
