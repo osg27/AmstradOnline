@@ -22,7 +22,7 @@ from app.schemas.room import (
 )
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
-TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", "playstation", "atarist", "atari8", "mastersystem", "arcade"}
+TESTING_SYSTEMS = {"amiga_link", "amiga_aga"}
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
 SUPER_ADMIN_ONLY_SYSTEMS = set()

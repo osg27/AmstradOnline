@@ -5016,9 +5016,22 @@ export default function RoomPage() {
       }
       forwardInputToEmulator(loadMessage);
 
-      if (reloadedNesFrame) {
-        const emulatorCanvas = await waitForEmulatorCanvas(reloadedNesFrame);
+      if (isNes) {
+        const frame = reloadedNesFrame || emulatorFrameRef.current;
+        await new Promise((resolve) => {
+          setTimeout(resolve, reloadedNesFrame ? 100 : 250);
+        });
+        const emulatorCanvas = await waitForEmulatorCanvas(frame);
         startMirrorLoop(emulatorCanvas);
+
+        if (hostStartedRef.current) {
+          const nextVideoStream = mirrorCanvasRef.current?.captureStream(60);
+          if (!nextVideoStream) {
+            throw new Error('NES mirror stream missing');
+          }
+          const nextAudioStream = await waitForHostAudioStream(frame);
+          await replaceHostMediaStreams(nextVideoStream, nextAudioStream);
+        }
       }
 
       if (isArcade || isAmigaAga || isAtariSt) {
