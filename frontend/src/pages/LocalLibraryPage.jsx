@@ -51,7 +51,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'atari8',
     label: 'Atari 400/800 XL',
     shortLabel: 'A8',
-    extensions: ['atr', 'xex', 'car', 'rom', 'cas', 'zip'],
+    extensions: ['atr', 'xfd', 'atx', 'xex', 'com', 'car', 'rom', 'bin', 'cas', 'zip'],
     pathHints: ['atari 8', 'atari8', '800xl', '400'],
   },
   {
@@ -327,8 +327,8 @@ function normalizeExactBoxArtKey(value) {
     .trim();
 }
 
-function rawGitHubBoxArtUrl(repo, path) {
-  return `https://raw.githubusercontent.com/libretro-thumbnails/${repo}/master/${path.split('/').map(encodeURIComponent).join('/')}`;
+function rawGitHubBoxArtUrl(repo, path, branch = 'master') {
+  return `https://raw.githubusercontent.com/libretro-thumbnails/${repo}/${branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
 }
 
 function libretroBoxArtUrl(repo, fileName) {
@@ -371,19 +371,22 @@ async function getBoxArtIndex(systemId) {
       seenTitles: new Set(),
     };
     for (const repo of repos) {
-      try {
-        const response = await fetch(`https://api.github.com/repos/libretro-thumbnails/${repo}/git/trees/master?recursive=1`, { cache: 'force-cache' });
-        if (!response.ok) continue;
-        const payload = await response.json();
-        const tree = Array.isArray(payload.tree) ? payload.tree : [];
-        tree
-          .filter((item) => item.type === 'blob' && /^Named_Boxarts\/.+\.png$/i.test(item.path))
-          .forEach((item) => {
-            const fileName = item.path.split('/').pop().replace(/\.png$/i, '');
-            addBoxArtEntry(collection, repo, fileName, rawGitHubBoxArtUrl(repo, item.path));
-          });
-      } catch {
-        // Try the next repo; external metadata sources are best-effort.
+      for (const branch of ['master', 'main']) {
+        try {
+          const response = await fetch(`https://api.github.com/repos/libretro-thumbnails/${repo}/git/trees/${branch}?recursive=1`, { cache: 'force-cache' });
+          if (!response.ok) continue;
+          const payload = await response.json();
+          const tree = Array.isArray(payload.tree) ? payload.tree : [];
+          tree
+            .filter((item) => item.type === 'blob' && /^Named_Boxarts\/.+\.png$/i.test(item.path))
+            .forEach((item) => {
+              const fileName = item.path.split('/').pop().replace(/\.png$/i, '');
+              addBoxArtEntry(collection, repo, fileName, rawGitHubBoxArtUrl(repo, item.path, branch));
+            });
+          if (tree.length) break;
+        } catch {
+          // Try the next branch/repo; external metadata sources are best-effort.
+        }
       }
 
       try {
