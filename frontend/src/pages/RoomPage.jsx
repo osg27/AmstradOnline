@@ -72,6 +72,17 @@ const CONTROL_DIRECTIONS = [
 const CONTROL_UTILITY_ACTIONS = ['fire2', 'pause', 'start', 'quit'];
 const ATARI8_ZIP_EXTENSIONS = ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas'];
 const ATARI8_ZIP_EXTENSION_PRIORITY = ['.xex', '.com', '.car', '.rom', '.bin', '.atr', '.xfd', '.atx', '.cas'];
+const SNES_ZIP_EXTENSIONS = ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'];
+const SNES_UNWANTED_ENTRY_PATTERNS = [
+  /\[t[+-][^\]]*\]/i,
+  /\[h[^\]]*\]/i,
+  /\[b[^\]]*\]/i,
+  /\[o[^\]]*\]/i,
+  /\[a[^\]]*\]/i,
+  /\[p[^\]]*\]/i,
+  /\[f[^\]]*\]/i,
+  /\b(trainer|trained|translation|translated|hack|bad|overdump|alternate|prototype|proto|beta|sample|demo)\b/i,
+];
 const ATARI8_MODEL_OPTIONS = [
   ['400/800', '400/800'],
   ['1200xl', '1200XL'],
@@ -276,6 +287,47 @@ async function expandAtari8ZipFile(file) {
   const [entryName, bytes] = entries[0];
   const fileName = entryName.split(/[\\/]/).pop() || entryName;
   return { fileName, bytes };
+}
+
+function scoreSnesZipEntry(entryName) {
+  const fileName = entryName.split(/[\\/]/).pop() || entryName;
+  const lowerName = fileName.toLowerCase();
+  let score = 0;
+
+  if (lowerName.endsWith('.sfc')) score += 8;
+  if (lowerName.endsWith('.smc')) score += 6;
+  if (/\((usa|u|world|europe|eur|e)\)/i.test(fileName)) score += 24;
+  if (/\((japan|j)\)/i.test(fileName)) score -= 8;
+  if (/\[!\]/i.test(fileName)) score += 8;
+  if (!/\[[^\]]+\]/.test(fileName)) score += 35;
+
+  for (const pattern of SNES_UNWANTED_ENTRY_PATTERNS) {
+    if (pattern.test(fileName)) score -= 60;
+  }
+
+  score -= entryName.split(/[\\/]/).length;
+  return score;
+}
+
+async function expandSnesZipFile(file) {
+  const archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  const entries = Object.entries(archive)
+    .filter(([entryName]) => {
+      const lowerName = entryName.toLowerCase();
+      return !lowerName.endsWith('/') && SNES_ZIP_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+    })
+    .sort(([leftName], [rightName]) => (
+      scoreSnesZipEntry(rightName) - scoreSnesZipEntry(leftName)
+      || leftName.localeCompare(rightName, undefined, { numeric: true, sensitivity: 'base' })
+    ));
+
+  if (!entries.length) {
+    throw new Error('SNES zip files need to contain a .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, or .dx2 ROM file');
+  }
+
+  const [entryName, bytes] = entries[0];
+  const fileName = entryName.split(/[\\/]/).pop() || entryName;
+  return { fileName, bytes, archiveEntryName: entryName };
 }
 
 function clearAtari8SessionStorage() {
@@ -524,6 +576,8 @@ export default function RoomPage() {
   const isAtariSt = roomSystem === 'atarist';
   const isMouseComputer = isAmigaFamily || isAtariSt;
   const isArcade = roomSystem === 'arcade';
+  const isLocalLibraryHostRoom = Boolean(localGameId && isHost);
+  const supportsMameScoreboard = isArcade && (isSoloMode || isLocalLibraryHostRoom);
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const isC64Party = isC64 && !isSoloMode && partyMaxPlayers > 2;
@@ -2876,7 +2930,7 @@ export default function RoomPage() {
 
     mameScoreBaselineRef.current = null;
     refreshMameLeaderboard(loadedDiskName);
-    if (!isSoloMode || !isHost) return undefined;
+    if (!supportsMameScoreboard || !isHost) return undefined;
 
     const timer = window.setTimeout(() => {
       captureMameScoreBaseline(loadedDiskName).catch((err) => {
@@ -2885,7 +2939,7 @@ export default function RoomPage() {
     }, 2500);
 
     return () => window.clearTimeout(timer);
-  }, [addLog, isArcade, isHost, isSoloMode, loadedDiskName]);
+  }, [addLog, isArcade, isHost, loadedDiskName, supportsMameScoreboard]);
 
   useEffect(() => {
     async function loadRoom() {
@@ -4265,7 +4319,7 @@ export default function RoomPage() {
   }
 
   async function refreshMameLeaderboard(fileName = loadedDiskName) {
-    if (!isSoloMode || !isArcade || !fileName) {
+    if (!supportsMameScoreboard || !fileName) {
       setMameLeaderboard([]);
       setMameLeaderboardSupported(false);
       setMameScoreStatus('');
@@ -4297,7 +4351,7 @@ export default function RoomPage() {
   }
 
   async function captureMameScoreBaseline(fileName = loadedDiskNameRef.current) {
-    if (!isSoloMode || !isArcade || !isHost || !fileName) return;
+    if (!supportsMameScoreboard || !isHost || !fileName) return;
 
     const frame = emulatorFrameRef.current;
     const bundle = await frame?.contentWindow?.getArcadeSaveBundle?.({ restartCore: false });
@@ -4312,7 +4366,7 @@ export default function RoomPage() {
   }
 
   async function submitMameScoreExtraction(reason = 'session') {
-    if (!isSoloMode || !isArcade || !isHost || !loadedDiskNameRef.current) return null;
+    if (!supportsMameScoreboard || !isHost || !loadedDiskNameRef.current) return null;
     if (!mameLeaderboardSupported) return null;
 
     const frame = emulatorFrameRef.current;
@@ -4380,7 +4434,7 @@ export default function RoomPage() {
   }
 
   function renderMameLeaderboardPanel(extraClass = '') {
-    if (!isSoloMode || !isArcade || !loadedDiskName) return null;
+    if (!supportsMameScoreboard || !loadedDiskName) return null;
 
     return (
       <div className={`mame-score-panel ${extraClass}`}>
@@ -4791,7 +4845,7 @@ export default function RoomPage() {
     setStatus(`Loading local game: ${game.title || game.fileName}`);
 
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('mode', 'solo');
+    nextParams.delete('mode');
     nextParams.set('localGame', game.id);
     navigate(`/room/${roomCode}?${nextParams.toString()}`, { replace: true });
     setLocalGameReloadToken((value) => value + 1);
@@ -4886,11 +4940,14 @@ export default function RoomPage() {
       }
 
       const atari8ZipFile = isAtari8 && file.name.toLowerCase().endsWith('.zip');
+      const snesZipFile = isSnes && file.name.toLowerCase().endsWith('.zip');
       const filesToLoad = (isAmigaAga || isPlayStation || isC64 || isAtariSt) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
       const loadedFiles = atari8ZipFile
         ? [await expandAtari8ZipFile(file)]
+        : snesZipFile
+        ? [await expandSnesZipFile(file)]
         : await Promise.all(filesToLoad.map(async (selectedFile) => ({
           fileName: selectedFile.name,
           bytes: new Uint8Array(await selectedFile.arrayBuffer()),
@@ -4975,11 +5032,15 @@ export default function RoomPage() {
         setAtariStMediaIndex(0);
       }
 
-      const loadedLabel = atari8ZipFile
+      const expandedZipFile = atari8ZipFile || snesZipFile;
+      const loadedLabel = expandedZipFile
         ? `${loadedFiles[0].fileName} from ${file.name}`
         : loadedFiles.length > 1
         ? `${loadedFiles[0].fileName} + ${loadedFiles.length - 1} disk${loadedFiles.length === 2 ? '' : 's'}`
         : file.name;
+      if (snesZipFile) {
+        addLog(`Selected SNES ROM from zip: ${loadedFiles[0].archiveEntryName || loadedFiles[0].fileName}`);
+      }
       setLoadedDiskName(loadedLabel);
       addLog(`${isSwapDisk ? 'Swapped disk' : 'Loaded file'}: ${loadedLabel}`);
       setStatus(`${isSwapDisk ? 'Disk swapped' : 'File loaded'}: ${loadedLabel}`);
@@ -5226,7 +5287,7 @@ export default function RoomPage() {
 
   return (
     <div className={`page room-page ${obsCaptureMode ? 'obs-capture-page' : ''}`}>
-      <div className={`page-social-layout room-social-layout ${isSoloMode && isArcade ? 'solo-arcade-layout' : ''}`}>
+      <div className={`page-social-layout room-social-layout ${supportsMameScoreboard ? 'solo-arcade-layout' : ''}`}>
         <div className="card room-card">
         <div className="room-topbar">
           <div className="room-title">
@@ -5673,7 +5734,7 @@ export default function RoomPage() {
                     {mediaLabel}
                   </button>
 
-                  {isSoloMode && localRoomGames.length > 0 ? (
+                  {isHost && localRoomGames.length > 0 ? (
                     <button type="button" className="secondary" onClick={() => setLocalGamePickerOpen((value) => !value)}>
                       {localGamePickerOpen ? 'Hide games' : 'Change game'}
                     </button>
@@ -6233,7 +6294,7 @@ export default function RoomPage() {
           </>
         ) : null}
         </div>
-        {isSoloMode && isArcade ? null : (
+        {supportsMameScoreboard ? null : (
           <div className="room-side-rail">
             <SocialSidebar roomCode={roomCode} allowInvites={!isSoloMode} showOnline={false} />
             {!isSoloMode ? (

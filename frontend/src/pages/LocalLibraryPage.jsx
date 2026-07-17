@@ -856,7 +856,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           party_max_players: 2,
         }),
       });
-      navigate(`/room/${room.room_code}?mode=solo&localGame=${encodeURIComponent(game.id)}`);
+      navigate(`/room/${room.room_code}?localGame=${encodeURIComponent(game.id)}`);
     } catch (err) {
       setStatus(`Could not start ${game.title}: ${err.message}`);
     } finally {
