@@ -37,7 +37,7 @@ def normalize_party_max_players(system: str, requested: int | None) -> int:
 
     requested_players = requested or 2
     if system == "arcade":
-        return min(4, max(3, requested_players))
+        return min(4, max(2, requested_players))
     return min(8, max(2, requested_players))
 
 
