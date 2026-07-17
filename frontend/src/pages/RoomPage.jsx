@@ -3476,6 +3476,7 @@ export default function RoomPage() {
     }
 
     const requestCapturedFrame = () => {
+      if (isArcade) return;
       mirrorCaptureTrackRef.current?.requestFrame?.();
     };
 
@@ -4130,7 +4131,7 @@ export default function RoomPage() {
         return;
       }
 
-      const stream = mirrorCanvasRef.current?.captureStream(60);
+      const stream = mirrorCanvasRef.current?.captureStream(isArcade ? 30 : 60);
 
       if (!stream) {
         throw new Error('Video stream missing');
@@ -4583,7 +4584,7 @@ export default function RoomPage() {
 
       const emulatorCanvas = await waitForEmulatorCanvas(frame);
       startMirrorLoop(emulatorCanvas);
-      const nextVideoStream = mirrorCanvasRef.current?.captureStream(60);
+      const nextVideoStream = mirrorCanvasRef.current?.captureStream(isArcade ? 30 : 60);
 
       if (!nextVideoStream) {
         throw new Error('Arcade mirror stream missing');
