@@ -5,7 +5,7 @@ import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
-import { getLocalLibraryFolder, getLocalLibraryGame } from '../localLibraryDb';
+import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames } from '../localLibraryDb';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
@@ -380,6 +380,11 @@ export default function RoomPage() {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
   const [roomCodeCopied, setRoomCodeCopied] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [localGamePickerOpen, setLocalGamePickerOpen] = useState(false);
+  const [localGameSearch, setLocalGameSearch] = useState('');
+  const [localRoomGames, setLocalRoomGames] = useState([]);
+  const [localGameReloadToken, setLocalGameReloadToken] = useState(0);
   const [emulatorFrameLoadCount, setEmulatorFrameLoadCount] = useState(0);
   const [roomSessionKey, setRoomSessionKey] = useState(0);
   const [emulatorSessionKey, setEmulatorSessionKey] = useState(0);
@@ -544,8 +549,8 @@ export default function RoomPage() {
     : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-07-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
-    ? '.adf,.zip'
-    : isMasterSystem ? '.sms' : isMegaDrive ? '.bin,.gen,.md,.smd' : isNes ? '.nes' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2' : isPcEngine ? '.pce,.sgx,.zip' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt' : isAtari8 ? '.atr,.xfd,.atx,.xex,.com,.car,.rom,.bin,.cas,.zip' : isAtariSt ? '.st,.msa,.stx,.ipf' : isArcade ? '.zip,.7z' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip' : '.dsk';
+    ? '.adf,.zip,.7z'
+    : isMasterSystem ? '.sms,.zip,.7z' : isMegaDrive ? '.bin,.gen,.md,.smd,.zip,.7z' : isNes ? '.nes,.zip,.7z' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2,.zip,.7z' : isPcEngine ? '.pce,.sgx,.zip,.7z' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt,.zip,.7z' : isAtari8 ? '.atr,.xfd,.atx,.xex,.com,.car,.rom,.bin,.cas,.zip,.7z' : isAtariSt ? '.st,.msa,.stx,.ipf,.zip,.7z' : isArcade ? '.zip,.7z' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip,.7z' : '.dsk';
   const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMasterSystem ? 'Load Master System ROM' : isMegaDrive ? 'Load Mega Drive ROM' : isNes ? 'Load NES ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isPlayStation ? loadedDiskName ? 'Change PlayStation game' : 'Load PlayStation game' : isC64 ? 'Load C64 file' : isAtari8 ? loadedDiskName ? 'Change Atari 8-bit file' : 'Load Atari 8-bit file' : isAtariSt ? 'Load Atari ST disk' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
@@ -608,6 +613,18 @@ export default function RoomPage() {
 
     return entries.slice(0, 120);
   }, [arcadeRomEntries, arcadeRomSearch, showArcadeCloneRoms]);
+  const filteredLocalRoomGames = useMemo(() => {
+    const query = localGameSearch.trim().toLowerCase();
+    const matches = query
+      ? localRoomGames.filter((game) => (
+        game.title.toLowerCase().includes(query)
+        || game.fileName.toLowerCase().includes(query)
+        || game.path.toLowerCase().includes(query)
+      ))
+      : localRoomGames;
+
+    return matches.slice(0, 180);
+  }, [localGameSearch, localRoomGames]);
 
   useEffect(() => {
     isHostRef.current = isHost === true;
@@ -672,6 +689,37 @@ export default function RoomPage() {
   const addLog = useCallback((message) => {
     setLogs((prev) => [`${new Date().toLocaleTimeString()} - ${message}`, ...prev].slice(0, 80));
   }, []);
+
+  useEffect(() => {
+    if (!isSoloMode || !roomSystem) {
+      setLocalRoomGames([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadLocalRoomGames() {
+      try {
+        const games = await getLocalLibraryGames();
+        if (cancelled) return;
+        setLocalRoomGames(
+          games
+            .filter((game) => game.roomSystem === roomSystem)
+            .sort((left, right) => left.title.localeCompare(right.title)),
+        );
+      } catch (err) {
+        if (!cancelled) {
+          addLog(`Local library list unavailable: ${err.message}`);
+          setLocalRoomGames([]);
+        }
+      }
+    }
+
+    loadLocalRoomGames();
+    return () => {
+      cancelled = true;
+    };
+  }, [addLog, isSoloMode, roomSystem]);
 
   const playRemoteVideo = useCallback(() => {
     const video = remoteVideoRef.current;
@@ -4684,7 +4732,50 @@ export default function RoomPage() {
   }
 
   function leaveRoom() {
-    navigate('/lobby');
+    navigate('/library');
+  }
+
+  async function invitePlayerFromSolo() {
+    if (!roomCode) return;
+
+    const inviteUrl = `${window.location.origin}/room/${roomCode}`;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setInviteCopied(true);
+      window.setTimeout(() => setInviteCopied(false), 1400);
+    } catch {
+      setInviteCopied(false);
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('mode');
+    const search = nextParams.toString();
+    navigate(`/room/${roomCode}${search ? `?${search}` : ''}`, { replace: true });
+    addLog('Solo room opened for guests');
+    setStatus('Invite link copied. Guests can now join this room.');
+  }
+
+  function chooseLocalRoomGame(game) {
+    if (!game?.id) return;
+
+    sessionStorage.setItem('oldstylegaming:pendingLocalGame', JSON.stringify({
+      id: game.id,
+      title: game.title,
+      fileName: game.fileName,
+      system: game.system,
+      roomSystem: game.roomSystem,
+    }));
+    localLibraryLoadAttemptedRef.current = false;
+    setLocalGamePickerOpen(false);
+    setLocalGameSearch('');
+    setLoadedDiskName(game.fileName || game.title || '');
+    setStatus(`Loading local game: ${game.title || game.fileName}`);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('mode', 'solo');
+    nextParams.set('localGame', game.id);
+    navigate(`/room/${roomCode}?${nextParams.toString()}`, { replace: true });
+    setLocalGameReloadToken((value) => value + 1);
   }
 
   function swapC64JoystickPorts() {
@@ -4716,8 +4807,8 @@ export default function RoomPage() {
 
       const isSwapDisk = isAmigaFamily && event.target.dataset.mode === 'swap';
       const allowedExtensions = isAmigaFamily
-        ? ['.adf', '.zip']
-        : isMasterSystem ? ['.sms'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isNes ? ['.nes'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isPcEngine ? ['.pce', '.sgx', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
+        ? ['.adf', '.zip', '.7z']
+        : isMasterSystem ? ['.sms', '.zip', '.7z'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd', '.zip', '.7z'] : isNes ? ['.nes', '.zip', '.7z'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2', '.zip', '.7z'] : isPcEngine ? ['.pce', '.sgx', '.zip', '.7z'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt', '.zip', '.7z'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip', '.7z'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf', '.zip', '.7z'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip', '.7z'] : ['.dsk'];
 
       const invalidFile = selectedFiles.find((selectedFile) => {
         const selectedLowerName = selectedFile.name.toLowerCase();
@@ -4731,7 +4822,7 @@ export default function RoomPage() {
           event.target.value = '';
           return;
         }
-        setError(isAmigaFamily ? 'Amiga rooms currently support .adf and .zip files' : isMasterSystem ? 'Master System rooms support .sms ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isNes ? 'NES rooms support .nes ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, and .dx2 ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, and .zip ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, and .crt files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, and .zip files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, and .ipf disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
+        setError(isAmigaFamily ? 'Amiga rooms support .adf, .zip, and .7z files' : isMasterSystem ? 'Master System rooms support .sms, .zip, and .7z ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, .smd, .zip, and .7z ROM files' : isNes ? 'NES rooms support .nes, .zip, and .7z ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .zip, and .7z ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, .zip, and .7z ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, .crt, .zip, and .7z files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, .zip, and .7z files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, .ipf, .zip, and .7z disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, .zip, and .7z files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${invalidFile.name}`);
         event.target.value = '';
         return;
@@ -4987,7 +5078,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isArcade, isAtariSt, isSoloMode, localGameId, room]);
+  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isArcade, isAtariSt, isSoloMode, localGameId, localGameReloadToken, room]);
 
   async function handleKickstartSelected(event) {
     try {
@@ -5137,9 +5228,14 @@ export default function RoomPage() {
           </div>
 
           <div className="room-actions">
-            <Link className="button-like secondary" to="/lobby">
-              Lobby
+            <Link className="button-like secondary" to="/library">
+              Library
             </Link>
+            {isSoloMode && isHost ? (
+              <button type="button" className="secondary" onClick={invitePlayerFromSolo}>
+                {inviteCopied ? 'Invite copied' : 'Invite player'}
+              </button>
+            ) : null}
             <button className="secondary" onClick={leaveRoom}>
               Leave
             </button>
@@ -5209,7 +5305,7 @@ export default function RoomPage() {
 
         <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
 
-        <div className="room-layout">
+        <div className={`room-layout ${localGamePickerOpen ? 'with-local-game-picker' : ''}`}>
           <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isArcade ? 'arcade-fullscreen' : ''} ${isScreenFullscreen && isSharedCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
             {obsCaptureMode ? (
               <button type="button" className="secondary obs-capture-exit" onClick={() => setObsCaptureMode(false)}>
@@ -5534,6 +5630,12 @@ export default function RoomPage() {
                   <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isAmigaAga && !isAtariSt}>
                     {mediaLabel}
                   </button>
+
+                  {isSoloMode && localRoomGames.length > 0 ? (
+                    <button type="button" className="secondary" onClick={() => setLocalGamePickerOpen((value) => !value)}>
+                      {localGamePickerOpen ? 'Hide games' : 'Change game'}
+                    </button>
+                  ) : null}
 
                   {isArcade ? (
                     <button type="button" className="secondary" onClick={openArcadeRomFolder} disabled={arcadeRomScanning}>
@@ -5878,6 +5980,46 @@ export default function RoomPage() {
             ) : null}
 
           </div>
+          {isSoloMode && localGamePickerOpen ? (
+            <aside className="panel local-room-game-picker" aria-label="Local library games">
+              <div className="local-room-game-picker-head">
+                <div>
+                  <span>Local library</span>
+                  <strong>{systemLabel}</strong>
+                </div>
+                <button type="button" className="secondary icon-button" onClick={() => setLocalGamePickerOpen(false)} aria-label="Close local game list">
+                  x
+                </button>
+              </div>
+              <input
+                type="search"
+                value={localGameSearch}
+                onChange={(event) => setLocalGameSearch(event.target.value)}
+                placeholder="Search games"
+              />
+              <div className="local-room-game-list">
+                {filteredLocalRoomGames.map((game) => (
+                  <button
+                    key={game.id}
+                    type="button"
+                    className={`local-room-game-item ${game.id === localGameId ? 'active' : ''}`}
+                    onClick={() => chooseLocalRoomGame(game)}
+                  >
+                    <span className={`local-room-game-thumb ${game.boxArtUrl ? 'has-art' : ''}`}>
+                      {game.boxArtUrl ? <img src={game.boxArtUrl} alt="" loading="lazy" /> : <em>{game.system?.toUpperCase?.() || 'ROM'}</em>}
+                    </span>
+                    <span>
+                      <strong>{game.title}</strong>
+                      <small>{game.fileName}</small>
+                    </span>
+                  </button>
+                ))}
+                {filteredLocalRoomGames.length === 0 ? (
+                  <p className="muted">No matching games in this system.</p>
+                ) : null}
+              </div>
+            </aside>
+          ) : null}
         </div>
 
         {controlProfileDrawerOpen && isCpcSystem ? (

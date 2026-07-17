@@ -35,7 +35,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'spectrum',
     label: 'ZX Spectrum',
     shortLabel: 'ZX',
-    extensions: ['tap', 'tzx', 'z80', 'sna', 'szx', 'zip'],
+    extensions: ['tap', 'tzx', 'z80', 'sna', 'szx', 'zip', '7z'],
     pathHints: ['spectrum', 'zx'],
   },
   {
@@ -43,7 +43,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'c64',
     label: 'Commodore 64',
     shortLabel: 'C64',
-    extensions: ['d64', 't64', 'tap', 'prg', 'crt', 'zip'],
+    extensions: ['d64', 't64', 'tap', 'prg', 'crt', 'zip', '7z'],
     pathHints: ['c64', 'commodore'],
   },
   {
@@ -51,7 +51,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'atari8',
     label: 'Atari 400/800 XL',
     shortLabel: 'A8',
-    extensions: ['atr', 'xfd', 'atx', 'xex', 'com', 'car', 'rom', 'bin', 'cas', 'zip'],
+    extensions: ['atr', 'xfd', 'atx', 'xex', 'com', 'car', 'rom', 'bin', 'cas', 'zip', '7z'],
     pathHints: ['atari 8', 'atari8', '800xl', '400'],
   },
   {
@@ -59,7 +59,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'nes',
     label: 'NES',
     shortLabel: 'NES',
-    extensions: ['nes'],
+    extensions: ['nes', 'zip', '7z'],
     pathHints: ['nes', 'nintendo entertainment'],
   },
   {
@@ -67,7 +67,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'snes',
     label: 'SNES',
     shortLabel: 'SNES',
-    extensions: ['sfc', 'smc'],
+    extensions: ['sfc', 'smc', 'zip', '7z'],
     pathHints: ['snes', 'super nintendo'],
   },
   {
@@ -75,7 +75,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'mastersystem',
     label: 'Sega Master System',
     shortLabel: 'SMS',
-    extensions: ['sms'],
+    extensions: ['sms', 'zip', '7z'],
     pathHints: ['master system', 'mastersystem', 'sms'],
   },
   {
@@ -83,7 +83,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'megadrive',
     label: 'Mega Drive',
     shortLabel: 'MD',
-    extensions: ['bin', 'gen', 'md', 'smd'],
+    extensions: ['bin', 'gen', 'md', 'smd', 'zip', '7z'],
     pathHints: ['mega drive', 'megadrive', 'genesis'],
   },
   {
@@ -91,7 +91,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'pcengine',
     label: 'PC Engine',
     shortLabel: 'PCE',
-    extensions: ['pce', 'sgx', 'zip'],
+    extensions: ['pce', 'sgx', 'zip', '7z'],
     pathHints: ['pc engine', 'pcengine', 'turbografx'],
   },
   {
@@ -107,7 +107,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'amiga',
     label: 'Amiga',
     shortLabel: 'A500',
-    extensions: ['adf', 'zip'],
+    extensions: ['adf', 'zip', '7z'],
     pathHints: ['amiga', 'a500'],
   },
   {
@@ -115,7 +115,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'atarist',
     label: 'Atari ST',
     shortLabel: 'ST',
-    extensions: ['st', 'msa', 'stx', 'ipf'],
+    extensions: ['st', 'msa', 'stx', 'ipf', 'zip', '7z'],
     pathHints: ['atari st', 'atarist'],
   },
 ];
@@ -726,7 +726,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       onComplete();
       return;
     }
-    navigate('/lobby');
+    navigate('/library');
   }
 
   async function scanFolder(targetSystemId) {
@@ -866,7 +866,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     if (mediaProgress && !window.confirm('Box art download is still running. Leave this page anyway?')) {
       return;
     }
-    navigate('/lobby');
+    navigate('/library');
   }
 
   async function downloadBoxArt() {
