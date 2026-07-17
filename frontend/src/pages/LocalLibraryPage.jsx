@@ -35,7 +35,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'spectrum',
     label: 'ZX Spectrum',
     shortLabel: 'ZX',
-    extensions: ['tap', 'tzx', 'z80', 'sna', 'szx'],
+    extensions: ['tap', 'tzx', 'z80', 'sna', 'szx', 'zip'],
     pathHints: ['spectrum', 'zx'],
   },
   {
@@ -43,7 +43,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'c64',
     label: 'Commodore 64',
     shortLabel: 'C64',
-    extensions: ['d64', 't64', 'tap', 'prg', 'crt'],
+    extensions: ['d64', 't64', 'tap', 'prg', 'crt', 'zip'],
     pathHints: ['c64', 'commodore'],
   },
   {
@@ -51,7 +51,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'atari8',
     label: 'Atari 400/800 XL',
     shortLabel: 'A8',
-    extensions: ['atr', 'xex', 'car', 'rom', 'cas'],
+    extensions: ['atr', 'xex', 'car', 'rom', 'cas', 'zip'],
     pathHints: ['atari 8', 'atari8', '800xl', '400'],
   },
   {
@@ -91,7 +91,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'pcengine',
     label: 'PC Engine',
     shortLabel: 'PCE',
-    extensions: ['pce', 'sgx'],
+    extensions: ['pce', 'sgx', 'zip'],
     pathHints: ['pc engine', 'pcengine', 'turbografx'],
   },
   {
@@ -99,7 +99,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'playstation',
     label: 'PlayStation',
     shortLabel: 'PS1',
-    extensions: ['cue', 'chd', 'pbp', 'iso'],
+    extensions: ['cue', 'chd', 'pbp', 'iso', 'zip', '7z'],
     pathHints: ['playstation', 'ps1', 'psx'],
   },
   {
@@ -107,7 +107,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'amiga',
     label: 'Amiga',
     shortLabel: 'A500',
-    extensions: ['adf'],
+    extensions: ['adf', 'zip'],
     pathHints: ['amiga', 'a500'],
   },
   {
@@ -586,6 +586,10 @@ function detectSystem(fileName, relativePath) {
 
   const hinted = candidates.find((system) => system.pathHints.some((hint) => path.includes(hint)));
   if (hinted) return hinted;
+
+  if (extension === 'zip' || extension === '7z') {
+    return null;
+  }
 
   return candidates[0];
 }
