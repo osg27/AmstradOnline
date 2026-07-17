@@ -166,10 +166,27 @@ function arcadeRomKey(fileName) {
   return fileBaseName(fileName).toLowerCase();
 }
 
+function canonicalArcadeParentKey(romKey) {
+  const metadata = mame2003PlusTitles[romKey];
+  if (metadata?.parent) return metadata.parent;
+
+  const parentPrefix = Object.entries(mame2003PlusTitles)
+    .filter(([candidateKey, candidate]) => (
+      candidateKey !== romKey
+      && candidateKey.length >= 4
+      && romKey.startsWith(candidateKey)
+      && !candidate.parent
+      && /^\d/.test(candidateKey)
+    ))
+    .sort(([left], [right]) => right.length - left.length)[0]?.[0];
+
+  return parentPrefix || romKey;
+}
+
 function isArcadeParentRom(game) {
   if (game.system !== 'arcade') return true;
-  const metadata = mame2003PlusTitles[arcadeRomKey(game.fileName)];
-  return !metadata?.parent;
+  const romKey = arcadeRomKey(game.fileName);
+  return canonicalArcadeParentKey(romKey) === romKey;
 }
 
 function uniq(values) {
