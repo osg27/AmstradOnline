@@ -899,6 +899,24 @@ export default function RoomPage() {
     setEmulatorPaused(nextPaused);
   }
 
+  function stopHostOutputStreams(message = '') {
+    stopMirrorLoop();
+    cleanupHostAudioGraph({ stopInput: true });
+    hostVideoStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+    hostAudioStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+    hostRawAudioStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+    hostVideoStreamRef.current = null;
+    hostAudioStreamRef.current = null;
+    hostRawAudioStreamRef.current = null;
+    mirrorCaptureTrackRef.current = null;
+    setHostStarted(false);
+    hostStartedRef.current = false;
+    hostStartingRef.current = false;
+    if (message) {
+      addLog(message);
+    }
+  }
+
   function resetLiveRoomSession(message = 'Room session reset', { preservePeer = false } = {}) {
     stopMirrorLoop();
     cleanupHostAudioGraph({ stopInput: true });
@@ -3107,10 +3125,16 @@ export default function RoomPage() {
       const hasTrack = remoteStream.getTracks().some((track) => track.id === event.track.id);
 
       if (!hasTrack) {
+        remoteStream.getTracks()
+          .filter((track) => track.kind === event.track.kind)
+          .forEach((track) => {
+            remoteStream.removeTrack(track);
+            track.stop?.();
+          });
         remoteStream.addTrack(event.track);
       }
 
-      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
+      if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
       }
 
@@ -5146,9 +5170,7 @@ export default function RoomPage() {
 
         if (cancelled) return;
         if (!isSoloMode) {
-          setHostStarted(false);
-          hostStartedRef.current = false;
-          hostStartingRef.current = false;
+          stopHostOutputStreams('Preparing fresh room stream for local game');
         }
 
         await handleDiskSelected({
