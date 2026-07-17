@@ -963,11 +963,11 @@ export default function RoomPage() {
     addLog(message);
   }
 
-  function applyRoomSystemUpdate(nextRoom, messagePrefix = 'Room switched') {
+  function applyRoomSystemUpdate(nextRoom, messagePrefix = 'Room switched', { preservePeer = false } = {}) {
     if (!nextRoom?.system) return;
     setRoom(nextRoom);
     setSelectedRoomSystem(nextRoom.system);
-    resetLiveRoomSession(`${messagePrefix} to ${roomSystemLabel(nextRoom.system)}`, { preservePeer: true });
+    resetLiveRoomSession(`${messagePrefix} to ${roomSystemLabel(nextRoom.system)}`, { preservePeer });
   }
 
   function updateAtari8Config(patch) {
@@ -3009,7 +3009,7 @@ export default function RoomPage() {
       role: isHost ? 'host' : 'guest',
       username,
     });
-  }, [isHost, isSoloMode, room, sendSignal, signalingOpen, username]);
+  }, [isHost, isSoloMode, room, roomSessionKey, sendSignal, signalingOpen, username]);
 
   useEffect(() => {
     if (isSoloMode) {
