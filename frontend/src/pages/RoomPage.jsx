@@ -899,24 +899,6 @@ export default function RoomPage() {
     setEmulatorPaused(nextPaused);
   }
 
-  function stopHostOutputStreams(message = '') {
-    stopMirrorLoop();
-    cleanupHostAudioGraph({ stopInput: true });
-    hostVideoStreamRef.current?.getTracks?.().forEach((track) => track.stop());
-    hostAudioStreamRef.current?.getTracks?.().forEach((track) => track.stop());
-    hostRawAudioStreamRef.current?.getTracks?.().forEach((track) => track.stop());
-    hostVideoStreamRef.current = null;
-    hostAudioStreamRef.current = null;
-    hostRawAudioStreamRef.current = null;
-    mirrorCaptureTrackRef.current = null;
-    setHostStarted(false);
-    hostStartedRef.current = false;
-    hostStartingRef.current = false;
-    if (message) {
-      addLog(message);
-    }
-  }
-
   function resetLiveRoomSession(message = 'Room session reset', { preservePeer = false } = {}) {
     stopMirrorLoop();
     cleanupHostAudioGraph({ stopInput: true });
@@ -3125,16 +3107,10 @@ export default function RoomPage() {
       const hasTrack = remoteStream.getTracks().some((track) => track.id === event.track.id);
 
       if (!hasTrack) {
-        remoteStream.getTracks()
-          .filter((track) => track.kind === event.track.kind)
-          .forEach((track) => {
-            remoteStream.removeTrack(track);
-            track.stop?.();
-          });
         remoteStream.addTrack(event.track);
       }
 
-      if (remoteVideoRef.current) {
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
       }
 
@@ -4195,7 +4171,6 @@ export default function RoomPage() {
         addLog(`Replaced room stream with ${stream.getVideoTracks().length} video track(s) and ${hostAudioStreamRef.current?.getAudioTracks().length || 0} audio track(s)`);
         setStatus('Room stream switched');
         hostStartedRef.current = true;
-        await renegotiatePeerConnection('Room stream');
         return;
       }
 
@@ -4618,9 +4593,6 @@ export default function RoomPage() {
       const nextVideoStream = emulatorCanvas.captureStream(60);
       const nextAudioStream = await waitForHostAudioStream(frame);
       await replaceHostMediaStreams(nextVideoStream, nextAudioStream);
-      if (!isSoloMode) {
-        await renegotiatePeerConnection('MAME stream');
-      }
 
       setLoadedDiskName(file.name);
       await refreshMameLeaderboard(file.name);
@@ -5168,10 +5140,11 @@ export default function RoomPage() {
           return;
         }
 
-        if (cancelled) return;
-        if (!isSoloMode) {
-          stopHostOutputStreams('Preparing fresh room stream for local game');
+        if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
+          await startHostSession();
         }
+
+        if (cancelled) return;
 
         await handleDiskSelected({
           target: {
@@ -5180,9 +5153,6 @@ export default function RoomPage() {
             value: '',
           },
         });
-        if (!isSoloMode && !hostStartedRef.current && !hostStartingRef.current) {
-          await startHostSession();
-        }
         sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
       } catch (err) {
         if (cancelled) return;
@@ -5197,7 +5167,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [canControlLocalEmulator, emulatorFrameLoadCount, isArcade, isHost, isSoloMode, localGameId, localGameReloadToken, room]);
+  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, room]);
 
   async function handleKickstartSelected(event) {
     try {
