@@ -724,21 +724,26 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     navigate('/lobby');
   }
 
-  async function scanFolder(targetSystemId = null) {
+  async function scanFolder(targetSystemId) {
     if (!canUseDirectoryPicker()) {
       setStatus('Folder scanning needs Chrome, Edge, or another Chromium browser.');
       return;
     }
 
+    const targetSystem = targetSystemId ? SYSTEM_BY_ID[targetSystemId] : null;
+    if (!targetSystem) {
+      setStatus('Choose a system first, then add that system folder.');
+      return;
+    }
+
     try {
-      const targetSystem = targetSystemId ? SYSTEM_BY_ID[targetSystemId] : null;
       const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
-      const folderId = targetSystem ? `system:${targetSystem.id}` : `mixed:${directoryHandle.name}-${Date.now()}`;
+      const folderId = `system:${targetSystem.id}`;
       const nextGames = [];
       const sampleHandles = [];
       let scanned = 0;
       setScanProgress({ scanned: 0, matched: 0 });
-      setStatus(`Scanning ${directoryHandle.name}${targetSystem ? ` for ${targetSystem.label}` : ''}...`);
+      setStatus(`Scanning ${directoryHandle.name} for ${targetSystem.label}...`);
 
       for await (const entry of walkDirectory(directoryHandle)) {
         scanned += 1;
@@ -746,7 +751,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const pathParts = entry.path.split(/[\\/]+/).map((part) => part.toLowerCase());
         const inSamplesFolder = pathParts.includes('samples');
 
-        if ((targetSystem?.id === 'arcade' || !targetSystem) && inSamplesFolder && ['zip', '7z'].includes(extension)) {
+        if (targetSystem.id === 'arcade' && inSamplesFolder && ['zip', '7z'].includes(extension)) {
           sampleHandles.push({
             key: entry.name.replace(/\.(zip|7z)$/i, '').toLowerCase(),
             name: entry.name,
@@ -756,17 +761,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           continue;
         }
 
-        const system = targetSystem && targetSystem.extensions.includes(extension)
+        const system = targetSystem.extensions.includes(extension)
           ? targetSystem
-          : targetSystem
-            ? null
-            : detectSystem(entry.name, entry.path);
+          : null;
         if (system) {
           nextGames.push({
             id: `${folderId}:${entry.path}`,
             folderId,
             folderName: directoryHandle.name,
-            folderSystem: targetSystem?.id || 'mixed',
+            folderSystem: targetSystem.id,
             title: titleFromFileName(entry.name),
             fileName: entry.name,
             path: entry.path,
@@ -786,8 +789,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       const folder = {
         id: folderId,
         name: directoryHandle.name,
-        system: targetSystem?.id || 'mixed',
-        systemLabel: targetSystem?.label || 'Mixed library',
+        system: targetSystem.id,
+        systemLabel: targetSystem.label,
         handle: directoryHandle,
         scannedAt: new Date().toISOString(),
         gameCount: nextGames.length,
@@ -810,10 +813,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
       await saveLocalLibraryFolders(mergedFolders);
       await saveLocalLibraryGames(mergedGames);
+      if (!selectedSystems.includes(targetSystem.id)) {
+        const nextSelectedSystems = [...selectedSystems, targetSystem.id];
+        setSelectedSystems(nextSelectedSystems);
+        await saveLocalLibrarySetting('selectedSystems', nextSelectedSystems);
+      }
       setFolders(mergedFolders);
       setGames(mergedGames);
       setScanProgress(null);
-      setStatus(`Found ${nextGames.length} ${targetSystem ? targetSystem.label : 'playable'} file${nextGames.length === 1 ? '' : 's'} in ${directoryHandle.name}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}.`);
+      setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${directoryHandle.name}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}.`);
     } catch (err) {
       if (err.name !== 'AbortError') {
         setStatus(`Scan failed: ${err.message}`);
@@ -927,10 +935,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             <p>{onboarding ? (games.length ? 'Your browser already has a scanned library. Pick the systems you want on your home page, then continue.' : 'Choose the systems you care about, attach local ROM folders, and your home page will become your own retro dashboard.') : 'Pick a folder once, build a searchable library, and keep the ROMs on your own drive.'}</p>
           </div>
           <div className="local-library-actions">
-            <button type="button" onClick={() => scanFolder()}>
-              <i className="bi bi-folder2-open" aria-hidden="true" />
-              Add mixed ROM folder
-            </button>
+            <span>Choose a system below, then add its ROM folder.</span>
             <span>{folders.length ? `${folders.length} folder${folders.length === 1 ? '' : 's'} connected` : 'No folders connected yet'}</span>
           </div>
         </section>
