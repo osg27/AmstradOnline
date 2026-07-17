@@ -747,7 +747,7 @@ export default function RoomPage() {
   }, []);
 
   useEffect(() => {
-    if (!isSoloMode || !roomSystem) {
+    if (!isHost || !roomSystem) {
       setLocalRoomGames([]);
       return undefined;
     }
@@ -775,7 +775,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [addLog, isSoloMode, roomSystem]);
+  }, [addLog, isHost, roomSystem]);
 
   const playRemoteVideo = useCallback(() => {
     const video = remoteVideoRef.current;
@@ -2519,6 +2519,7 @@ export default function RoomPage() {
 
     if (message.type === 'room-system-changed' && message.room) {
       applyRoomSystemUpdate(message.room, `${message.username || 'Host'} switched the room`);
+      setLocalGamePickerOpen(false);
       return;
     }
 
@@ -2784,6 +2785,14 @@ export default function RoomPage() {
       });
 
       applyRoomSystemUpdate(nextRoom, 'Room switched');
+      localLibraryLoadAttemptedRef.current = false;
+      setLocalGameSearch('');
+      setLocalGamePickerOpen(true);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('localGame');
+      nextParams.delete('mode');
+      const query = nextParams.toString();
+      navigate(`/room/${roomCode}${query ? `?${query}` : ''}`, { replace: true });
       sendSignal({
         type: 'room-system-changed',
         username: username || 'Host',
@@ -4162,6 +4171,7 @@ export default function RoomPage() {
         addLog(`Replaced room stream with ${stream.getVideoTracks().length} video track(s) and ${hostAudioStreamRef.current?.getAudioTracks().length || 0} audio track(s)`);
         setStatus('Room stream switched');
         hostStartedRef.current = true;
+        await renegotiatePeerConnection('Room stream');
         return;
       }
 
@@ -4584,6 +4594,9 @@ export default function RoomPage() {
       const nextVideoStream = emulatorCanvas.captureStream(60);
       const nextAudioStream = await waitForHostAudioStream(frame);
       await replaceHostMediaStreams(nextVideoStream, nextAudioStream);
+      if (!isSoloMode) {
+        await renegotiatePeerConnection('MAME stream');
+      }
 
       setLoadedDiskName(file.name);
       await refreshMameLeaderboard(file.name);
@@ -5131,11 +5144,12 @@ export default function RoomPage() {
           return;
         }
 
-        if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
-          await startHostSession();
-        }
-
         if (cancelled) return;
+        if (!isSoloMode) {
+          setHostStarted(false);
+          hostStartedRef.current = false;
+          hostStartingRef.current = false;
+        }
 
         await handleDiskSelected({
           target: {
@@ -5144,6 +5158,9 @@ export default function RoomPage() {
             value: '',
           },
         });
+        if (!isSoloMode && !hostStartedRef.current && !hostStartingRef.current) {
+          await startHostSession();
+        }
         sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
       } catch (err) {
         if (cancelled) return;
@@ -5158,7 +5175,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, room]);
+  }, [canControlLocalEmulator, emulatorFrameLoadCount, isArcade, isHost, isSoloMode, localGameId, localGameReloadToken, room]);
 
   async function handleKickstartSelected(event) {
     try {
@@ -6083,7 +6100,7 @@ export default function RoomPage() {
             ) : null}
 
           </div>
-          {isSoloMode && localGamePickerOpen ? (
+          {isHost && localGamePickerOpen ? (
             <aside className="panel local-room-game-picker" aria-label="Local library games">
               <div className="local-room-game-picker-head">
                 <div>
