@@ -5174,12 +5174,6 @@ export default function RoomPage() {
           return;
         }
 
-        if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
-          await startHostSession();
-        }
-
-        if (cancelled) return;
-
         await handleDiskSelected({
           target: {
             files: [file],
@@ -5187,6 +5181,12 @@ export default function RoomPage() {
             value: '',
           },
         });
+
+        if (cancelled) return;
+
+        if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
+          await startHostSession();
+        }
         sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
       } catch (err) {
         if (cancelled) return;
