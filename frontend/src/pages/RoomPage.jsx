@@ -2684,6 +2684,16 @@ export default function RoomPage() {
         activePeerSignalIdRef.current = message.from;
       }
 
+      if (pc.remoteDescription?.type === 'offer' && pc.remoteDescription.sdp === message.offer?.sdp) {
+        addLog('Ignored duplicate offer');
+        return;
+      }
+
+      if (pc.signalingState !== 'stable') {
+        addLog(`Ignored offer while ${pc.signalingState}`);
+        return;
+      }
+
       await pc.setRemoteDescription(message.offer);
       await flushPendingIceCandidates();
 
@@ -2716,6 +2726,11 @@ export default function RoomPage() {
       addLog('Received answer');
       if (message.from) {
         activePeerSignalIdRef.current = message.from;
+      }
+
+      if (pc.signalingState !== 'have-local-offer') {
+        addLog(`Ignored answer while ${pc.signalingState}`);
+        return;
       }
 
       await pc.setRemoteDescription(message.answer);
@@ -3454,7 +3469,9 @@ export default function RoomPage() {
 
     ctx.imageSmoothingEnabled = false;
 
-    function drawContained(sourceX, sourceY, sourceWidth, sourceHeight) {
+    let activeSourceCanvas = sourceCanvas;
+
+    function drawContained(drawSource, sourceX, sourceY, sourceWidth, sourceHeight) {
       const scale = Math.min(mirrorCanvas.width / sourceWidth, mirrorCanvas.height / sourceHeight);
       const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
       const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
@@ -3463,7 +3480,7 @@ export default function RoomPage() {
 
       ctx.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
       ctx.drawImage(
-        sourceCanvas,
+        drawSource,
         sourceX,
         sourceY,
         sourceWidth,
@@ -3481,16 +3498,25 @@ export default function RoomPage() {
 
     const drawOnce = () => {
       try {
-        const sourceWidth = sourceCanvas.width || sourceCanvas.clientWidth;
-        const sourceHeight = sourceCanvas.height || sourceCanvas.clientHeight;
+        if (isArcade) {
+          const frameDocument = emulatorFrameRef.current?.contentDocument
+            || emulatorFrameRef.current?.contentWindow?.document;
+          const nextSourceCanvas = findCanvasInDocument(frameDocument);
+          if (nextSourceCanvas) {
+            activeSourceCanvas = nextSourceCanvas;
+          }
+        }
+
+        const sourceWidth = activeSourceCanvas.width || activeSourceCanvas.clientWidth;
+        const sourceHeight = activeSourceCanvas.height || activeSourceCanvas.clientHeight;
         if (!sourceWidth || !sourceHeight) {
           return false;
         }
 
         if (isArcade) {
-          drawContained(0, 0, sourceWidth, sourceHeight);
+          drawContained(activeSourceCanvas, 0, 0, sourceWidth, sourceHeight);
         } else {
-          ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
+          ctx.drawImage(activeSourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
         }
         requestCapturedFrame();
         return true;
@@ -3524,6 +3550,7 @@ export default function RoomPage() {
         arcadeScreen
         && arcadeScreen.width > 0
         && arcadeScreen.height > 0
+        && arcadeScreen.style.display !== 'none'
         && arcadeScreen.dataset.ignoreCapture !== 'true'
       ) {
         return arcadeScreen;
@@ -3556,6 +3583,8 @@ export default function RoomPage() {
     const canvas = canvases.find((candidate) => (
       candidate.id !== 'placeholder-canvas'
       && (!isAtariSt || candidate.id !== 'atarist-screen')
+      && (!isArcade || candidate.id !== 'arcade-screen')
+      && (!isArcade || ((candidate.width || candidate.clientWidth) >= 256 && (candidate.height || candidate.clientHeight) >= 200))
       && candidate.dataset.ignoreCapture !== 'true'
       && candidate.width > 0
       && candidate.height > 0
