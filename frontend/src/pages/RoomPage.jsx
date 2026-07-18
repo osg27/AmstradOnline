@@ -3469,20 +3469,7 @@ export default function RoomPage() {
 
     ctx.imageSmoothingEnabled = false;
 
-    let activeSourceCanvas = sourceCanvas;
-    let arcadeGameCanvasLocked = !isArcade || sourceCanvas.id !== 'arcade-screen';
-
-    function isUsableArcadeGameCanvas(candidate) {
-      if (!candidate || candidate.id === 'arcade-screen') return false;
-      if (candidate.dataset.ignoreCapture === 'true') return false;
-
-      const candidateWidth = candidate.width || candidate.clientWidth;
-      const candidateHeight = candidate.height || candidate.clientHeight;
-
-      return candidateWidth >= 256 && candidateHeight >= 200;
-    }
-
-    function drawContained(drawSource, sourceX, sourceY, sourceWidth, sourceHeight) {
+    function drawContained(sourceX, sourceY, sourceWidth, sourceHeight) {
       const scale = Math.min(mirrorCanvas.width / sourceWidth, mirrorCanvas.height / sourceHeight);
       const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
       const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
@@ -3491,7 +3478,7 @@ export default function RoomPage() {
 
       ctx.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
       ctx.drawImage(
-        drawSource,
+        sourceCanvas,
         sourceX,
         sourceY,
         sourceWidth,
@@ -3504,34 +3491,22 @@ export default function RoomPage() {
     }
 
     const requestCapturedFrame = () => {
+      if (isArcade) return;
       mirrorCaptureTrackRef.current?.requestFrame?.();
     };
 
     const drawOnce = () => {
       try {
-        if (isArcade && !arcadeGameCanvasLocked) {
-          const frameDocument = emulatorFrameRef.current?.contentDocument
-            || emulatorFrameRef.current?.contentWindow?.document;
-          const nextSourceCanvas = findCanvasInDocument(frameDocument);
-          if (isUsableArcadeGameCanvas(nextSourceCanvas)) {
-            activeSourceCanvas = nextSourceCanvas;
-            arcadeGameCanvasLocked = true;
-            addLog(`Locked MAME stream canvas ${nextSourceCanvas.width || nextSourceCanvas.clientWidth}x${nextSourceCanvas.height || nextSourceCanvas.clientHeight}`);
-          } else if (nextSourceCanvas && activeSourceCanvas.id === 'arcade-screen') {
-            activeSourceCanvas = nextSourceCanvas;
-          }
-        }
-
-        const sourceWidth = activeSourceCanvas.width || activeSourceCanvas.clientWidth;
-        const sourceHeight = activeSourceCanvas.height || activeSourceCanvas.clientHeight;
+        const sourceWidth = sourceCanvas.width || sourceCanvas.clientWidth;
+        const sourceHeight = sourceCanvas.height || sourceCanvas.clientHeight;
         if (!sourceWidth || !sourceHeight) {
           return false;
         }
 
         if (isArcade) {
-          drawContained(activeSourceCanvas, 0, 0, sourceWidth, sourceHeight);
+          drawContained(0, 0, sourceWidth, sourceHeight);
         } else {
-          ctx.drawImage(activeSourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
+          ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
         }
         requestCapturedFrame();
         return true;
@@ -3558,19 +3533,6 @@ export default function RoomPage() {
 
   function findCanvasInDocument(doc, depth = 0) {
     if (!doc || depth > 3) return null;
-
-    if (isArcade) {
-      const arcadeScreen = doc.querySelector('#arcade-screen');
-      if (
-        arcadeScreen
-        && arcadeScreen.width > 0
-        && arcadeScreen.height > 0
-        && arcadeScreen.style.display !== 'none'
-        && arcadeScreen.dataset.ignoreCapture !== 'true'
-      ) {
-        return arcadeScreen;
-      }
-    }
 
     if (isAtariSt) {
       const nativeAtariCanvas = doc.querySelector('#game canvas');
@@ -3599,7 +3561,6 @@ export default function RoomPage() {
       candidate.id !== 'placeholder-canvas'
       && (!isAtariSt || candidate.id !== 'atarist-screen')
       && (!isArcade || candidate.id !== 'arcade-screen')
-      && (!isArcade || ((candidate.width || candidate.clientWidth) >= 256 && (candidate.height || candidate.clientHeight) >= 200))
       && candidate.dataset.ignoreCapture !== 'true'
       && candidate.width > 0
       && candidate.height > 0
@@ -4185,7 +4146,7 @@ export default function RoomPage() {
         return;
       }
 
-      const stream = mirrorCanvasRef.current?.captureStream(60);
+      const stream = mirrorCanvasRef.current?.captureStream(isArcade ? 30 : 60);
 
       if (!stream) {
         throw new Error('Video stream missing');
@@ -4638,7 +4599,7 @@ export default function RoomPage() {
 
       const emulatorCanvas = await waitForEmulatorCanvas(frame);
       startMirrorLoop(emulatorCanvas);
-      const nextVideoStream = mirrorCanvasRef.current?.captureStream(60);
+      const nextVideoStream = mirrorCanvasRef.current?.captureStream(isArcade ? 30 : 60);
 
       if (!nextVideoStream) {
         throw new Error('Arcade mirror stream missing');
