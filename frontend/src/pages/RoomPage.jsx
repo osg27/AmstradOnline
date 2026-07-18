@@ -4137,7 +4137,13 @@ export default function RoomPage() {
       }
 
       const emulatorCanvas = await waitForEmulatorCanvas(iframe);
-      startMirrorLoop(emulatorCanvas);
+      const useDirectCanvasStream = isArcade && typeof emulatorCanvas.captureStream === 'function';
+
+      if (useDirectCanvasStream) {
+        addLog('Using native arcade canvas stream');
+      } else {
+        startMirrorLoop(emulatorCanvas);
+      }
 
       if (isAmigaLink) {
         addLog('Local linked Amiga ready');
@@ -4146,7 +4152,9 @@ export default function RoomPage() {
         return;
       }
 
-      const stream = mirrorCanvasRef.current?.captureStream(isArcade ? 30 : 60);
+      const stream = useDirectCanvasStream
+        ? emulatorCanvas.captureStream(60)
+        : mirrorCanvasRef.current?.captureStream(60);
 
       if (!stream) {
         throw new Error('Video stream missing');
@@ -4598,8 +4606,7 @@ export default function RoomPage() {
       frame.contentWindow?.postMessage({ type: 'arcade_start' }, window.location.origin);
 
       const emulatorCanvas = await waitForEmulatorCanvas(frame);
-      startMirrorLoop(emulatorCanvas);
-      const nextVideoStream = mirrorCanvasRef.current?.captureStream(isArcade ? 30 : 60);
+      const nextVideoStream = emulatorCanvas.captureStream(60);
 
       if (!nextVideoStream) {
         throw new Error('Arcade mirror stream missing');
