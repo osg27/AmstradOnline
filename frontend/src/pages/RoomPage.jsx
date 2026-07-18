@@ -3519,6 +3519,18 @@ export default function RoomPage() {
   function findCanvasInDocument(doc, depth = 0) {
     if (!doc || depth > 3) return null;
 
+    if (isArcade) {
+      const arcadeScreen = doc.querySelector('#arcade-screen');
+      if (
+        arcadeScreen
+        && arcadeScreen.width > 0
+        && arcadeScreen.height > 0
+        && arcadeScreen.dataset.ignoreCapture !== 'true'
+      ) {
+        return arcadeScreen;
+      }
+    }
+
     if (isAtariSt) {
       const nativeAtariCanvas = doc.querySelector('#game canvas');
       if (
@@ -3545,7 +3557,6 @@ export default function RoomPage() {
     const canvas = canvases.find((candidate) => (
       candidate.id !== 'placeholder-canvas'
       && (!isAtariSt || candidate.id !== 'atarist-screen')
-      && (!isArcade || candidate.id !== 'arcade-screen')
       && candidate.dataset.ignoreCapture !== 'true'
       && candidate.width > 0
       && candidate.height > 0
