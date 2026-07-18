@@ -6,7 +6,8 @@
   const GAMEPAD_API_INDEX = 64;
   const GAMEPAD_API_STRIDE = 32;
   const NTSC_FPS = 60;
-  const SOUND_DELAY_FRAME = 8;
+  const SOUND_DELAY_FRAME = 3;
+  const MAX_AUDIO_QUEUE_TIME = 0.12;
   const isMasterSystem = new URLSearchParams(window.location.search).get('system') === 'mastersystem';
   const systemName = isMasterSystem ? 'Master System' : 'Mega Drive';
 
@@ -99,13 +100,14 @@
     source.connect(audioMasterGain || audioContext.destination);
 
     const currentSoundTime = audioContext.currentTime;
-    if (currentSoundTime < soundShedTime) {
-      source.start(soundShedTime);
-      soundShedTime += audioBuffer.duration;
-    } else {
-      source.start(currentSoundTime);
-      soundShedTime = currentSoundTime + audioBuffer.duration + soundDelayTime;
+    const minimumStartTime = currentSoundTime + soundDelayTime;
+
+    if (soundShedTime < minimumStartTime || soundShedTime > currentSoundTime + MAX_AUDIO_QUEUE_TIME) {
+      soundShedTime = minimumStartTime;
     }
+
+    source.start(soundShedTime);
+    soundShedTime += audioBuffer.duration;
   }
 
   function getAxis(mask, negativeBit, positiveBit) {
@@ -272,11 +274,6 @@
 
     const sampleCount = gens._sound();
     if (!audioContext || sampleCount <= 0) return;
-
-    if (fps < targetFps) {
-      soundShedTime = 0;
-      return;
-    }
 
     const audioBuffer = audioContext.createBuffer(2, Math.min(sampleCount, SAMPLING_PER_FPS), SOUND_FREQUENCY);
     audioBuffer.getChannelData(0).set(audioL.slice(0, audioBuffer.length));
