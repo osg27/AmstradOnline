@@ -161,6 +161,11 @@
     pendingStart = true;
     ensureAudio();
 
+    if (started && romReady && !emulatorPaused) {
+      pendingStart = false;
+      return;
+    }
+
     if (!wasmReady) {
       drawStatus(`Starting ${systemName}`, 'Checking genplus runtime...');
       return;
@@ -181,6 +186,7 @@
       emulatorPaused = false;
       pendingStart = false;
       then = Date.now();
+      soundShedTime = 0;
       console.info(`${systemName}: emulator started at ${targetFps} FPS`);
     } catch (error) {
       started = false;
@@ -215,6 +221,7 @@
     emulatorPaused = false;
     pendingStart = false;
     then = Date.now();
+    soundShedTime = 0;
 
     if (!looping) {
       looping = true;
@@ -239,6 +246,8 @@
       romBytes.byteLength,
     );
     romBuffer.set(romBytes);
+    started = false;
+    soundShedTime = 0;
     romReady = true;
     drawStatus(`${systemName} ready`, romName);
     startEmulator();
