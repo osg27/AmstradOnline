@@ -850,7 +850,7 @@ export default function RoomPage() {
   }
 
   function buildHostAudioStream(rawAudioStream) {
-    cleanupHostAudioGraph({ stopInput: true });
+    cleanupHostAudioGraph({ stopInput: false });
     hostRawAudioStreamRef.current = rawAudioStream || null;
 
     if (!rawAudioStream?.getAudioTracks?.().length) {
