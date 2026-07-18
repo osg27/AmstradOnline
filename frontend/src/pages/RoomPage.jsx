@@ -3470,6 +3470,17 @@ export default function RoomPage() {
     ctx.imageSmoothingEnabled = false;
 
     let activeSourceCanvas = sourceCanvas;
+    let arcadeGameCanvasLocked = !isArcade || sourceCanvas.id !== 'arcade-screen';
+
+    function isUsableArcadeGameCanvas(candidate) {
+      if (!candidate || candidate.id === 'arcade-screen') return false;
+      if (candidate.dataset.ignoreCapture === 'true') return false;
+
+      const candidateWidth = candidate.width || candidate.clientWidth;
+      const candidateHeight = candidate.height || candidate.clientHeight;
+
+      return candidateWidth >= 256 && candidateHeight >= 200;
+    }
 
     function drawContained(drawSource, sourceX, sourceY, sourceWidth, sourceHeight) {
       const scale = Math.min(mirrorCanvas.width / sourceWidth, mirrorCanvas.height / sourceHeight);
@@ -3498,11 +3509,15 @@ export default function RoomPage() {
 
     const drawOnce = () => {
       try {
-        if (isArcade) {
+        if (isArcade && !arcadeGameCanvasLocked) {
           const frameDocument = emulatorFrameRef.current?.contentDocument
             || emulatorFrameRef.current?.contentWindow?.document;
           const nextSourceCanvas = findCanvasInDocument(frameDocument);
-          if (nextSourceCanvas) {
+          if (isUsableArcadeGameCanvas(nextSourceCanvas)) {
+            activeSourceCanvas = nextSourceCanvas;
+            arcadeGameCanvasLocked = true;
+            addLog(`Locked MAME stream canvas ${nextSourceCanvas.width || nextSourceCanvas.clientWidth}x${nextSourceCanvas.height || nextSourceCanvas.clientHeight}`);
+          } else if (nextSourceCanvas && activeSourceCanvas.id === 'arcade-screen') {
             activeSourceCanvas = nextSourceCanvas;
           }
         }
