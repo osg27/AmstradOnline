@@ -383,23 +383,17 @@ export default function LobbyPage() {
     eras: platform.eras.map((era) => ({
       ...era,
       systems: era.systems.filter((system) => (
-        (!filterToLocalLibrary || selectedLibrarySystemSet.has(system.id)) &&
-        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin || (system.id === 'atarist' && canUsePreviewSystems))
+        !filterToLocalLibrary || selectedLibrarySystemSet.has(system.id)
       )).map((system) => {
-        const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
-        const locked = lockedForTesting || Boolean(system.underConstruction);
+        const locked = Boolean(system.underConstruction);
         return {
           ...system,
           locked,
-          badge: system.underConstruction
-            ? 'Under construction'
-            : system.testing
-              ? canUsePreviewSystems ? 'Testing' : 'Coming soon - in testing'
-              : null,
+          badge: system.underConstruction ? 'Under construction' : null,
         };
       }),
     })).filter((era) => era.systems.length > 0),
-  })).filter((platform) => platform.eras.length > 0), [canUsePreviewSystems, filterToLocalLibrary, isAdmin, isSuperAdmin, selectedLibrarySystemSet]);
+  })).filter((platform) => platform.eras.length > 0), [filterToLocalLibrary, selectedLibrarySystemSet]);
 
   const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];
@@ -559,7 +553,7 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin && !(selectedSystem.id === 'atarist' && canUsePreviewSystems)) || (modeConfig.testing && !canUsePreviewSystems)) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled) {
         throw new Error('That play mode is not ready yet.');
       }
 
@@ -798,7 +792,7 @@ export default function LobbyPage() {
                   modeId !== 'link' || selectedSystem?.id === 'amiga'
                 )).map(([modeId, mode]) => {
                   const modeConfig = selectedSystem?.modes[modeId];
-                  const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked && (!modeConfig.testing || canUsePreviewSystems));
+                  const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked);
                   const active = selectedMode === modeId;
 
                   return (
@@ -811,7 +805,7 @@ export default function LobbyPage() {
                     >
                       <span>{mode.kicker}</span>
                       <strong>{mode.label}</strong>
-                      <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.testing || modeConfig?.testing ? 'Available to testers for now' : modeConfig?.note || 'Coming later'}</small>
+                      <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : modeConfig?.note || 'Coming later'}</small>
                     </button>
                   );
                 })}
@@ -837,9 +831,9 @@ export default function LobbyPage() {
             <button
               className="launch-button"
               onClick={() => createSession()}
-              disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled || (selectedModeConfig?.testing && !canUsePreviewSystems)}
+              disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled}
             >
-              {loadingCreate ? 'Starting...' : !selectedSystem ? 'Choose a system' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Currently in testing' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
+              {loadingCreate ? 'Starting...' : !selectedSystem ? 'Choose a system' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Not available' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
             </button>
 
             {error ? <p className="error">{error}</p> : null}
