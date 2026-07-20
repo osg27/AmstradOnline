@@ -984,28 +984,30 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           </div>
         </section>
 
-        <section className="setup-wizard library-overview-strip" aria-label="Library overview">
-          <div className="setup-step active">
-            <span>1</span>
-            <strong>Select systems</strong>
-            <small>{visibleSystems.length || selectedSystems.length} visible</small>
-          </div>
-          <div className={`setup-step ${folders.length ? 'active' : ''}`}>
-            <span>2</span>
-            <strong>Choose folders</strong>
-            <small>{folders.length ? `${folders.length} connected` : 'Waiting'}</small>
-          </div>
-          <div className={`setup-step ${games.length ? 'active' : ''}`}>
-            <span>3</span>
-            <strong>Scan library</strong>
-            <small>{scanProgress ? `${scanProgress.scanned} scanned` : `${games.length} games`}</small>
-          </div>
-          <div className={`setup-step ${games.length ? 'active' : ''}`}>
-            <span>4</span>
-            <strong>Play</strong>
-            <small>Solo rooms first</small>
-          </div>
-        </section>
+        {onboarding ? (
+          <section className="setup-wizard library-overview-strip" aria-label="Library overview">
+            <div className="setup-step active">
+              <span>1</span>
+              <strong>Select systems</strong>
+              <small>{visibleSystems.length || selectedSystems.length} visible</small>
+            </div>
+            <div className={`setup-step ${folders.length ? 'active' : ''}`}>
+              <span>2</span>
+              <strong>Choose folders</strong>
+              <small>{folders.length ? `${folders.length} connected` : 'Waiting'}</small>
+            </div>
+            <div className={`setup-step ${games.length ? 'active' : ''}`}>
+              <span>3</span>
+              <strong>Scan library</strong>
+              <small>{scanProgress ? `${scanProgress.scanned} scanned` : `${games.length} games`}</small>
+            </div>
+            <div className={`setup-step ${games.length ? 'active' : ''}`}>
+              <span>4</span>
+              <strong>Play</strong>
+              <small>Solo rooms first</small>
+            </div>
+          </section>
+        ) : null}
 
         {onboarding ? (
           <div className="onboarding-finish-bar">
