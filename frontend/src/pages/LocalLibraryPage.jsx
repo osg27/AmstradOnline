@@ -148,6 +148,7 @@ const LIBRETRO_BOXART_REPOS = {
 const boxArtIndexCache = new Map();
 const arcadeParentKeyCache = new Map();
 const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 'nintendo']);
+const LIBRARY_PAGE_SIZE = 96;
 
 function slugify(value) {
   return value
@@ -639,6 +640,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [showBoxArtOnly, setShowBoxArtOnly] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [loadingJoin, setLoadingJoin] = useState(false);
+  const [renderLimit, setRenderLimit] = useState(LIBRARY_PAGE_SIZE);
 
   useEffect(() => {
     async function loadLibrary() {
@@ -682,37 +684,36 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }, [mediaProgress]);
 
   const systemCounts = useMemo(() => buildSystemCounts(games), [games]);
-  const visibleSystems = useMemo(() => SUPPORTED_SYSTEMS.filter((system) => selectedSystems.includes(system.id)), [selectedSystems]);
+  const visibleSystems = useMemo(
+    () => SUPPORTED_SYSTEMS.filter((system) => (systemCounts[system.id] || 0) > 0 || folders.some((folder) => folder.system === system.id)),
+    [folders, systemCounts],
+  );
+  const activeSystemDetails = activeSystem === 'all' || activeSystem === 'favourites'
+    ? null
+    : SYSTEM_BY_ID[activeSystem];
   const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
   const filteredGames = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return games
-      .filter((game) => selectedSystems.includes(game.system))
       .filter((game) => activeSystem === 'all' || game.system === activeSystem || (activeSystem === 'favourites' && favouriteSet.has(game.id)))
       .filter((game) => showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game))
       .filter((game) => !showBoxArtOnly || Boolean(game.boxArtUrl))
       .filter((game) => !normalizedQuery || `${game.title} ${game.fileName} ${game.path}`.toLowerCase().includes(normalizedQuery))
       .sort((a, b) => a.title.localeCompare(b.title));
-  }, [activeSystem, favouriteSet, games, query, selectedSystems, showArcadeClones, showBoxArtOnly]);
+  }, [activeSystem, favouriteSet, games, query, showArcadeClones, showBoxArtOnly]);
   const hiddenArcadeCloneCount = useMemo(
     () => games
-      .filter((game) => selectedSystems.includes(game.system))
       .filter((game) => activeSystem === 'all' || game.system === 'arcade' || (activeSystem === 'favourites' && favouriteSet.has(game.id)))
       .filter((game) => game.system === 'arcade' && !isArcadeParentRom(game))
       .length,
-    [activeSystem, favouriteSet, games, selectedSystems],
+    [activeSystem, favouriteSet, games],
   );
+  const displayedGames = useMemo(() => filteredGames.slice(0, renderLimit), [filteredGames, renderLimit]);
+  const canShowMoreGames = filteredGames.length > displayedGames.length;
 
-  async function toggleSystem(systemId) {
-    const next = selectedSystems.includes(systemId)
-      ? selectedSystems.filter((id) => id !== systemId)
-      : [...selectedSystems, systemId];
-    setSelectedSystems(next);
-    await saveLocalLibrarySetting('selectedSystems', next);
-    if (activeSystem !== 'all' && activeSystem !== 'favourites' && !next.includes(activeSystem)) {
-      setActiveSystem('all');
-    }
-  }
+  useEffect(() => {
+    setRenderLimit(LIBRARY_PAGE_SIZE);
+  }, [activeSystem, query, showArcadeClones, showBoxArtOnly]);
 
   async function toggleFavourite(gameId) {
     const next = favouriteSet.has(gameId)
@@ -983,11 +984,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           </div>
         </section>
 
-        <section className="setup-wizard" aria-label="Setup wizard">
+        <section className="setup-wizard library-overview-strip" aria-label="Library overview">
           <div className="setup-step active">
             <span>1</span>
             <strong>Select systems</strong>
-            <small>{selectedSystems.length} enabled</small>
+            <small>{visibleSystems.length || selectedSystems.length} visible</small>
           </div>
           <div className={`setup-step ${folders.length ? 'active' : ''}`}>
             <span>2</span>
@@ -1021,21 +1022,25 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         <main className={`local-library-layout ${onboarding ? 'onboarding-library-layout' : ''}`}>
           <aside className="local-library-sidebar">
             <div className="local-library-panel">
-              <h2>Systems</h2>
-              <div className="system-picker-list">
+              <div className="library-panel-head">
+                <h2>Platforms</h2>
+                <button type="button" className="secondary" onClick={() => setActiveSystem('all')}>All</button>
+              </div>
+              <div className="system-picker-list platform-rail">
                 {SUPPORTED_SYSTEMS.map((system) => {
                   const linkedFolder = folders.find((folder) => folder.system === system.id);
+                  const count = systemCounts[system.id] || 0;
                   return (
-                    <div key={system.id} className={selectedSystems.includes(system.id) ? 'system-picker-row enabled' : 'system-picker-row'}>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={selectedSystems.includes(system.id)}
-                          onChange={() => toggleSystem(system.id)}
-                        />
+                    <div key={system.id} className={activeSystem === system.id ? 'system-picker-row enabled' : 'system-picker-row'}>
+                      <button
+                        type="button"
+                        className="platform-select-button"
+                        onClick={() => setActiveSystem(system.id)}
+                      >
+                        <span className="platform-short-code">{system.shortLabel}</span>
                         <span>{system.label}</span>
-                        <small>{systemCounts[system.id] || 0}</small>
-                      </label>
+                        <small>{count}</small>
+                      </button>
                       <button type="button" className="secondary" onClick={() => scanFolder(system.id)}>
                         {linkedFolder ? 'Change folder' : 'Add folder'}
                       </button>
@@ -1083,6 +1088,18 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
           {!onboarding ? (
           <section className="local-library-main">
+            <div className="local-library-titlebar">
+              <div>
+                <p className="lobby-eyebrow">{activeSystem === 'favourites' ? 'Saved Picks' : activeSystemDetails?.shortLabel || 'All Platforms'}</p>
+                <h2>{activeSystem === 'favourites' ? 'Favourites' : activeSystemDetails?.label || 'All Games'}</h2>
+                <span>{filteredGames.length} shown from {games.length} indexed files</span>
+              </div>
+              {activeSystemDetails ? (
+                <button type="button" onClick={() => scanFolder(activeSystemDetails.id)}>
+                  {folders.some((folder) => folder.system === activeSystemDetails.id) ? 'Change folder' : 'Add folder'}
+                </button>
+              ) : null}
+            </div>
             <div className="local-library-toolbar">
               <div className="library-filter-tabs" aria-label="Library filters">
                 <button type="button" className={activeSystem === 'all' ? 'active' : 'secondary'} onClick={() => setActiveSystem('all')}>
@@ -1091,16 +1108,6 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 <button type="button" className={activeSystem === 'favourites' ? 'active' : 'secondary'} onClick={() => setActiveSystem('favourites')}>
                   Favourites
                 </button>
-                {visibleSystems.map((system) => (
-                  <button
-                    key={system.id}
-                    type="button"
-                    className={activeSystem === system.id ? 'active' : 'secondary'}
-                    onClick={() => setActiveSystem(system.id)}
-                  >
-                    {system.shortLabel}
-                  </button>
-                ))}
               </div>
               <input
                 type="search"
@@ -1143,7 +1150,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
             {filteredGames.length ? (
               <div className="local-game-grid">
-                {filteredGames.map((game) => {
+                {displayedGames.map((game) => {
                   const system = SYSTEM_BY_ID[game.system];
                   const favourite = favouriteSet.has(game.id);
                   return (
@@ -1151,7 +1158,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                       <div className={game.boxArtUrl ? 'local-game-art has-art' : 'local-game-art'}>
                         {game.boxArtUrl ? (
                           <>
-                            <img src={game.boxArtUrl} alt="" loading="lazy" />
+                            <img src={game.boxArtUrl} alt="" loading="lazy" decoding="async" />
                             <div className="local-game-art-overlay">
                               <strong>{game.title}</strong>
                               <small>{system?.label || 'Unknown system'}</small>
@@ -1182,6 +1189,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                     </article>
                   );
                 })}
+                {canShowMoreGames ? (
+                  <button
+                    type="button"
+                    className="library-show-more"
+                    onClick={() => setRenderLimit((limit) => limit + LIBRARY_PAGE_SIZE)}
+                  >
+                    Show {Math.min(LIBRARY_PAGE_SIZE, filteredGames.length - displayedGames.length)} more
+                  </button>
+                ) : null}
               </div>
             ) : (
               <div className="empty-local-library">
