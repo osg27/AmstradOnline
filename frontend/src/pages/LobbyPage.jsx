@@ -200,7 +200,7 @@ const PLATFORM_SHELVES = [
             accent: 'violet',
             logo: masterSystemLogoUrl,
             summary: 'Master System games with two-player controls.',
-            formats: '.sms',
+            formats: '.sms .zip .7z',
             testing: true,
             modes: {
               solo: { enabled: true },
@@ -375,16 +375,13 @@ export default function LobbyPage() {
   const [librarySystems, setLibrarySystems] = useState([]);
   const canUsePreviewSystems = isAdmin || isTester;
   const allLibrarySystemIds = useMemo(() => SUPPORTED_SYSTEMS.map((system) => system.id), []);
-  const selectedLibrarySystemSet = useMemo(() => new Set(librarySystems), [librarySystems]);
   const filterToLocalLibrary = librarySetupComplete === true && librarySystems.length > 0;
 
   const visibleShelves = useMemo(() => PLATFORM_SHELVES.map((platform) => ({
     ...platform,
     eras: platform.eras.map((era) => ({
       ...era,
-      systems: era.systems.filter((system) => (
-        !filterToLocalLibrary || selectedLibrarySystemSet.has(system.id)
-      )).map((system) => {
+      systems: era.systems.map((system) => {
         const locked = Boolean(system.underConstruction);
         return {
           ...system,
@@ -393,7 +390,7 @@ export default function LobbyPage() {
         };
       }),
     })).filter((era) => era.systems.length > 0),
-  })).filter((platform) => platform.eras.length > 0), [filterToLocalLibrary, selectedLibrarySystemSet]);
+  })).filter((platform) => platform.eras.length > 0), [canUsePreviewSystems]);
 
   const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];

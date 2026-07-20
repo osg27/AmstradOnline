@@ -330,6 +330,16 @@ input:focus {
   justify-content: center;
 }
 
+.lobby-social-layout {
+  width: min(100%, calc(100vw - clamp(0.8rem, 2vw, 2rem)));
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
+  justify-content: stretch;
+}
+
+.lobby-social-layout .lobby-shell {
+  max-width: none;
+}
+
 .room-social-layout {
   grid-template-columns: minmax(0, 1220px) minmax(270px, 320px);
 }
@@ -1163,13 +1173,13 @@ input:focus {
 .local-library-page {
   align-items: flex-start;
   justify-content: center;
-  padding: clamp(0.65rem, 1.25vw, 1.35rem);
+  padding: clamp(0.45rem, 1vw, 1rem);
 }
 
 .local-library-shell {
-  width: min(100%, 1780px);
+  width: min(100%, calc(100vw - clamp(0.8rem, 2vw, 2rem)));
   max-width: none;
-  padding: 1.15rem;
+  padding: clamp(0.8rem, 1.1vw, 1.2rem);
   border: 1px solid rgba(91, 105, 100, 0.72);
   border-radius: 8px;
   background:
@@ -1186,7 +1196,7 @@ input:focus {
 
 .local-library-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
   gap: 1rem;
   align-items: stretch;
   margin-bottom: 1rem;
@@ -1200,7 +1210,7 @@ input:focus {
 .local-library-hero h1 {
   margin-bottom: 0.35rem;
   color: #fff7dd;
-  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-size: clamp(2rem, 3.4vw, 3.8rem);
   line-height: 1;
 }
 
@@ -1254,7 +1264,7 @@ input:focus {
 }
 
 .welcome-home-page .local-library-shell {
-  width: min(100%, 1780px);
+  width: min(100%, calc(100vw - clamp(0.8rem, 2vw, 2rem)));
   margin-inline: auto;
 }
 
@@ -1349,8 +1359,8 @@ input:focus {
 
 .local-library-layout {
   display: grid;
-  grid-template-columns: minmax(330px, 380px) minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+  gap: clamp(0.8rem, 1vw, 1.2rem);
   align-items: start;
 }
 
@@ -1411,10 +1421,10 @@ input:focus {
 
 .system-picker-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
   align-items: center;
-  padding: 0.65rem;
+  padding: 0.52rem;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #151918;
@@ -1426,15 +1436,15 @@ input:focus {
 }
 
 .platform-rail {
-  max-height: min(66vh, 780px);
+  max-height: min(70vh, 820px);
   overflow: auto;
   padding-right: 0.25rem;
 }
 
 .platform-select-button {
   display: grid;
-  grid-template-columns: 2.45rem minmax(0, 1fr) auto;
-  gap: 0.65rem;
+  grid-template-columns: 2.35rem minmax(0, 1fr) auto;
+  gap: 0.55rem;
   align-items: center;
   width: 100%;
   min-width: 0;
@@ -1472,18 +1482,37 @@ input:focus {
   white-space: nowrap;
 }
 
-.system-picker-row > button.secondary {
-  width: 100%;
-  justify-self: stretch;
+.system-picker-row > button.secondary.platform-folder-button {
+  width: auto;
+  justify-self: end;
+  padding-inline: 0.65rem;
+  font-size: 0.86rem;
 }
 
-.system-picker-row em {
-  grid-column: 1 / -1;
+.platform-title-stack {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.platform-title-stack strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff7dd;
+  font-size: 0.98rem;
+  font-weight: 950;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platform-title-stack em {
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-style: normal;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1571,7 +1600,7 @@ input:focus {
 
 .local-library-toolbar {
   display: grid;
-  grid-template-columns: auto minmax(280px, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(320px, 1fr) auto auto auto;
   gap: 0.75rem;
   align-items: center;
 }
@@ -1679,16 +1708,16 @@ input:focus {
 
 .local-game-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  gap: 0.85rem;
 }
 
 .local-game-card {
   display: grid;
-  grid-template-rows: 250px auto auto auto minmax(2.4rem, 1fr) auto;
+  grid-template-rows: 236px auto auto auto minmax(2.4rem, 1fr) auto;
   gap: 0.5rem;
-  min-height: 455px;
-  padding: 0.85rem;
+  min-height: 430px;
+  padding: 0.65rem;
   border: 1px solid #303735;
   border-radius: 8px;
   background:
@@ -1701,8 +1730,8 @@ input:focus {
 .local-game-card > button {
   align-self: end;
   width: 100%;
-  min-height: 48px;
-  max-height: 52px;
+  min-height: 44px;
+  max-height: 46px;
 }
 
 .local-game-art {
@@ -1725,7 +1754,7 @@ input:focus {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  padding: 0.35rem;
+  padding: 0.28rem;
 }
 
 .local-game-art span {
@@ -1823,12 +1852,12 @@ input:focus {
 }
 
 .local-game-card.has-box-art {
-  grid-template-rows: 300px auto minmax(0, 1fr) auto;
-  min-height: 390px;
+  grid-template-rows: 306px auto auto;
+  min-height: 404px;
 }
 
 .local-game-card.has-box-art > button {
-  grid-row: 4;
+  grid-row: 3;
 }
 
 .library-show-more {

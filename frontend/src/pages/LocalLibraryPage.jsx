@@ -960,7 +960,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           <div>
             <p className="lobby-eyebrow">{onboarding ? 'Welcome to Old Style Gaming' : 'Your ROMs, your machine'}</p>
             <h1>{onboarding ? 'Set up your game shelves' : 'Local Game Library'}</h1>
-            <p>{onboarding ? (games.length ? 'Your browser already has a scanned library. Pick the systems you want on your home page, then continue.' : 'Choose the systems you care about, attach local ROM folders, and your home page will become your own retro dashboard.') : 'Pick a folder once, build a searchable library, and keep the ROMs on your own drive.'}</p>
+            <p>{onboarding ? (games.length ? 'Your browser already has a scanned library. Pick a platform and keep playing.' : 'Choose each system folder once and your games become a console-style library.') : 'Pick a platform, browse the wall, and launch straight into a room.'}</p>
           </div>
           <div className="local-library-actions">
             <span>Choose a system below, then add its ROM folder.</span>
@@ -1040,13 +1040,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                         onClick={() => setActiveSystem(system.id)}
                       >
                         <span className="platform-short-code">{system.shortLabel}</span>
-                        <span>{system.label}</span>
+                        <span className="platform-title-stack">
+                          <strong>{system.label}</strong>
+                          <em>{linkedFolder ? linkedFolder.name : 'No folder connected'}</em>
+                        </span>
                         <small>{count}</small>
                       </button>
-                      <button type="button" className="secondary" onClick={() => scanFolder(system.id)}>
+                      <button type="button" className="secondary platform-folder-button" onClick={() => scanFolder(system.id)}>
                         {linkedFolder ? 'Change folder' : 'Add folder'}
                       </button>
-                      {linkedFolder ? <em>{linkedFolder.name}</em> : null}
                     </div>
                   );
                 })}
