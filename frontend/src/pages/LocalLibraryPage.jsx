@@ -889,7 +889,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     if (mediaProgress && !window.confirm('Box art download is still running. Leave this page anyway?')) {
       return;
     }
-    navigate('/library');
+    navigate('/lobby');
   }
 
   async function downloadBoxArt() {
