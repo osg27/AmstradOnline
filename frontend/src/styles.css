@@ -1359,7 +1359,7 @@ input:focus {
 
 .local-library-layout {
   display: grid;
-  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+  grid-template-columns: minmax(330px, 370px) minmax(0, 1fr);
   gap: clamp(0.8rem, 1vw, 1.2rem);
   align-items: start;
 }
@@ -1421,10 +1421,10 @@ input:focus {
 
 .system-picker-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.52rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: stretch;
+  padding: 0.68rem;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #151918;
@@ -1443,12 +1443,12 @@ input:focus {
 
 .platform-select-button {
   display: grid;
-  grid-template-columns: 2.35rem minmax(0, 1fr) auto;
-  gap: 0.55rem;
+  grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  gap: 0.7rem;
   align-items: center;
   width: 100%;
   min-width: 0;
-  min-height: 42px;
+  min-height: 52px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1483,10 +1483,11 @@ input:focus {
 }
 
 .system-picker-row > button.secondary.platform-folder-button {
-  width: auto;
-  justify-self: end;
-  padding-inline: 0.65rem;
+  width: 100%;
+  justify-self: stretch;
+  padding-inline: 0.75rem;
   font-size: 0.86rem;
+  text-align: center;
 }
 
 .platform-title-stack {
@@ -1497,20 +1498,18 @@ input:focus {
 
 .platform-title-stack strong {
   min-width: 0;
-  overflow: hidden;
   color: #fff7dd;
-  font-size: 0.98rem;
+  font-size: 1.02rem;
   font-weight: 950;
-  line-height: 1.08;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.12;
+  white-space: normal;
 }
 
 .platform-title-stack em {
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   font-style: normal;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -1526,8 +1525,13 @@ input:focus {
 }
 
 .system-picker-row small {
-  min-width: 2rem;
+  min-width: 3.4rem;
+  padding: 0.18rem 0.36rem;
+  border: 1px solid rgba(225, 172, 52, 0.22);
+  border-radius: 999px;
+  background: rgba(225, 172, 52, 0.08);
   color: var(--gold);
+  font-size: 0.82rem;
   font-weight: 950;
   text-align: right;
 }
