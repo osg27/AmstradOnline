@@ -646,6 +646,72 @@ function buildSystemCounts(games) {
   }, {});
 }
 
+function canonicalLibraryTitle(game) {
+  const rawTitle = game.title || fileBaseName(game.fileName);
+  const withoutMeta = stripRegionAndMeta(rawTitle)
+    .replace(/\b(?:rev(?:ision)?|version|ver)\s*[a-z0-9.]+$/i, '')
+    .replace(/\b(?:beta|proto(?:type)?|sample|demo|hack|trainer|translation|overdump|bad dump|alternate)\b.*$/i, '')
+    .replace(/\b(?:usa|europe|japan|world|korea|brazil|australia|france|germany|spain|italy)\b$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return titleCaseSmallWords(moveTrailingArticle(withoutMeta || rawTitle));
+}
+
+function libraryGroupKey(game, { showArcadeClones = false } = {}) {
+  if (game.system === 'arcade') {
+    if (showArcadeClones) return `arcade:${game.id}`;
+    const romKey = arcadeRomKey(game.fileName);
+    return `arcade:${canonicalArcadeParentKey(romKey)}`;
+  }
+
+  const canonicalTitle = canonicalLibraryTitle(game);
+  return `${game.system}:${normalizeBoxArtKey(canonicalTitle) || normalizeExactBoxArtKey(canonicalTitle) || game.id}`;
+}
+
+function variantPreferenceScore(game) {
+  const haystack = `${game.fileName} ${game.path}`.toLowerCase();
+  let score = 0;
+
+  if (game.boxArtUrl) score -= 1000;
+  if (/\(europe\)|\b\(e\)\b/.test(haystack)) score -= 90;
+  if (/\(world\)/.test(haystack)) score -= 80;
+  if (/\(usa\)|\b\(u\)\b/.test(haystack)) score -= 70;
+  if (/\(japan\)|\b\(j\)\b/.test(haystack)) score -= 35;
+  if (/\[!\]/.test(haystack)) score -= 25;
+  if (/\b(?:rev|revision|version|ver|beta|proto|sample|demo|hack|trainer|translation|overdump|bad|alternate)\b|\[(?:b|h|o|p|t)[0-9+\]]/i.test(haystack)) score += 100;
+
+  score += game.fileName.length / 100;
+  return score;
+}
+
+function makeGroupedGame(variants) {
+  const sortedVariants = [...variants].sort((left, right) => {
+    const score = variantPreferenceScore(left) - variantPreferenceScore(right);
+    if (score !== 0) return score;
+    return left.fileName.localeCompare(right.fileName);
+  });
+  const preferred = sortedVariants[0];
+  return {
+    ...preferred,
+    title: canonicalLibraryTitle(preferred),
+    variantCount: sortedVariants.length,
+    variants: sortedVariants,
+  };
+}
+
+function groupLibraryGames(games, options = {}) {
+  const groups = new Map();
+
+  for (const game of games) {
+    const key = libraryGroupKey(game, options);
+    const variants = groups.get(key) || [];
+    variants.push(game);
+    groups.set(key, variants);
+  }
+
+  return [...groups.values()].map(makeGroupedGame);
+}
+
 export default function LocalLibraryPage({ embedded = false, onboarding = false, onComplete = null }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -709,7 +775,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
   }, [mediaProgress]);
 
-  const systemCounts = useMemo(() => buildSystemCounts(games), [games]);
+  const groupedGames = useMemo(
+    () => groupLibraryGames(
+      games.filter((game) => showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game)),
+      { showArcadeClones },
+    ),
+    [games, showArcadeClones],
+  );
+  const systemCounts = useMemo(() => buildSystemCounts(groupedGames), [groupedGames]);
   const visibleSystems = useMemo(
     () => SUPPORTED_SYSTEMS.filter((system) => (systemCounts[system.id] || 0) > 0 || folders.some((folder) => folder.system === system.id)),
     [folders, systemCounts],
@@ -720,19 +793,34 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
   const filteredGames = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return games
-      .filter((game) => activeSystem === 'all' || game.system === activeSystem || (activeSystem === 'favourites' && favouriteSet.has(game.id)))
-      .filter((game) => showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game))
+    return groupedGames
+      .filter((game) => (
+        activeSystem === 'all'
+        || game.system === activeSystem
+        || (activeSystem === 'favourites' && game.variants.some((variant) => favouriteSet.has(variant.id)))
+      ))
       .filter((game) => !showBoxArtOnly || Boolean(game.boxArtUrl))
-      .filter((game) => !normalizedQuery || `${game.title} ${game.fileName} ${game.path}`.toLowerCase().includes(normalizedQuery))
+      .filter((game) => {
+        if (!normalizedQuery) return true;
+        return game.variants.some((variant) => (
+          `${game.title} ${variant.title} ${variant.fileName} ${variant.path}`.toLowerCase().includes(normalizedQuery)
+        ));
+      })
       .sort((a, b) => a.title.localeCompare(b.title));
-  }, [activeSystem, favouriteSet, games, query, showArcadeClones, showBoxArtOnly]);
+  }, [activeSystem, favouriteSet, groupedGames, query, showBoxArtOnly]);
   const hiddenArcadeCloneCount = useMemo(
-    () => games
-      .filter((game) => activeSystem === 'all' || game.system === 'arcade' || (activeSystem === 'favourites' && favouriteSet.has(game.id)))
-      .filter((game) => game.system === 'arcade' && !isArcadeParentRom(game))
-      .length,
+    () => {
+      if (activeSystem !== 'all' && activeSystem !== 'arcade' && activeSystem !== 'favourites') return 0;
+      return games
+        .filter((game) => activeSystem !== 'favourites' || favouriteSet.has(game.id))
+        .filter((game) => game.system === 'arcade' && !isArcadeParentRom(game))
+        .length;
+    },
     [activeSystem, favouriteSet, games],
+  );
+  const hiddenVariantCount = useMemo(
+    () => filteredGames.reduce((count, game) => count + Math.max(0, (game.variantCount || 1) - 1), 0),
+    [filteredGames],
   );
   const displayedGames = useMemo(() => filteredGames.slice(0, renderLimit), [filteredGames, renderLimit]);
   const canShowMoreGames = filteredGames.length > displayedGames.length;
@@ -741,10 +829,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     setRenderLimit(LIBRARY_PAGE_SIZE);
   }, [activeSystem, query, showArcadeClones, showBoxArtOnly]);
 
-  async function toggleFavourite(gameId) {
-    const next = favouriteSet.has(gameId)
-      ? favourites.filter((id) => id !== gameId)
-      : [...favourites, gameId];
+  async function toggleFavourite(game) {
+    const variantIds = new Set((game.variants || [game]).map((variant) => variant.id));
+    const isFavourite = [...variantIds].some((id) => favouriteSet.has(id));
+    const next = isFavourite
+      ? favourites.filter((id) => !variantIds.has(id))
+      : [...favourites, game.id];
     setFavourites(next);
     await saveLocalLibrarySetting('favourites', next);
   }
@@ -1187,7 +1277,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
             <div className="library-summary-strip">
               <strong>{filteredGames.length}</strong>
-              <span>shown from {games.length} indexed files{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
+              <span>shown from {games.length} indexed files{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
             {mediaProgress ? (
               <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
@@ -1199,7 +1289,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               <div className="local-game-grid">
                 {displayedGames.map((game) => {
                   const system = SYSTEM_BY_ID[game.system];
-                  const favourite = favouriteSet.has(game.id);
+                  const favourite = game.variants.some((variant) => favouriteSet.has(variant.id));
                   return (
                     <article key={game.id} className={game.boxArtUrl ? 'local-game-card has-box-art' : 'local-game-card'}>
                       <div className={game.boxArtUrl ? 'local-game-art has-art' : 'local-game-art'}>
@@ -1217,10 +1307,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                       </div>
                       <div className="local-game-card-head">
                         <span>{system?.shortLabel || game.system}</span>
+                        {game.variantCount > 1 ? (
+                          <em>{game.variantCount} versions</em>
+                        ) : null}
                         <button
                           type="button"
                           className={favourite ? 'active icon-button' : 'secondary icon-button'}
-                          onClick={() => toggleFavourite(game.id)}
+                          onClick={() => toggleFavourite(game)}
                           title={favourite ? 'Remove favourite' : 'Add favourite'}
                           aria-label={favourite ? `Remove ${game.title} from favourites` : `Add ${game.title} to favourites`}
                         >
