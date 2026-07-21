@@ -3,6 +3,19 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import mame2003PlusTitles from '../data/mame2003PlusTitles';
+import amigaLogoUrl from '../../assets/amiga500.svg';
+import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
+import arcadeLogoUrl from '../../assets/MAMELogo.svg';
+import atari8LogoUrl from '../../assets/Atari.png';
+import atariStLogoUrl from '../../assets/atari-st.webp';
+import c64LogoUrl from '../../assets/C64_Logo.webp';
+import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
+import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
+import nesLogoUrl from '../../assets/NES_logo.svg.webp';
+import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
+import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
+import snesLogoUrl from '../../assets/SNES_logo.svg.webp';
+import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
 import {
   getLocalLibraryFolders,
   getLocalLibraryGames,
@@ -18,6 +31,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'arcade',
     label: 'MAME Arcade',
     shortLabel: 'MAME',
+    logo: arcadeLogoUrl,
     extensions: ['zip', '7z'],
     pathHints: ['mame', 'arcade'],
     note: 'MAME 2003 / 2003-Plus romset',
@@ -27,6 +41,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'cpc',
     label: 'Amstrad CPC',
     shortLabel: 'CPC',
+    logo: amstradLogoUrl,
     extensions: ['dsk'],
     pathHints: ['amstrad', 'cpc'],
   },
@@ -35,6 +50,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'spectrum',
     label: 'ZX Spectrum',
     shortLabel: 'ZX',
+    logo: spectrumLogoUrl,
     extensions: ['tap', 'tzx', 'z80', 'sna', 'szx', 'zip', '7z'],
     pathHints: ['spectrum', 'zx'],
   },
@@ -43,6 +59,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'c64',
     label: 'Commodore 64',
     shortLabel: 'C64',
+    logo: c64LogoUrl,
     extensions: ['d64', 't64', 'tap', 'prg', 'crt', 'zip', '7z'],
     pathHints: ['c64', 'commodore'],
   },
@@ -51,6 +68,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'atari8',
     label: 'Atari 400/800 XL',
     shortLabel: 'A8',
+    logo: atari8LogoUrl,
     extensions: ['atr', 'xfd', 'atx', 'xex', 'com', 'car', 'rom', 'bin', 'cas', 'zip', '7z'],
     pathHints: ['atari 8', 'atari8', '800xl', '400'],
   },
@@ -59,6 +77,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'nes',
     label: 'NES',
     shortLabel: 'NES',
+    logo: nesLogoUrl,
     extensions: ['nes', 'zip', '7z'],
     pathHints: ['nes', 'nintendo entertainment'],
   },
@@ -67,6 +86,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'snes',
     label: 'SNES',
     shortLabel: 'SNES',
+    logo: snesLogoUrl,
     extensions: ['sfc', 'smc', 'zip', '7z'],
     pathHints: ['snes', 'super nintendo'],
   },
@@ -75,6 +95,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'mastersystem',
     label: 'Sega Master System',
     shortLabel: 'SMS',
+    logo: masterSystemLogoUrl,
     extensions: ['sms', 'zip', '7z'],
     pathHints: ['master system', 'mastersystem', 'sms'],
   },
@@ -83,6 +104,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'megadrive',
     label: 'Mega Drive',
     shortLabel: 'MD',
+    logo: megaDriveLogoUrl,
     extensions: ['bin', 'gen', 'md', 'smd', 'zip', '7z'],
     pathHints: ['mega drive', 'megadrive', 'genesis'],
   },
@@ -91,6 +113,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'pcengine',
     label: 'PC Engine',
     shortLabel: 'PCE',
+    logo: pcEngineLogoUrl,
     extensions: ['pce', 'sgx', 'zip', '7z'],
     pathHints: ['pc engine', 'pcengine', 'turbografx'],
   },
@@ -99,6 +122,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'playstation',
     label: 'PlayStation',
     shortLabel: 'PS1',
+    logo: playStationLogoUrl,
     extensions: ['cue', 'chd', 'pbp', 'iso', 'zip', '7z'],
     pathHints: ['playstation', 'ps1', 'psx'],
   },
@@ -107,6 +131,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'amiga',
     label: 'Amiga',
     shortLabel: 'A500',
+    logo: amigaLogoUrl,
     extensions: ['adf', 'zip', '7z'],
     pathHints: ['amiga', 'a500'],
   },
@@ -115,6 +140,7 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'atarist',
     label: 'Atari ST',
     shortLabel: 'ST',
+    logo: atariStLogoUrl,
     extensions: ['st', 'msa', 'stx', 'ipf', 'zip', '7z'],
     pathHints: ['atari st', 'atarist'],
   },
@@ -1032,22 +1058,39 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 {SUPPORTED_SYSTEMS.map((system) => {
                   const linkedFolder = folders.find((folder) => folder.system === system.id);
                   const count = systemCounts[system.id] || 0;
+                  const folderLabel = linkedFolder ? linkedFolder.name : 'No folder connected';
                   return (
                     <div key={system.id} className={activeSystem === system.id ? 'system-picker-row enabled' : 'system-picker-row'}>
                       <button
                         type="button"
                         className="platform-select-button"
                         onClick={() => setActiveSystem(system.id)}
+                        title={`${system.label} - ${folderLabel}`}
                       >
-                        <span className="platform-short-code">{system.shortLabel}</span>
+                        <span className="platform-logo-badge" aria-hidden="true">
+                          {system.logo ? (
+                            <img
+                              className={`platform-rail-logo platform-rail-logo-${system.id}`}
+                              src={system.logo}
+                              alt=""
+                            />
+                          ) : (
+                            <span>{system.shortLabel}</span>
+                          )}
+                        </span>
                         <span className="platform-title-stack">
                           <strong>{system.label}</strong>
-                          <em>{linkedFolder ? linkedFolder.name : 'No folder connected'}</em>
                         </span>
                         <small>{count}</small>
                       </button>
-                      <button type="button" className="secondary platform-folder-button" onClick={() => scanFolder(system.id)}>
-                        {linkedFolder ? 'Change folder' : 'Add folder'}
+                      <button
+                        type="button"
+                        className="secondary platform-config-button"
+                        onClick={() => scanFolder(system.id)}
+                        title={`Configure ${system.label}`}
+                        aria-label={`Configure ${system.label}`}
+                      >
+                        <i className="bi bi-gear-fill" aria-hidden="true" />
                       </button>
                     </div>
                   );
