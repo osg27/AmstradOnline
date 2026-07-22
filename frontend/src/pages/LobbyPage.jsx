@@ -9,7 +9,6 @@ import amiga500LogoUrl from '../../assets/amiga500.svg';
 import amiga1200LogoUrl from '../../assets/amiga1200.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
 import arcadeLogoUrl from '../../assets/MAMELogo.svg';
-import atari8LogoUrl from '../../assets/Atari.png';
 import atariStLogoUrl from '../../assets/atari-st.webp';
 import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
@@ -98,22 +97,6 @@ const PLATFORM_SHELVES = [
               solo: { enabled: true },
               hosted: { enabled: true },
               party: { enabled: true },
-              link: { enabled: false, note: 'Not available yet' },
-            },
-          },
-          {
-            id: 'atari8',
-            name: 'Atari 400/800 XL',
-            shortName: 'A8',
-            accent: 'ruby',
-            logo: atari8LogoUrl,
-            summary: 'Atari 8-bit games with disk, executable, cartridge and joystick support.',
-            formats: '.atr .xex .car .rom .cas .zip',
-            testing: true,
-            modes: {
-              solo: { enabled: true },
-              hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available yet' },
               link: { enabled: false, note: 'Not available yet' },
             },
           },

@@ -27,7 +27,6 @@ const ROOM_SYSTEM_OPTIONS = [
   ['cpc_party', 'Amstrad CPC Party'],
   ['spectrum', 'ZX Spectrum'],
   ['c64', 'Commodore 64'],
-  ['atari8', 'Atari 400/800 XL'],
   ['atarist', 'Atari ST'],
   ['amiga', 'Amiga'],
   ['amiga_link', 'Amiga Link Play'],

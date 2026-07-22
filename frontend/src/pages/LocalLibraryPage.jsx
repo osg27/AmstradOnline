@@ -6,7 +6,6 @@ import mame2003PlusTitles from '../data/mame2003PlusTitles';
 import amigaLogoUrl from '../../assets/amiga500.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
 import arcadeLogoUrl from '../../assets/MAMELogo.svg';
-import atari8LogoUrl from '../../assets/Atari.png';
 import atariStLogoUrl from '../../assets/atari-st.webp';
 import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
@@ -62,15 +61,6 @@ export const SUPPORTED_SYSTEMS = [
     logo: c64LogoUrl,
     extensions: ['d64', 't64', 'tap', 'prg', 'crt', 'zip', '7z'],
     pathHints: ['c64', 'commodore'],
-  },
-  {
-    id: 'atari8',
-    roomSystem: 'atari8',
-    label: 'Atari 400/800 XL',
-    shortLabel: 'A8',
-    logo: atari8LogoUrl,
-    extensions: ['atr', 'xfd', 'atx', 'xex', 'com', 'car', 'rom', 'bin', 'cas', 'zip', '7z'],
-    pathHints: ['atari 8', 'atari8', '800xl', '400'],
   },
   {
     id: 'nes',
@@ -160,7 +150,6 @@ const LIBRETRO_BOXART_REPOS = {
   cpc: ['Amstrad_-_CPC'],
   spectrum: ['Sinclair_-_ZX_Spectrum'],
   c64: ['Commodore_-_64'],
-  atari8: ['Atari_-_8-bit'],
   nes: ['Nintendo_-_Nintendo_Entertainment_System'],
   snes: ['Nintendo_-_Super_Nintendo_Entertainment_System'],
   mastersystem: ['Sega_-_Master_System_-_Mark_III'],
