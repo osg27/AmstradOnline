@@ -732,6 +732,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
+  const [launchingSystemId, setLaunchingSystemId] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(false);
   const [showBoxArtOnly, setShowBoxArtOnly] = useState(false);
   const [joinCode, setJoinCode] = useState('');
@@ -1021,6 +1022,27 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     navigate('/lobby');
   }
 
+  async function launchSystemRoom(system) {
+    if (!system) return;
+
+    setLaunchingSystemId(system.id);
+    setStatus(`Opening ${system.label} room...`);
+    try {
+      const room = await apiFetch('/rooms/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          system: system.roomSystem,
+          party_max_players: 2,
+        }),
+      });
+      navigate(`/room/${room.room_code}`);
+    } catch (err) {
+      setStatus(`Could not open ${system.label}: ${err.message}`);
+    } finally {
+      setLaunchingSystemId(null);
+    }
+  }
+
   async function downloadBoxArt() {
     const skippedArcadeClones = filteredGames.filter((game) => game.system === 'arcade' && !isArcadeParentRom(game) && !game.boxArtUrl).length;
     const targets = filteredGames.filter((game) => !game.boxArtUrl && isArcadeParentRom(game));
@@ -1245,9 +1267,19 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 <span>{filteredGames.length} shown from {games.length} indexed files</span>
               </div>
               {activeSystemDetails ? (
-                <button type="button" onClick={() => scanFolder(activeSystemDetails.id)}>
-                  {folders.some((folder) => folder.system === activeSystemDetails.id) ? 'Change folder' : 'Add folder'}
-                </button>
+                <div className="local-library-title-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => launchSystemRoom(activeSystemDetails)}
+                    disabled={launchingSystemId === activeSystemDetails.id}
+                  >
+                    {launchingSystemId === activeSystemDetails.id ? 'Opening...' : 'Open room'}
+                  </button>
+                  <button type="button" onClick={() => scanFolder(activeSystemDetails.id)}>
+                    {folders.some((folder) => folder.system === activeSystemDetails.id) ? 'Change folder' : 'Add folder'}
+                  </button>
+                </div>
               ) : null}
             </div>
             <div className="local-library-toolbar">
@@ -1355,7 +1387,22 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ) : (
               <div className="empty-local-library">
                 <strong>{games.length ? 'No games match that filter' : 'No local library yet'}</strong>
-                <span>{games.length ? 'Try another system or search term.' : 'Use Locate ROM folder to scan a folder you choose.'}</span>
+                <span>
+                  {games.length
+                    ? 'Try another system or search term.'
+                    : activeSystemDetails
+                      ? `Open a ${activeSystemDetails.label} room and upload one game, or add a folder when you are ready.`
+                      : 'Pick a system to open a room, or add folders when you are ready.'}
+                </span>
+                {activeSystemDetails ? (
+                  <button
+                    type="button"
+                    onClick={() => launchSystemRoom(activeSystemDetails)}
+                    disabled={launchingSystemId === activeSystemDetails.id}
+                  >
+                    {launchingSystemId === activeSystemDetails.id ? 'Opening...' : `Open ${activeSystemDetails.label} room`}
+                  </button>
+                ) : null}
               </div>
             )}
           </section>
