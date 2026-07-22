@@ -164,6 +164,27 @@ const boxArtIndexCache = new Map();
 const arcadeParentKeyCache = new Map();
 const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 'nintendo']);
 const LIBRARY_PAGE_SIZE = 96;
+const COMPACT_REGION_SUFFIXES = {
+  U: 'USA',
+  E: 'Europe',
+  J: 'Japan',
+  W: 'World',
+};
+const TITLE_ACRONYMS = new Set([
+  'ABC',
+  'FIFA',
+  'MLB',
+  'NBA',
+  'NCAA',
+  'NFL',
+  'NHL',
+  'RPG',
+  'TV',
+  'UFO',
+  'USA',
+  'WCW',
+  'WWF',
+]);
 
 function slugify(value) {
   return value
@@ -244,7 +265,9 @@ function titleCaseSmallWords(value) {
     .split(/\s+/)
     .filter(Boolean)
     .map((part) => {
+      const upper = part.toUpperCase();
       if (/^(THE|A|AN|AND|OF|IN|ON|TO|FOR)$/i.test(part)) return part.toLowerCase();
+      if (TITLE_ACRONYMS.has(upper)) return upper;
       if (/^[IVX]+$/i.test(part)) return part.toUpperCase();
       return part.charAt(0).toUpperCase() + part.slice(1);
     })
@@ -256,10 +279,67 @@ function titleCaseSmallWords(value) {
 }
 
 function moveTrailingArticle(value) {
-  return value.replace(/^(.+),\s*(the|a|an)$/i, (_match, title, article) => {
-    const normalizedArticle = article.charAt(0).toUpperCase() + article.slice(1).toLowerCase();
-    return `${normalizedArticle} ${title.trim()}`;
-  });
+  return value
+    .replace(/^(.+),\s*(the|a|an)$/i, (_match, title, article) => {
+      const normalizedArticle = article.charAt(0).toUpperCase() + article.slice(1).toLowerCase();
+      return `${normalizedArticle} ${title.trim()}`;
+    })
+    .replace(/^(.+?)\s+(the|a|an)$/i, (_match, title, article) => {
+      const normalizedArticle = article.charAt(0).toUpperCase() + article.slice(1).toLowerCase();
+      return `${normalizedArticle} ${title.trim()}`;
+    });
+}
+
+function stripCompactRegionSuffix(value) {
+  const trimmed = value.trim();
+  const match = /^(.{3,})([UEJW])$/i.exec(trimmed);
+  if (!match) return { title: trimmed, region: null };
+  const looksLikeCompactRomName = !/\s/.test(trimmed)
+    && (/^[0-9]/.test(trimmed) || /[a-z][A-Z0-9]/.test(trimmed) || /[A-Z][a-z]+[A-Z]$/.test(trimmed));
+  if (!looksLikeCompactRomName) return { title: trimmed, region: null };
+
+  const title = match[1].trim();
+  const region = COMPACT_REGION_SUFFIXES[match[2].toUpperCase()] || null;
+  return { title, region };
+}
+
+function splitCompactTitle(value) {
+  return value
+    .replace(/[_]+/g, ' ')
+    .replace(/[-]+/g, ' ')
+    .replace(/([a-z])([A-Z0-9])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .replace(/([0-9])([A-Za-z])/g, '$1 $2')
+    .replace(/([A-Za-z])([0-9])/g, '$1 $2')
+    .replace(/\b([A-Z])\s+([A-Z])\b/g, '$1$2')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactTitleVariants(value) {
+  const raw = fileBaseName(value || '').replace(/_/g, ' ').trim();
+  const stripped = stripRegionAndMeta(raw);
+  return uniq([raw, stripped].flatMap((source) => {
+    if (!source) return [];
+
+    const regionless = stripCompactRegionSuffix(source);
+    const split = splitCompactTitle(regionless.title);
+    const articleFixed = moveTrailingArticle(split);
+    const cased = titleCaseSmallWords(articleFixed);
+    const regionSuffix = regionless.region ? `(${regionless.region})` : '';
+
+    return [
+      source,
+      regionless.title,
+      split,
+      articleFixed,
+      cased,
+      regionSuffix ? `${split} ${regionSuffix}` : null,
+      regionSuffix ? `${cased} ${regionSuffix}` : null,
+      ...punctuationVariants(split),
+      ...punctuationVariants(cased),
+    ];
+  }));
 }
 
 function disneyVariants(value) {
@@ -343,6 +423,10 @@ function normalizeExactBoxArtKey(value) {
     .trim();
 }
 
+function normalizeCompactBoxArtKey(value) {
+  return normalizeBoxArtKey(value).replace(/\s+/g, '');
+}
+
 function rawGitHubBoxArtUrl(repo, path, branch = 'master') {
   return `https://raw.githubusercontent.com/libretro-thumbnails/${repo}/${branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
 }
@@ -358,6 +442,7 @@ function makeBoxArtEntry(repo, fileName, url) {
     url,
     exactKey: normalizeExactBoxArtKey(fileName),
     looseKey: normalizeBoxArtKey(fileName),
+    compactKey: normalizeCompactBoxArtKey(fileName),
   };
 }
 
@@ -373,6 +458,9 @@ function addBoxArtEntry(collection, repo, fileName, url) {
   if (entry.looseKey && !collection.looseMap.has(entry.looseKey)) {
     collection.looseMap.set(entry.looseKey, entry);
   }
+  if (entry.compactKey && !collection.compactMap.has(entry.compactKey)) {
+    collection.compactMap.set(entry.compactKey, entry);
+  }
 }
 
 async function getBoxArtIndex(systemId) {
@@ -384,6 +472,7 @@ async function getBoxArtIndex(systemId) {
       entries: [],
       exactMap: new Map(),
       looseMap: new Map(),
+      compactMap: new Map(),
       seenTitles: new Set(),
     };
     for (const repo of repos) {
@@ -430,6 +519,7 @@ function findIndexedBoxArt(game, index) {
   const candidates = buildBoxArtNameCandidates(game);
   const exactKeys = candidates.map(normalizeExactBoxArtKey).filter(Boolean);
   const looseKeys = candidates.map(normalizeBoxArtKey).filter(Boolean);
+  const compactKeys = candidates.map(normalizeCompactBoxArtKey).filter(Boolean);
 
   for (const key of exactKeys) {
     const match = index.exactMap.get(key);
@@ -438,6 +528,11 @@ function findIndexedBoxArt(game, index) {
 
   for (const key of looseKeys) {
     const match = index.looseMap.get(key);
+    if (match) return match;
+  }
+
+  for (const key of compactKeys) {
+    const match = index.compactMap.get(key);
     if (match) return match;
   }
 
@@ -461,6 +556,8 @@ function findIndexedBoxArt(game, index) {
 
 function buildBoxArtNameCandidates(game) {
   const base = fileBaseName(game.fileName).replace(/_/g, ' ').trim();
+  const compactBaseVariants = compactTitleVariants(base);
+  const compactStoredTitleVariants = compactTitleVariants(game.title);
   const romKey = game.system === 'arcade' ? arcadeRomKey(game.fileName) : '';
   const canonicalRomKey = romKey ? canonicalArcadeParentKey(romKey) : '';
   const arcadeMetadata = romKey ? mame2003PlusTitles[romKey] : null;
@@ -494,6 +591,8 @@ function buildBoxArtNameCandidates(game) {
   const articleFixedTitle = titleCaseSmallWords(articleFixed);
   const titleVariants = uniq([
     game.title,
+    ...compactStoredTitleVariants,
+    ...compactBaseVariants,
     cleanedTitle,
     articleFixed,
     articleFixedTitle,
@@ -515,6 +614,7 @@ function buildBoxArtNameCandidates(game) {
     usaEurope,
     usaEuropeBrazil,
     withoutBracketMeta,
+    ...compactBaseVariants,
     ...arcadeTitles,
     ...titleVariants,
     ...titleVariants.flatMap((title) => appendRegions(title)),
@@ -583,11 +683,16 @@ async function findBoxArtForGame(game) {
 }
 
 function titleFromFileName(fileName) {
-  return slugify(fileName)
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part.length <= 3 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1))
-    .join(' ');
+  const base = fileBaseName(fileName);
+  const compactTitle = compactTitleVariants(base)
+    .map((variant) => stripRegionAndMeta(variant))
+    .find((variant) => variant && variant.includes(' '));
+
+  if (compactTitle) {
+    return titleCaseSmallWords(moveTrailingArticle(compactTitle));
+  }
+
+  return titleCaseSmallWords(moveTrailingArticle(slugify(fileName)));
 }
 
 function getFileExtension(fileName) {
@@ -636,7 +741,11 @@ function buildSystemCounts(games) {
 }
 
 function canonicalLibraryTitle(game) {
-  const rawTitle = game.title || fileBaseName(game.fileName);
+  const storedTitle = game.title || fileBaseName(game.fileName);
+  const fileTitle = titleFromFileName(game.fileName || storedTitle);
+  const rawTitle = !storedTitle.includes(' ') && fileTitle.includes(' ')
+    ? fileTitle
+    : storedTitle;
   const withoutMeta = stripRegionAndMeta(rawTitle)
     .replace(/\b(?:rev(?:ision)?|version|ver)\s*[a-z0-9.]+$/i, '')
     .replace(/\b(?:beta|proto(?:type)?|sample|demo|hack|trainer|translation|overdump|bad dump|alternate)\b.*$/i, '')
