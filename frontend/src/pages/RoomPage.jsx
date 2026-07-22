@@ -9,7 +9,7 @@ import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames } from
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
-import mame2003PlusTitles from '../data/mame2003PlusTitles';
+import { getMameTitleDatabase } from '../data/mameTitleLookup';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
@@ -22,6 +22,7 @@ const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
 const BUILTIN_MAME_LEADERBOARD_ROMS = new Set([
   'dkong',
 ]);
+const mame2003PlusTitles = getMameTitleDatabase();
 const ROOM_SYSTEM_OPTIONS = [
   ['cpc', 'Amstrad CPC'],
   ['cpc_party', 'Amstrad CPC Party'],

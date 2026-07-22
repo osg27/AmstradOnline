@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
-import mame2003PlusTitles from '../data/mame2003PlusTitles';
+import { getMameTitleDatabase } from '../data/mameTitleLookup';
 import amigaLogoUrl from '../../assets/amiga500.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
 import arcadeLogoUrl from '../../assets/MAMELogo.svg';
@@ -137,6 +137,7 @@ export const SUPPORTED_SYSTEMS = [
 ];
 
 const SYSTEM_BY_ID = Object.fromEntries(SUPPORTED_SYSTEMS.map((system) => [system.id, system]));
+const mame2003PlusTitles = getMameTitleDatabase();
 const EXTENSION_SYSTEMS = SUPPORTED_SYSTEMS.reduce((map, system) => {
   system.extensions.forEach((extension) => {
     if (!map.has(extension)) map.set(extension, []);
