@@ -651,10 +651,25 @@ function canonicalLibraryTitle(game) {
   const withoutMeta = stripRegionAndMeta(rawTitle)
     .replace(/\b(?:rev(?:ision)?|version|ver)\s*[a-z0-9.]+$/i, '')
     .replace(/\b(?:beta|proto(?:type)?|sample|demo|hack|trainer|translation|overdump|bad dump|alternate)\b.*$/i, '')
+    .replace(/\b(?:sound(?:s|track)?|music|bgm|sample(?:s)?|speech|voice(?:s)?)\b$/i, '')
     .replace(/\b(?:usa|europe|japan|world|korea|brazil|australia|france|germany|spain|italy)\b$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
   return titleCaseSmallWords(moveTrailingArticle(withoutMeta || rawTitle));
+}
+
+function isLikelySupportRom(gameOrName) {
+  const fileName = typeof gameOrName === 'string'
+    ? gameOrName
+    : gameOrName?.fileName || gameOrName?.name || '';
+  const normalizedName = fileBaseName(fileName)
+    .replace(/[\[\](){}]/g, ' ')
+    .replace(/[_.-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return /\b(?:sound(?:s|track)?|music|bgm|sample(?:s)?|speech|voice(?:s)?)\b$/i.test(normalizedName)
+    || /\b(?:sound|music)\s*test\b/i.test(normalizedName);
 }
 
 function libraryGroupKey(game, { showArcadeClones = false } = {}) {
@@ -777,7 +792,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   const groupedGames = useMemo(
     () => groupLibraryGames(
-      games.filter((game) => showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game)),
+      games.filter((game) => (
+        !isLikelySupportRom(game)
+        && (showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game))
+      )),
       { showArcadeClones },
     ),
     [games, showArcadeClones],
@@ -866,6 +884,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       const nextGames = [];
       const sampleHandles = [];
       let scanned = 0;
+      let skippedSupport = 0;
       setScanProgress({ scanned: 0, matched: 0 });
       setStatus(`Scanning ${directoryHandle.name} for ${targetSystem.label}...`);
 
@@ -882,6 +901,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             path: entry.path,
             handle: entry.handle,
           });
+          continue;
+        }
+
+        if (targetSystem.id !== 'arcade' && isLikelySupportRom(entry.name)) {
+          skippedSupport += 1;
           continue;
         }
 
@@ -945,7 +969,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       setFolders(mergedFolders);
       setGames(mergedGames);
       setScanProgress(null);
-      setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${directoryHandle.name}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}.`);
+      setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${directoryHandle.name}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}${skippedSupport ? `, skipped ${skippedSupport} support file${skippedSupport === 1 ? '' : 's'}` : ''}.`);
     } catch (err) {
       if (err.name !== 'AbortError') {
         setStatus(`Scan failed: ${err.message}`);
