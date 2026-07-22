@@ -554,6 +554,10 @@ function findIndexedBoxArt(game, index) {
     if (match) return match;
   }
 
+  if (game.system === 'arcade') {
+    return null;
+  }
+
   const baseKey = normalizeBoxArtKey(stripRegionAndMeta(fileBaseName(game.fileName)));
   if (baseKey.length >= 4) {
     const startsWithMatch = index.entries.find((entry) => entry.looseKey.startsWith(baseKey) || baseKey.startsWith(entry.looseKey));
@@ -572,32 +576,26 @@ function findIndexedBoxArt(game, index) {
   return null;
 }
 
+function buildArcadeBoxArtNameCandidates(game) {
+  const romKeys = uniq([
+    arcadeRomKey(game.fileName),
+    ...(game.variants || []).map((variant) => arcadeRomKey(variant.fileName)),
+  ].filter(Boolean));
+
+  return uniq([
+    ...romKeys.map((romKey) => canonicalArcadeParentKey(romKey)),
+    ...romKeys,
+  ]);
+}
+
 function buildBoxArtNameCandidates(game) {
+  if (game.system === 'arcade') {
+    return buildArcadeBoxArtNameCandidates(game);
+  }
+
   const base = fileBaseName(game.fileName).replace(/_/g, ' ').trim();
   const compactBaseVariants = compactTitleVariants(base);
   const compactStoredTitleVariants = compactTitleVariants(game.title);
-  const romKey = game.system === 'arcade' ? arcadeRomKey(game.fileName) : '';
-  const canonicalRomKey = romKey ? canonicalArcadeParentKey(romKey) : '';
-  const arcadeMetadata = romKey ? mame2003PlusTitles[romKey] : null;
-  const canonicalArcadeMetadata = canonicalRomKey ? mame2003PlusTitles[canonicalRomKey] : null;
-  const arcadeTitles = game.system === 'arcade'
-    ? uniq([
-      romKey,
-      canonicalRomKey,
-      arcadeMetadata?.title,
-      canonicalArcadeMetadata?.title,
-    ].flatMap((value) => (
-      value
-        ? [
-          value,
-          stripRegionAndMeta(value),
-          titleCaseSmallWords(stripRegionAndMeta(value)),
-          moveTrailingArticle(stripRegionAndMeta(value)),
-          ...punctuationVariants(stripRegionAndMeta(value)),
-        ]
-        : []
-    )))
-    : [];
   const expandedBase = regionExpandedName(base);
   const revisedBase = normalizeRevisionTags(expandedBase);
   const withoutRevision = expandedBase.replace(/\s*\(Rev[^)]*\)/gi, '').trim();
@@ -618,7 +616,6 @@ function buildBoxArtNameCandidates(game) {
     moveTrailingArticle(cleanedTitle),
     moveTrailingArticle(base),
     moveTrailingArticle(expandedBase),
-    ...arcadeTitles,
     ...punctuationVariants(game.title),
     ...punctuationVariants(cleanedTitle),
     ...punctuationVariants(articleFixedTitle),
@@ -633,12 +630,10 @@ function buildBoxArtNameCandidates(game) {
     usaEuropeBrazil,
     withoutBracketMeta,
     ...compactBaseVariants,
-    ...arcadeTitles,
     ...titleVariants,
     ...titleVariants.flatMap((title) => appendRegions(title)),
     ...titleVariants.flatMap((title) => appendRegions(title, '(Rev 1)')),
     ...titleVariants.flatMap((title) => appendRegions(title, '(Beta)')),
-    game.system === 'arcade' ? fileBaseName(game.fileName).toLowerCase() : null,
   ]);
 }
 
@@ -1258,7 +1253,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   async function downloadBoxArt() {
     const skippedArcadeClones = filteredGames.filter((game) => game.system === 'arcade' && !isArcadeParentRom(game) && !game.boxArtUrl).length;
-    const targets = filteredGames.filter((game) => !game.boxArtUrl && isArcadeParentRom(game));
+    const targets = filteredGames.filter((game) => (
+      isArcadeParentRom(game)
+      && (game.system === 'arcade' || !game.boxArtUrl)
+    ));
     if (!targets.length) {
       setStatus(skippedArcadeClones
         ? 'Box art is already downloaded for shown parent games. MAME clone ROMs are skipped.'
