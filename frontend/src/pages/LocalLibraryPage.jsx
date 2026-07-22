@@ -235,6 +235,23 @@ function isArcadeParentRom(game) {
   return canonicalArcadeParentKey(romKey) === romKey;
 }
 
+function cleanArcadeDisplayTitle(value) {
+  return titleCaseSmallWords(moveTrailingArticle(stripRegionAndMeta(value || '')))
+    .replace(/\s+\bset\s+\d+\b$/i, '')
+    .replace(/\s+\bversion\s+[a-z0-9.]+\b$/i, '')
+    .replace(/\s+\bbootleg\b$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function arcadeMetadataTitle(game) {
+  if (game.system !== 'arcade') return '';
+  const romKey = arcadeRomKey(game.fileName);
+  const parentKey = canonicalArcadeParentKey(romKey);
+  const metadata = mame2003PlusTitles[parentKey] || mame2003PlusTitles[romKey];
+  return cleanArcadeDisplayTitle(metadata?.title || '');
+}
+
 function uniq(values) {
   return [...new Set(values.filter(Boolean))];
 }
@@ -741,6 +758,9 @@ function buildSystemCounts(games) {
 }
 
 function canonicalLibraryTitle(game) {
+  const arcadeTitle = arcadeMetadataTitle(game);
+  if (arcadeTitle) return arcadeTitle;
+
   const storedTitle = game.title || fileBaseName(game.fileName);
   const fileTitle = titleFromFileName(game.fileName || storedTitle);
   const rawTitle = !storedTitle.includes(' ') && fileTitle.includes(' ')
@@ -754,6 +774,53 @@ function canonicalLibraryTitle(game) {
     .replace(/\s+/g, ' ')
     .trim();
   return titleCaseSmallWords(moveTrailingArticle(withoutMeta || rawTitle));
+}
+
+function withRomanSearchAliases(value) {
+  const variants = [value];
+  variants.push(value.replace(/\bII\b/gi, '2'));
+  variants.push(value.replace(/\bIII\b/gi, '3'));
+  variants.push(value.replace(/\bIV\b/gi, '4'));
+  variants.push(value.replace(/\bVI\b/gi, '6'));
+  variants.push(value.replace(/\bVII\b/gi, '7'));
+  variants.push(value.replace(/\bVIII\b/gi, '8'));
+  variants.push(value.replace(/\bIX\b/gi, '9'));
+  variants.push(value.replace(/\b2\b/g, 'II'));
+  variants.push(value.replace(/\b3\b/g, 'III'));
+  variants.push(value.replace(/\b4\b/g, 'IV'));
+  return uniq(variants);
+}
+
+function searchableTitleParts(game) {
+  const romKey = game.system === 'arcade' ? arcadeRomKey(game.fileName) : '';
+  const parentKey = romKey ? canonicalArcadeParentKey(romKey) : '';
+  const arcadeTitles = uniq([
+    romKey,
+    parentKey,
+    mame2003PlusTitles[romKey]?.title,
+    mame2003PlusTitles[parentKey]?.title,
+    cleanArcadeDisplayTitle(mame2003PlusTitles[romKey]?.title),
+    cleanArcadeDisplayTitle(mame2003PlusTitles[parentKey]?.title),
+  ]);
+  const titleParts = uniq([
+    canonicalLibraryTitle(game),
+    game.title,
+    titleFromFileName(game.fileName || ''),
+    fileBaseName(game.fileName || ''),
+    ...arcadeTitles,
+    ...(game.variants || []).flatMap((variant) => [
+      canonicalLibraryTitle(variant),
+      variant.title,
+      titleFromFileName(variant.fileName || ''),
+      fileBaseName(variant.fileName || ''),
+      variant.fileName,
+      variant.path,
+      variant.system === 'arcade' ? arcadeRomKey(variant.fileName) : '',
+      variant.system === 'arcade' ? cleanArcadeDisplayTitle(mame2003PlusTitles[arcadeRomKey(variant.fileName)]?.title) : '',
+    ]),
+  ]);
+
+  return uniq(titleParts.flatMap((part) => withRomanSearchAliases(part || '')));
 }
 
 function isLikelySupportRom(gameOrName) {
@@ -922,9 +989,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       .filter((game) => !showBoxArtOnly || Boolean(game.boxArtUrl))
       .filter((game) => {
         if (!normalizedQuery) return true;
-        return game.variants.some((variant) => (
-          `${game.title} ${variant.title} ${variant.fileName} ${variant.path}`.toLowerCase().includes(normalizedQuery)
-        ));
+        return searchableTitleParts(game)
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedQuery);
       })
       .sort((a, b) => a.title.localeCompare(b.title));
   }, [activeSystem, favouriteSet, groupedGames, query, showBoxArtOnly]);
@@ -1538,7 +1606,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                       </div>
                       <h3>{game.title}</h3>
                       <p>{system?.label || 'Unknown system'}</p>
-                      <small>{game.path}</small>
+                      <small>{game.variantCount > 1 ? `${game.variantCount} versions available` : 'Ready to play'}</small>
                       <button type="button" onClick={() => launchGame(game)} disabled={launchingId === game.id}>
                         {launchingId === game.id ? 'Starting...' : 'Play'}
                       </button>
