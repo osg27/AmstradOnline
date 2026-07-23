@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
@@ -1055,6 +1055,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [joinCode, setJoinCode] = useState('');
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [renderLimit, setRenderLimit] = useState(LIBRARY_PAGE_SIZE);
+  const gameGridRef = useRef(null);
 
   useEffect(() => {
     async function loadLibrary() {
@@ -1149,7 +1150,25 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   useEffect(() => {
     setRenderLimit(LIBRARY_PAGE_SIZE);
+    if (gameGridRef.current) {
+      gameGridRef.current.scrollTop = 0;
+    }
   }, [activeSystem, query, showArcadeClones, showBoxArtOnly]);
+
+  useEffect(() => {
+    const grid = gameGridRef.current;
+    if (!grid || !canShowMoreGames) return;
+    if (grid.scrollHeight <= grid.clientHeight + 80) {
+      setRenderLimit((limit) => Math.min(filteredGames.length, limit + LIBRARY_PAGE_SIZE));
+    }
+  }, [canShowMoreGames, displayedGames.length, filteredGames.length]);
+
+  function handleGameGridScroll(event) {
+    const grid = event.currentTarget;
+    const distanceFromBottom = grid.scrollHeight - grid.scrollTop - grid.clientHeight;
+    if (distanceFromBottom > 800) return;
+    setRenderLimit((limit) => Math.min(filteredGames.length, limit + LIBRARY_PAGE_SIZE));
+  }
 
   async function toggleFavourite(game) {
     const variantIds = new Set((game.variants || [game]).map((variant) => variant.id));
@@ -1714,7 +1733,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ) : null}
 
             {filteredGames.length ? (
-              <div className="local-game-grid">
+              <div className="local-game-grid" ref={gameGridRef} onScroll={handleGameGridScroll}>
                 {displayedGames.map((game) => {
                   const system = SYSTEM_BY_ID[game.system];
                   const favourite = game.variants.some((variant) => favouriteSet.has(variant.id));
@@ -1757,15 +1776,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                     </article>
                   );
                 })}
-                {canShowMoreGames ? (
-                  <button
-                    type="button"
-                    className="library-show-more"
-                    onClick={() => setRenderLimit((limit) => limit + LIBRARY_PAGE_SIZE)}
-                  >
-                    Show {Math.min(LIBRARY_PAGE_SIZE, filteredGames.length - displayedGames.length)} more
-                  </button>
-                ) : null}
+                {canShowMoreGames ? <div className="library-scroll-status">More games load as you scroll</div> : null}
               </div>
             ) : (
               <div className="empty-local-library">
