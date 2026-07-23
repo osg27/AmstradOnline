@@ -5,10 +5,10 @@
     "row_size": 3,
     "row_count": 1,
     "score_start": 0,
-    "score_length": 2,
+    "score_length": 3,
     "encoding": "bcd_le",
     "multiplier": 1,
-    "max_score": 999990,
+    "max_score": 2999990,
     "default_scores": []
   },
   "mrdo": {
