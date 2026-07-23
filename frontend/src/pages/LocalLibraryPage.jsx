@@ -1044,24 +1044,44 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [searchParams] = useSearchParams();
   const requestedSystem = searchParams.get('system');
   const requestedSystemExists = SUPPORTED_SYSTEMS.some((system) => system.id === requestedSystem);
+  const requestedLetter = searchParams.get('letter');
+  const requestedLetterExists = requestedLetter === 'all' || LIBRARY_ALPHABET.includes(requestedLetter);
   const username = localStorage.getItem('username');
   const [folders, setFolders] = useState([]);
   const [games, setGames] = useState([]);
   const [selectedSystems, setSelectedSystems] = useState([]);
   const [activeSystem, setActiveSystem] = useState(requestedSystemExists ? requestedSystem : 'all');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(searchParams.get('q') || '');
   const [favourites, setFavourites] = useState([]);
   const [status, setStatus] = useState('Loading library...');
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
   const [launchingSystemId, setLaunchingSystemId] = useState(null);
-  const [showArcadeClones, setShowArcadeClones] = useState(false);
-  const [showBoxArtOnly, setShowBoxArtOnly] = useState(false);
-  const [letterFilter, setLetterFilter] = useState('all');
+  const [showArcadeClones, setShowArcadeClones] = useState(searchParams.get('clones') === '1');
+  const [showBoxArtOnly, setShowBoxArtOnly] = useState(searchParams.get('boxArt') === '1');
+  const [letterFilter, setLetterFilter] = useState(requestedLetterExists ? requestedLetter : 'all');
   const [joinCode, setJoinCode] = useState('');
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [renderLimit, setRenderLimit] = useState(LIBRARY_PAGE_SIZE);
+
+  function buildLibraryReturnPath(overrides = {}) {
+    const params = new URLSearchParams();
+    const nextSystem = overrides.system ?? activeSystem;
+    const nextQuery = overrides.query ?? query;
+    const nextLetter = overrides.letter ?? letterFilter;
+    const nextShowArcadeClones = overrides.showArcadeClones ?? showArcadeClones;
+    const nextShowBoxArtOnly = overrides.showBoxArtOnly ?? showBoxArtOnly;
+
+    if (nextSystem && nextSystem !== 'all') params.set('system', nextSystem);
+    if (nextQuery.trim()) params.set('q', nextQuery.trim());
+    if (nextLetter && nextLetter !== 'all') params.set('letter', nextLetter);
+    if (nextShowArcadeClones) params.set('clones', '1');
+    if (nextShowBoxArtOnly) params.set('boxArt', '1');
+
+    const queryString = params.toString();
+    return queryString ? `/library?${queryString}` : '/library';
+  }
 
   useEffect(() => {
     async function loadLibrary() {
@@ -1380,7 +1400,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           party_max_players: 2,
         }),
       });
-      navigate(`/room/${room.room_code}?localGame=${encodeURIComponent(game.id)}`);
+      const nextParams = new URLSearchParams({
+        localGame: game.id,
+        returnTo: buildLibraryReturnPath(),
+      });
+      navigate(`/room/${room.room_code}?${nextParams.toString()}`);
     } catch (err) {
       setStatus(`Could not start ${game.title}: ${err.message}`);
     } finally {
@@ -1400,7 +1424,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         method: 'POST',
         body: JSON.stringify({ room_code: code }),
       });
-      navigate(`/room/${room.room_code}`);
+      const nextParams = new URLSearchParams({
+        returnTo: buildLibraryReturnPath(),
+      });
+      navigate(`/room/${room.room_code}?${nextParams.toString()}`);
     } catch (err) {
       setStatus(`Could not join room ${code}: ${err.message}`);
     } finally {
@@ -1428,7 +1455,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           party_max_players: 2,
         }),
       });
-      navigate(`/room/${room.room_code}`);
+      const nextParams = new URLSearchParams({
+        returnTo: buildLibraryReturnPath({ system: system.id }),
+      });
+      navigate(`/room/${room.room_code}?${nextParams.toString()}`);
     } catch (err) {
       setStatus(`Could not open ${system.label}: ${err.message}`);
     } finally {

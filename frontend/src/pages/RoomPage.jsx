@@ -41,6 +41,23 @@ const ROOM_SYSTEM_OPTIONS = [
   ['arcade', 'MAME Arcade'],
 ];
 
+function getSafeLibraryReturnPath(value) {
+  if (!value) return '/library';
+
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin === window.location.origin && url.pathname === '/library') {
+      return `${url.pathname}${url.search}`;
+    }
+  } catch {
+    if (value === '/library' || value.startsWith('/library?')) {
+      return value;
+    }
+  }
+
+  return '/library';
+}
+
 const CONTROL_ACTION_LABELS = {
   up: 'Up',
   down: 'Down',
@@ -400,6 +417,7 @@ export default function RoomPage() {
   const username = localStorage.getItem('username');
   const isSoloMode = searchParams.get('mode') === 'solo';
   const localGameId = searchParams.get('localGame');
+  const libraryReturnPath = getSafeLibraryReturnPath(searchParams.get('returnTo'));
   const [obsCaptureMode, setObsCaptureMode] = useState(false);
 
   useEffect(() => {
@@ -4818,7 +4836,7 @@ export default function RoomPage() {
   }
 
   function leaveRoom() {
-    navigate('/library');
+    navigate(libraryReturnPath);
   }
 
   async function invitePlayerFromSolo() {
@@ -4836,6 +4854,7 @@ export default function RoomPage() {
       });
       const nextParams = new URLSearchParams();
       if (localGameId) nextParams.set('localGame', localGameId);
+      if (libraryReturnPath !== '/library') nextParams.set('returnTo', libraryReturnPath);
       const query = nextParams.toString();
       const invitePath = `/room/${nextRoom.room_code}${query ? `?${query}` : ''}`;
       const inviteUrl = `${window.location.origin}${invitePath}`;
