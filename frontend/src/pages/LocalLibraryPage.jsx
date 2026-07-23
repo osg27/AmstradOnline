@@ -595,7 +595,7 @@ function findIndexedBoxArt(game, index) {
   }
 
   if (game.system === 'arcade') {
-    return null;
+    return findArcadeIndexedBoxArtByTitle(candidates, index);
   }
 
   const baseKey = normalizeBoxArtKey(stripRegionAndMeta(fileBaseName(game.fileName)));
@@ -616,6 +616,37 @@ function findIndexedBoxArt(game, index) {
   return null;
 }
 
+function findArcadeIndexedBoxArtByTitle(candidates, index) {
+  const safeKeys = uniq(candidates.map(normalizeBoxArtKey))
+    .filter((key) => {
+      if (key.length < 3) return false;
+      const compact = key.replace(/\s+/g, '');
+      const tokens = key.split(' ').filter(Boolean);
+      return /^\d{3,5}$/.test(compact) || key.length >= 5 || tokens.length >= 2;
+    });
+
+  const safeCompacts = uniq(candidates.map(normalizeCompactBoxArtKey))
+    .filter((key) => key.length >= 4);
+
+  for (const key of safeKeys) {
+    const match = index.entries.find((entry) => (
+      entry.looseKey === key
+      || entry.looseKey.startsWith(`${key} `)
+    ));
+    if (match) return match;
+  }
+
+  for (const key of safeCompacts) {
+    const match = index.entries.find((entry) => (
+      entry.compactKey === key
+      || entry.compactKey.startsWith(key)
+    ));
+    if (match) return match;
+  }
+
+  return null;
+}
+
 function buildArcadeBoxArtNameCandidates(game) {
   const romKeys = uniq([
     game.romKey,
@@ -625,11 +656,33 @@ function buildArcadeBoxArtNameCandidates(game) {
       arcadeRomKey(variant.fileName),
     ]),
   ].filter(Boolean));
-
-  return uniq([
+  const parentKeys = uniq([
     game.parentRomKey,
     ...romKeys.map((romKey) => canonicalArcadeParentKey(romKey)),
+  ]);
+  const metadataTitles = uniq([...parentKeys, ...romKeys].flatMap((romKey) => {
+    const title = mame2003PlusTitles[romKey]?.title || '';
+    return [
+      title,
+      cleanArcadeDisplayTitle(title),
+    ];
+  }));
+  const fileTitles = uniq([
+    game.title,
+    cleanArcadeDisplayTitle(game.title || ''),
+    titleFromFileName(game.fileName || ''),
+    ...(game.variants || []).flatMap((variant) => [
+      variant.title,
+      cleanArcadeDisplayTitle(variant.title || ''),
+      titleFromFileName(variant.fileName || ''),
+    ]),
+  ]);
+
+  return uniq([
+    ...parentKeys,
     ...romKeys,
+    ...metadataTitles,
+    ...fileTitles,
   ]);
 }
 
