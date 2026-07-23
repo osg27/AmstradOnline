@@ -174,6 +174,7 @@ const COMPACT_REGION_SUFFIXES = {
 const TITLE_ACRONYMS = new Set([
   'ABC',
   'FIFA',
+  'HQ',
   'MLB',
   'NBA',
   'NCAA',
@@ -186,6 +187,30 @@ const TITLE_ACRONYMS = new Set([
   'WCW',
   'WWF',
 ]);
+
+const COMPACT_TITLE_ALIASES = [
+  ['3ninjaskickback', '3 Ninjas Kick Back'],
+  ['7thsaga', '7th Saga'],
+  ['90minutes', '90 Minutes European Prime Goal'],
+  ['aaahhrealmonsters', 'Aaahh!!! Real Monsters'],
+  ['abcmondaynightfootball', 'ABC Monday Night Football'],
+  ['acmeanimationfactory', 'ACME Animation Factory'],
+  ['adventuresofbatmanandrobin', 'Adventures of Batman and Robin'],
+  ['adventuresoftintin', 'Adventures of Tintin'],
+  ['battletoadsdoubledragon', 'Battletoads Double Dragon'],
+  ['battletoads', 'Battletoads'],
+  ['chasehq', 'Chase H.Q.'],
+  ['disneysaladdin', "Disney's Aladdin"],
+  ['disneysbonkers', "Disney's Bonkers"],
+  ['disneysjunglebook', "Disney's The Jungle Book"],
+  ['disneyslionking', "Disney's The Lion King"],
+  ['disneyslittlemermaid', "Disney's The Little Mermaid"],
+  ['indianajonesandthelastcrusade', 'Indiana Jones and the Last Crusade'],
+  ['teenagemutantninjaturtlesturtlesintime', 'Teenage Mutant Ninja Turtles - Turtles in Time'],
+  ['teenagemutantninjaturtles', 'Teenage Mutant Ninja Turtles'],
+];
+
+const SUPPORT_ROM_PATTERN = /\b(?:sound(?:s|track)?|music|bgm|sample(?:s)?|speech|voice(?:s)?|audio|ost|sound\s*test|music\s*test)\b/i;
 
 function slugify(value) {
   return value
@@ -232,7 +257,7 @@ function canonicalArcadeParentKey(romKey) {
 
 function isArcadeParentRom(game) {
   if (game.system !== 'arcade') return true;
-  const romKey = arcadeRomKey(game.fileName);
+  const romKey = game.romKey || arcadeRomKey(game.fileName);
   return canonicalArcadeParentKey(romKey) === romKey;
 }
 
@@ -247,8 +272,8 @@ function cleanArcadeDisplayTitle(value) {
 
 function arcadeMetadataTitle(game) {
   if (game.system !== 'arcade') return '';
-  const romKey = arcadeRomKey(game.fileName);
-  const parentKey = canonicalArcadeParentKey(romKey);
+  const romKey = game.romKey || arcadeRomKey(game.fileName);
+  const parentKey = game.parentRomKey || canonicalArcadeParentKey(romKey);
   const metadata = mame2003PlusTitles[parentKey] || mame2003PlusTitles[romKey];
   return cleanArcadeDisplayTitle(metadata?.title || '');
 }
@@ -337,7 +362,8 @@ function splitCompactTitle(value) {
 function compactTitleVariants(value) {
   const raw = fileBaseName(value || '').replace(/_/g, ' ').trim();
   const stripped = stripRegionAndMeta(raw);
-  return uniq([raw, stripped].flatMap((source) => {
+  const knownTitle = knownCompactTitle(raw);
+  return uniq([knownTitle, raw, stripped].flatMap((source) => {
     if (!source) return [];
 
     const regionless = stripCompactRegionSuffix(source);
@@ -443,6 +469,20 @@ function normalizeExactBoxArtKey(value) {
 
 function normalizeCompactBoxArtKey(value) {
   return normalizeBoxArtKey(value).replace(/\s+/g, '');
+}
+
+function rawCompactKey(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\.[^.]+$/, '')
+    .replace(/[\[\(].*?[\]\)]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function knownCompactTitle(value) {
+  const compact = rawCompactKey(value);
+  const match = COMPACT_TITLE_ALIASES.find(([prefix]) => compact.startsWith(prefix));
+  return match?.[1] || '';
 }
 
 function rawGitHubBoxArtUrl(repo, path, branch = 'master') {
@@ -578,11 +618,16 @@ function findIndexedBoxArt(game, index) {
 
 function buildArcadeBoxArtNameCandidates(game) {
   const romKeys = uniq([
+    game.romKey,
     arcadeRomKey(game.fileName),
-    ...(game.variants || []).map((variant) => arcadeRomKey(variant.fileName)),
+    ...(game.variants || []).flatMap((variant) => [
+      variant.romKey,
+      arcadeRomKey(variant.fileName),
+    ]),
   ].filter(Boolean));
 
   return uniq([
+    game.parentRomKey,
     ...romKeys.map((romKey) => canonicalArcadeParentKey(romKey)),
     ...romKeys,
   ]);
@@ -697,6 +742,11 @@ async function findBoxArtForGame(game) {
 
 function titleFromFileName(fileName) {
   const base = fileBaseName(fileName);
+  const knownTitle = knownCompactTitle(base);
+  if (knownTitle) {
+    return titleCaseSmallWords(moveTrailingArticle(knownTitle));
+  }
+
   const compactTitle = compactTitleVariants(base)
     .map((variant) => stripRegionAndMeta(variant))
     .find((variant) => variant && variant.includes(' '));
@@ -759,9 +809,12 @@ function canonicalLibraryTitle(game) {
 
   const storedTitle = game.title || fileBaseName(game.fileName);
   const fileTitle = titleFromFileName(game.fileName || storedTitle);
-  const rawTitle = !storedTitle.includes(' ') && fileTitle.includes(' ')
-    ? fileTitle
-    : storedTitle;
+  const knownTitle = knownCompactTitle(game.fileName || storedTitle);
+  const rawTitle = knownTitle || (
+    !storedTitle.includes(' ') && fileTitle.includes(' ')
+      ? fileTitle
+      : storedTitle
+  );
   const withoutMeta = stripRegionAndMeta(rawTitle)
     .replace(/\b(?:rev(?:ision)?|version|ver)\s*[a-z0-9.]+$/i, '')
     .replace(/\b(?:beta|proto(?:type)?|sample|demo|hack|trainer|translation|overdump|bad dump|alternate)\b.*$/i, '')
@@ -787,9 +840,26 @@ function withRomanSearchAliases(value) {
   return uniq(variants);
 }
 
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\.[^.]+$/, ' ')
+    .replace(/\bh\s*\.?\s*q\.?\b/g, 'hq')
+    .replace(/\bdisney'?s?\b/g, 'disney')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\bh q\b/g, 'hq')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactSearchText(value) {
+  return normalizeSearchText(value).replace(/\s+/g, '');
+}
+
 function searchableTitleParts(game) {
-  const romKey = game.system === 'arcade' ? arcadeRomKey(game.fileName) : '';
-  const parentKey = romKey ? canonicalArcadeParentKey(romKey) : '';
+  const romKey = game.system === 'arcade' ? (game.romKey || arcadeRomKey(game.fileName)) : '';
+  const parentKey = romKey ? (game.parentRomKey || canonicalArcadeParentKey(romKey)) : '';
   const arcadeTitles = uniq([
     romKey,
     parentKey,
@@ -803,6 +873,7 @@ function searchableTitleParts(game) {
     game.title,
     titleFromFileName(game.fileName || ''),
     fileBaseName(game.fileName || ''),
+    knownCompactTitle(game.fileName || game.title || ''),
     ...arcadeTitles,
     ...(game.variants || []).flatMap((variant) => [
       canonicalLibraryTitle(variant),
@@ -811,12 +882,34 @@ function searchableTitleParts(game) {
       fileBaseName(variant.fileName || ''),
       variant.fileName,
       variant.path,
-      variant.system === 'arcade' ? arcadeRomKey(variant.fileName) : '',
-      variant.system === 'arcade' ? cleanArcadeDisplayTitle(mame2003PlusTitles[arcadeRomKey(variant.fileName)]?.title) : '',
+      knownCompactTitle(variant.fileName || variant.title || ''),
+      variant.system === 'arcade' ? (variant.romKey || arcadeRomKey(variant.fileName)) : '',
+      variant.system === 'arcade' ? (variant.parentRomKey || canonicalArcadeParentKey(variant.romKey || arcadeRomKey(variant.fileName))) : '',
+      variant.system === 'arcade' ? cleanArcadeDisplayTitle(mame2003PlusTitles[variant.romKey || arcadeRomKey(variant.fileName)]?.title) : '',
+      variant.system === 'arcade' ? cleanArcadeDisplayTitle(mame2003PlusTitles[variant.parentRomKey || canonicalArcadeParentKey(variant.romKey || arcadeRomKey(variant.fileName))]?.title) : '',
     ]),
   ]);
 
   return uniq(titleParts.flatMap((part) => withRomanSearchAliases(part || '')));
+}
+
+function matchesLibraryQuery(game, query) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return true;
+
+  const queryVariants = uniq(withRomanSearchAliases(trimmedQuery).flatMap((part) => [
+    normalizeSearchText(part),
+    compactSearchText(part),
+  ]));
+  const haystacks = uniq(searchableTitleParts(game).flatMap((part) => [
+    normalizeSearchText(part),
+    compactSearchText(part),
+  ]));
+
+  return queryVariants.some((queryPart) => (
+    queryPart.length > 0
+    && haystacks.some((haystack) => haystack.includes(queryPart))
+  ));
 }
 
 function isLikelySupportRom(gameOrName) {
@@ -829,14 +922,13 @@ function isLikelySupportRom(gameOrName) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  return /\b(?:sound(?:s|track)?|music|bgm|sample(?:s)?|speech|voice(?:s)?)\b$/i.test(normalizedName)
-    || /\b(?:sound|music)\s*test\b/i.test(normalizedName);
+  return SUPPORT_ROM_PATTERN.test(normalizedName);
 }
 
 function libraryGroupKey(game, { showArcadeClones = false } = {}) {
   if (game.system === 'arcade') {
     if (showArcadeClones) return `arcade:${game.id}`;
-    const romKey = arcadeRomKey(game.fileName);
+    const romKey = game.romKey || arcadeRomKey(game.fileName);
     return `arcade:${canonicalArcadeParentKey(romKey)}`;
   }
 
@@ -975,7 +1067,6 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     : null;
   const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
   const filteredGames = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     return groupedGames
       .filter((game) => (
         activeSystem === 'all'
@@ -983,13 +1074,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         || (activeSystem === 'favourites' && game.variants.some((variant) => favouriteSet.has(variant.id)))
       ))
       .filter((game) => !showBoxArtOnly || Boolean(game.boxArtUrl))
-      .filter((game) => {
-        if (!normalizedQuery) return true;
-        return searchableTitleParts(game)
-          .join(' ')
-          .toLowerCase()
-          .includes(normalizedQuery);
-      })
+      .filter((game) => matchesLibraryQuery(game, query))
       .sort((a, b) => a.title.localeCompare(b.title));
   }, [activeSystem, favouriteSet, groupedGames, query, showBoxArtOnly]);
   const hiddenArcadeCloneCount = useMemo(
@@ -1070,7 +1155,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           continue;
         }
 
-        if (targetSystem.id !== 'arcade' && isLikelySupportRom(entry.name)) {
+        if (isLikelySupportRom(entry.name)) {
           skippedSupport += 1;
           continue;
         }
@@ -1079,17 +1164,24 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           ? targetSystem
           : null;
         if (system) {
+          const romKey = system.id === 'arcade' ? arcadeRomKey(entry.name) : '';
+          const parentRomKey = romKey ? canonicalArcadeParentKey(romKey) : '';
+          const arcadeTitle = romKey
+            ? cleanArcadeDisplayTitle(mame2003PlusTitles[romKey]?.title || mame2003PlusTitles[parentRomKey]?.title || '')
+            : '';
           nextGames.push({
             id: `${folderId}:${entry.path}`,
             folderId,
             folderName: directoryHandle.name,
             folderSystem: targetSystem.id,
-            title: titleFromFileName(entry.name),
+            title: arcadeTitle || titleFromFileName(entry.name),
             fileName: entry.name,
             path: entry.path,
             extension,
             system: system.id,
             roomSystem: system.roomSystem,
+            romKey,
+            parentRomKey,
             handle: entry.handle,
             indexedAt: new Date().toISOString(),
           });
@@ -1255,7 +1347,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const skippedArcadeClones = filteredGames.filter((game) => game.system === 'arcade' && !isArcadeParentRom(game) && !game.boxArtUrl).length;
     const targets = filteredGames.filter((game) => (
       isArcadeParentRom(game)
-      && (game.system === 'arcade' || !game.boxArtUrl)
+      && !game.boxArtUrl
     ));
     if (!targets.length) {
       setStatus(skippedArcadeClones
