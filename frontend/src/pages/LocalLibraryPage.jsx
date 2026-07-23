@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
@@ -165,6 +165,7 @@ const boxArtIndexCache = new Map();
 const arcadeParentKeyCache = new Map();
 const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 'nintendo']);
 const LIBRARY_PAGE_SIZE = 96;
+const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 const COMPACT_REGION_SUFFIXES = {
   U: 'USA',
   E: 'Europe',
@@ -965,6 +966,11 @@ function matchesLibraryQuery(game, query) {
   ));
 }
 
+function getLibraryTitleInitial(title) {
+  const first = String(title || '').trim().charAt(0).toUpperCase();
+  return /^[A-Z]$/.test(first) ? first : '#';
+}
+
 function isLikelySupportRom(gameOrName) {
   const fileName = typeof gameOrName === 'string'
     ? gameOrName
@@ -1052,10 +1058,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [launchingSystemId, setLaunchingSystemId] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(false);
   const [showBoxArtOnly, setShowBoxArtOnly] = useState(false);
+  const [letterFilter, setLetterFilter] = useState('all');
   const [joinCode, setJoinCode] = useState('');
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [renderLimit, setRenderLimit] = useState(LIBRARY_PAGE_SIZE);
-  const gameGridRef = useRef(null);
 
   useEffect(() => {
     async function loadLibrary() {
@@ -1120,7 +1126,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     ? folders.find((folder) => folder.system === activeSystemDetails.id)
     : null;
   const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
-  const filteredGames = useMemo(() => {
+  const letterSourceGames = useMemo(() => {
     return groupedGames
       .filter((game) => (
         activeSystem === 'all'
@@ -1131,6 +1137,18 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       .filter((game) => matchesLibraryQuery(game, query))
       .sort((a, b) => a.title.localeCompare(b.title));
   }, [activeSystem, favouriteSet, groupedGames, query, showBoxArtOnly]);
+  const alphabetCounts = useMemo(() => {
+    const counts = Object.fromEntries(LIBRARY_ALPHABET.map((letter) => [letter, 0]));
+    letterSourceGames.forEach((game) => {
+      const initial = getLibraryTitleInitial(game.title);
+      counts[initial] = (counts[initial] || 0) + 1;
+    });
+    return counts;
+  }, [letterSourceGames]);
+  const filteredGames = useMemo(() => {
+    if (letterFilter === 'all') return letterSourceGames;
+    return letterSourceGames.filter((game) => getLibraryTitleInitial(game.title) === letterFilter);
+  }, [letterFilter, letterSourceGames]);
   const hiddenArcadeCloneCount = useMemo(
     () => {
       if (activeSystem !== 'all' && activeSystem !== 'arcade' && activeSystem !== 'favourites') return 0;
@@ -1150,25 +1168,28 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   useEffect(() => {
     setRenderLimit(LIBRARY_PAGE_SIZE);
-    if (gameGridRef.current) {
-      gameGridRef.current.scrollTop = 0;
-    }
-  }, [activeSystem, query, showArcadeClones, showBoxArtOnly]);
+  }, [activeSystem, letterFilter, query, showArcadeClones, showBoxArtOnly]);
 
   useEffect(() => {
-    const grid = gameGridRef.current;
-    if (!grid || !canShowMoreGames) return;
-    if (grid.scrollHeight <= grid.clientHeight + 80) {
+    if (letterFilter !== 'all' && !alphabetCounts[letterFilter]) {
+      setLetterFilter('all');
+    }
+  }, [alphabetCounts, letterFilter]);
+
+  useEffect(() => {
+    if (!canShowMoreGames) return undefined;
+
+    function loadMoreNearPageBottom() {
+      const documentElement = document.documentElement;
+      const distanceFromBottom = documentElement.scrollHeight - window.scrollY - window.innerHeight;
+      if (distanceFromBottom > 1000) return;
       setRenderLimit((limit) => Math.min(filteredGames.length, limit + LIBRARY_PAGE_SIZE));
     }
-  }, [canShowMoreGames, displayedGames.length, filteredGames.length]);
 
-  function handleGameGridScroll(event) {
-    const grid = event.currentTarget;
-    const distanceFromBottom = grid.scrollHeight - grid.scrollTop - grid.clientHeight;
-    if (distanceFromBottom > 800) return;
-    setRenderLimit((limit) => Math.min(filteredGames.length, limit + LIBRARY_PAGE_SIZE));
-  }
+    window.addEventListener('scroll', loadMoreNearPageBottom, { passive: true });
+    loadMoreNearPageBottom();
+    return () => window.removeEventListener('scroll', loadMoreNearPageBottom);
+  }, [canShowMoreGames, filteredGames.length]);
 
   async function toggleFavourite(game) {
     const variantIds = new Set((game.variants || [game]).map((variant) => variant.id));
@@ -1721,10 +1742,34 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 {mediaProgress ? `Box art ${mediaProgress.checked}/${mediaProgress.total}` : 'Download box art'}
               </button>
             </div>
+            <div className="library-alpha-strip" aria-label="Filter games by first letter">
+              <button
+                type="button"
+                className={letterFilter === 'all' ? 'active' : 'secondary'}
+                onClick={() => setLetterFilter('all')}
+              >
+                All
+              </button>
+              {LIBRARY_ALPHABET.map((letter) => {
+                const count = alphabetCounts[letter] || 0;
+                return (
+                  <button
+                    key={letter}
+                    type="button"
+                    className={letterFilter === letter ? 'active' : 'secondary'}
+                    onClick={() => setLetterFilter(letter)}
+                    disabled={!count}
+                    title={`${count} ${count === 1 ? 'game' : 'games'} beginning with ${letter}`}
+                  >
+                    {letter}
+                  </button>
+                );
+              })}
+            </div>
 
             <div className="library-summary-strip">
               <strong>{filteredGames.length}</strong>
-              <span>shown from {games.length} indexed files{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
+              <span>shown from {games.length} indexed files{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
             {mediaProgress ? (
               <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
@@ -1733,7 +1778,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ) : null}
 
             {filteredGames.length ? (
-              <div className="local-game-grid" ref={gameGridRef} onScroll={handleGameGridScroll}>
+              <div className="local-game-grid">
                 {displayedGames.map((game) => {
                   const system = SYSTEM_BY_ID[game.system];
                   const favourite = game.variants.some((variant) => favouriteSet.has(variant.id));
