@@ -8,7 +8,7 @@
     "score_length": 3,
     "encoding": "bcd_le",
     "multiplier": 1,
-    "max_score": 2999990,
+    "max_score": 999999,
     "default_scores": []
   },
   "mrdo": {
