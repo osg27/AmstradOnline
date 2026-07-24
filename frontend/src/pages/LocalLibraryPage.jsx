@@ -1277,9 +1277,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     navigate('/library');
   }
 
-  async function scanFolder(targetSystemId) {
+  async function pickSystemFolder(targetSystemId) {
     if (!canUseDirectoryPicker()) {
-      setStatus('Folder scanning needs Chrome, Edge, or another Chromium browser.');
+      setStatus('Folder scanning needs Chrome, Edge, Brave, or another Chromium browser.');
+      return;
+    }
+    if (window.isSecureContext === false) {
+      setStatus('Folder scanning needs localhost or HTTPS before the browser will allow folder access.');
       return;
     }
 
@@ -1289,8 +1293,26 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       return;
     }
 
+    let directoryHandle;
     try {
-      const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+      directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        setStatus('Folder selection cancelled.');
+      } else if (err?.name === 'SecurityError' || err?.name === 'NotAllowedError') {
+        setStatus('Brave blocked folder access. Allow file and folder access for this site or turn Shields off for localhost, then try Add folder again.');
+      } else {
+        setStatus(`Folder picker failed: ${err?.message || 'Browser blocked folder access.'}`);
+      }
+      setScanProgress(null);
+      return;
+    }
+
+    await scanSystemFolder(targetSystem, directoryHandle);
+  }
+
+  async function scanSystemFolder(targetSystem, directoryHandle) {
+    try {
       const folderId = `system:${targetSystem.id}`;
       const nextGames = [];
       const sampleHandles = [];
@@ -1389,9 +1411,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       setScanProgress(null);
       setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${directoryHandle.name}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}${skippedSupport ? `, skipped ${skippedSupport} support file${skippedSupport === 1 ? '' : 's'}` : ''}.`);
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        setStatus(`Scan failed: ${err.message}`);
-      }
+      setStatus(`Scan failed: ${err?.message || 'Could not read that folder.'}`);
       setScanProgress(null);
     }
   }
@@ -1690,7 +1710,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                       <button
                         type="button"
                         className="secondary platform-config-button"
-                        onClick={() => scanFolder(system.id)}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          pickSystemFolder(system.id);
+                        }}
                         title={`Configure ${system.label}`}
                         aria-label={`Configure ${system.label}`}
                       >
@@ -1773,7 +1798,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                   >
                     {launchingSystemId === activeSystemDetails.id ? 'Opening...' : 'Open room'}
                   </button>
-                  <button type="button" onClick={() => scanFolder(activeSystemDetails.id)}>
+                  <button type="button" onClick={() => pickSystemFolder(activeSystemDetails.id)}>
                     {activeSystemFolder ? 'Change folder' : 'Add folder'}
                   </button>
                   {activeSystemFolder ? (
