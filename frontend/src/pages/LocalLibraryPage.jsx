@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { apiFetch } from '../api/client';
+import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import { getMameTitleDatabase } from '../data/mameTitleLookup';
 import amigaLogoUrl from '../../assets/amiga500.svg';
@@ -758,17 +758,56 @@ function probeImageUrl(url) {
   });
 }
 
+function toApiMediaUrl(path) {
+  if (!path) return path;
+  if (/^(https?:|data:|blob:)/i.test(path)) return path;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
+}
+
+function isExternalBoxArtUrl(url) {
+  if (!/^https?:\/\//i.test(url || '')) return false;
+  return !url.startsWith(API_BASE_URL);
+}
+
+async function cacheBoxArtUrl(game, sourceUrl) {
+  try {
+    const result = await apiFetch('/library/media/boxart', {
+      method: 'POST',
+      body: JSON.stringify({
+        url: sourceUrl,
+        system: game.system,
+        title: game.title,
+        rom_name: game.fileName || game.romKey || game.id,
+      }),
+    });
+    if (result?.url) {
+      return { url: toApiMediaUrl(result.url), cached: true };
+    }
+  } catch (error) {
+    console.warn('Box art cache failed', error);
+  }
+
+  return { url: sourceUrl, cached: false };
+}
+
+async function buildBoxArtMedia(game, sourceUrl) {
+  const cached = await cacheBoxArtUrl(game, sourceUrl);
+  return {
+    boxArtUrl: cached.url,
+    boxArtSource: sourceUrl,
+    boxArtCached: cached.cached,
+    boxArtFetchedAt: new Date().toISOString(),
+  };
+}
+
 async function findBoxArtForGame(game) {
   const index = await getBoxArtIndex(game.system);
   const indexedMatch = findIndexedBoxArt(game, index);
   if (indexedMatch) {
     const imageUrl = await probeImageUrl(indexedMatch.url);
     if (imageUrl) {
-      return {
-        boxArtUrl: imageUrl,
-        boxArtSource: imageUrl,
-        boxArtFetchedAt: new Date().toISOString(),
-      };
+      return buildBoxArtMedia(game, imageUrl);
     }
   }
 
@@ -785,11 +824,7 @@ async function findBoxArtForGame(game) {
       const url = `https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/${encodeURIComponent(name)}.png`;
       const imageUrl = await probeImageUrl(url);
       if (imageUrl) {
-        return {
-          boxArtUrl: imageUrl,
-          boxArtSource: imageUrl,
-          boxArtFetchedAt: new Date().toISOString(),
-        };
+        return buildBoxArtMedia(game, imageUrl);
       }
     }
   }
@@ -1482,7 +1517,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const skippedArcadeClones = filteredGames.filter((game) => game.system === 'arcade' && !isArcadeParentRom(game) && !game.boxArtUrl).length;
     const targets = filteredGames.filter((game) => (
       isArcadeParentRom(game)
-      && (!game.boxArtUrl || brokenBoxArtIds.has(game.id))
+      && (!game.boxArtUrl || brokenBoxArtIds.has(game.id) || isExternalBoxArtUrl(game.boxArtUrl))
     ));
     if (!targets.length) {
       setStatus(skippedArcadeClones

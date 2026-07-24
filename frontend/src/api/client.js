@@ -16,7 +16,7 @@ function getDefaultWsBaseUrl() {
   return `${protocol}//${window.location.host}`;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || getDefaultApiBaseUrl();
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || getDefaultApiBaseUrl();
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || getDefaultWsBaseUrl();
 
 function formatApiErrorDetail(detail) {
