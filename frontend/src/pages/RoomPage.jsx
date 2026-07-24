@@ -239,6 +239,131 @@ function shouldAutoSelectControlMatch(matches) {
   return best.score >= 110 || (best.score >= 92 && (!next || best.score - next.score >= 12));
 }
 
+function cpcDiskText(bytes, offset, length) {
+  let text = '';
+  for (let index = 0; index < length && offset + index < bytes.length; index += 1) {
+    const value = bytes[offset + index] & 0x7f;
+    if (value >= 32 && value <= 126) {
+      text += String.fromCharCode(value);
+    }
+  }
+  return text.trim();
+}
+
+function getCpcDskTrackLayout(bytes) {
+  const header = cpcDiskText(bytes, 0, 48);
+  const extended = header.includes('EXTENDED CPC DSK');
+  if (!header.includes('CPC') || !header.includes('Disk')) return null;
+
+  const tracks = bytes[0x30] || 0;
+  const sides = bytes[0x31] || 1;
+  const count = Math.max(0, tracks * sides);
+  if (!count) return null;
+
+  const sizes = [];
+  if (extended) {
+    for (let index = 0; index < count; index += 1) {
+      sizes.push((bytes[0x34 + index] || 0) * 256);
+    }
+  } else {
+    const size = bytes[0x32] | ((bytes[0x33] || 0) << 8);
+    for (let index = 0; index < count; index += 1) {
+      sizes.push(size);
+    }
+  }
+
+  return { sizes };
+}
+
+function extractCpcDskCatalog(bytes) {
+  const layout = getCpcDskTrackLayout(bytes);
+  if (!layout) return [];
+
+  const entries = [];
+  const seen = new Set();
+  let trackOffset = 256;
+
+  layout.sizes.forEach((trackSize) => {
+    if (!trackSize || trackOffset + 256 > bytes.length) {
+      trackOffset += trackSize || 0;
+      return;
+    }
+
+    const trackHeader = cpcDiskText(bytes, trackOffset, 32);
+    if (!trackHeader.includes('Track-Info')) {
+      trackOffset += trackSize;
+      return;
+    }
+
+    const sectorCount = bytes[trackOffset + 0x15] || 0;
+    let dataOffset = trackOffset + 0x100;
+
+    for (let sector = 0; sector < sectorCount; sector += 1) {
+      const entryOffset = trackOffset + 0x18 + sector * 8;
+      const sectorId = bytes[entryOffset + 2];
+      const sectorLength = (
+        bytes[entryOffset + 6] | ((bytes[entryOffset + 7] || 0) << 8)
+      ) || (128 << (bytes[entryOffset + 3] || 2));
+
+      if (sectorId >= 0xc1 && sectorId <= 0xc4) {
+        const end = Math.min(dataOffset + sectorLength, bytes.length);
+        for (let offset = dataOffset; offset + 32 <= end; offset += 32) {
+          const user = bytes[offset];
+          if (user > 15) continue;
+
+          const base = cpcDiskText(bytes, offset + 1, 8).replace(/\s+/g, '').trim();
+          const ext = cpcDiskText(bytes, offset + 9, 3).replace(/\s+/g, '').trim().toUpperCase();
+          if (!base || !ext) continue;
+
+          const key = `${base}.${ext}`.toUpperCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          entries.push({ base, ext, name: key });
+        }
+      }
+
+      dataOffset += sectorLength;
+    }
+
+    trackOffset += trackSize;
+  });
+
+  return entries;
+}
+
+function pickCpcAutoloadEntry(entries, fileName) {
+  if (!entries.length) return null;
+
+  const basEntries = entries.filter((entry) => entry.ext === 'BAS');
+  if (basEntries.length === 1) return basEntries[0];
+
+  const runnable = entries.filter((entry) => ['BAS', 'BIN'].includes(entry.ext));
+  const candidates = runnable.length ? runnable : entries;
+  const diskTokens = searchTokens(fileName);
+  const loaderWords = /\b(loader|load|menu|disc|disk|start|boot|run|intro)\b/i;
+  const badWords = /\b(screen|title|pic|font|charset|chars|data|table|music|sound|score|scores|hiscore|hi|readme|doc)\b/i;
+
+  const ranked = candidates
+    .map((entry) => {
+      const baseTokens = searchTokens(entry.base);
+      let score = tokenSimilarity(baseTokens, diskTokens) * 4;
+
+      if (entry.ext === 'BAS') score += 30;
+      if (loaderWords.test(entry.base)) score += 20;
+      if (badWords.test(entry.base)) score -= 40;
+
+      return { entry, score };
+    })
+    .sort((left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name));
+
+  return ranked[0]?.entry || null;
+}
+
+function detectCpcAutoloadCommand(bytes, fileName) {
+  const entry = pickCpcAutoloadEntry(extractCpcDskCatalog(bytes), fileName);
+  return entry ? `RUN"${entry.base}` : null;
+}
+
 function atari8ZipEntryPriority(entryName) {
   const lowerName = entryName.toLowerCase();
   const index = ATARI8_ZIP_EXTENSION_PRIORITY.findIndex((extension) => lowerName.endsWith(extension));
@@ -5002,6 +5127,9 @@ export default function RoomPage() {
           bytes: new Uint8Array(await selectedFile.arrayBuffer()),
         })));
       const bytes = loadedFiles[0].bytes;
+      const cpcAutoloadCommand = isCpcSystem && !isSwapDisk
+        ? detectCpcAutoloadCommand(bytes, loadedFiles[0].fileName)
+        : null;
       const atari8AutoProfile = isAtari8
         ? findAtari8AutoProfile([file.name, ...loadedFiles.map((loadedFile) => loadedFile.fileName)])
         : null;
@@ -5019,6 +5147,7 @@ export default function RoomPage() {
         files: isPlayStation ? loadedFiles : undefined,
         disks: isAmigaAga && !isSwapDisk ? loadedFiles : undefined,
         media: isC64 || isAtariSt ? loadedFiles : undefined,
+        autoloadCommand: cpcAutoloadCommand || undefined,
       };
 
       if (isC64 && loadedDiskName) {
@@ -5057,6 +5186,10 @@ export default function RoomPage() {
         await reloadAtariStFrame();
       }
       forwardInputToEmulator(loadMessage);
+
+      if (isCpcSystem && !isSwapDisk) {
+        addLog(cpcAutoloadCommand ? `Amstrad autoload: ${cpcAutoloadCommand}` : 'Amstrad autoload not detected; catalogue only');
+      }
 
       if (isNes) {
         const frame = reloadedNesFrame || emulatorFrameRef.current;

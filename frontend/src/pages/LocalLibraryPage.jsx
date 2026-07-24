@@ -762,11 +762,14 @@ async function findBoxArtForGame(game) {
   const index = await getBoxArtIndex(game.system);
   const indexedMatch = findIndexedBoxArt(game, index);
   if (indexedMatch) {
-    return {
-      boxArtUrl: indexedMatch.url,
-      boxArtSource: indexedMatch.url,
-      boxArtFetchedAt: new Date().toISOString(),
-    };
+    const imageUrl = await probeImageUrl(indexedMatch.url);
+    if (imageUrl) {
+      return {
+        boxArtUrl: imageUrl,
+        boxArtSource: imageUrl,
+        boxArtFetchedAt: new Date().toISOString(),
+      };
+    }
   }
 
   if (game.system === 'arcade') {
@@ -1064,6 +1067,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [joinCode, setJoinCode] = useState('');
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [renderLimit, setRenderLimit] = useState(LIBRARY_PAGE_SIZE);
+  const [brokenBoxArtIds, setBrokenBoxArtIds] = useState(() => new Set());
 
   function buildLibraryReturnPath(overrides = {}) {
     const params = new URLSearchParams();
@@ -1146,17 +1150,25 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     ? folders.find((folder) => folder.system === activeSystemDetails.id)
     : null;
   const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
-  const letterSourceGames = useMemo(() => {
+  const activeLibraryGames = useMemo(() => {
     return groupedGames
       .filter((game) => (
         activeSystem === 'all'
         || game.system === activeSystem
         || (activeSystem === 'favourites' && game.variants.some((variant) => favouriteSet.has(variant.id)))
-      ))
-      .filter((game) => !showBoxArtOnly || Boolean(game.boxArtUrl))
+      ));
+  }, [activeSystem, favouriteSet, groupedGames]);
+  const activeLibraryCountLabel = activeSystem === 'all'
+    ? 'indexed games'
+    : activeSystem === 'favourites'
+      ? 'favourites'
+      : `${activeSystemDetails?.label || 'platform'} games`;
+  const letterSourceGames = useMemo(() => {
+    return activeLibraryGames
+      .filter((game) => !showBoxArtOnly || (Boolean(game.boxArtUrl) && !brokenBoxArtIds.has(game.id)))
       .filter((game) => matchesLibraryQuery(game, query))
       .sort((a, b) => a.title.localeCompare(b.title));
-  }, [activeSystem, favouriteSet, groupedGames, query, showBoxArtOnly]);
+  }, [activeLibraryGames, brokenBoxArtIds, query, showBoxArtOnly]);
   const alphabetCounts = useMemo(() => {
     const counts = Object.fromEntries(LIBRARY_ALPHABET.map((letter) => [letter, 0]));
     letterSourceGames.forEach((game) => {
@@ -1470,7 +1482,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const skippedArcadeClones = filteredGames.filter((game) => game.system === 'arcade' && !isArcadeParentRom(game) && !game.boxArtUrl).length;
     const targets = filteredGames.filter((game) => (
       isArcadeParentRom(game)
-      && !game.boxArtUrl
+      && (!game.boxArtUrl || brokenBoxArtIds.has(game.id))
     ));
     if (!targets.length) {
       setStatus(skippedArcadeClones
@@ -1500,6 +1512,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             nextGames = nextGames.map((item) => (
               item.id === game.id ? { ...item, ...media } : item
             ));
+            setBrokenBoxArtIds((current) => {
+              if (!current.has(game.id)) return current;
+              const next = new Set(current);
+              next.delete(game.id);
+              return next;
+            });
             setGames(nextGames);
           }
         } catch {
@@ -1703,7 +1721,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               <div>
                 <p className="lobby-eyebrow">{activeSystem === 'favourites' ? 'Saved Picks' : activeSystemDetails?.shortLabel || 'All Platforms'}</p>
                 <h2>{activeSystem === 'favourites' ? 'Favourites' : activeSystemDetails?.label || 'All Games'}</h2>
-                <span>{filteredGames.length} shown from {games.length} indexed files</span>
+                <span>{filteredGames.length} shown from {activeLibraryGames.length} {activeLibraryCountLabel}</span>
               </div>
               {activeSystemDetails ? (
                 <div className="local-library-title-actions">
@@ -1799,7 +1817,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
             <div className="library-summary-strip">
               <strong>{filteredGames.length}</strong>
-              <span>shown from {games.length} indexed files{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
+              <span>shown from {activeLibraryGames.length} {activeLibraryCountLabel}{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
             {mediaProgress ? (
               <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
@@ -1812,12 +1830,27 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 {displayedGames.map((game) => {
                   const system = SYSTEM_BY_ID[game.system];
                   const favourite = game.variants.some((variant) => favouriteSet.has(variant.id));
+                  const hasBoxArt = Boolean(game.boxArtUrl) && !brokenBoxArtIds.has(game.id);
                   return (
-                    <article key={game.id} className={game.boxArtUrl ? 'local-game-card has-box-art' : 'local-game-card'}>
-                      <div className={game.boxArtUrl ? 'local-game-art has-art' : 'local-game-art'}>
-                        {game.boxArtUrl ? (
+                    <article key={game.id} className={hasBoxArt ? 'local-game-card has-box-art' : 'local-game-card'}>
+                      <div className={hasBoxArt ? 'local-game-art has-art' : 'local-game-art'}>
+                        {hasBoxArt ? (
                           <>
-                            <img src={game.boxArtUrl} alt="" loading="lazy" decoding="async" />
+                            <img
+                              src={game.boxArtUrl}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                              referrerPolicy="no-referrer"
+                              onError={() => {
+                                setBrokenBoxArtIds((current) => {
+                                  if (current.has(game.id)) return current;
+                                  const next = new Set(current);
+                                  next.add(game.id);
+                                  return next;
+                                });
+                              }}
+                            />
                             <div className="local-game-art-overlay">
                               <strong>{game.title}</strong>
                               <small>{system?.label || 'Unknown system'}</small>

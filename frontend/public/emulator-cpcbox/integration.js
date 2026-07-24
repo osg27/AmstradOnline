@@ -105,6 +105,7 @@
 
   const heldJoystickKeys = new Set();
   const heldRemoteKeyCodes = new Set();
+  const CURSOR_KEY_CODES = new Set([37, 38, 39, 40]);
   let pendingDisk = null;
   let ready = false;
 
@@ -115,7 +116,42 @@
     return KEY_CODES[key] ?? null;
   }
 
-  function dispatchKey(code, action) {
+  function keyStrokeFor(character) {
+    if (character === '"') return { code: 50, shift: true };
+    if (character === '!') return { code: 49, shift: true };
+    if (character === '$') return { code: 52, shift: true };
+    if (character === '%') return { code: 53, shift: true };
+    if (character === '&') return { code: 55, shift: true };
+    if (character === '(') return { code: 57, shift: true };
+    if (character === ')') return { code: 48, shift: true };
+
+    const code = keyCodeFor(character);
+    return code === null ? null : { code, shift: false };
+  }
+
+  function matrixKeyFor(code, joystickMode) {
+    if (!window.pT?.iQ) return null;
+    if (!window.oU || typeof joystickMode !== 'boolean') return window.pT.iQ(code);
+
+    const previous = window.oU.g;
+    window.oU.g = joystickMode;
+    const matrixKey = window.pT.iQ(code);
+    window.oU.g = previous;
+    return matrixKey;
+  }
+
+  function applyMatrixKey(code, action, options = {}) {
+    const matrixKey = matrixKeyFor(code, options.forceKeyboard ? false : undefined);
+    if (!matrixKey || !window.pT?.hj) return false;
+
+    const [row, bit] = matrixKey;
+    window.pT.hj[row] = action === 'down'
+      ? window.pT.hj[row] & ~bit & 255
+      : window.pT.hj[row] | bit;
+    return true;
+  }
+
+  function dispatchKey(code, action, options = {}) {
     if (code === null) return;
     document.dispatchEvent(new KeyboardEvent(action === 'down' ? 'keydown' : 'keyup', {
       bubbles: true,
@@ -124,13 +160,7 @@
       which: code,
     }));
 
-    const matrixKey = window.pT?.iQ?.(code);
-    if (matrixKey && window.pT?.hj) {
-      const [row, bit] = matrixKey;
-      window.pT.hj[row] = action === 'down'
-        ? window.pT.hj[row] & ~bit & 255
-        : window.pT.hj[row] | bit;
-    }
+    applyMatrixKey(code, action, options);
   }
 
   function releaseAllInput() {
@@ -168,11 +198,36 @@
     setTimeout(() => dispatchKey(code, 'up'), duration);
   }
 
+  function tapStroke(stroke, duration = 55) {
+    if (!stroke) return;
+    if (stroke.shift) {
+      dispatchKey(16, 'down');
+      setTimeout(() => dispatchKey(stroke.code, 'down'), 8);
+      setTimeout(() => dispatchKey(stroke.code, 'up'), duration);
+      setTimeout(() => dispatchKey(16, 'up'), duration + 12);
+      return;
+    }
+    tapKey(stroke.code, duration);
+  }
+
+  function setJoystickMode(enabled) {
+    if (window.oU) window.oU.g = Boolean(enabled);
+
+    const joystickButton = document.getElementById('checkbox-joystick');
+    if (joystickButton) {
+      joystickButton.setAttribute('title', enabled ? 'Disable CPC joystick' : 'Enable CPC joystick');
+      joystickButton.style.backgroundPosition = enabled ? '0px -36px' : '0px 0px';
+    }
+  }
+
   function typeText(text, delay = 90, startDelay = 900) {
     [...text].forEach((character, index) => {
-      setTimeout(() => tapKey(character.toUpperCase().charCodeAt(0)), startDelay + index * delay);
+      const stroke = keyStrokeFor(character);
+      if (stroke) {
+        setTimeout(() => tapStroke(stroke), startDelay + index * delay);
+      }
     });
-    setTimeout(() => tapKey(13), startDelay + text.length * delay + 100);
+    setTimeout(() => tapKey(13), startDelay + text.length * delay + 120);
   }
 
   function boot6128() {
@@ -189,11 +244,11 @@
     }
     $('#snapshot').val('boot_cpc6128');
     $('#snapshot').trigger('change');
-    window.oU.g = false;
+    setJoystickMode(true);
     return true;
   }
 
-  function insertDisk(fileName, bytes) {
+  function insertDisk(fileName, bytes, autoloadCommand) {
     const input = document.getElementById('drivea-input');
     if (!input || !window.DataTransfer) return false;
 
@@ -202,31 +257,34 @@
     transfer.items.add(file);
     input.files = transfer.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    setTimeout(() => typeText('cat'), 250);
+    typeText('cat', 90, 900);
+    if (typeof autoloadCommand === 'string' && autoloadCommand.trim()) {
+      typeText(autoloadCommand.trim(), 90, 2800);
+    }
     return true;
   }
 
-  function loadDisk(fileName, bytes) {
-    pendingDisk = { fileName, bytes };
+  function loadDisk(fileName, bytes, autoloadCommand) {
+    pendingDisk = { fileName, bytes, autoloadCommand };
     if (!ready) return;
 
     boot6128();
     setTimeout(() => {
-      if (pendingDisk && insertDisk(pendingDisk.fileName, pendingDisk.bytes)) {
+      if (pendingDisk && insertDisk(pendingDisk.fileName, pendingDisk.bytes, pendingDisk.autoloadCommand)) {
         pendingDisk = null;
       }
     }, 300);
   }
 
   function applyJoystickMask(mask) {
-    if (window.oU) window.oU.g = false;
+    setJoystickMode(true);
     const next = new Set();
     if (mask & 1) next.add(38);
     if (mask & 2) next.add(40);
     if (mask & 4) next.add(37);
     if (mask & 8) next.add(39);
     if (mask & 16) next.add(17);
-    if (mask & 32) next.add(32);
+    if (mask & 32) next.add(18);
     if (mask & 64) next.add(13);
 
     heldJoystickKeys.forEach((code) => {
@@ -240,22 +298,30 @@
     next.forEach((code) => heldJoystickKeys.add(code));
   }
 
-  document.addEventListener('keydown', (event) => {
+  function handlePhysicalKey(event) {
     if (!event.isTrusted) return;
-    window.parent.postMessage({ type: 'amstrad_input', key: event.key, action: 'down' }, location.origin);
-  }, true);
 
-  document.addEventListener('keyup', (event) => {
-    if (!event.isTrusted) return;
-    window.parent.postMessage({ type: 'amstrad_input', key: event.key, action: 'up' }, location.origin);
-  }, true);
+    const code = event.keyCode || event.which;
+    const action = event.type === 'keydown' ? 'down' : 'up';
+
+    if (CURSOR_KEY_CODES.has(code) && window.oU?.g) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      applyMatrixKey(code, action, { forceKeyboard: true });
+    }
+
+    window.parent.postMessage({ type: 'amstrad_input', key: event.key, action }, location.origin);
+  }
+
+  document.addEventListener('keydown', handlePhysicalKey, true);
+  document.addEventListener('keyup', handlePhysicalKey, true);
 
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || !event.data) return;
     const data = event.data;
 
     if (data.type === 'amstrad_autoload' && data.fileName && data.bytes) {
-      loadDisk(data.fileName, new Uint8Array(data.bytes));
+      loadDisk(data.fileName, new Uint8Array(data.bytes), data.autoloadCommand);
     } else if (data.type === 'amstrad_reset') {
       boot6128();
     } else if (data.type === 'amstrad_audio_unlock') {
@@ -265,9 +331,8 @@
     } else if (data.type === 'emulator_set_paused') {
       setEmulatorPaused(data.paused);
     } else if (data.type === 'amstrad_remote_input' || data.type === 'amstrad_remote_control') {
-      if (window.oU) window.oU.g = false;
       const code = keyCodeFor(data.key);
-      dispatchKey(code, data.action);
+      dispatchKey(code, data.action, { forceKeyboard: CURSOR_KEY_CODES.has(code) });
       if (code !== null) {
         if (data.action === 'down') heldRemoteKeyCodes.add(code);
         else heldRemoteKeyCodes.delete(code);
@@ -287,7 +352,7 @@
     ready = true;
     clearInterval(readinessTimer);
     boot6128();
-    if (pendingDisk) loadDisk(pendingDisk.fileName, pendingDisk.bytes);
+    if (pendingDisk) loadDisk(pendingDisk.fileName, pendingDisk.bytes, pendingDisk.autoloadCommand);
   }, 50);
 
   window.getAmstradAudioStream = () => {
