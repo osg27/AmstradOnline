@@ -71,6 +71,17 @@ const CONTROL_DIRECTIONS = [
 const CONTROL_UTILITY_ACTIONS = ['fire2', 'pause', 'start', 'quit'];
 const ATARI8_ZIP_EXTENSIONS = ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas'];
 const ATARI8_ZIP_EXTENSION_PRIORITY = ['.xex', '.com', '.car', '.rom', '.bin', '.atr', '.xfd', '.atx', '.cas'];
+const ROM_ZIP_EXTENSIONS = {
+  c64: ['.d64', '.t64', '.tap', '.prg', '.crt'],
+  mastersystem: ['.sms'],
+  megadrive: ['.bin', '.gen', '.md', '.smd'],
+  nes: ['.nes'],
+  snes: ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'],
+  pcengine: ['.pce', '.sgx'],
+  playstation: ['.cue', '.bin', '.chd', '.pbp', '.iso'],
+  spectrum: ['.tap', '.tzx', '.z80', '.sna', '.szx'],
+};
+const MULTI_FILE_ZIP_SYSTEMS = new Set(['c64', 'playstation']);
 const ATARI8_MODEL_OPTIONS = [
   ['400/800', '400/800'],
   ['1200xl', '1200XL'],
@@ -275,6 +286,49 @@ async function expandAtari8ZipFile(file) {
   const [entryName, bytes] = entries[0];
   const fileName = entryName.split(/[\\/]/).pop() || entryName;
   return { fileName, bytes };
+}
+
+async function expandRomZipFile(file, system) {
+  const supportedExtensions = ROM_ZIP_EXTENSIONS[system];
+  if (!supportedExtensions) {
+    throw new Error(`${roomSystemLabel(system)} zip files are not supported`);
+  }
+
+  let archive;
+  try {
+    archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  } catch (error) {
+    throw new Error(`Could not unzip ${file.name}: ${error.message}`);
+  }
+
+  const entries = Object.entries(archive)
+    .filter(([entryName]) => {
+      const lowerName = entryName.toLowerCase();
+      return !lowerName.endsWith('/')
+        && !lowerName.split(/[\\/]/).some((part) => part === '__macosx')
+        && supportedExtensions.some((extension) => lowerName.endsWith(extension));
+    })
+    .sort(([leftName], [rightName]) => {
+      const leftLower = leftName.toLowerCase();
+      const rightLower = rightName.toLowerCase();
+      const leftPriority = supportedExtensions.findIndex((extension) => leftLower.endsWith(extension));
+      const rightPriority = supportedExtensions.findIndex((extension) => rightLower.endsWith(extension));
+      return leftPriority - rightPriority
+        || leftName.localeCompare(rightName, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+  if (!entries.length) {
+    throw new Error(
+      `${roomSystemLabel(system)} zip files need to contain ${supportedExtensions.join(', ')} ROM files`,
+    );
+  }
+
+  const selectedEntries = MULTI_FILE_ZIP_SYSTEMS.has(system) ? entries : entries.slice(0, 1);
+  return selectedEntries.map(([entryName, bytes]) => ({
+    fileName: entryName.split(/[\\/]/).pop() || entryName,
+    bytes,
+    archiveEntryName: entryName,
+  }));
 }
 
 function clearAtari8SessionStorage() {
@@ -4714,7 +4768,7 @@ export default function RoomPage() {
       const isSwapDisk = isAmigaFamily && event.target.dataset.mode === 'swap';
       const allowedExtensions = isAmigaFamily
         ? ['.adf', '.adz', '.dms', '.ipf', '.zip', '.7z']
-        : isMasterSystem ? ['.sms'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd'] : isNes ? ['.nes'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'] : isPcEngine ? ['.pce', '.sgx', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
+        : isMasterSystem ? ['.sms', '.zip'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd', '.zip'] : isNes ? ['.nes', '.zip'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2', '.zip'] : isPcEngine ? ['.pce', '.sgx', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.t64', '.tap', '.prg', '.crt', '.zip'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip'] : ['.dsk'];
 
       const invalidFile = selectedFiles.find((selectedFile) => {
         const selectedLowerName = selectedFile.name.toLowerCase();
@@ -4728,7 +4782,7 @@ export default function RoomPage() {
           event.target.value = '';
           return;
         }
-        setError(isAmigaFamily ? 'Amiga rooms support .adf, .adz, .dms, .ipf, .zip, and .7z files' : isMasterSystem ? 'Master System rooms support .sms ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, and .smd ROM files' : isNes ? 'NES rooms support .nes ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, and .dx2 ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, and .zip ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, and .crt files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, and .zip files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, and .ipf disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
+        setError(isAmigaFamily ? 'Amiga rooms support .adf, .adz, .dms, .ipf, .zip, and .7z files' : isMasterSystem ? 'Master System rooms support .sms and .zip ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, .smd, and .zip ROM files' : isNes ? 'NES rooms support .nes and .zip ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, .dx2, and .zip ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, and .zip ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, .crt, and .zip files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, and .zip files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, and .ipf disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, and .zip files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${invalidFile.name}`);
         event.target.value = '';
         return;
@@ -4773,11 +4827,17 @@ export default function RoomPage() {
       }
 
       const atari8ZipFile = isAtari8 && file.name.toLowerCase().endsWith('.zip');
+      const romZipFile = !atari8ZipFile
+        && !isArcade
+        && file.name.toLowerCase().endsWith('.zip')
+        && Boolean(ROM_ZIP_EXTENSIONS[roomSystem]);
       const filesToLoad = (isAmigaAga || isPlayStation || isC64 || isAtariSt) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
       const loadedFiles = atari8ZipFile
         ? [await expandAtari8ZipFile(file)]
+        : romZipFile
+        ? await expandRomZipFile(file, roomSystem)
         : await Promise.all(filesToLoad.map(async (selectedFile) => ({
           fileName: selectedFile.name,
           bytes: new Uint8Array(await selectedFile.arrayBuffer()),
@@ -4862,7 +4922,7 @@ export default function RoomPage() {
         setAtariStMediaIndex(0);
       }
 
-      const loadedLabel = atari8ZipFile
+      const loadedLabel = atari8ZipFile || romZipFile
         ? `${loadedFiles[0].fileName} from ${file.name}`
         : loadedFiles.length > 1
         ? `${loadedFiles[0].fileName} + ${loadedFiles.length - 1} disk${loadedFiles.length === 2 ? '' : 's'}`
