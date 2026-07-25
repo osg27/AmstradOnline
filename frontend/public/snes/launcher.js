@@ -381,6 +381,7 @@
       '/emulatorjs/data/src/emulator.js',
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extractzip.js',
+      '/emulatorjs/data/compression/extract7z.js',
       '/emulatorjs/data/cores/snes9x-wasm.data',
     ];
 

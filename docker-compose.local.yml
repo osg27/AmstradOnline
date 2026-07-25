@@ -1,0 +1,13 @@
+services:
+  backend:
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      CORS_ORIGINS: http://localhost:4173,http://127.0.0.1:4173
+      APP_BASE_URL: http://localhost:4173
+      PUBLIC_APP_URL: http://localhost:4173
+      ADMIN_USERNAME: pagman27
+
+  frontend:
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_WS_BASE_URL: ws://localhost:8000

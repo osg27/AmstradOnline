@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import SocialSidebar from '../components/SocialSidebar';
+import { getLocalLibrarySetting } from '../localLibraryDb';
+import LocalLibraryPage, { SUPPORTED_SYSTEMS } from './LocalLibraryPage';
 import amiga500LogoUrl from '../../assets/amiga500.svg';
 import amiga1200LogoUrl from '../../assets/amiga1200.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
 import arcadeLogoUrl from '../../assets/MAMELogo.svg';
-import atari8LogoUrl from '../../assets/Atari.png';
 import atariStLogoUrl from '../../assets/atari-st.webp';
 import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
@@ -99,22 +100,6 @@ const PLATFORM_SHELVES = [
               link: { enabled: false, note: 'Not available yet' },
             },
           },
-          {
-            id: 'atari8',
-            name: 'Atari 400/800 XL',
-            shortName: 'A8',
-            accent: 'ruby',
-            logo: atari8LogoUrl,
-            summary: 'Atari 8-bit games with disk, executable, cartridge and joystick support.',
-            formats: '.atr .xex .car .rom .cas .zip',
-            testing: true,
-            modes: {
-              solo: { enabled: true },
-              hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available yet' },
-              link: { enabled: false, note: 'Not available yet' },
-            },
-          },
         ],
       },
       {
@@ -198,7 +183,7 @@ const PLATFORM_SHELVES = [
             accent: 'violet',
             logo: masterSystemLogoUrl,
             summary: 'Master System games with two-player controls.',
-            formats: '.sms',
+            formats: '.sms .zip .7z',
             testing: true,
             modes: {
               solo: { enabled: true },
@@ -369,35 +354,50 @@ export default function LobbyPage() {
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
+  const [librarySystems, setLibrarySystems] = useState([]);
   const canUsePreviewSystems = isAdmin || isTester;
+  const allLibrarySystemIds = useMemo(() => SUPPORTED_SYSTEMS.map((system) => system.id), []);
+  const filterToLocalLibrary = librarySetupComplete === true && librarySystems.length > 0;
 
   const visibleShelves = useMemo(() => PLATFORM_SHELVES.map((platform) => ({
     ...platform,
     eras: platform.eras.map((era) => ({
       ...era,
-      systems: era.systems.filter((system) => (
-        (!system.adminOnly || isAdmin) && (!system.superAdminOnly || isSuperAdmin || (system.id === 'atarist' && canUsePreviewSystems))
-      )).map((system) => {
-        const lockedForTesting = Boolean(system.testing && !canUsePreviewSystems);
-        const locked = lockedForTesting || Boolean(system.underConstruction);
+      systems: era.systems.map((system) => {
+        const locked = Boolean(system.underConstruction);
         return {
           ...system,
           locked,
-          badge: system.underConstruction
-            ? 'Under construction'
-            : system.testing
-              ? canUsePreviewSystems ? 'Testing' : 'Coming soon - in testing'
-              : null,
+          badge: system.underConstruction ? 'Under construction' : null,
         };
       }),
-    })),
-  })), [canUsePreviewSystems, isAdmin, isSuperAdmin]);
+    })).filter((era) => era.systems.length > 0),
+  })).filter((platform) => platform.eras.length > 0), [canUsePreviewSystems]);
 
   const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];
   const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0] || null;
   const selectedModeConfig = selectedSystem?.modes[selectedMode];
   const emptyEraCopy = EMPTY_ERA_COPY[selectedPlatform?.id] || EMPTY_ERA_COPY.micros;
+
+  useEffect(() => {
+    async function loadLibrarySetup() {
+      try {
+        const [setupComplete, savedSystems] = await Promise.all([
+          getLocalLibrarySetting('librarySetupComplete', false),
+          getLocalLibrarySetting('selectedSystems', []),
+        ]);
+        setLibrarySetupComplete(Boolean(setupComplete));
+        setLibrarySystems(Array.isArray(savedSystems) && savedSystems.length ? savedSystems : allLibrarySystemIds);
+      } catch {
+        setLibrarySetupComplete(false);
+        setLibrarySystems(allLibrarySystemIds);
+      }
+    }
+
+    loadLibrarySetup();
+  }, [allLibrarySystemIds]);
 
   useEffect(() => {
     if (selectedMode !== 'party') return;
@@ -465,6 +465,35 @@ export default function LobbyPage() {
     return era?.systems.find((system) => !system.locked) || era?.systems[0] || null;
   }
 
+  useEffect(() => {
+    if (!visibleShelves.length) return;
+
+    const nextPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
+    const nextGroup = nextPlatform?.eras.find((era) => era.id === selectedEra) || nextPlatform?.eras[0];
+    const nextSystem = nextGroup?.systems.find((system) => system.id === selectedSystemId && !system.locked) || pickFirstSystem(nextGroup);
+
+    if (nextPlatform?.id && nextPlatform.id !== selectedPlatformId) {
+      setSelectedPlatformId(nextPlatform.id);
+    }
+    if (nextGroup?.id && nextGroup.id !== selectedEra) {
+      setSelectedEra(nextGroup.id);
+    }
+    if (nextSystem?.id && nextSystem.id !== selectedSystemId) {
+      setSelectedSystemId(nextSystem.id);
+      setSelectedMode(nextSystem.modes.hosted?.enabled ? 'hosted' : 'solo');
+    }
+  }, [selectedEra, selectedPlatformId, selectedSystemId, visibleShelves]);
+
+  async function handleLibrarySetupComplete() {
+    try {
+      const savedSystems = await getLocalLibrarySetting('selectedSystems', []);
+      setLibrarySystems(Array.isArray(savedSystems) && savedSystems.length ? savedSystems : allLibrarySystemIds);
+    } catch {
+      setLibrarySystems(allLibrarySystemIds);
+    }
+    setLibrarySetupComplete(true);
+  }
+
   function choosePlatform(platformId) {
     const platform = visibleShelves.find((item) => item.id === platformId);
     const nextEra = platform?.eras.find((era) => era.systems.length > 0) || platform?.eras[0];
@@ -489,6 +518,10 @@ export default function LobbyPage() {
 
   function chooseSystem(system) {
     if (system.locked) return;
+    if (filterToLocalLibrary) {
+      navigate(`/library?system=${encodeURIComponent(system.id)}`);
+      return;
+    }
     setSelectedSystemId(system.id);
     if (!system.modes[selectedMode]?.enabled) {
       setSelectedMode(system.modes.hosted?.enabled ? 'hosted' : 'solo');
@@ -500,7 +533,7 @@ export default function LobbyPage() {
     setLoadingCreate(true);
     try {
       const modeConfig = selectedSystem?.modes[mode];
-      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled || (selectedSystem.adminOnly && !isAdmin) || (selectedSystem.superAdminOnly && !isSuperAdmin && !(selectedSystem.id === 'atarist' && canUsePreviewSystems)) || (modeConfig.testing && !canUsePreviewSystems)) {
+      if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled) {
         throw new Error('That play mode is not ready yet.');
       }
 
@@ -552,6 +585,32 @@ export default function LobbyPage() {
     navigate('/login');
   }
 
+  if (librarySetupComplete === false) {
+    return (
+      <div className="page local-library-page welcome-home-page">
+        <header className="lobby-header welcome-home-header">
+          <BrandMark />
+          <div className="account-strip">
+            <span>{username}</span>
+            <button className="secondary" onClick={logout}>Logout</button>
+          </div>
+        </header>
+        <LocalLibraryPage embedded onboarding onComplete={handleLibrarySetupComplete} />
+      </div>
+    );
+  }
+
+  if (librarySetupComplete === null) {
+    return (
+      <div className="page local-library-page welcome-home-page">
+        <div className="local-library-shell loading-library-shell">
+          <BrandMark />
+          <h1>Loading your library...</h1>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page lobby-page">
       <div className="page-social-layout lobby-social-layout">
@@ -560,6 +619,7 @@ export default function LobbyPage() {
           <BrandMark />
           <div className="account-strip">
             <span>{username}</span>
+            <button className="secondary" onClick={() => navigate('/library')}>My Library</button>
             {canUsePreviewSystems ? (
               <button className="secondary" onClick={() => navigate('/feedback')}>
                 Feedback{feedbackNotificationCount ? ` (${feedbackNotificationCount})` : ''}
@@ -712,7 +772,7 @@ export default function LobbyPage() {
                   modeId !== 'link' || selectedSystem?.id === 'amiga'
                 )).map(([modeId, mode]) => {
                   const modeConfig = selectedSystem?.modes[modeId];
-                  const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked && (!modeConfig.testing || canUsePreviewSystems));
+                  const enabled = Boolean(modeConfig?.enabled && !selectedSystem?.locked);
                   const active = selectedMode === modeId;
 
                   return (
@@ -725,7 +785,7 @@ export default function LobbyPage() {
                     >
                       <span>{mode.kicker}</span>
                       <strong>{mode.label}</strong>
-                      <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.testing || modeConfig?.testing ? 'Available to testers for now' : modeConfig?.note || 'Coming later'}</small>
+                      <small>{enabled ? mode.description : selectedSystem?.underConstruction ? 'Under construction' : modeConfig?.note || 'Coming later'}</small>
                     </button>
                   );
                 })}
@@ -751,9 +811,9 @@ export default function LobbyPage() {
             <button
               className="launch-button"
               onClick={() => createSession()}
-              disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled || (selectedModeConfig?.testing && !canUsePreviewSystems)}
+              disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled}
             >
-              {loadingCreate ? 'Starting...' : !selectedSystem ? 'Choose a system' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Currently in testing' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
+              {loadingCreate ? 'Starting...' : !selectedSystem ? 'Choose a system' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Not available' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
             </button>
 
             {error ? <p className="error">{error}</p> : null}

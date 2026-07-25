@@ -35,6 +35,12 @@ build/
 *.err
 *.out
 
+# Cached library media
+library_media/
+library-media/
+backend/library_media/
+backend/library-media/
+
 # Large generated emulator assets
 *.wasm
 *.data

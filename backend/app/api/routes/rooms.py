@@ -22,7 +22,7 @@ from app.schemas.room import (
 )
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
-TESTING_SYSTEMS = {"amiga_link", "amiga_aga", "nes", "snes", "c64", "pcengine", "playstation", "atarist", "atari8", "mastersystem", "arcade"}
+TESTING_SYSTEMS = {"amiga_link", "amiga_aga"}
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
 SUPER_ADMIN_ONLY_SYSTEMS = set()
@@ -37,7 +37,7 @@ def normalize_party_max_players(system: str, requested: int | None) -> int:
 
     requested_players = requested or 2
     if system == "arcade":
-        return min(4, max(3, requested_players))
+        return min(4, max(2, requested_players))
     return min(8, max(2, requested_players))
 
 

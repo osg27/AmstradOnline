@@ -8,7 +8,6 @@ const SYSTEM_OPTIONS = [
   ['cpc', 'Amstrad CPC'],
   ['cpc_party', 'Amstrad Party'],
   ['spectrum', 'ZX Spectrum'],
-  ['atari8', 'Atari 400/800 XL'],
   ['amiga', 'Amiga'],
   ['amiga_aga', 'Amiga AGA'],
   ['mastersystem', 'Sega Master System'],
