@@ -100,6 +100,17 @@ const SNES_UNWANTED_ENTRY_PATTERNS = [
   /\[f[^\]]*\]/i,
   /\b(trainer|trained|translation|translated|hack|bad|overdump|alternate|prototype|proto|beta|sample|demo)\b/i,
 ];
+const ROM_ZIP_EXTENSIONS = {
+  c64: ['.d64', '.t64', '.tap', '.prg', '.crt'],
+  mastersystem: ['.sms'],
+  megadrive: ['.bin', '.gen', '.md', '.smd'],
+  nes: ['.nes'],
+  snes: ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'],
+  pcengine: ['.pce', '.sgx'],
+  playstation: ['.cue', '.bin', '.chd', '.pbp', '.iso'],
+  spectrum: ['.tap', '.tzx', '.z80', '.sna', '.szx'],
+};
+const MULTI_FILE_ZIP_SYSTEMS = new Set(['c64', 'playstation']);
 const ATARI8_MODEL_OPTIONS = [
   ['400/800', '400/800'],
   ['1200xl', '1200XL'],
@@ -470,6 +481,49 @@ async function expandSnesZipFile(file) {
   const [entryName, bytes] = entries[0];
   const fileName = entryName.split(/[\\/]/).pop() || entryName;
   return { fileName, bytes, archiveEntryName: entryName };
+}
+
+async function expandRomZipFile(file, system) {
+  const supportedExtensions = ROM_ZIP_EXTENSIONS[system];
+  if (!supportedExtensions) {
+    throw new Error(`${roomSystemLabel(system)} zip files are not supported`);
+  }
+
+  let archive;
+  try {
+    archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  } catch (error) {
+    throw new Error(`Could not unzip ${file.name}: ${error.message}`);
+  }
+
+  const entries = Object.entries(archive)
+    .filter(([entryName]) => {
+      const lowerName = entryName.toLowerCase();
+      return !lowerName.endsWith('/')
+        && !lowerName.split(/[\\/]/).some((part) => part === '__macosx')
+        && supportedExtensions.some((extension) => lowerName.endsWith(extension));
+    })
+    .sort(([leftName], [rightName]) => {
+      const leftLower = leftName.toLowerCase();
+      const rightLower = rightName.toLowerCase();
+      const leftPriority = supportedExtensions.findIndex((extension) => leftLower.endsWith(extension));
+      const rightPriority = supportedExtensions.findIndex((extension) => rightLower.endsWith(extension));
+      return leftPriority - rightPriority
+        || leftName.localeCompare(rightName, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+  if (!entries.length) {
+    throw new Error(
+      `${roomSystemLabel(system)} zip files need to contain ${supportedExtensions.join(', ')} ROM files`,
+    );
+  }
+
+  const selectedEntries = MULTI_FILE_ZIP_SYSTEMS.has(system) ? entries : entries.slice(0, 1);
+  return selectedEntries.map(([entryName, bytes]) => ({
+    fileName: entryName.split(/[\\/]/).pop() || entryName,
+    bytes,
+    archiveEntryName: entryName,
+  }));
 }
 
 function clearAtari8SessionStorage() {
@@ -5115,6 +5169,11 @@ export default function RoomPage() {
 
       const atari8ZipFile = isAtari8 && file.name.toLowerCase().endsWith('.zip');
       const snesZipFile = isSnes && file.name.toLowerCase().endsWith('.zip');
+      const romZipFile = !atari8ZipFile
+        && !snesZipFile
+        && !isArcade
+        && file.name.toLowerCase().endsWith('.zip')
+        && Boolean(ROM_ZIP_EXTENSIONS[roomSystem]);
       const filesToLoad = (isAmigaAga || isPlayStation || isC64 || isAtariSt) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
@@ -5122,6 +5181,8 @@ export default function RoomPage() {
         ? [await expandAtari8ZipFile(file)]
         : snesZipFile
         ? [await expandSnesZipFile(file)]
+        : romZipFile
+        ? await expandRomZipFile(file, roomSystem)
         : await Promise.all(filesToLoad.map(async (selectedFile) => ({
           fileName: selectedFile.name,
           bytes: new Uint8Array(await selectedFile.arrayBuffer()),
@@ -5227,7 +5288,7 @@ export default function RoomPage() {
         setAtariStMediaIndex(0);
       }
 
-      const expandedZipFile = atari8ZipFile || snesZipFile;
+      const expandedZipFile = atari8ZipFile || snesZipFile || romZipFile;
       const loadedLabel = expandedZipFile
         ? `${loadedFiles[0].fileName} from ${file.name}`
         : loadedFiles.length > 1
