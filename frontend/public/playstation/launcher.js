@@ -306,6 +306,11 @@
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
+    window.EJS_retroarchOpts = isSaturn
+      ? [
+        { name: 'system_directory', default: '/', isString: true },
+      ]
+      : undefined;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
       'emulator.js': '/emulatorjs/data/src/emulator.js',
@@ -361,6 +366,9 @@
         9: { value: 'j', value2: 'BUTTON_4' },
       },
     };
+    window.EJS_defaultOptions = isSaturn
+      ? { yabause_force_hle_bios: 'disabled' }
+      : undefined;
     window.EJS_Buttons = {
       playPause: false,
       restart: false,
@@ -429,7 +437,9 @@
     // EmulatorJS uses the File name to detect and extract archives. An anonymous
     // blob URL can make a ZIP reach PCSX as an unknown file with no content.
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
-    biosUrl = bios ? new File([bios.bytes], bios.fileName, { type: 'application/octet-stream' }) : null;
+    biosUrl = bios
+      ? new File([bios.bytes], isSaturn ? 'saturn_bios.bin' : bios.fileName, { type: 'application/octet-stream' })
+      : null;
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
     drawStatus(`Loading ${systemName}`, primaryGame.fileName);
 
