@@ -334,6 +334,8 @@
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
+    window.EJS_disableDatabases = isSaturn;
+    window.EJS_cacheConfig = isSaturn ? { enabled: false } : undefined;
     window.EJS_volume = 1;
     window.EJS_backgroundColor = '#000';
     window.EJS_color = '#2f8f76';
@@ -367,7 +369,10 @@
       },
     };
     window.EJS_defaultOptions = isSaturn
-      ? { yabause_force_hle_bios: 'disabled' }
+      ? {
+        yabause_force_hle_bios: 'disabled',
+        yabause_numthreads: '1',
+      }
       : undefined;
     window.EJS_Buttons = {
       playPause: false,
