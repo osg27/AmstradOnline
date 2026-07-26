@@ -16,6 +16,7 @@ import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
 import nesLogoUrl from '../../assets/59db13187bf21468ce403a95096fbd14.png';
 import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
 import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
+import saturnLogoUrl from '../../assets/SEGA_Saturn_logo.png';
 import snesLogoUrl from '../../assets/SNES_logo.svg.webp';
 import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
 
@@ -220,7 +221,7 @@ const PLATFORM_SHELVES = [
             name: 'Mega Drive',
             shortName: 'MD',
             accent: 'violet',
-            logo: megaDriveLogoUrl,
+            logo: saturnLogoUrl,
             summary: 'Mega Drive games with two-player controls.',
             formats: '.bin .gen .md .smd',
             modes: {
@@ -374,7 +375,10 @@ export default function LobbyPage() {
   const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
   const [librarySystems, setLibrarySystems] = useState([]);
   const canUsePreviewSystems = isAdmin || isTester || isSuperAdmin;
-  const allLibrarySystemIds = useMemo(() => SUPPORTED_SYSTEMS.map((system) => system.id), []);
+  const allLibrarySystemIds = useMemo(
+    () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin).map((system) => system.id),
+    [isSuperAdmin],
+  );
   const filterToLocalLibrary = librarySetupComplete === true && librarySystems.length > 0;
 
   const visibleShelves = useMemo(() => PLATFORM_SHELVES.map((platform) => ({

@@ -4,6 +4,7 @@ import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import { getMameTitleDatabase } from '../data/mameTitleLookup';
 import amigaLogoUrl from '../../assets/amiga500.svg';
+import amigaAgaLogoUrl from '../../assets/amiga1200.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
 import arcadeLogoUrl from '../../assets/MAMELogo.svg';
 import atariStLogoUrl from '../../assets/atari-st.webp';
@@ -13,6 +14,7 @@ import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
 import nesLogoUrl from '../../assets/NES_logo.svg.webp';
 import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
 import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
+import saturnLogoUrl from '../../assets/SEGA_Saturn_logo.png';
 import snesLogoUrl from '../../assets/SNES_logo.svg.webp';
 import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
 import {
@@ -117,6 +119,17 @@ export const SUPPORTED_SYSTEMS = [
     pathHints: ['playstation', 'ps1', 'psx'],
   },
   {
+    id: 'saturn',
+    roomSystem: 'saturn',
+    label: 'Sega Saturn',
+    shortLabel: 'SAT',
+    logo: saturnLogoUrl,
+    extensions: ['cue', 'chd', 'iso', 'zip', '7z'],
+    pathHints: ['sega saturn', 'saturn'],
+    note: 'Super Admin experimental system',
+    superAdminOnly: true,
+  },
+  {
     id: 'amiga',
     roomSystem: 'amiga',
     label: 'Amiga',
@@ -124,6 +137,15 @@ export const SUPPORTED_SYSTEMS = [
     logo: amigaLogoUrl,
     extensions: ['adf', 'zip', '7z'],
     pathHints: ['amiga', 'a500'],
+  },
+  {
+    id: 'amiga_aga',
+    roomSystem: 'amiga_aga',
+    label: 'Amiga AGA',
+    shortLabel: 'A1200',
+    logo: amigaAgaLogoUrl,
+    extensions: ['adf', 'adz', 'dms', 'ipf', 'zip', '7z'],
+    pathHints: ['amiga aga', 'amiga 1200', 'amiga1200', 'a1200', 'aga'],
   },
   {
     id: 'atarist',
@@ -157,7 +179,9 @@ const LIBRETRO_BOXART_REPOS = {
   megadrive: ['Sega_-_Mega_Drive_-_Genesis'],
   pcengine: ['NEC_-_PC_Engine_-_TurboGrafx_16'],
   playstation: ['Sony_-_PlayStation'],
+  saturn: ['Sega_-_Saturn'],
   amiga: ['Commodore_-_Amiga'],
+  amiga_aga: ['Commodore_-_Amiga'],
   atarist: ['Atari_-_ST'],
 };
 
@@ -1080,8 +1104,13 @@ function groupLibraryGames(games, options = {}) {
 export default function LocalLibraryPage({ embedded = false, onboarding = false, onComplete = null }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isSuperAdmin = localStorage.getItem('isSuperAdmin') === 'true';
+  const availableSystems = useMemo(
+    () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin),
+    [isSuperAdmin],
+  );
   const requestedSystem = searchParams.get('system');
-  const requestedSystemExists = SUPPORTED_SYSTEMS.some((system) => system.id === requestedSystem);
+  const requestedSystemExists = availableSystems.some((system) => system.id === requestedSystem);
   const requestedLetter = searchParams.get('letter');
   const requestedLetterExists = requestedLetter === 'all' || LIBRARY_ALPHABET.includes(requestedLetter);
   const username = localStorage.getItem('username');
@@ -1133,7 +1162,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         ]);
         setFolders(savedFolders);
         setGames(savedGames);
-        setSelectedSystems(savedSystems.length ? savedSystems : SUPPORTED_SYSTEMS.map((system) => system.id));
+        const availableSystemIds = new Set(availableSystems.map((system) => system.id));
+        const availableSavedSystems = savedSystems.filter((systemId) => availableSystemIds.has(systemId));
+        setSelectedSystems(availableSavedSystems.length ? availableSavedSystems : availableSystems.map((system) => system.id));
         setFavourites(savedFavourites);
         setStatus(savedGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
       } catch (err) {
@@ -1142,7 +1173,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     }
 
     loadLibrary();
-  }, []);
+  }, [availableSystems]);
 
   useEffect(() => {
     if (requestedSystemExists) {
@@ -1175,8 +1206,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   );
   const systemCounts = useMemo(() => buildSystemCounts(groupedGames), [groupedGames]);
   const visibleSystems = useMemo(
-    () => SUPPORTED_SYSTEMS.filter((system) => (systemCounts[system.id] || 0) > 0 || folders.some((folder) => folder.system === system.id)),
-    [folders, systemCounts],
+    () => availableSystems.filter((system) => (systemCounts[system.id] || 0) > 0 || folders.some((folder) => folder.system === system.id)),
+    [availableSystems, folders, systemCounts],
   );
   const activeSystemDetails = activeSystem === 'all' || activeSystem === 'favourites'
     ? null
@@ -1679,7 +1710,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 <button type="button" className="secondary" onClick={() => setActiveSystem('all')}>All</button>
               </div>
               <div className="system-picker-list platform-rail">
-                {SUPPORTED_SYSTEMS.map((system) => {
+                {availableSystems.map((system) => {
                   const linkedFolder = folders.find((folder) => folder.system === system.id);
                   const count = systemCounts[system.id] || 0;
                   const folderLabel = linkedFolder ? linkedFolder.name : 'No folder connected';
