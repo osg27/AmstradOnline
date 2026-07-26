@@ -285,6 +285,23 @@ const PLATFORM_SHELVES = [
               link: { enabled: false, note: 'Not available' },
             },
           },
+          {
+            id: 'saturn',
+            name: 'Sega Saturn',
+            shortName: 'SAT',
+            accent: 'blue',
+            logo: megaDriveLogoUrl,
+            summary: 'Experimental Sega Saturn support using Yabause and a locally supplied BIOS.',
+            formats: '.cue/.bin .chd .iso .zip .7z',
+            testing: true,
+            superAdminOnly: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available' },
+            },
+          },
         ],
       },
     ],
@@ -356,7 +373,7 @@ export default function LobbyPage() {
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
   const [librarySystems, setLibrarySystems] = useState([]);
-  const canUsePreviewSystems = isAdmin || isTester;
+  const canUsePreviewSystems = isAdmin || isTester || isSuperAdmin;
   const allLibrarySystemIds = useMemo(() => SUPPORTED_SYSTEMS.map((system) => system.id), []);
   const filterToLocalLibrary = librarySetupComplete === true && librarySystems.length > 0;
 

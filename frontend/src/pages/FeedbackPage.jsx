@@ -15,6 +15,7 @@ const SYSTEM_OPTIONS = [
   ['snes', 'SNES'],
   ['pcengine', 'PC Engine / TurboGrafx-16'],
   ['playstation', 'Sony PlayStation'],
+  ['saturn', 'Sega Saturn'],
   ['arcade', 'Arcade / MAME'],
 ];
 

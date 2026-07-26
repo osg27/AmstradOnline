@@ -1,4 +1,7 @@
 (function () {
+  const isSaturn = window.location.pathname.startsWith('/saturn/');
+  const systemName = isSaturn ? 'Saturn' : 'PlayStation';
+  const messagePrefix = isSaturn ? 'saturn' : 'playstation';
   const screen = document.getElementById('playstation-screen');
   const gameContainer = document.getElementById('game');
   const context = screen.getContext('2d', { alpha: false });
@@ -18,7 +21,7 @@
   let lastSimulatedMasks = [0, 0];
   let bios = null;
   let biosUrl = null;
-  let statusText = 'PlayStation ready';
+  let statusText = `${systemName} ready`;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -91,11 +94,13 @@
     }
   }
 
-  window.getPlayStationAudioStream = function getPlayStationAudioStream() {
+  const getSystemAudioStream = function getSystemAudioStream() {
     const audioContext = ensureAudio();
     audioContext?.resume?.().catch(() => {});
     return audioDestination?.stream || null;
   };
+  window.getPlayStationAudioStream = getSystemAudioStream;
+  window.getSaturnAudioStream = getSystemAudioStream;
 
   function setEmulatorVolume(volume) {
     emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
@@ -290,13 +295,13 @@
     localMask = 0;
     remoteMask = 0;
     clearGameContainer();
-    drawStatus('PlayStation ready', 'Load a PlayStation game from the room');
+    drawStatus(`${systemName} ready`, `Load a ${systemName} game from the room`);
   }
 
   function configureEmulator(fileName, romUrl, externalFiles = {}) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
-    window.EJS_core = 'psx';
+    window.EJS_core = isSaturn ? 'segaSaturn' : 'psx';
     window.EJS_biosUrl = biosUrl;
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
@@ -377,29 +382,33 @@
     };
 
     window.EJS_ready = () => {
-      console.log('Old Style Gaming PlayStation: EmulatorJS ready');
+      console.log(`Old Style Gaming ${systemName}: EmulatorJS ready`);
     };
     window.EJS_onGameStart = () => {
-      console.log('Old Style Gaming PlayStation: game started');
+      console.log(`Old Style Gaming ${systemName}: game started`);
       statusText = '';
     };
     window.EJS_onExit = () => {
-      drawStatus('PlayStation stopped', fileName);
+      drawStatus(`${systemName} stopped`, fileName);
     };
   }
 
   async function loadCurrentRom() {
     if (!currentRom) {
-      drawStatus('PlayStation ready', 'Load a PlayStation game from the room');
+      drawStatus(`${systemName} ready`, `Load a ${systemName} game from the room`);
+      return;
+    }
+    if (isSaturn && !bios) {
+      drawStatus('Saturn BIOS required', 'Load your local saturn_bios.bin first');
       return;
     }
 
     ensureAudio()?.resume?.().catch(() => {});
-    drawStatus('Checking PlayStation runtime', currentRom.fileName);
+    drawStatus(`Checking ${systemName} runtime`, currentRom.fileName);
     try {
       await preflightEmulatorJs();
     } catch (error) {
-      drawStatus('PlayStation runtime missing', error.message);
+      drawStatus(`${systemName} runtime missing`, error.message);
       return;
     }
 
@@ -422,12 +431,12 @@
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
     biosUrl = bios ? new File([bios.bytes], bios.fileName, { type: 'application/octet-stream' }) : null;
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
-    drawStatus('Loading PlayStation', primaryGame.fileName);
+    drawStatus(`Loading ${systemName}`, primaryGame.fileName);
 
     loaderScript = document.createElement('script');
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
     loaderScript.async = true;
-    loaderScript.onerror = () => drawStatus('PlayStation failed to load', 'Could not load EmulatorJS');
+    loaderScript.onerror = () => drawStatus(`${systemName} failed to load`, 'Could not load EmulatorJS');
     document.body.appendChild(loaderScript);
   }
 
@@ -438,7 +447,7 @@
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extract7z.js',
       '/emulatorjs/data/compression/extractzip.js',
-      '/emulatorjs/data/cores/pcsx_rearmed-wasm.data',
+      `/emulatorjs/data/cores/${isSaturn ? 'yabause' : 'pcsx_rearmed'}-wasm.data`,
     ];
 
     for (const path of required) {
@@ -454,13 +463,13 @@
   window.addEventListener('error', (event) => {
     const where = event.filename ? `${event.filename.split('/').slice(-3).join('/')} ${event.lineno || ''}`.trim() : '';
     const message = [event.message || 'Check browser console', where].filter(Boolean).join(' - ');
-    console.error('Old Style Gaming PlayStation error:', event.error || event.message, event.filename);
-    drawStatus('PlayStation error', message);
+    console.error(`Old Style Gaming ${systemName} error:`, event.error || event.message, event.filename);
+    drawStatus(`${systemName} error`, message);
   });
 
   window.addEventListener('unhandledrejection', (event) => {
-    console.error('Old Style Gaming PlayStation promise error:', event.reason);
-    drawStatus('PlayStation error', event.reason?.message || 'Check browser console');
+    console.error(`Old Style Gaming ${systemName} promise error:`, event.reason);
+    drawStatus(`${systemName} error`, event.reason?.message || 'Check browser console');
   });
 
   function mirrorEmulatorCanvas() {
@@ -489,12 +498,12 @@
     if (event.origin !== window.location.origin) return;
 
     const message = event.data || {};
-    if (message.type === 'playstation_start') {
-      window.getPlayStationAudioStream();
+    if (message.type === `${messagePrefix}_start`) {
+      getSystemAudioStream();
       return;
     }
 
-    if (message.type === 'playstation_autoload') {
+    if (message.type === `${messagePrefix}_autoload`) {
       currentRom = {
         fileName: message.fileName || 'game.chd',
         bytes: new Uint8Array(message.bytes || []),
@@ -507,22 +516,22 @@
       return;
     }
 
-    if (message.type === 'playstation_reset') {
+    if (message.type === `${messagePrefix}_reset`) {
       resetToReady();
       return;
     }
 
-    if (message.type === 'playstation_bios') {
+    if (message.type === `${messagePrefix}_bios`) {
       bios = {
-        fileName: message.fileName || 'scph5501.bin',
+        fileName: message.fileName || (isSaturn ? 'saturn_bios.bin' : 'scph5501.bin'),
         bytes: new Uint8Array(message.bytes || []),
       };
-      drawStatus('PlayStation BIOS ready', bios.fileName);
+      drawStatus(`${systemName} BIOS ready`, bios.fileName);
       return;
     }
 
     if (message.type === 'amstrad_audio_unlock') {
-      window.getPlayStationAudioStream();
+      getSystemAudioStream();
       return;
     }
 
@@ -547,10 +556,10 @@
   });
 
   screen.addEventListener('pointerdown', () => {
-    window.getPlayStationAudioStream();
+    getSystemAudioStream();
     window.focus();
   });
 
-  drawStatus('PlayStation ready', 'Load a PlayStation game from the room');
+  drawStatus(`${systemName} ready`, `Load a ${systemName} game from the room`);
   mirrorEmulatorCanvas();
 })();

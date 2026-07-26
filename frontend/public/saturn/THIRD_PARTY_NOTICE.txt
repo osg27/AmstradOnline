@@ -1,0 +1,14 @@
+Sega Saturn support uses the Yabause libretro core distributed by EmulatorJS.
+
+Yabause
+Copyright the Yabause and libretro contributors
+License: GPL-2.0
+Source: https://github.com/libretro/yabause
+
+EmulatorJS
+Copyright the EmulatorJS contributors
+License: GPL-3.0
+Source: https://github.com/EmulatorJS/EmulatorJS
+
+No Sega BIOS or game content is included. Users must provide their own legally
+obtained Saturn BIOS and game images.

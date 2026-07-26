@@ -44,6 +44,11 @@ backend/library-media/
 # Large generated emulator assets
 *.wasm
 *.data
+!frontend/public/emulatorjs/
+!frontend/public/emulatorjs/data/
+!frontend/public/emulatorjs/data/cores/
+!frontend/public/emulatorjs/data/cores/yabause-wasm.data
+!frontend/public/emulatorjs/data/cores/yabause-legacy-wasm.data
 
 # VS Code local settings
 .vscode/
