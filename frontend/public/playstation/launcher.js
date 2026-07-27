@@ -371,7 +371,8 @@
     window.EJS_defaultOptions = isSaturn
       ? {
         yabause_force_hle_bios: 'disabled',
-        yabause_frameskip: '0',
+        yabause_frameskip: 'disabled',
+        yabause_numthreads: '1',
       }
       : undefined;
     window.EJS_Buttons = {
