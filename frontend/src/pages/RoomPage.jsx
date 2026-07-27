@@ -781,7 +781,7 @@ export default function RoomPage() {
   const isArcade = roomSystem === 'arcade';
   const isLocalLibraryHostRoom = Boolean(localGameId && isHost);
   const supportsMameScoreboard = isArcade && (isSoloMode || isLocalLibraryHostRoom);
-  const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isSaturn ? SATURN_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
+  const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const isC64Party = isC64 && !isSoloMode && partyMaxPlayers > 2;
   const isArcadeParty = isArcade && !isSoloMode && partyMaxPlayers > 2;
@@ -805,7 +805,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isSaturn ? '/saturn/launcher.html?v=2026-07-26-1' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-2' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.zip,.7z'
@@ -1646,7 +1646,9 @@ export default function RoomPage() {
       frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
     });
 
-    const storedBios = await loadStoredKickstart(isSaturn ? SATURN_BIOS_KEY : PLAYSTATION_BIOS_KEY);
+    const storedBios = isSaturn
+      ? savedSystemMediaRef.current.get(SATURN_BIOS_KEY)
+      : await loadStoredKickstart(PLAYSTATION_BIOS_KEY);
     if (storedBios) {
       frame.contentWindow?.postMessage({
         type: isSaturn ? 'saturn_bios' : 'playstation_bios',
@@ -3737,6 +3739,17 @@ export default function RoomPage() {
   function findCanvasInDocument(doc, depth = 0) {
     if (!doc || depth > 3) return null;
 
+    if (isDiscConsole) {
+      const nativeDiscCanvas = doc.querySelector('#game canvas');
+      if (
+        nativeDiscCanvas
+        && nativeDiscCanvas.width > 0
+        && nativeDiscCanvas.height > 0
+      ) {
+        return nativeDiscCanvas;
+      }
+    }
+
     if (isAtariSt) {
       const nativeAtariCanvas = doc.querySelector('#game canvas');
       if (
@@ -5493,14 +5506,19 @@ export default function RoomPage() {
         event.target.value = '';
         return;
       }
-      await saveStoredKickstart(isSaturn ? SATURN_BIOS_KEY : PLAYSTATION_BIOS_KEY, file.name, bytes);
+      if (isSaturn) {
+        savedSystemMediaRef.current.set(SATURN_BIOS_KEY, { fileName: file.name, bytes });
+      }
+      if (!isSaturn) {
+        await saveStoredKickstart(PLAYSTATION_BIOS_KEY, file.name, bytes);
+      }
       forwardInputToEmulator({
         type: isSaturn ? 'saturn_bios' : 'playstation_bios',
         fileName: file.name,
         bytes,
       });
-      setPlaystationBiosName(`${file.name} (saved locally)`);
-      addLog(`Saved ${isSaturn ? 'Saturn' : 'PlayStation'} BIOS locally: ${file.name}`);
+      setPlaystationBiosName(`${file.name} (${isSaturn ? 'this session' : 'saved locally'})`);
+      addLog(`${isSaturn ? 'Loaded' : 'Saved'} ${isSaturn ? 'Saturn' : 'PlayStation'} BIOS ${isSaturn ? 'for this session' : 'locally'}: ${file.name}`);
       setStatus(`${isSaturn ? 'Saturn' : 'PlayStation'} BIOS ready: ${file.name}`);
       event.target.value = '';
     } catch (err) {

@@ -306,6 +306,11 @@
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
+    window.EJS_retroarchOpts = isSaturn
+      ? [
+        { name: 'system_directory', default: '/', isString: true },
+      ]
+      : undefined;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
       'emulator.js': '/emulatorjs/data/src/emulator.js',
@@ -329,6 +334,8 @@
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
+    window.EJS_disableDatabases = isSaturn;
+    window.EJS_cacheConfig = isSaturn ? { enabled: false } : undefined;
     window.EJS_volume = 1;
     window.EJS_backgroundColor = '#000';
     window.EJS_color = '#2f8f76';
@@ -361,6 +368,12 @@
         9: { value: 'j', value2: 'BUTTON_4' },
       },
     };
+    window.EJS_defaultOptions = isSaturn
+      ? {
+        yabause_force_hle_bios: 'disabled',
+        yabause_frameskip: '0',
+      }
+      : undefined;
     window.EJS_Buttons = {
       playPause: false,
       restart: false,
@@ -387,6 +400,8 @@
     window.EJS_onGameStart = () => {
       console.log(`Old Style Gaming ${systemName}: game started`);
       statusText = '';
+      ensureAudio()?.resume?.().catch(() => {});
+      setEmulatorVolume(emulatorVolume);
     };
     window.EJS_onExit = () => {
       drawStatus(`${systemName} stopped`, fileName);
@@ -429,7 +444,9 @@
     // EmulatorJS uses the File name to detect and extract archives. An anonymous
     // blob URL can make a ZIP reach PCSX as an unknown file with no content.
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
-    biosUrl = bios ? new File([bios.bytes], bios.fileName, { type: 'application/octet-stream' }) : null;
+    biosUrl = bios
+      ? new File([bios.bytes], isSaturn ? 'saturn_bios.bin' : bios.fileName, { type: 'application/octet-stream' })
+      : null;
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
     drawStatus(`Loading ${systemName}`, primaryGame.fileName);
 
@@ -556,6 +573,10 @@
   });
 
   screen.addEventListener('pointerdown', () => {
+    getSystemAudioStream();
+    window.focus();
+  });
+  gameContainer.addEventListener('pointerdown', () => {
     getSystemAudioStream();
     window.focus();
   });
