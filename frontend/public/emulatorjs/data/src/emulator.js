@@ -1142,6 +1142,15 @@ class EmulatorJS {
             this.startGameError(this.localization("Error loading EmulatorJS runtime"));
             throw new Error("EJS_Runtime is not defined!");
         }
+        if (this.getCore() === "mednafen_saturn") {
+            // The threaded runtime transfers this canvas to an OffscreenCanvas
+            // when its WebGL context is created. Give it a real drawing buffer
+            // and layout box first; resizing the transferred default 300x150
+            // canvas after startup leaves Beetle Saturn rendering black.
+            this.canvas.width = 768;
+            this.canvas.height = 544;
+            this.game.appendChild(this.canvas);
+        }
         window.EJS_Runtime({
             noInitialRun: true,
             onRuntimeInitialized: null,

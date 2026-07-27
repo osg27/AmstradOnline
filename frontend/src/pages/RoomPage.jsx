@@ -805,7 +805,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-6' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-7' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.zip,.7z'
