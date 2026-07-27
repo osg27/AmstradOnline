@@ -4353,10 +4353,10 @@ export default function RoomPage() {
       }
 
       const emulatorCanvas = await waitForEmulatorCanvas(iframe);
-      const useDirectCanvasStream = isArcade && typeof emulatorCanvas.captureStream === 'function';
+      const useDirectCanvasStream = (isArcade || isSaturn) && typeof emulatorCanvas.captureStream === 'function';
 
       if (useDirectCanvasStream) {
-        addLog('Using native arcade canvas stream');
+        addLog(`Using native ${isSaturn ? 'Saturn' : 'arcade'} canvas stream`);
       } else {
         startMirrorLoop(emulatorCanvas);
       }
@@ -5829,16 +5829,18 @@ export default function RoomPage() {
                       src={emulatorSrc}
                       onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
                       style={{
-                        position: 'absolute',
+                        position: isSaturn ? 'relative' : 'absolute',
                         left: '0',
                         top: '0',
-                        display: 'inline',
-                        width: '768px',
-                        height: '544px',
-                        border: '0',
+                        display: isSaturn ? 'block' : 'inline',
+                        width: isSaturn ? '100%' : '768px',
+                        height: isSaturn ? 'auto' : '544px',
+                        aspectRatio: isSaturn ? '4 / 3' : undefined,
+                        border: isSaturn ? '1px solid #1f2f4a' : '0',
+                        borderRadius: isSaturn ? '8px' : '0',
                         background: '#000',
-                        opacity: 0,
-                        pointerEvents: 'none',
+                        opacity: isSaturn ? 1 : 0,
+                        pointerEvents: isSaturn ? 'auto' : 'none',
                       }}
                     />
 
@@ -5858,7 +5860,7 @@ export default function RoomPage() {
                         border: '1px solid #1f2f4a',
                         borderRadius: '8px',
                         background: '#000',
-                        display: 'block',
+                        display: isSaturn ? 'none' : 'block',
                       }}
                       width={768}
                       height={544}
