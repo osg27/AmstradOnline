@@ -336,7 +336,7 @@
       'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
     };
     window.EJS_startOnLoaded = true;
-    window.EJS_threads = isSaturn;
+    window.EJS_threads = false;
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
@@ -463,7 +463,7 @@
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extract7z.js',
       '/emulatorjs/data/compression/extractzip.js',
-      `/emulatorjs/data/cores/${isSaturn ? 'mednafen_saturn-thread' : 'pcsx_rearmed'}-wasm.data`,
+      `/emulatorjs/data/cores/${isSaturn ? 'yabause' : 'pcsx_rearmed'}-wasm.data`,
     ];
 
     for (const path of required) {
