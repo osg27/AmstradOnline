@@ -22,11 +22,16 @@
   let bios = null;
   let biosUrl = null;
   let statusText = `${systemName} ready`;
+  let showNativeSaturnCanvas = false;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
   function drawStatus(main, sub = '') {
     statusText = main;
+    if (isSaturn) {
+      showNativeSaturnCanvas = false;
+      screen.style.display = 'block';
+    }
     context.fillStyle = '#000';
     context.fillRect(0, 0, screen.width, screen.height);
     context.fillStyle = '#fff';
@@ -401,6 +406,13 @@
     window.EJS_onGameStart = () => {
       console.log(`Old Style Gaming ${systemName}: game started`);
       statusText = '';
+      if (isSaturn) {
+        // A threaded Emscripten core transfers WebGL rendering to an
+        // OffscreenCanvas. Mirroring it into this 2D overlay can copy only
+        // cleared frames and hide correctly rendered output underneath.
+        showNativeSaturnCanvas = true;
+        screen.style.display = 'none';
+      }
       ensureAudio()?.resume?.().catch(() => {});
       setEmulatorVolume(emulatorVolume);
     };
@@ -491,6 +503,11 @@
   });
 
   function mirrorEmulatorCanvas() {
+    if (showNativeSaturnCanvas) {
+      requestAnimationFrame(mirrorEmulatorCanvas);
+      return;
+    }
+
     const gameCanvas = gameContainer.querySelector('canvas');
 
     if (gameCanvas && gameCanvas.width && gameCanvas.height) {
