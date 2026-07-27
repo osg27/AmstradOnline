@@ -768,7 +768,10 @@ class EmulatorJS {
         const runtimeUrl = URL.createObjectURL(runtimeSource);
         script.src = runtimeUrl;
         script.addEventListener("load", () => {
-            URL.revokeObjectURL(runtimeUrl);
+            // Pthread workers import the main runtime URL after the script load
+            // event. Revoking it here races worker startup and produces
+            // "Failed to execute importScripts" for threaded cores.
+            this.runtimeUrl = runtimeUrl;
             this.initModule(wasm, thread);
         });
         script.addEventListener("error", () => {
