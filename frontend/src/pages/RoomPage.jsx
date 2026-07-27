@@ -805,7 +805,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-7' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-2' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.zip,.7z'
@@ -4353,10 +4353,10 @@ export default function RoomPage() {
       }
 
       const emulatorCanvas = await waitForEmulatorCanvas(iframe);
-      const useDirectCanvasStream = (isArcade || isSaturn) && typeof emulatorCanvas.captureStream === 'function';
+      const useDirectCanvasStream = isArcade && typeof emulatorCanvas.captureStream === 'function';
 
       if (useDirectCanvasStream) {
-        addLog(`Using native ${isSaturn ? 'Saturn' : 'arcade'} canvas stream`);
+        addLog('Using native arcade canvas stream');
       } else {
         startMirrorLoop(emulatorCanvas);
       }
@@ -5829,18 +5829,16 @@ export default function RoomPage() {
                       src={emulatorSrc}
                       onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
                       style={{
-                        position: isSaturn ? 'relative' : 'absolute',
+                        position: 'absolute',
                         left: '0',
                         top: '0',
-                        display: isSaturn ? 'block' : 'inline',
-                        width: isSaturn ? '100%' : '768px',
-                        height: isSaturn ? 'auto' : '544px',
-                        aspectRatio: isSaturn ? '4 / 3' : undefined,
-                        border: isSaturn ? '1px solid #1f2f4a' : '0',
-                        borderRadius: isSaturn ? '8px' : '0',
+                        display: 'inline',
+                        width: '768px',
+                        height: '544px',
+                        border: '0',
                         background: '#000',
-                        opacity: isSaturn ? 1 : 0,
-                        pointerEvents: isSaturn ? 'auto' : 'none',
+                        opacity: 0,
+                        pointerEvents: 'none',
                       }}
                     />
 
@@ -5860,7 +5858,7 @@ export default function RoomPage() {
                         border: '1px solid #1f2f4a',
                         borderRadius: '8px',
                         background: '#000',
-                        display: isSaturn ? 'none' : 'block',
+                        display: 'block',
                       }}
                       width={768}
                       height={544}

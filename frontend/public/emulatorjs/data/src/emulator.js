@@ -761,17 +761,14 @@ class EmulatorJS {
     initGameCore(js, wasm, thread) {
         let script = this.createElement("script");
         const runtimeSource = new Blob([
-            "globalThis.EJS_Runtime = (function () {\n",
+            "window.EJS_Runtime = (function () {\n",
             js,
             "\nreturn typeof EJS_Runtime === 'function' ? EJS_Runtime : null;\n}());",
         ], { type: "application/javascript" });
         const runtimeUrl = URL.createObjectURL(runtimeSource);
         script.src = runtimeUrl;
         script.addEventListener("load", () => {
-            // Pthread workers import the main runtime URL after the script load
-            // event. Revoking it here races worker startup and produces
-            // "Failed to execute importScripts" for threaded cores.
-            this.runtimeUrl = runtimeUrl;
+            URL.revokeObjectURL(runtimeUrl);
             this.initModule(wasm, thread);
         });
         script.addEventListener("error", () => {
@@ -1141,15 +1138,6 @@ class EmulatorJS {
             console.warn("EJS_Runtime is not defined!");
             this.startGameError(this.localization("Error loading EmulatorJS runtime"));
             throw new Error("EJS_Runtime is not defined!");
-        }
-        if (this.getCore() === "mednafen_saturn") {
-            // The threaded runtime transfers this canvas to an OffscreenCanvas
-            // when its WebGL context is created. Give it a real drawing buffer
-            // and layout box first; resizing the transferred default 300x150
-            // canvas after startup leaves Beetle Saturn rendering black.
-            this.canvas.width = 768;
-            this.canvas.height = 544;
-            this.game.appendChild(this.canvas);
         }
         window.EJS_Runtime({
             noInitialRun: true,

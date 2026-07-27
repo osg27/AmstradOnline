@@ -22,16 +22,11 @@
   let bios = null;
   let biosUrl = null;
   let statusText = `${systemName} ready`;
-  let showNativeSaturnCanvas = false;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
   function drawStatus(main, sub = '') {
     statusText = main;
-    if (isSaturn) {
-      showNativeSaturnCanvas = false;
-      screen.style.display = 'block';
-    }
     context.fillStyle = '#000';
     context.fillRect(0, 0, screen.width, screen.height);
     context.fillStyle = '#fff';
@@ -311,12 +306,6 @@
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
-    window.EJS_rawFiles = isSaturn && bios
-      ? {
-        '/sega_101.bin': bios.bytes,
-        '/mpr-17933.bin': bios.bytes,
-      }
-      : undefined;
     window.EJS_retroarchOpts = isSaturn
       ? [
         { name: 'system_directory', default: '/', isString: true },
@@ -324,7 +313,7 @@
       : undefined;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
-      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isSaturn ? '2026-07-27-3' : '2026-07-27-2'}`,
+      'emulator.js': '/emulatorjs/data/src/emulator.js',
       'emulator.css': '/emulatorjs/data/emulator.css',
       'cache.js': '/emulatorjs/data/src/cache.js',
       'compression.js': '/emulatorjs/data/src/compression.js',
@@ -341,7 +330,7 @@
       'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
     };
     window.EJS_startOnLoaded = true;
-    window.EJS_threads = isSaturn;
+    window.EJS_threads = false;
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
@@ -379,7 +368,12 @@
         9: { value: 'j', value2: 'BUTTON_4' },
       },
     };
-    window.EJS_defaultOptions = undefined;
+    window.EJS_defaultOptions = isSaturn
+      ? {
+        yabause_force_hle_bios: 'disabled',
+        yabause_frameskip: '0',
+      }
+      : undefined;
     window.EJS_Buttons = {
       playPause: false,
       restart: false,
@@ -406,13 +400,6 @@
     window.EJS_onGameStart = () => {
       console.log(`Old Style Gaming ${systemName}: game started`);
       statusText = '';
-      if (isSaturn) {
-        // A threaded Emscripten core transfers WebGL rendering to an
-        // OffscreenCanvas. Mirroring it into this 2D overlay can copy only
-        // cleared frames and hide correctly rendered output underneath.
-        showNativeSaturnCanvas = true;
-        screen.style.display = 'none';
-      }
       ensureAudio()?.resume?.().catch(() => {});
       setEmulatorVolume(emulatorVolume);
     };
@@ -477,7 +464,7 @@
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extract7z.js',
       '/emulatorjs/data/compression/extractzip.js',
-      `/emulatorjs/data/cores/${isSaturn ? 'mednafen_saturn-thread' : 'pcsx_rearmed'}-wasm.data`,
+      `/emulatorjs/data/cores/${isSaturn ? 'yabause' : 'pcsx_rearmed'}-wasm.data`,
     ];
 
     for (const path of required) {
@@ -503,11 +490,6 @@
   });
 
   function mirrorEmulatorCanvas() {
-    if (showNativeSaturnCanvas) {
-      requestAnimationFrame(mirrorEmulatorCanvas);
-      return;
-    }
-
     const gameCanvas = gameContainer.querySelector('canvas');
 
     if (gameCanvas && gameCanvas.width && gameCanvas.height) {
