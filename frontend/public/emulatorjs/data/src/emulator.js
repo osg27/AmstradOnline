@@ -761,7 +761,7 @@ class EmulatorJS {
     initGameCore(js, wasm, thread) {
         let script = this.createElement("script");
         const runtimeSource = new Blob([
-            "window.EJS_Runtime = (function () {\n",
+            "globalThis.EJS_Runtime = (function () {\n",
             js,
             "\nreturn typeof EJS_Runtime === 'function' ? EJS_Runtime : null;\n}());",
         ], { type: "application/javascript" });
