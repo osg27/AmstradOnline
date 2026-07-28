@@ -589,9 +589,11 @@
       if (isBeetleSaturn) {
         currentRom = {
           // Beetle Saturn deliberately falls back to its BIOS when content
-          // is not a recognised disc or ST-V image.
+          // is not a recognised disc or ST-V image. Use a complete dummy
+          // sector because its ST-V probe reads a 128-byte identification
+          // header before rejecting unknown content.
           fileName: 'Saturn BIOS Boot.biosboot',
-          bytes: new Uint8Array([0]),
+          bytes: new Uint8Array(2048),
           files: [],
         };
         drawStatus(`${systemName} BIOS boot`, 'No disc mounted');
