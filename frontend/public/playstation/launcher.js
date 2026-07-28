@@ -325,7 +325,7 @@
       : undefined;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
-      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-1' : '2026-07-27-1'}`,
+      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-2' : '2026-07-27-1'}`,
       'emulator.css': '/emulatorjs/data/emulator.css',
       'cache.js': '/emulatorjs/data/src/cache.js',
       'compression.js': '/emulatorjs/data/src/compression.js',
