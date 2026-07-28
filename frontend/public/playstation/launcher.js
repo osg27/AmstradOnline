@@ -1,5 +1,6 @@
 (function () {
-  const isSaturn = window.location.pathname.startsWith('/saturn/');
+  const isBeetleSaturn = window.location.pathname.startsWith('/saturn-beetle/');
+  const isSaturn = isBeetleSaturn || window.location.pathname.startsWith('/saturn/');
   const systemName = isSaturn ? 'Saturn' : 'PlayStation';
   const messagePrefix = isSaturn ? 'saturn' : 'playstation';
   const screen = document.getElementById('playstation-screen');
@@ -22,11 +23,16 @@
   let bios = null;
   let biosUrl = null;
   let statusText = `${systemName} ready`;
+  let showNativeCanvas = false;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
   function drawStatus(main, sub = '') {
     statusText = main;
+    if (isBeetleSaturn) {
+      showNativeCanvas = false;
+      screen.style.display = 'block';
+    }
     context.fillStyle = '#000';
     context.fillRect(0, 0, screen.width, screen.height);
     context.fillStyle = '#fff';
@@ -301,11 +307,17 @@
   function configureEmulator(fileName, romUrl, externalFiles = {}) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
-    window.EJS_core = isSaturn ? 'segaSaturn' : 'psx';
+    window.EJS_core = isBeetleSaturn ? 'segaSaturnBeetle' : isSaturn ? 'segaSaturn' : 'psx';
     window.EJS_biosUrl = biosUrl;
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
+    window.EJS_rawFiles = isBeetleSaturn && bios
+      ? {
+        '/sega_101.bin': bios.bytes,
+        '/mpr-17933.bin': bios.bytes,
+      }
+      : undefined;
     window.EJS_retroarchOpts = isSaturn
       ? [
         { name: 'system_directory', default: '/', isString: true },
@@ -313,7 +325,7 @@
       : undefined;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
-      'emulator.js': '/emulatorjs/data/src/emulator.js',
+      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-1' : '2026-07-27-1'}`,
       'emulator.css': '/emulatorjs/data/emulator.css',
       'cache.js': '/emulatorjs/data/src/cache.js',
       'compression.js': '/emulatorjs/data/src/compression.js',
@@ -330,7 +342,7 @@
       'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
     };
     window.EJS_startOnLoaded = true;
-    window.EJS_threads = false;
+    window.EJS_threads = isBeetleSaturn;
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
@@ -368,7 +380,7 @@
         9: { value: 'j', value2: 'BUTTON_4' },
       },
     };
-    window.EJS_defaultOptions = isSaturn
+    window.EJS_defaultOptions = isSaturn && !isBeetleSaturn
       ? {
         yabause_force_hle_bios: 'disabled',
         yabause_frameskip: 'disabled',
@@ -401,6 +413,10 @@
     window.EJS_onGameStart = () => {
       console.log(`Old Style Gaming ${systemName}: game started`);
       statusText = '';
+      if (isBeetleSaturn) {
+        showNativeCanvas = true;
+        screen.style.display = 'none';
+      }
       ensureAudio()?.resume?.().catch(() => {});
       setEmulatorVolume(emulatorVolume);
     };
@@ -465,7 +481,7 @@
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extract7z.js',
       '/emulatorjs/data/compression/extractzip.js',
-      `/emulatorjs/data/cores/${isSaturn ? 'yabause' : 'pcsx_rearmed'}-wasm.data`,
+      `/emulatorjs/data/cores/${isBeetleSaturn ? 'mednafen_saturn-thread' : isSaturn ? 'yabause' : 'pcsx_rearmed'}-wasm.data`,
     ];
 
     for (const path of required) {
@@ -491,6 +507,11 @@
   });
 
   function mirrorEmulatorCanvas() {
+    if (showNativeCanvas) {
+      requestAnimationFrame(mirrorEmulatorCanvas);
+      return;
+    }
+
     const gameCanvas = gameContainer.querySelector('canvas');
 
     if (gameCanvas && gameCanvas.width && gameCanvas.height) {

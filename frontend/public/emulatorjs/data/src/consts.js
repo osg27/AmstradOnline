@@ -31,6 +31,7 @@ export const cores = {
     "atari2600": ["stella2014"],
     "jaguar": ["virtualjaguar"],
     "segaSaturn": ["yabause"],
+    "segaSaturnBeetle": ["mednafen_saturn"],
     "amiga": ["puae"],
     "c64": ["vice_x64sc"],
     "c128": ["vice_x128"],
@@ -42,6 +43,6 @@ export const cores = {
     "3ds": ["azahar"]
 };
 
-export const requiresThreads = ["ppsspp", "dosbox_pure", "azahar"];
+export const requiresThreads = ["ppsspp", "dosbox_pure", "azahar", "mednafen_saturn"];
 
 export const requiresWebGL2 = ["ppsspp", "azahar"];

@@ -25,7 +25,7 @@ router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga"}
 UNAVAILABLE_SYSTEMS = set()
 ADMIN_ONLY_SYSTEMS = set()
-SUPER_ADMIN_ONLY_SYSTEMS = {"saturn"}
+SUPER_ADMIN_ONLY_SYSTEMS = {"saturn", "saturn_beetle"}
 XYPHOE_SYSTEMS = set()
 PRIVATE_SUPER_ADMIN_SYSTEMS = set()
 PARTY_SYSTEMS = {"cpc_party", "c64", "arcade"}

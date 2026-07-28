@@ -40,6 +40,7 @@ const ROOM_SYSTEM_OPTIONS = [
   ['pcengine', 'PC Engine / TurboGrafx-16'],
   ['playstation', 'Sony PlayStation'],
   ['saturn', 'Sega Saturn'],
+  ['saturn_beetle', 'Sega Saturn Accurate Core'],
   ['arcade', 'MAME Arcade'],
 ];
 
@@ -111,9 +112,10 @@ const ROM_ZIP_EXTENSIONS = {
   pcengine: ['.pce', '.sgx'],
   playstation: ['.cue', '.bin', '.chd', '.pbp', '.iso'],
   saturn: ['.cue', '.bin', '.chd', '.iso'],
+  saturn_beetle: ['.cue', '.bin', '.chd', '.iso'],
   spectrum: ['.tap', '.tzx', '.z80', '.sna', '.szx'],
 };
-const MULTI_FILE_ZIP_SYSTEMS = new Set(['c64', 'playstation', 'saturn']);
+const MULTI_FILE_ZIP_SYSTEMS = new Set(['c64', 'playstation', 'saturn', 'saturn_beetle']);
 const ATARI8_MODEL_OPTIONS = [
   ['400/800', '400/800'],
   ['1200xl', '1200XL'],
@@ -772,7 +774,8 @@ export default function RoomPage() {
   const isSnes = roomSystem === 'snes';
   const isPcEngine = roomSystem === 'pcengine';
   const isPlayStation = roomSystem === 'playstation';
-  const isSaturn = roomSystem === 'saturn';
+  const isBeetleSaturn = roomSystem === 'saturn_beetle';
+  const isSaturn = roomSystem === 'saturn' || isBeetleSaturn;
   const isDiscConsole = isPlayStation || isSaturn;
   const isC64 = roomSystem === 'c64';
   const isAtari8 = roomSystem === 'atari8';
@@ -790,7 +793,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const canSendPlayerInput = isHost || !isArcadeParty || Boolean(partyPlayerNumber);
   const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isDiscConsole || isC64 || isAtari8 || isAtariSt || isArcade;
-  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isSaturn ? 'Sega Saturn' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isBeetleSaturn ? 'Sega Saturn Accurate Core' : isSaturn ? 'Sega Saturn' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
 
   useEffect(() => {
     setSelectedRoomSystem(roomSystem);
@@ -805,7 +808,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/saturn-beetle/launcher.html?v=2026-07-28-1' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.zip,.7z'
@@ -1259,7 +1262,7 @@ export default function RoomPage() {
     const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone;
     const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
     const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
-    const isMultiButtonSystem = system === 'mastersystem' || system === 'megadrive' || system === 'nes' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'saturn' || system === 'arcade';
+    const isMultiButtonSystem = system === 'mastersystem' || system === 'megadrive' || system === 'nes' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'saturn' || system === 'saturn_beetle' || system === 'arcade';
     const fire = isMultiButtonSystem
       ? pad.buttons[0]?.pressed
       : [0, 1].some((index) => pad.buttons[index]?.pressed);
@@ -1290,7 +1293,7 @@ export default function RoomPage() {
       if ((pad.axes[2] ?? 0) < -deadzone) mask |= 32768;
       if ((pad.axes[2] ?? 0) > deadzone) mask |= 65536;
     }
-    if (system === 'playstation' || system === 'saturn') {
+    if (system === 'playstation' || system === 'saturn' || system === 'saturn_beetle') {
       if (pad.buttons[3]?.pressed) mask |= 256;
       if (pad.buttons[8]?.pressed) mask |= 512;
       if (pad.buttons[4]?.pressed) mask |= 1024;
@@ -4353,10 +4356,10 @@ export default function RoomPage() {
       }
 
       const emulatorCanvas = await waitForEmulatorCanvas(iframe);
-      const useDirectCanvasStream = isArcade && typeof emulatorCanvas.captureStream === 'function';
+      const useDirectCanvasStream = (isArcade || isBeetleSaturn) && typeof emulatorCanvas.captureStream === 'function';
 
       if (useDirectCanvasStream) {
-        addLog('Using native arcade canvas stream');
+        addLog(`Using native ${isBeetleSaturn ? 'Beetle Saturn' : 'arcade'} canvas stream`);
       } else {
         startMirrorLoop(emulatorCanvas);
       }
@@ -5829,16 +5832,18 @@ export default function RoomPage() {
                       src={emulatorSrc}
                       onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
                       style={{
-                        position: 'absolute',
+                        position: isBeetleSaturn ? 'relative' : 'absolute',
                         left: '0',
                         top: '0',
-                        display: 'inline',
-                        width: '768px',
-                        height: '544px',
-                        border: '0',
+                        display: isBeetleSaturn ? 'block' : 'inline',
+                        width: isBeetleSaturn ? '100%' : '768px',
+                        height: isBeetleSaturn ? 'auto' : '544px',
+                        aspectRatio: isBeetleSaturn ? '4 / 3' : undefined,
+                        border: isBeetleSaturn ? '1px solid #1f2f4a' : '0',
+                        borderRadius: isBeetleSaturn ? '8px' : '0',
                         background: '#000',
-                        opacity: 0,
-                        pointerEvents: 'none',
+                        opacity: isBeetleSaturn ? 1 : 0,
+                        pointerEvents: isBeetleSaturn ? 'auto' : 'none',
                       }}
                     />
 
@@ -5858,7 +5863,7 @@ export default function RoomPage() {
                         border: '1px solid #1f2f4a',
                         borderRadius: '8px',
                         background: '#000',
-                        display: 'block',
+                        display: isBeetleSaturn ? 'none' : 'block',
                       }}
                       width={768}
                       height={544}
@@ -5934,7 +5939,7 @@ export default function RoomPage() {
                           onChange={(event) => setSelectedRoomSystem(event.target.value)}
                           disabled={switchingSystem}
                         >
-                          {ROOM_SYSTEM_OPTIONS.filter(([value]) => value !== 'saturn' || isSuperAdmin).map(([value, label]) => (
+                          {ROOM_SYSTEM_OPTIONS.filter(([value]) => !['saturn', 'saturn_beetle'].includes(value) || isSuperAdmin).map(([value, label]) => (
                             <option key={value} value={value}>{label}</option>
                           ))}
                         </select>

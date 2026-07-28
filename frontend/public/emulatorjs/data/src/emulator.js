@@ -761,14 +761,16 @@ class EmulatorJS {
     initGameCore(js, wasm, thread) {
         let script = this.createElement("script");
         const runtimeSource = new Blob([
-            "window.EJS_Runtime = (function () {\n",
+            "globalThis.EJS_Runtime = (function () {\n",
             js,
             "\nreturn typeof EJS_Runtime === 'function' ? EJS_Runtime : null;\n}());",
         ], { type: "application/javascript" });
         const runtimeUrl = URL.createObjectURL(runtimeSource);
         script.src = runtimeUrl;
         script.addEventListener("load", () => {
-            URL.revokeObjectURL(runtimeUrl);
+            // Threaded cores import this runtime URL after the script has
+            // loaded, so it must remain valid for worker startup.
+            this.runtimeUrl = runtimeUrl;
             this.initModule(wasm, thread);
         });
         script.addEventListener("error", () => {
@@ -1138,6 +1140,13 @@ class EmulatorJS {
             console.warn("EJS_Runtime is not defined!");
             this.startGameError(this.localization("Error loading EmulatorJS runtime"));
             throw new Error("EJS_Runtime is not defined!");
+        }
+        if (this.getCore() === "mednafen_saturn") {
+            // Prepare the drawing buffer before the threaded runtime transfers
+            // it to an OffscreenCanvas.
+            this.canvas.width = 768;
+            this.canvas.height = 544;
+            this.game.appendChild(this.canvas);
         }
         window.EJS_Runtime({
             noInitialRun: true,
