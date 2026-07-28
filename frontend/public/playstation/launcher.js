@@ -307,7 +307,10 @@
   function configureEmulator(fileName, romUrl, externalFiles = {}) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
-    window.EJS_core = isBeetleSaturn ? 'segaSaturnBeetle' : isSaturn ? 'segaSaturn' : 'psx';
+    // Use the concrete core name for the isolated Saturn build. Using a new
+    // system alias here makes an older cached consts.js treat the alias as the
+    // core filename and request a non-existent *-legacy-wasm.data payload.
+    window.EJS_core = isBeetleSaturn ? 'mednafen_saturn' : isSaturn ? 'segaSaturn' : 'psx';
     window.EJS_biosUrl = biosUrl;
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
@@ -325,7 +328,7 @@
       : undefined;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
-      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-2' : '2026-07-27-1'}`,
+      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-3' : '2026-07-27-1'}`,
       'emulator.css': '/emulatorjs/data/emulator.css',
       'cache.js': '/emulatorjs/data/src/cache.js',
       'compression.js': '/emulatorjs/data/src/compression.js',
