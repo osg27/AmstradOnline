@@ -330,7 +330,7 @@
       : undefined;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
-      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-5' : '2026-07-27-1'}`,
+      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-6' : '2026-07-27-1'}`,
       'emulator.css': '/emulatorjs/data/emulator.css',
       'cache.js': '/emulatorjs/data/src/cache.js',
       'compression.js': '/emulatorjs/data/src/compression.js',
@@ -390,9 +390,9 @@
         // Mid-frame synchronisation can stall the threaded WebAssembly
         // frontend before its first complete video/audio frame.
         beetle_saturn_midsync: 'disabled',
-        // With no disc there is nothing to auto-detect the console region
-        // from. Match the known-good Japanese BIOS used by this test.
-        beetle_saturn_region: 'Japan',
+        // Let Beetle derive the region from mounted content. BIOS-only startup
+        // retains the known-good Japanese fallback used by the diagnostic.
+        beetle_saturn_region: romUrl === null ? 'Japan' : 'Auto Detect',
       }
       : isSaturn
       ? {
@@ -577,10 +577,14 @@
         })),
       };
       if (isBeetleSaturn) {
-        // Keep the selected disc ready for the next phase of the isolated
-        // core test, but first prove that the core can render and play audio
-        // from the Saturn BIOS with no disc mounted.
         pendingAccurateSaturnRom = nextRom;
+        if (bios) {
+          currentRom = pendingAccurateSaturnRom;
+          pendingAccurateSaturnRom = null;
+          loadCurrentRom();
+        } else {
+          drawStatus('Saturn game ready', 'Load your local Saturn BIOS to start');
+        }
         return;
       }
       currentRom = nextRom;
@@ -599,13 +603,19 @@
         bytes: new Uint8Array(message.bytes || []),
       };
       if (isBeetleSaturn) {
-        currentRom = {
-          fileName: 'Saturn BIOS',
-          bytes: new Uint8Array(),
-          files: [],
-          biosOnly: true,
-        };
-        drawStatus(`${systemName} BIOS boot`, 'No disc mounted');
+        if (pendingAccurateSaturnRom) {
+          currentRom = pendingAccurateSaturnRom;
+          pendingAccurateSaturnRom = null;
+          drawStatus(`Loading ${systemName}`, currentRom.fileName);
+        } else {
+          currentRom = {
+            fileName: 'Saturn BIOS',
+            bytes: new Uint8Array(),
+            files: [],
+            biosOnly: true,
+          };
+          drawStatus(`${systemName} BIOS boot`, 'No disc mounted');
+        }
         loadCurrentRom();
         return;
       }
