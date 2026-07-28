@@ -1,7 +1,7 @@
 {
   "core": "mednafen_saturn",
-  "buildStart": "2026-07-26T22:33:30+00:00",
-  "buildEnd": "2026-07-26T23:59:00+00:00",
+  "buildStart": "2026-07-28T22:20:00+01:00",
+  "buildEnd": "2026-07-28T22:25:00+01:00",
   "options": {
     "defaultWebGL2": true,
     "threads": true,

@@ -150,6 +150,7 @@ async function loadLanguage(config) {
 const config = {
     debug: debug,
     gameUrl: window.EJS_gameUrl,
+    noGame: window.EJS_noGame,
     dataPath: scriptPath,
     system: window.EJS_core,
     biosUrl: window.EJS_biosUrl,

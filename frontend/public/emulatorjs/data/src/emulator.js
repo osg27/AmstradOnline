@@ -1124,7 +1124,15 @@ class EmulatorJS {
     downloadFiles() {
         (async () => {
             await this.initializeGameManager();
-            
+
+            if (this.config.noGame) {
+                await this.download(this.config.biosUrl, this.downloadType.bios);
+                await this.downloadStartState();
+                this.fileName = null;
+                this.startGame();
+                return;
+            }
+
             const romData = await this.download(this.config.gameUrl, this.downloadType.rom);
             await this.download(this.config.biosUrl, this.downloadType.bios);
             await this.downloadStartState();
@@ -1197,7 +1205,9 @@ class EmulatorJS {
         try {
             const args = [];
             if (this.debug) args.push("-v");
-            args.push("/" + this.fileName);
+            if (this.fileName) {
+                args.push("/" + this.fileName);
+            }
             if (this.debug) console.log(args);
             this.Module.callMain(args);
             if (typeof this.config.softLoad === "number" && this.config.softLoad > 0) {

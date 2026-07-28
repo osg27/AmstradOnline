@@ -315,6 +315,7 @@
     window.EJS_biosUrl = biosUrl;
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
+    window.EJS_noGame = isBeetleSaturn && romUrl === null;
     window.EJS_externalFiles = externalFiles;
     window.EJS_rawFiles = isBeetleSaturn && bios
       ? {
@@ -329,7 +330,7 @@
       : undefined;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
-      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-3' : '2026-07-27-1'}`,
+      'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-4' : '2026-07-27-1'}`,
       'emulator.css': '/emulatorjs/data/emulator.css',
       'cache.js': '/emulatorjs/data/src/cache.js',
       'compression.js': '/emulatorjs/data/src/compression.js',
@@ -458,6 +459,20 @@
     }
 
     clearGameContainer();
+    biosUrl = bios
+      ? new File([bios.bytes], isSaturn ? 'saturn_bios.bin' : bios.fileName, { type: 'application/octet-stream' })
+      : null;
+    if (isBeetleSaturn && currentRom.biosOnly) {
+      configureEmulator('Saturn BIOS', null, {});
+      drawStatus(`Loading ${systemName} BIOS`, 'No disc mounted');
+      loaderScript = document.createElement('script');
+      loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
+      loaderScript.async = true;
+      loaderScript.onerror = () => drawStatus(`${systemName} failed to load`, 'Could not load EmulatorJS');
+      document.body.appendChild(loaderScript);
+      return;
+    }
+
     const gameFiles = currentRom.files?.length
       ? currentRom.files
       : [{ fileName: currentRom.fileName, bytes: currentRom.bytes }];
@@ -474,9 +489,6 @@
     // EmulatorJS uses the File name to detect and extract archives. An anonymous
     // blob URL can make a ZIP reach PCSX as an unknown file with no content.
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, { type: 'application/octet-stream' });
-    biosUrl = bios
-      ? new File([bios.bytes], isSaturn ? 'saturn_bios.bin' : bios.fileName, { type: 'application/octet-stream' })
-      : null;
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
     drawStatus(`Loading ${systemName}`, primaryGame.fileName);
 
@@ -588,13 +600,10 @@
       };
       if (isBeetleSaturn) {
         currentRom = {
-          // Beetle Saturn deliberately falls back to its BIOS when content
-          // is not a recognised disc or ST-V image. Use a complete dummy
-          // sector because its ST-V probe reads a 128-byte identification
-          // header before rejecting unknown content.
-          fileName: 'Saturn BIOS Boot.biosboot',
-          bytes: new Uint8Array(2048),
+          fileName: 'Saturn BIOS',
+          bytes: new Uint8Array(),
           files: [],
+          biosOnly: true,
         };
         drawStatus(`${systemName} BIOS boot`, 'No disc mounted');
         loadCurrentRom();
