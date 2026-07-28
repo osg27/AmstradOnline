@@ -664,6 +664,7 @@ export default function RoomPage() {
   const [mameLeaderboardSupported, setMameLeaderboardSupported] = useState(false);
   const [mameScoreStatus, setMameScoreStatus] = useState('');
   const [mameScoreBusy, setMameScoreBusy] = useState(false);
+  const [mameScoreChangeToken, setMameScoreChangeToken] = useState(0);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
@@ -701,6 +702,7 @@ export default function RoomPage() {
   const localLibraryLoadAttemptedRef = useRef(false);
   const loadedDiskNameRef = useRef('');
   const mameScoreBaselineRef = useRef(null);
+  const mameScoreProcessedTokenRef = useRef(0);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
   const inputSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -806,7 +808,7 @@ export default function RoomPage() {
     ? '/amiga-aga/launcher.html?v=2026-06-13-2'
     : isAmiga || isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-08-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-07-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-29-1' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.zip,.7z'
@@ -1807,8 +1809,13 @@ export default function RoomPage() {
   useEffect(() => {
     function handleArcadeMessage(event) {
       if (event.origin !== window.location.origin) return;
+      if (event.source !== emulatorFrameRef.current?.contentWindow) return;
 
       const message = event.data || {};
+      if (message.type === 'arcade_score_files_changed') {
+        setMameScoreChangeToken((token) => token + 1);
+        return;
+      }
       if (message.type !== 'arcade_log') return;
 
       const prefix = message.level === 'error' ? 'Arcade error' : 'Arcade';
@@ -3170,6 +3177,42 @@ export default function RoomPage() {
 
     return () => window.clearTimeout(timer);
   }, [addLog, isArcade, isHost, loadedDiskName, supportsMameScoreboard]);
+
+  useEffect(() => {
+    if (
+      !mameScoreChangeToken
+      || mameScoreChangeToken <= mameScoreProcessedTokenRef.current
+      || !isArcade
+      || !isHost
+      || !supportsMameScoreboard
+      || !mameLeaderboardSupported
+      || mameScoreBusy
+    ) return undefined;
+
+    mameScoreProcessedTokenRef.current = mameScoreChangeToken;
+    setMameScoreStatus('New score data detected...');
+    const timer = window.setTimeout(async () => {
+      setMameScoreBusy(true);
+      try {
+        await submitMameScoreExtraction('automatic');
+      } catch (err) {
+        setMameScoreStatus('Automatic score check failed. You can still save it manually.');
+        addLog(`Automatic MAME score extraction failed: ${err.message}`);
+      } finally {
+        setMameScoreBusy(false);
+      }
+    }, 4000);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    addLog,
+    isArcade,
+    isHost,
+    mameLeaderboardSupported,
+    mameScoreBusy,
+    mameScoreChangeToken,
+    supportsMameScoreboard,
+  ]);
 
   useEffect(() => {
     async function loadRoom() {

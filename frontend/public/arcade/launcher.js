@@ -13,6 +13,8 @@
   let emulatorPaused = false;
   let romStartedAt = 0;
   let currentSampleFiles = [];
+  let scoreFileWatchTimer = null;
+  let lastScoreFileSignature = '';
   const playerMasks = [0, 0, 0, 0];
   let lastSimulatedMasks = [0, 0, 0, 0];
   let statusText = 'MAME 2003-Plus ready';
@@ -360,7 +362,7 @@
     return files;
   }
 
-  function buildFsDebugDump() {
+  function buildFsDebugDump({ quiet = false } = {}) {
     const manager = window.EJS_emulator?.gameManager;
     const fs = manager?.FS;
     const debug = {
@@ -491,10 +493,50 @@
     debug.onlyHiscoreDat = uploadFiles.length > 0 && uploadFiles.every((file) => isHiscoreDat(file.path));
     if (debug.onlyHiscoreDat) {
       debug.warning = 'Only hiscore.dat was found. That is the support definition file, not a generated score file.';
-      postArcadeLog(debug.warning, 'error');
+      if (!quiet) postArcadeLog(debug.warning, 'error');
     }
 
     return { debug, files: uploadFiles };
+  }
+
+  function getScoreFileSignature() {
+    const { debug } = buildFsDebugDump({ quiet: true });
+    const romKey = normaliseRomKey(currentRom?.fileName);
+    return debug.files
+      .filter((file) => {
+        const path = normaliseFsPath(file.path).toLowerCase();
+        return path.endsWith(`/${romKey}.hi`)
+          || path.endsWith(`/${romKey}.nv`)
+          || path.includes(`/nvram/${romKey}/`);
+      })
+      .map((file) => `${file.path}:${file.size}:${file.mtimeMs || 0}`)
+      .sort()
+      .join('|');
+  }
+
+  function stopScoreFileWatch() {
+    if (scoreFileWatchTimer) {
+      window.clearInterval(scoreFileWatchTimer);
+      scoreFileWatchTimer = null;
+    }
+    lastScoreFileSignature = '';
+  }
+
+  function startScoreFileWatch() {
+    stopScoreFileWatch();
+    window.setTimeout(() => {
+      if (!currentRom || !window.EJS_emulator?.gameManager?.FS) return;
+      lastScoreFileSignature = getScoreFileSignature();
+      scoreFileWatchTimer = window.setInterval(() => {
+        const signature = getScoreFileSignature();
+        if (!signature || signature === lastScoreFileSignature) return;
+        lastScoreFileSignature = signature;
+        window.parent?.postMessage({
+          type: 'arcade_score_files_changed',
+          romName: currentRom.fileName,
+        }, window.location.origin);
+      }, 2500);
+    }, 3000);
   }
 
   window.getArcadeSaveBundle = async function getArcadeSaveBundle(options = {}) {
@@ -733,6 +775,7 @@
   }
 
   function clearGameContainer() {
+    stopScoreFileWatch();
     try {
       window.EJS_emulator?.gameManager?.clearEJSResetTimer?.();
       window.EJS_emulator?.gamepad?.terminate?.();
@@ -907,6 +950,7 @@
       postArcadeLog(`MAME game started: ${fileName}`);
       statusText = '';
       screen.style.display = 'none';
+      startScoreFileWatch();
     };
     window.EJS_onExit = () => {
       drawStatus('MAME stopped', fileName);
