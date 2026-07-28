@@ -39,8 +39,6 @@ const ROOM_SYSTEM_OPTIONS = [
   ['snes', 'SNES'],
   ['pcengine', 'PC Engine / TurboGrafx-16'],
   ['playstation', 'Sony PlayStation'],
-  ['saturn', 'Sega Saturn'],
-  ['saturn_beetle', 'Sega Saturn Webretro Core'],
   ['arcade', 'MAME Arcade'],
 ];
 
@@ -5939,7 +5937,7 @@ export default function RoomPage() {
                           onChange={(event) => setSelectedRoomSystem(event.target.value)}
                           disabled={switchingSystem}
                         >
-                          {ROOM_SYSTEM_OPTIONS.filter(([value]) => !['saturn', 'saturn_beetle'].includes(value) || isSuperAdmin).map(([value, label]) => (
+                          {ROOM_SYSTEM_OPTIONS.map(([value, label]) => (
                             <option key={value} value={value}>{label}</option>
                           ))}
                         </select>

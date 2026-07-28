@@ -16,7 +16,6 @@ import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
 import nesLogoUrl from '../../assets/59db13187bf21468ce403a95096fbd14.png';
 import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
 import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
-import saturnLogoUrl from '../../assets/SEGA_Saturn_logo.png';
 import snesLogoUrl from '../../assets/SNES_logo.svg.webp';
 import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
 
@@ -221,7 +220,7 @@ const PLATFORM_SHELVES = [
             name: 'Mega Drive',
             shortName: 'MD',
             accent: 'violet',
-            logo: saturnLogoUrl,
+            logo: megaDriveLogoUrl,
             summary: 'Mega Drive games with two-player controls.',
             formats: '.bin .gen .md .smd',
             modes: {
@@ -279,40 +278,6 @@ const PLATFORM_SHELVES = [
             summary: 'Original PlayStation games using a locally supplied BIOS.',
             formats: '.cue/.bin .chd .pbp .iso .zip .7z',
             testing: true,
-            modes: {
-              solo: { enabled: true },
-              hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available yet' },
-              link: { enabled: false, note: 'Not available' },
-            },
-          },
-          {
-            id: 'saturn',
-            name: 'Sega Saturn',
-            shortName: 'SAT',
-            accent: 'blue',
-            logo: megaDriveLogoUrl,
-            summary: 'Experimental Sega Saturn support using Yabause and a locally supplied BIOS.',
-            formats: '.cue/.bin .chd .iso .zip .7z',
-            testing: true,
-            superAdminOnly: true,
-            modes: {
-              solo: { enabled: true },
-              hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available yet' },
-              link: { enabled: false, note: 'Not available' },
-            },
-          },
-          {
-            id: 'saturn_beetle',
-            name: 'Sega Saturn Webretro Core',
-            shortName: 'SAT X',
-            accent: 'blue',
-            logo: saturnLogoUrl,
-            summary: 'Isolated Beetle Saturn development runtime. Yabause remains available separately.',
-            formats: '.cue/.bin .chd .iso .zip .7z',
-            testing: true,
-            superAdminOnly: true,
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },

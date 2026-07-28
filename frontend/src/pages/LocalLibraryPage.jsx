@@ -14,7 +14,6 @@ import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
 import nesLogoUrl from '../../assets/NES_logo.svg.webp';
 import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
 import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
-import saturnLogoUrl from '../../assets/SEGA_Saturn_logo.png';
 import snesLogoUrl from '../../assets/SNES_logo.svg.webp';
 import spectrumLogoUrl from '../../assets/Sinclair_ZX_Spectrum-03.svg.webp';
 import {
@@ -119,28 +118,6 @@ export const SUPPORTED_SYSTEMS = [
     pathHints: ['playstation', 'ps1', 'psx'],
   },
   {
-    id: 'saturn',
-    roomSystem: 'saturn',
-    label: 'Sega Saturn',
-    shortLabel: 'SAT',
-    logo: saturnLogoUrl,
-    extensions: ['cue', 'chd', 'iso', 'zip', '7z'],
-    pathHints: ['sega saturn', 'saturn'],
-    note: 'Super Admin experimental system',
-    superAdminOnly: true,
-  },
-  {
-    id: 'saturn_beetle',
-    roomSystem: 'saturn_beetle',
-    label: 'Saturn Webretro Core',
-    shortLabel: 'SAT X',
-    logo: saturnLogoUrl,
-    extensions: ['cue', 'chd', 'iso', 'zip', '7z'],
-    pathHints: ['sega saturn', 'saturn'],
-    note: 'Super Admin isolated core development',
-    superAdminOnly: true,
-  },
-  {
     id: 'amiga',
     roomSystem: 'amiga',
     label: 'Amiga',
@@ -190,8 +167,6 @@ const LIBRETRO_BOXART_REPOS = {
   megadrive: ['Sega_-_Mega_Drive_-_Genesis'],
   pcengine: ['NEC_-_PC_Engine_-_TurboGrafx_16'],
   playstation: ['Sony_-_PlayStation'],
-  saturn: ['Sega_-_Saturn'],
-  saturn_beetle: ['Sega_-_Saturn'],
   amiga: ['Commodore_-_Amiga'],
   amiga_aga: ['Commodore_-_Amiga'],
   atarist: ['Atari_-_ST'],

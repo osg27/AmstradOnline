@@ -23,7 +23,7 @@ from app.schemas.room import (
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 TESTING_SYSTEMS = {"amiga_link", "amiga_aga"}
-UNAVAILABLE_SYSTEMS = set()
+UNAVAILABLE_SYSTEMS = {"saturn", "saturn_beetle"}
 ADMIN_ONLY_SYSTEMS = set()
 SUPER_ADMIN_ONLY_SYSTEMS = {"saturn", "saturn_beetle"}
 XYPHOE_SYSTEMS = set()
