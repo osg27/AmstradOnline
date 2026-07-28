@@ -389,6 +389,9 @@
         // Mid-frame synchronisation can stall the threaded WebAssembly
         // frontend before its first complete video/audio frame.
         beetle_saturn_midsync: 'disabled',
+        // With no disc there is nothing to auto-detect the console region
+        // from. Match the known-good Japanese BIOS used by this test.
+        beetle_saturn_region: 'Japan',
       }
       : isSaturn
       ? {
