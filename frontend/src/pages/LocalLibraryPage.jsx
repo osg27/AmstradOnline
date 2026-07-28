@@ -132,7 +132,7 @@ export const SUPPORTED_SYSTEMS = [
   {
     id: 'saturn_beetle',
     roomSystem: 'saturn_beetle',
-    label: 'Saturn Accurate Core',
+    label: 'Saturn Webretro Core',
     shortLabel: 'SAT X',
     logo: saturnLogoUrl,
     extensions: ['cue', 'chd', 'iso', 'zip', '7z'],

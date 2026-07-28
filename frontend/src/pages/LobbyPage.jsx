@@ -305,7 +305,7 @@ const PLATFORM_SHELVES = [
           },
           {
             id: 'saturn_beetle',
-            name: 'Sega Saturn Accurate Core',
+            name: 'Sega Saturn Webretro Core',
             shortName: 'SAT X',
             accent: 'blue',
             logo: saturnLogoUrl,
