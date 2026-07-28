@@ -383,7 +383,13 @@
         9: { value: 'j', value2: 'BUTTON_4' },
       },
     };
-    window.EJS_defaultOptions = isSaturn && !isBeetleSaturn
+    window.EJS_defaultOptions = isBeetleSaturn
+      ? {
+        // Mid-frame synchronisation can stall the threaded WebAssembly
+        // frontend before its first complete video/audio frame.
+        beetle_saturn_midsync: 'disabled',
+      }
+      : isSaturn
       ? {
         yabause_force_hle_bios: 'disabled',
         yabause_frameskip: 'disabled',
