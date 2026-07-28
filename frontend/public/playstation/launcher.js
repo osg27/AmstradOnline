@@ -24,6 +24,7 @@
   let biosUrl = null;
   let statusText = `${systemName} ready`;
   let showNativeCanvas = false;
+  let pendingAccurateSaturnRom = null;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -552,7 +553,7 @@
     }
 
     if (message.type === `${messagePrefix}_autoload`) {
-      currentRom = {
+      const nextRom = {
         fileName: message.fileName || 'game.chd',
         bytes: new Uint8Array(message.bytes || []),
         files: (message.files || []).map((file) => ({
@@ -560,6 +561,14 @@
           bytes: new Uint8Array(file.bytes || []),
         })),
       };
+      if (isBeetleSaturn) {
+        // Keep the selected disc ready for the next phase of the isolated
+        // core test, but first prove that the core can render and play audio
+        // from the Saturn BIOS with no disc mounted.
+        pendingAccurateSaturnRom = nextRom;
+        return;
+      }
+      currentRom = nextRom;
       loadCurrentRom();
       return;
     }
@@ -574,6 +583,18 @@
         fileName: message.fileName || (isSaturn ? 'saturn_bios.bin' : 'scph5501.bin'),
         bytes: new Uint8Array(message.bytes || []),
       };
+      if (isBeetleSaturn) {
+        currentRom = {
+          // Beetle Saturn deliberately falls back to its BIOS when content
+          // is not a recognised disc or ST-V image.
+          fileName: 'Saturn BIOS Boot.biosboot',
+          bytes: new Uint8Array([0]),
+          files: [],
+        };
+        drawStatus(`${systemName} BIOS boot`, 'No disc mounted');
+        loadCurrentRom();
+        return;
+      }
       drawStatus(`${systemName} BIOS ready`, bios.fileName);
       return;
     }
