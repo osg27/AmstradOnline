@@ -490,7 +490,10 @@ function uploadFile(accept, callback) {
 }
 
 function uploadFileMulti(accept, callback) {
-	let directoryUpload = confirm("Upload a directory?");
+	// The Old Style Gaming room supplies a complete BIN/CUE set. If the
+	// fallback webretro picker is used, always allow selecting multiple files
+	// without interrupting the user with the upstream directory prompt.
+	let directoryUpload = false;
 	
 	var input = document.createElement("input");
 	input.type = "file";
