@@ -3907,6 +3907,10 @@ input:focus {
   cursor: crosshair;
 }
 
+.video.master-system-video {
+  max-height: min(68vh, 620px);
+}
+
 .video-panel.fullscreen-screen {
   position: fixed;
   inset: 0;

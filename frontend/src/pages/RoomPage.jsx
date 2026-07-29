@@ -5916,7 +5916,7 @@ export default function RoomPage() {
 
                     <canvas
                       ref={mirrorCanvasRef}
-                      className="video"
+                      className={`video ${isMasterSystem ? 'master-system-video' : ''}`}
                       onClick={captureInput}
                       onPointerDown={handleAmigaPointerDown}
                       onPointerUp={handleAmigaPointerUp}
