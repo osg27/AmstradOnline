@@ -417,7 +417,7 @@ export default function LobbyPage() {
         const nextIsAdmin = Boolean(session.is_admin);
         const nextIsSuperAdmin = Boolean(session.is_super_admin);
         const nextIsTester = Boolean(session.is_tester);
-        const nextIsVip = Boolean(session.is_vip);
+        const nextIsVip = Boolean(session.is_vip || session.is_admin || session.is_super_admin);
         const nextIsXyphoe = Boolean(session.is_xyphoe);
 
         setIsAdmin(nextIsAdmin);

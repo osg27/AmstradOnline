@@ -43,7 +43,7 @@ def is_tester_user(user: User) -> bool:
 
 
 def is_vip_user(user: User) -> bool:
-    return user.role == "vip" or is_super_admin_user(user)
+    return user.role == "vip" or is_admin_user(user)
 
 
 def is_xyphoe_user(user: User) -> bool:

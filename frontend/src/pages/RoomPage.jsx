@@ -5472,7 +5472,10 @@ export default function RoomPage() {
         }
 
         if (pendingGame?.id === localGameId && pendingGame.source === 'internet-archive-mame') {
-          if (localStorage.getItem('isVip') !== 'true') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) {
             throw new Error('VIP access is required for the remote MAME library.');
           }
 
