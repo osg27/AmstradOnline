@@ -1187,7 +1187,26 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 archiveSampleFileName: sampleFileName,
               };
             });
-          setGames([...localGames, ...archiveGames]);
+          const parentRomNames = [...new Set(archiveGames.map((game) => game.parentRomKey))];
+          const cachedArtwork = await apiFetch('/library/media/boxart/lookup', {
+            method: 'POST',
+            body: JSON.stringify({
+              system: 'arcade',
+              rom_names: parentRomNames,
+            }),
+          }).catch(() => ({ matches: {} }));
+          const artworkMatches = cachedArtwork?.matches || {};
+          const archiveGamesWithArtwork = archiveGames.map((game) => {
+            const cachedPath = artworkMatches[game.parentRomKey];
+            return cachedPath
+              ? {
+                  ...game,
+                  boxArtUrl: toApiMediaUrl(cachedPath),
+                  boxArtCached: true,
+                }
+              : game;
+          });
+          setGames([...localGames, ...archiveGamesWithArtwork]);
           setStatus(`VIP MAME library ready: ${archiveGames.length} remote games.`);
         } else {
           setGames(localGames);

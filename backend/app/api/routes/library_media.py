@@ -2,6 +2,7 @@ import hashlib
 import mimetypes
 import os
 import re
+import shutil
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -34,6 +35,11 @@ class BoxArtCacheRequest(BaseModel):
     rom_name: str | None = None
 
 
+class BoxArtLookupRequest(BaseModel):
+    system: str
+    rom_names: list[str]
+
+
 def _slug(value: str | None) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", (value or "unknown").lower()).strip("-")
     return slug or "unknown"
@@ -55,6 +61,33 @@ def _extension_for_response(content_type: str | None, url_path: str) -> str:
     raise HTTPException(status_code=400, detail="URL did not return a supported image type")
 
 
+def _rom_key(value: str | None) -> str:
+    return _slug(re.sub(r"\.(?:zip|7z)$", "", value or "", flags=re.IGNORECASE))
+
+
+def _indexed_box_art(system: str, rom_name: str) -> Path | None:
+    index_dir = MEDIA_ROOT / "boxart" / _slug(system) / "by-rom"
+    key = _rom_key(rom_name)
+    for extension in CONTENT_TYPE_EXTENSIONS.values():
+        candidate = index_dir / f"{key}{extension}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _index_box_art(target: Path, system: str, rom_name: str | None) -> None:
+    if not rom_name:
+        return
+    index_dir = MEDIA_ROOT / "boxart" / _slug(system) / "by-rom"
+    index_dir.mkdir(parents=True, exist_ok=True)
+    indexed_target = index_dir / f"{_rom_key(rom_name)}{target.suffix}"
+    if indexed_target.is_file() and indexed_target.stat().st_size == target.stat().st_size:
+        return
+    temp = indexed_target.with_suffix(f"{indexed_target.suffix}.tmp")
+    shutil.copyfile(target, temp)
+    temp.replace(indexed_target)
+
+
 @router.post("/boxart")
 def cache_box_art(payload: BoxArtCacheRequest):
     parsed = urlparse(payload.url)
@@ -72,6 +105,7 @@ def cache_box_art(payload: BoxArtCacheRequest):
             extension = _extension_for_response(response.headers.get("content-type"), parsed.path)
             target = target_dir / f"{key}{extension}"
             if target.is_file():
+                _index_box_art(target, system, payload.rom_name)
                 return {
                     "url": _response_url(target),
                     "cached": True,
@@ -86,6 +120,7 @@ def cache_box_art(payload: BoxArtCacheRequest):
             temp = target.with_suffix(f"{target.suffix}.tmp")
             temp.write_bytes(data)
             temp.replace(target)
+            _index_box_art(target, system, payload.rom_name)
     except HTTPException:
         raise
     except HTTPError as exc:
@@ -101,6 +136,19 @@ def cache_box_art(payload: BoxArtCacheRequest):
         "bytes": target.stat().st_size,
         "content_type": mimetypes.guess_type(target.name)[0],
     }
+
+
+@router.post("/boxart/lookup")
+def lookup_box_art(payload: BoxArtLookupRequest):
+    if len(payload.rom_names) > 6000:
+        raise HTTPException(status_code=400, detail="Too many ROM names")
+
+    matches = {}
+    for rom_name in dict.fromkeys(payload.rom_names):
+        target = _indexed_box_art(payload.system, rom_name)
+        if target:
+            matches[rom_name] = _response_url(target)
+    return {"matches": matches}
 
 
 @router.get("/files/{path:path}")
