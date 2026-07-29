@@ -1,1 +1,1 @@
-{ "core": "mame2003_plus", "buildStart": "2025-06-14T19:09:40+00:00", "buildEnd": "2025-06-14T19:14:42+00:00", "options": {} }
+{ "core": "mame2003_plus", "buildStart": "2026-07-29T01:58:00+00:00", "buildEnd": "2026-07-29T02:47:59+00:00", "options": { "hiscoreSyncFrames": 300 } }
