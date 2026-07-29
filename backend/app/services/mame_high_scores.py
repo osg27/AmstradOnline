@@ -849,14 +849,6 @@ def filter_hi2txt_player_scores(
     if game.parser != HI2TXT_PARSER:
         return FilteredMameScores(scores=current_scores, expected_initials=[], parsed_scores=parsed_debug, baseline_scores=baseline_debug)
 
-    existing = (
-        db.query(MameHighScore)
-        .filter(MameHighScore.user_id == user_id, MameHighScore.rom_name == rom_name)
-        .order_by(MameHighScore.score.desc(), MameHighScore.created_at, MameHighScore.id)
-        .first()
-    )
-    existing_score = int(existing.score) if existing else 0
-
     if baseline_scores is not None:
         added_scores = scores_added_since_baseline(current_scores, baseline_scores)
         if added_scores:
@@ -866,33 +858,12 @@ def filter_hi2txt_player_scores(
                 parsed_scores=parsed_debug,
                 baseline_scores=baseline_debug,
             )
-
-        # A game's persisted .hi file can be restored before the delayed baseline
-        # snapshot is taken. Do not lose a real PB merely because it is therefore
-        # present in both snapshots.
-        higher_than_pb = [score for score in current_scores if score.score > existing_score]
-        if higher_than_pb:
-            return FilteredMameScores(
-                scores=sorted(higher_than_pb, key=lambda item: item.score, reverse=True)[:1],
-                expected_initials=[],
-                parsed_scores=parsed_debug,
-                baseline_scores=baseline_debug,
-            )
         raise MameNoPlayerScore(
             f"{game.display_name or game.rom_name} score table was decoded, but the current table matched the start-of-game snapshot."
         )
 
-    higher_than_pb = [score for score in current_scores if score.score > existing_score]
-    if higher_than_pb:
-        return FilteredMameScores(
-            scores=sorted(higher_than_pb, key=lambda item: item.score, reverse=True)[:1],
-            expected_initials=[],
-            parsed_scores=parsed_debug,
-            baseline_scores=baseline_debug,
-        )
-
     raise MameNoPlayerScore(
-        f"{game.display_name or game.rom_name} score table was decoded, but it did not contain a new personal best."
+        f"{game.display_name or game.rom_name} needs a start-of-game score snapshot before a player score can be identified."
     )
 
 

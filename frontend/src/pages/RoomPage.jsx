@@ -4671,6 +4671,21 @@ export default function RoomPage() {
       return null;
     }
 
+    if (reason === 'automatic' && !baseline.length) {
+      mameScoreBaselineRef.current = {
+        romName,
+        files,
+        capturedAt: Date.now(),
+      };
+      setMameScoreStatus('');
+      addLog(`MAME score baseline established from first generated save for ${romName}`);
+      return {
+        status: 'baseline',
+        rom_name: leaderboardRomName || romName,
+        rows_inserted: 0,
+      };
+    }
+
     const result = await apiFetch(`/scores/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`, {
       method: 'POST',
       body: JSON.stringify({
