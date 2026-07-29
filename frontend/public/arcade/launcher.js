@@ -500,16 +500,23 @@
   }
 
   function getScoreFileSignature() {
-    const { debug } = buildFsDebugDump({ quiet: true });
+    const { files } = buildFsDebugDump({ quiet: true });
     const romKey = normaliseRomKey(currentRom?.fileName);
-    return debug.files
+    return files
       .filter((file) => {
         const path = normaliseFsPath(file.path).toLowerCase();
         return path.endsWith(`/${romKey}.hi`)
           || path.endsWith(`/${romKey}.nv`)
           || path.includes(`/nvram/${romKey}/`);
       })
-      .map((file) => `${file.path}:${file.size}:${file.mtimeMs || 0}`)
+      .map((file) => {
+        let hash = 2166136261;
+        for (const byte of file.bytes) {
+          hash ^= byte;
+          hash = Math.imul(hash, 16777619);
+        }
+        return `${file.path}:${file.bytes.length}:${hash >>> 0}`;
+      })
       .sort()
       .join('|');
   }
@@ -821,7 +828,7 @@
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
     window.EJS_defaultOptions = {
-      'mame2003-plus_autosave_hiscore': 'enabled',
+      'mame2003-plus_autosave_hiscore': 'recursively',
     };
     window.EJS_rawFiles = {};
     currentSampleFiles.forEach((sample) => {
