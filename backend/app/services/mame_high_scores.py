@@ -834,27 +834,6 @@ def scores_added_since_baseline(
     return added
 
 
-def infer_username_initials(username: str | None) -> set[str]:
-    cleaned = re.sub(r"[^A-Za-z0-9]", "", username or "")
-    if not cleaned:
-        return set()
-
-    candidates: set[str] = set()
-    candidates.add(cleaned[:3].upper())
-    if cleaned.upper() == "OLDSTYLEGAMING":
-        candidates.add("OSG")
-
-    camel_parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+", cleaned)
-    if len(camel_parts) > 1:
-        candidates.add("".join(part[0] for part in camel_parts)[:5].upper())
-
-    capitals = "".join(char for char in cleaned if char.isupper())
-    if capitals:
-        candidates.add(capitals[:5].upper())
-
-    return {candidate for candidate in candidates if len(candidate) >= 2}
-
-
 def filter_hi2txt_player_scores(
     *,
     db: Session,
@@ -876,24 +855,26 @@ def filter_hi2txt_player_scores(
         .order_by(MameHighScore.score.desc(), MameHighScore.created_at, MameHighScore.id)
         .first()
     )
-    expected_initials = infer_username_initials(username)
-    existing_initials = normalise_initials(existing.initials if existing else None)
-    if existing_initials:
-        expected_initials.add(existing_initials)
-    expected_initials_list = sorted(expected_initials)
+    existing_score = int(existing.score) if existing else 0
 
     if baseline_scores is not None:
         added_scores = scores_added_since_baseline(current_scores, baseline_scores)
         if added_scores:
-            preferred_added_scores = [
-                score
-                for score in added_scores
-                if not normalise_initials(score.initials) or normalise_initials(score.initials) in expected_initials
-            ]
-            candidate_scores = preferred_added_scores or added_scores
             return FilteredMameScores(
-                scores=sorted(candidate_scores, key=lambda item: item.score, reverse=True)[:1],
-                expected_initials=expected_initials_list,
+                scores=sorted(added_scores, key=lambda item: item.score, reverse=True)[:1],
+                expected_initials=[],
+                parsed_scores=parsed_debug,
+                baseline_scores=baseline_debug,
+            )
+
+        # A game's persisted .hi file can be restored before the delayed baseline
+        # snapshot is taken. Do not lose a real PB merely because it is therefore
+        # present in both snapshots.
+        higher_than_pb = [score for score in current_scores if score.score > existing_score]
+        if higher_than_pb:
+            return FilteredMameScores(
+                scores=sorted(higher_than_pb, key=lambda item: item.score, reverse=True)[:1],
+                expected_initials=[],
                 parsed_scores=parsed_debug,
                 baseline_scores=baseline_debug,
             )
@@ -901,38 +882,18 @@ def filter_hi2txt_player_scores(
             f"{game.display_name or game.rom_name} score table was decoded, but the current table matched the start-of-game snapshot."
         )
 
-    player_scores = [
-        score
-        for score in current_scores
-        if normalise_initials(score.initials) and normalise_initials(score.initials) in expected_initials
-    ]
-    if player_scores:
-        return FilteredMameScores(
-            scores=sorted(player_scores, key=lambda item: item.score, reverse=True)[:1],
-            expected_initials=expected_initials_list,
-            parsed_scores=parsed_debug,
-            baseline_scores=baseline_debug,
-        )
-
-    existing_score = int(existing.score) if existing else 0
     higher_than_pb = [score for score in current_scores if score.score > existing_score]
-    if len(higher_than_pb) == 1:
+    if higher_than_pb:
         return FilteredMameScores(
-            scores=higher_than_pb,
-            expected_initials=expected_initials_list,
+            scores=sorted(higher_than_pb, key=lambda item: item.score, reverse=True)[:1],
+            expected_initials=[],
             parsed_scores=parsed_debug,
             baseline_scores=baseline_debug,
         )
 
-    if not player_scores:
-        hint = f" Expected initials: {', '.join(expected_initials_list)}." if expected_initials else ""
-        if len(higher_than_pb) > 1:
-            hint += f" Found {len(higher_than_pb)} scores above current PB, so refusing to guess."
-        raise MameNoPlayerScore(
-            f"{game.display_name or game.rom_name} score table was decoded, but no row matched this player's initials.{hint}"
-        )
-
-    return FilteredMameScores(scores=[], expected_initials=expected_initials_list, parsed_scores=parsed_debug, baseline_scores=baseline_debug)
+    raise MameNoPlayerScore(
+        f"{game.display_name or game.rom_name} score table was decoded, but it did not contain a new personal best."
+    )
 
 
 def list_session_files(session_path: Path) -> list[str]:

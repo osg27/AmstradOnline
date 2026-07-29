@@ -3190,12 +3190,20 @@ export default function RoomPage() {
       || mameScoreBusy
     ) return undefined;
 
-    mameScoreProcessedTokenRef.current = mameScoreChangeToken;
     setMameScoreStatus('New score data detected...');
     const timer = window.setTimeout(async () => {
       setMameScoreBusy(true);
       try {
-        await submitMameScoreExtraction('automatic');
+        let result = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          result = await submitMameScoreExtraction('automatic');
+          if ((result?.rows_inserted || 0) > 0 || result?.status === 'failed') break;
+          if (attempt < 2) {
+            setMameScoreStatus('Score data is still settling; checking again...');
+            await new Promise((resolve) => window.setTimeout(resolve, 3000));
+          }
+        }
+        mameScoreProcessedTokenRef.current = mameScoreChangeToken;
       } catch (err) {
         setMameScoreStatus('Automatic score check failed. You can still save it manually.');
         addLog(`Automatic MAME score extraction failed: ${err.message}`);
