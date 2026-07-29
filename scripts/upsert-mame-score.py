@@ -43,16 +43,18 @@ from app.services.mame_high_scores import CONFIGURED_HI_PARSER, canonical_mame_r
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Insert or update a user's best MAME leaderboard score.")
+    parser = argparse.ArgumentParser(description="Insert, update, or delete a user's MAME leaderboard score.")
     parser.add_argument("--username", required=True, help="Site username, case-insensitive")
     parser.add_argument("--rom", required=True, help="MAME ROM name, e.g. galaxian")
-    parser.add_argument("--score", required=True, type=int, help="Trusted score to store")
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--score", type=int, help="Trusted score to store")
+    action.add_argument("--delete", action="store_true", help="Delete this user's score for the ROM")
     parser.add_argument("--initials", default=None, help="Optional arcade initials")
     parser.add_argument("--session-id", default=None, help="Optional session id/audit label")
     parser.add_argument("--parser", default=CONFIGURED_HI_PARSER, help="Parser label to store")
     args = parser.parse_args()
 
-    if args.score <= 0:
+    if args.score is not None and args.score <= 0:
         raise SystemExit("Score must be positive.")
 
     rom_name = canonical_mame_rom_name(args.rom)
@@ -67,6 +69,19 @@ def main() -> int:
         )
         if not user:
             raise SystemExit(f"User not found: {args.username}")
+
+        if args.delete:
+            deleted = (
+                db.query(MameHighScore)
+                .filter(
+                    MameHighScore.user_id == user.id,
+                    MameHighScore.rom_name == rom_name,
+                )
+                .delete(synchronize_session=False)
+            )
+            db.commit()
+            print(f"deleted {deleted} score(s): {user.username} {rom_name}")
+            return 0
 
         game = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
         if game:
