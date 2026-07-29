@@ -790,6 +790,27 @@ function boxArtLookupKey(game) {
   return game.fileName || game.path || game.title || game.id;
 }
 
+function savedBoxArtByGame(games) {
+  const artwork = new Map();
+  games.forEach((game) => {
+    if (!game?.system || !game?.boxArtUrl) return;
+    const key = boxArtLookupKey(game);
+    if (!key) return;
+    artwork.set(`${game.system}\0${key}`, {
+      boxArtUrl: game.boxArtUrl,
+      boxArtSource: game.boxArtSource,
+      boxArtCached: game.boxArtCached,
+      boxArtFetchedAt: game.boxArtFetchedAt,
+    });
+  });
+  return artwork;
+}
+
+function applySavedBoxArt(game, artwork) {
+  const media = artwork.get(`${game.system}\0${boxArtLookupKey(game)}`);
+  return media ? { ...game, ...media } : game;
+}
+
 async function restoreCachedBoxArt(games) {
   const gamesBySystem = new Map();
   games.forEach((game) => {
@@ -1195,6 +1216,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           getLocalLibrarySetting('selectedSystems', []),
           getLocalLibrarySetting('favourites', []),
         ]);
+        const savedArtwork = savedBoxArtByGame(savedGames);
         const localGames = savedGames.filter((game) => game.source !== 'internet-archive-mame');
         const localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         setFolders(savedFolders);
@@ -1218,7 +1240,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               const sampleFileName = [romKey, parentRomKey]
                 .map((key) => `${key}.zip`)
                 .find((name) => sampleNames.has(name)) || '';
-              return {
+              return applySavedBoxArt({
                 id: `archive-mame:${romKey}`,
                 title,
                 fileName,
@@ -1229,7 +1251,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 parentRomKey,
                 source: 'internet-archive-mame',
                 archiveSampleFileName: sampleFileName,
-              };
+              }, savedArtwork);
             });
           const archiveGamesWithArtwork = await restoreCachedBoxArt(archiveGames);
           setGames([...localGamesWithArtwork, ...archiveGamesWithArtwork]);
