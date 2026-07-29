@@ -4719,27 +4719,6 @@ export default function RoomPage() {
     }
   }
 
-  async function clearMameLeaderboard() {
-    if (!isSuperAdmin || mameScoreBusy || !loadedDiskName) return;
-    const romName = getArcadeLeaderboardKey(loadedDiskName);
-    if (!window.confirm(`Clear every saved score for ${romName.toUpperCase()}?`)) return;
-
-    setMameScoreBusy(true);
-    try {
-      const result = await apiFetch(`/scores/mame/leaderboards/${encodeURIComponent(romName)}`, {
-        method: 'DELETE',
-      });
-      setMameLeaderboard([]);
-      setMameScoreStatus(`Leaderboard cleared (${result.rows_deleted || 0} score${result.rows_deleted === 1 ? '' : 's'} removed).`);
-      addLog(`Cleared MAME leaderboard ${romName}: ${result.rows_deleted || 0} rows`);
-    } catch (err) {
-      setMameScoreStatus('Leaderboard could not be cleared.');
-      addLog(`MAME leaderboard clear failed: ${err.message}`);
-    } finally {
-      setMameScoreBusy(false);
-    }
-  }
-
   function renderMameLeaderboardPanel(extraClass = '') {
     if (!supportsMameScoreboard || !loadedDiskName) return null;
 
@@ -4760,16 +4739,9 @@ export default function RoomPage() {
             : 'Online leaderboard not available for this game yet.'}
         </p>
         {mameLeaderboardSupported && isHost ? (
-          <>
-            <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow} disabled={mameScoreBusy}>
-              {mameScoreBusy ? 'Updating leaderboard...' : 'Save MAME score now'}
-            </button>
-            {isSuperAdmin ? (
-              <button type="button" className="danger mame-save-score" onClick={clearMameLeaderboard} disabled={mameScoreBusy}>
-                Clear leaderboard
-              </button>
-            ) : null}
-          </>
+          <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow} disabled={mameScoreBusy}>
+            {mameScoreBusy ? 'Registering score...' : 'Save MAME score now'}
+          </button>
         ) : null}
         {mameLeaderboardSupported && mameLeaderboard.length ? (
           <div className="mame-score-list">

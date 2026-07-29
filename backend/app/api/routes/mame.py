@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import is_admin_user, is_super_admin_user
+from app.api.routes.auth import is_admin_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.mame_leaderboard import MameHighScore, MameLeaderboardGame
@@ -91,25 +91,6 @@ def get_mame_leaderboard(
         )
         for index, (score, username) in enumerate(rows)
     ]
-
-
-@router.delete("/leaderboards/{rom_name}")
-def clear_mame_leaderboard(
-    rom_name: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if not is_super_admin_user(current_user):
-        raise HTTPException(status_code=403, detail="Only the super admin can clear a leaderboard")
-
-    canonical_name = canonical_mame_rom_name(rom_name)
-    deleted = (
-        db.query(MameHighScore)
-        .filter(MameHighScore.rom_name == canonical_name)
-        .delete(synchronize_session=False)
-    )
-    db.commit()
-    return {"rom_name": canonical_name, "rows_deleted": deleted}
 
 
 @router.post("/sessions/{session_id}/extract-scores", response_model=MameScoreExtractionResponse)
