@@ -1255,14 +1255,49 @@ export default function RoomPage() {
     }
   }
 
+  function nonStandardGamepadDirections(pad, deadzone) {
+    const directions = { left: false, right: false, up: false, down: false };
+
+    // Fight sticks and USB encoder boards commonly expose the lever on one of
+    // these additional axis pairs instead of the standard axes 0/1.
+    for (const [xIndex, yIndex] of [[2, 3], [4, 5], [6, 7]]) {
+      if (xIndex >= pad.axes.length || yIndex >= pad.axes.length) continue;
+      const x = Number(pad.axes[xIndex]) || 0;
+      const y = Number(pad.axes[yIndex]) || 0;
+      directions.left ||= x < -deadzone;
+      directions.right ||= x > deadzone;
+      directions.up ||= y < -deadzone;
+      directions.down ||= y > deadzone;
+    }
+
+    // Some DirectInput devices expose the D-pad as a single eight-way POV
+    // axis. Chromium/Firefox use eighth-turn values from -1 (up) through 1
+    // (up-left), with an out-of-range value for neutral.
+    for (const axisIndex of [9]) {
+      if (axisIndex >= pad.axes.length) continue;
+      const value = Number(pad.axes[axisIndex]);
+      if (!Number.isFinite(value) || value < -1.05 || value > 1.05) continue;
+      const position = Math.max(0, Math.min(7, Math.round((value + 1) * 3.5)));
+      directions.up ||= position === 0 || position === 1 || position === 7;
+      directions.right ||= position >= 1 && position <= 3;
+      directions.down ||= position >= 3 && position <= 5;
+      directions.left ||= position >= 5 && position <= 7;
+    }
+
+    return directions;
+  }
+
   function gamepadToJoystickMask(pad, system = roomSystem) {
     let mask = 0;
     const deadzone = 0.45;
+    const fallback = pad.mapping === 'standard'
+      ? { left: false, right: false, up: false, down: false }
+      : nonStandardGamepadDirections(pad, deadzone);
 
-    const left = pad.buttons[14]?.pressed || (pad.axes[0] ?? 0) < -deadzone;
-    const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone;
-    const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone;
-    const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone;
+    const left = pad.buttons[14]?.pressed || (pad.axes[0] ?? 0) < -deadzone || fallback.left;
+    const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone || fallback.right;
+    const up = pad.buttons[12]?.pressed || (pad.axes[1] ?? 0) < -deadzone || fallback.up;
+    const down = pad.buttons[13]?.pressed || (pad.axes[1] ?? 0) > deadzone || fallback.down;
     const isMultiButtonSystem = system === 'mastersystem' || system === 'megadrive' || system === 'nes' || system === 'snes' || system === 'pcengine' || system === 'playstation' || system === 'saturn' || system === 'saturn_beetle' || system === 'arcade';
     const fire = isMultiButtonSystem
       ? pad.buttons[0]?.pressed
