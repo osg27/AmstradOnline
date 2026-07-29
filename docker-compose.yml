@@ -21,6 +21,7 @@ services:
     command: sh -c "pip install --no-cache-dir -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes:
       - ./backend:/app
+      - ./library_media:/library_media
     env_file:
       - .env
     ports:

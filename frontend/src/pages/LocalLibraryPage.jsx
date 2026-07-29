@@ -811,6 +811,30 @@ function applySavedBoxArt(game, artwork) {
   return media ? { ...game, ...media } : game;
 }
 
+async function applyIndexedBoxArt(games, system) {
+  const missingGames = games.filter((game) => game.system === system && !game.boxArtUrl);
+  if (!missingGames.length) return games;
+
+  const index = await getBoxArtIndex(system);
+  const matches = new Map();
+  missingGames.forEach((game) => {
+    const match = findIndexedBoxArt(game, index);
+    if (match) matches.set(game.id, match.url);
+  });
+
+  return games.map((game) => {
+    const sourceUrl = matches.get(game.id);
+    return sourceUrl
+      ? {
+          ...game,
+          boxArtUrl: sourceUrl,
+          boxArtSource: sourceUrl,
+          boxArtCached: false,
+        }
+      : game;
+  });
+}
+
 async function restoreCachedBoxArt(games) {
   const gamesBySystem = new Map();
   games.forEach((game) => {
@@ -1253,8 +1277,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 archiveSampleFileName: sampleFileName,
               }, savedArtwork);
             });
-          const archiveGamesWithArtwork = await restoreCachedBoxArt(archiveGames);
+          const cachedArchiveGames = await restoreCachedBoxArt(archiveGames);
+          const archiveGamesWithArtwork = await applyIndexedBoxArt(cachedArchiveGames, 'arcade');
           setGames([...localGamesWithArtwork, ...archiveGamesWithArtwork]);
+          await saveLocalLibraryGames([...localGamesWithArtwork, ...archiveGamesWithArtwork]);
           setStatus(`VIP MAME library ready: ${archiveGames.length} remote games.`);
         } else {
           setGames(localGamesWithArtwork);
