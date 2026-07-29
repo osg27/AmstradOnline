@@ -24,6 +24,7 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
+import { prepareVipMameFile } from '../vipMameCache';
 
 export const SUPPORTED_SYSTEMS = [
   {
@@ -1115,6 +1116,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
   const [launchingSystemId, setLaunchingSystemId] = useState(null);
+  const [vipPreparation, setVipPreparation] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(searchParams.get('clones') === '1');
   const [showBoxArtOnly, setShowBoxArtOnly] = useState(searchParams.get('boxArt') === '1');
   const [letterFilter, setLetterFilter] = useState(requestedLetterExists ? requestedLetter : 'all');
@@ -1511,6 +1513,45 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     setLaunchingId(game.id);
     setStatus(`Starting ${game.title}...`);
     try {
+      if (game.source === 'internet-archive-mame') {
+        const prepareFile = async (directory, fileName, label) => {
+          setVipPreparation({
+            title: game.title,
+            fileName,
+            label,
+            loaded: 0,
+            total: 0,
+            percent: 0,
+            attempt: 1,
+          });
+          await prepareVipMameFile(directory, fileName, ({ loaded, total, attempt, retrying }) => {
+            setVipPreparation({
+              title: game.title,
+              fileName,
+              label: retrying ? `Retrying ${label.toLowerCase()}...` : label,
+              loaded,
+              total,
+              percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0,
+              attempt,
+            });
+          });
+        };
+
+        await prepareFile('roms', game.fileName, 'Downloading ROM');
+        if (game.archiveSampleFileName) {
+          await prepareFile('samples', game.archiveSampleFileName, 'Downloading samples');
+        }
+        setVipPreparation({
+          title: game.title,
+          fileName: game.fileName,
+          label: 'ROM ready — opening room',
+          loaded: 1,
+          total: 1,
+          percent: 100,
+          attempt: 1,
+        });
+      }
+
       sessionStorage.setItem('oldstylegaming:pendingLocalGame', JSON.stringify({
         id: game.id,
         title: game.title,
@@ -1537,6 +1578,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       setStatus(`Could not start ${game.title}: ${err.message}`);
     } finally {
       setLaunchingId(null);
+      setVipPreparation(null);
     }
   }
 
@@ -1657,6 +1699,28 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   const content = (
     <div className="local-library-shell">
+      {vipPreparation ? (
+        <div className="vip-rom-loading-overlay" role="status" aria-live="polite">
+          <div className="vip-rom-loading-scene">
+            <span className="vip-rom-loading-badge">VIP MAME</span>
+            <div className="vip-rom-loading-cabinet" aria-hidden="true">
+              <i className="bi bi-joystick" />
+            </div>
+            <p>Preparing your game</p>
+            <h2>{vipPreparation.title}</h2>
+            <strong>{vipPreparation.label}</strong>
+            <div className="vip-rom-loading-progress">
+              <span style={{ width: `${vipPreparation.percent}%` }} />
+            </div>
+            <small>
+              {vipPreparation.total
+                ? `${vipPreparation.percent}% - ${(vipPreparation.loaded / 1048576).toFixed(1)} of ${(vipPreparation.total / 1048576).toFixed(1)} MB`
+                : vipPreparation.attempt > 1 ? 'Connection interrupted - retrying' : 'Connecting to remote library...'}
+            </small>
+            <em>The room will open automatically when the ROM is ready.</em>
+          </div>
+        </div>
+      ) : null}
       {!embedded ? (
       <header className="lobby-header local-library-header">
         <BrandMark />

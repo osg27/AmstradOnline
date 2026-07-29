@@ -3907,6 +3907,111 @@ input:focus {
   cursor: crosshair;
 }
 
+.vip-rom-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(40, 170, 125, 0.2), transparent 36%),
+    rgba(4, 9, 8, 0.94);
+  backdrop-filter: blur(8px);
+}
+
+.vip-rom-loading-scene {
+  width: min(560px, 100%);
+  padding: 36px;
+  text-align: center;
+  border: 1px solid rgba(103, 224, 174, 0.45);
+  border-radius: 18px;
+  background: linear-gradient(155deg, rgba(22, 31, 29, 0.98), rgba(8, 13, 12, 0.98));
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58);
+}
+
+.vip-rom-loading-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  color: #07110d;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  border-radius: 999px;
+  background: #67e0ae;
+}
+
+.vip-rom-loading-cabinet {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  margin: 24px auto 18px;
+  color: #67e0ae;
+  font-size: 3.25rem;
+  border: 2px solid rgba(103, 224, 174, 0.38);
+  border-radius: 22px;
+  background: rgba(103, 224, 174, 0.08);
+  animation: vip-rom-pulse 1.5s ease-in-out infinite;
+}
+
+.vip-rom-loading-scene p,
+.vip-rom-loading-scene h2 {
+  margin: 0;
+}
+
+.vip-rom-loading-scene p {
+  color: #a8b8b1;
+}
+
+.vip-rom-loading-scene h2 {
+  margin-top: 6px;
+  font-size: clamp(1.7rem, 5vw, 2.5rem);
+}
+
+.vip-rom-loading-scene > strong {
+  display: block;
+  margin-top: 22px;
+  color: #dce9e4;
+}
+
+.vip-rom-loading-progress {
+  height: 12px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.vip-rom-loading-progress span {
+  display: block;
+  height: 100%;
+  min-width: 2%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2c9472, #67e0ae);
+  transition: width 160ms ease-out;
+}
+
+.vip-rom-loading-scene small,
+.vip-rom-loading-scene em {
+  display: block;
+  margin-top: 10px;
+  color: #9eaea7;
+  font-style: normal;
+}
+
+.vip-rom-loading-scene em {
+  margin-top: 24px;
+  font-size: 0.86rem;
+}
+
+@keyframes vip-rom-pulse {
+  50% {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 34px rgba(103, 224, 174, 0.16);
+  }
+}
+
 .video.master-system-video {
   max-height: min(68vh, 620px);
 }

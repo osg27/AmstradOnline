@@ -6,6 +6,7 @@ import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
 import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames } from '../localLibraryDb';
+import { takePreparedVipMameFile } from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
@@ -5480,6 +5481,8 @@ export default function RoomPage() {
           }
 
           async function downloadVipArchiveFile(directory, fileName) {
+            const prepared = await takePreparedVipMameFile(directory, fileName);
+            if (prepared) return prepared;
             const token = localStorage.getItem('token');
             const response = await fetch(
               `${API_BASE_URL}/auth/vip/mame/files/${directory}/${encodeURIComponent(fileName)}`,
