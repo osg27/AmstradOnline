@@ -641,6 +641,10 @@ def parse_configured_hi(source_path: Path, rom_name: str) -> list[ParsedMameScor
 
 def parse_tapper_nvram(source_path: Path) -> list[ParsedMameScore]:
     """Decode the Midway MCR table shared by Tapper, Domino Man and Journey."""
+    if source_path.is_dir():
+        legacy_source = source_path / "nvram"
+        if legacy_source.is_file():
+            source_path = legacy_source
     if not source_path.is_file():
         raise ValueError(f"Tapper NVRAM score source is not a file: {source_path.name}")
 
@@ -650,7 +654,7 @@ def parse_tapper_nvram(source_path: Path) -> list[ParsedMameScore]:
 
     # The table starts after a 7-byte header, a 6-byte odd-nibble top-score
     # field, and another 7 reserved bytes. It contains ten rows of three name
-    # bytes followed by a three-byte big-endian integer score.
+    # bytes followed by a three-byte big-endian packed-BCD score.
     table_offset = 20
     row_size = 6
     parsed: list[ParsedMameScore] = []
@@ -660,8 +664,8 @@ def parse_tapper_nvram(source_path: Path) -> list[ParsedMameScore]:
         row = data[start:start + row_size]
         if len(row) != row_size:
             break
-        score = int.from_bytes(row[3:6], "big", signed=False)
-        if not plausible_arcade_score(score, "tapper"):
+        score = decode_bcd_score(row[3:6])
+        if score is None or not plausible_arcade_score(score, "tapper"):
             continue
         initials = "".join(chr(value) if 32 <= value <= 126 else " " for value in row[:3]).strip() or None
         key = (score, initials or "")
@@ -890,7 +894,7 @@ def filter_hi2txt_player_scores(
 ) -> FilteredMameScores:
     parsed_debug = serialize_parsed_scores(current_scores)
     baseline_debug = serialize_parsed_scores(baseline_scores or [])
-    if game.parser not in {HI2TXT_PARSER, TAPPER_NVRAM_PARSER}:
+    if game.parser != HI2TXT_PARSER:
         return FilteredMameScores(scores=current_scores, expected_initials=[], parsed_scores=parsed_debug, baseline_scores=baseline_debug)
 
     if baseline_scores is not None:
