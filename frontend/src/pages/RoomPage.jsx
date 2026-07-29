@@ -3702,8 +3702,8 @@ export default function RoomPage() {
       mirrorCanvas.width = 768;
       mirrorCanvas.height = 576;
     } else if (isMasterSystem) {
-      // Genesis Plus GX centres the Master System's 512x384 output inside
-      // its shared 640x480 framebuffer. Crop that padding so the game fills
+      // Genesis Plus GX places the Master System's 512x384 output at the
+      // top-centre of its shared 640x480 framebuffer. Crop that padding so the game fills
       // the room screen instead of appearing as a small picture in black.
       mirrorCanvas.width = 512;
       mirrorCanvas.height = 384;
@@ -3762,7 +3762,7 @@ export default function RoomPage() {
         if (isArcade) {
           drawContained(0, 0, sourceWidth, sourceHeight);
         } else if (isMasterSystem && sourceWidth >= 640 && sourceHeight >= 480) {
-          ctx.drawImage(sourceCanvas, 64, 48, 512, 384, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
+          ctx.drawImage(sourceCanvas, 64, 0, 512, 384, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
         } else {
           ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
         }
