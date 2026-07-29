@@ -782,6 +782,49 @@ function isExternalBoxArtUrl(url) {
   return !url.startsWith(API_BASE_URL);
 }
 
+function boxArtLookupKey(game) {
+  if (game.system === 'arcade') {
+    const romKey = game.romKey || arcadeRomKey(game.fileName || '');
+    return game.parentRomKey || canonicalArcadeParentKey(romKey);
+  }
+  return game.fileName || game.path || game.title || game.id;
+}
+
+async function restoreCachedBoxArt(games) {
+  const gamesBySystem = new Map();
+  games.forEach((game) => {
+    if (!game?.system) return;
+    const entries = gamesBySystem.get(game.system) || [];
+    entries.push(game);
+    gamesBySystem.set(game.system, entries);
+  });
+
+  const artworkBySystem = new Map();
+  await Promise.all([...gamesBySystem.entries()].map(async ([system, systemGames]) => {
+    const romNames = [...new Set(systemGames.map(boxArtLookupKey).filter(Boolean))];
+    if (!romNames.length) return;
+    const result = await apiFetch('/library/media/boxart/lookup', {
+      method: 'POST',
+      body: JSON.stringify({
+        system,
+        rom_names: romNames,
+      }),
+    }).catch(() => ({ matches: {} }));
+    artworkBySystem.set(system, result?.matches || {});
+  }));
+
+  return games.map((game) => {
+    const cachedPath = artworkBySystem.get(game.system)?.[boxArtLookupKey(game)];
+    return cachedPath
+      ? {
+          ...game,
+          boxArtUrl: toApiMediaUrl(cachedPath),
+          boxArtCached: true,
+        }
+      : game;
+  });
+}
+
 async function cacheBoxArtUrl(game, sourceUrl) {
   try {
     const result = await apiFetch('/library/media/boxart', {
@@ -790,7 +833,7 @@ async function cacheBoxArtUrl(game, sourceUrl) {
         url: sourceUrl,
         system: game.system,
         title: game.title,
-        rom_name: game.fileName || game.romKey || game.id,
+        rom_name: boxArtLookupKey(game),
       }),
     });
     if (result?.url) {
@@ -1153,14 +1196,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           getLocalLibrarySetting('favourites', []),
         ]);
         const localGames = savedGames.filter((game) => game.source !== 'internet-archive-mame');
+        const localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         setFolders(savedFolders);
-        setGames(localGames);
+        setGames(localGamesWithArtwork);
         if (isVip) {
           setStatus('Connecting VIP MAME library...');
           const catalog = await apiFetch('/auth/vip/mame/catalog');
           const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
           const localArcadeKeys = new Set(
-            localGames
+            localGamesWithArtwork
               .filter((game) => game.system === 'arcade')
               .map((game) => arcadeRomKey(game.fileName)),
           );
@@ -1187,30 +1231,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 archiveSampleFileName: sampleFileName,
               };
             });
-          const parentRomNames = [...new Set(archiveGames.map((game) => game.parentRomKey))];
-          const cachedArtwork = await apiFetch('/library/media/boxart/lookup', {
-            method: 'POST',
-            body: JSON.stringify({
-              system: 'arcade',
-              rom_names: parentRomNames,
-            }),
-          }).catch(() => ({ matches: {} }));
-          const artworkMatches = cachedArtwork?.matches || {};
-          const archiveGamesWithArtwork = archiveGames.map((game) => {
-            const cachedPath = artworkMatches[game.parentRomKey];
-            return cachedPath
-              ? {
-                  ...game,
-                  boxArtUrl: toApiMediaUrl(cachedPath),
-                  boxArtCached: true,
-                }
-              : game;
-          });
-          setGames([...localGames, ...archiveGamesWithArtwork]);
+          const archiveGamesWithArtwork = await restoreCachedBoxArt(archiveGames);
+          setGames([...localGamesWithArtwork, ...archiveGamesWithArtwork]);
           setStatus(`VIP MAME library ready: ${archiveGames.length} remote games.`);
         } else {
-          setGames(localGames);
-          setStatus(localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
+          setGames(localGamesWithArtwork);
+          setStatus(localGamesWithArtwork.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
         }
         const availableSystemIds = new Set(availableSystems.map((system) => system.id));
         const availableSavedSystems = savedSystems.filter((systemId) => availableSystemIds.has(systemId));
