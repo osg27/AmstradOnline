@@ -22,6 +22,7 @@ logger = logging.getLogger("oldstylegaming.mame_high_scores")
 BUILTIN_HI_BCD_PARSER = "mame_hi_bcd"
 HI2TXT_PARSER = "hi2txt"
 CONFIGURED_HI_PARSER = "configured_hi"
+TAPPER_NVRAM_PARSER = "tapper_nvram"
 
 MAME_CANONICAL_ROM_ALIASES = {
     # Donkey Kong sets share the same high-score memory layout. Store all of
@@ -38,6 +39,10 @@ MAME_CANONICAL_ROM_ALIASES = {
     "dkongx": "dkong",
     "dkremix": "dkong",
     "dkchrmx": "dkong",
+    # Midway MCR Tapper variants use the same 2 KB NVRAM score table.
+    "tappera": "tapper",
+    "rbtapper": "tapper",
+    "sutapper": "tapper",
 }
 
 DEFAULT_MAME_GAMES = [
@@ -49,6 +54,7 @@ DEFAULT_MAME_GAMES = [
     ("dkong3", "Donkey Kong 3", HI2TXT_PARSER),
     ("galaga", "Galaga", HI2TXT_PARSER),
     ("frogger", "Frogger", HI2TXT_PARSER),
+    ("tapper", "Tapper", TAPPER_NVRAM_PARSER),
 ]
 
 BASE_ROM_SCORE_LIMITS = {
@@ -101,6 +107,7 @@ ROM_SCORE_GRANULARITY = {
     if int(rule.get("score_granularity", 10)) > 0
 }
 SUPPORTED_EXACT_HI_GAMES = (DKONG_HI_GAMES | CONFIGURED_HI_GAMES) - DISABLED_MAME_SCORE_GAMES
+SUPPORTED_EXACT_HI_GAMES.add("tapper")
 DEFAULT_MAME_GAMES.extend(
     (
         rom_name,
@@ -286,7 +293,7 @@ def seed_default_mame_games(db: Session) -> None:
     for rom_name, display_name, parser in seed_games.values():
         supported = (
             rom_name not in DISABLED_MAME_SCORE_GAMES
-            and (parser == HI2TXT_PARSER or rom_name in SUPPORTED_EXACT_HI_GAMES)
+            and (parser in {HI2TXT_PARSER, TAPPER_NVRAM_PARSER} or rom_name in SUPPORTED_EXACT_HI_GAMES)
         )
         existing = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
         if existing:
@@ -389,8 +396,9 @@ def is_nvram_source(path: Path, rom_name: str) -> bool:
         return False
     if path.is_dir():
         return normalise_rom_name(name) == expected
-    if path.is_file() and name.endswith(".nv"):
-        return normalise_rom_name(name[:-3]) == expected
+    if path.is_file():
+        candidate_name = name[:-3] if name.endswith(".nv") else name
+        return normalise_rom_name(candidate_name) == expected
     return False
 
 
@@ -631,6 +639,40 @@ def parse_configured_hi(source_path: Path, rom_name: str) -> list[ParsedMameScor
     return parse_configured_hi_table(source_path, rom_name)
 
 
+def parse_tapper_nvram(source_path: Path) -> list[ParsedMameScore]:
+    """Decode the Midway MCR table shared by Tapper, Domino Man and Journey."""
+    if not source_path.is_file():
+        raise ValueError(f"Tapper NVRAM score source is not a file: {source_path.name}")
+
+    data = source_path.read_bytes()
+    if len(data) < 80:
+        raise ValueError(f"Tapper NVRAM is too short ({len(data)} bytes; expected a 2 KB block)")
+
+    # The table starts after a 7-byte header, a 6-byte odd-nibble top-score
+    # field, and another 7 reserved bytes. It contains ten rows of three name
+    # bytes followed by a three-byte big-endian integer score.
+    table_offset = 20
+    row_size = 6
+    parsed: list[ParsedMameScore] = []
+    seen: set[tuple[int, str]] = set()
+    for row_index in range(10):
+        start = table_offset + row_index * row_size
+        row = data[start:start + row_size]
+        if len(row) != row_size:
+            break
+        score = int.from_bytes(row[3:6], "big", signed=False)
+        if not plausible_arcade_score(score, "tapper"):
+            continue
+        initials = "".join(chr(value) if 32 <= value <= 126 else " " for value in row[:3]).strip() or None
+        key = (score, initials or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        parsed.append(ParsedMameScore(score=score, initials=initials, rank_in_game=row_index + 1))
+
+    return sorted(parsed, key=lambda item: item.score, reverse=True)
+
+
 def find_uploaded_hiscore_dat(source_path: Path) -> Path | None:
     for parent in source_path.parents:
         candidates = [
@@ -793,6 +835,8 @@ def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMam
         return parse_mame_hi_bcd(source_path, game.rom_name)
     if game.parser == CONFIGURED_HI_PARSER:
         return parse_configured_hi(source_path, game.rom_name)
+    if game.parser == TAPPER_NVRAM_PARSER:
+        return parse_tapper_nvram(source_path)
     if game.parser == HI2TXT_PARSER:
         return parse_hi2txt(source_path, game.rom_name)
     if game.parser == "custom":
@@ -846,7 +890,7 @@ def filter_hi2txt_player_scores(
 ) -> FilteredMameScores:
     parsed_debug = serialize_parsed_scores(current_scores)
     baseline_debug = serialize_parsed_scores(baseline_scores or [])
-    if game.parser != HI2TXT_PARSER:
+    if game.parser not in {HI2TXT_PARSER, TAPPER_NVRAM_PARSER}:
         return FilteredMameScores(scores=current_scores, expected_initials=[], parsed_scores=parsed_debug, baseline_scores=baseline_debug)
 
     if baseline_scores is not None:
