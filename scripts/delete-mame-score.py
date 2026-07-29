@@ -10,6 +10,10 @@ BACKEND = ROOT / "backend"
 VENV_PYTHON_CANDIDATES = [
     BACKEND / ".venv" / "bin" / "python",
     BACKEND / ".venv" / "Scripts" / "python.exe",
+    BACKEND / "venv" / "bin" / "python",
+    BACKEND / "venv" / "Scripts" / "python.exe",
+    ROOT / "venv" / "bin" / "python",
+    ROOT / "venv" / "Scripts" / "python.exe",
 ]
 
 
