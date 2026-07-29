@@ -1155,7 +1155,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         setGames(localGames);
         if (isVip) {
           setStatus('Connecting VIP MAME library...');
-          const catalog = await apiFetch('/vip/mame/catalog');
+          const catalog = await apiFetch('/auth/vip/mame/catalog');
           const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
           const localArcadeKeys = new Set(
             localGames

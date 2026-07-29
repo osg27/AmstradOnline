@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from app.api.routes.auth import get_current_user, is_vip_user
 from app.models.user import User
 
-router = APIRouter(prefix="/vip/mame", tags=["vip-mame"])
+router = APIRouter(prefix="/auth/vip/mame", tags=["vip-mame"])
 
 ARCHIVE_ITEM = "mame-2003-plus-reference-set"
 ARCHIVE_DOWNLOAD_ROOT = f"https://archive.org/download/{ARCHIVE_ITEM}"

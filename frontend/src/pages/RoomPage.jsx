@@ -5482,7 +5482,7 @@ export default function RoomPage() {
           async function downloadVipArchiveFile(directory, fileName) {
             const token = localStorage.getItem('token');
             const response = await fetch(
-              `${API_BASE_URL}/vip/mame/files/${directory}/${encodeURIComponent(fileName)}`,
+              `${API_BASE_URL}/auth/vip/mame/files/${directory}/${encodeURIComponent(fileName)}`,
               { headers: token ? { Authorization: `Bearer ${token}` } : {} },
             );
             if (!response.ok) {
