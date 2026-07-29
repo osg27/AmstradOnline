@@ -3701,6 +3701,12 @@ export default function RoomPage() {
     if (isArcade) {
       mirrorCanvas.width = 768;
       mirrorCanvas.height = 576;
+    } else if (isMasterSystem) {
+      // Genesis Plus GX centres the Master System's 512x384 output inside
+      // its shared 640x480 framebuffer. Crop that padding so the game fills
+      // the room screen instead of appearing as a small picture in black.
+      mirrorCanvas.width = 512;
+      mirrorCanvas.height = 384;
     } else if (isCpcSystem) {
       // CPCBox renders double-height CPC pixels into a 768x272 framebuffer.
       // Restore their display aspect in the room mirror and outgoing stream.
@@ -3755,6 +3761,8 @@ export default function RoomPage() {
 
         if (isArcade) {
           drawContained(0, 0, sourceWidth, sourceHeight);
+        } else if (isMasterSystem && sourceWidth >= 640 && sourceHeight >= 480) {
+          ctx.drawImage(sourceCanvas, 64, 48, 512, 384, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
         } else {
           ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
         }
