@@ -9,6 +9,7 @@ from app.api.routes.mame import router as mame_router
 from app.api.routes.rooms import router as rooms_router
 from app.api.routes.scores import router as scores_router
 from app.api.routes.social import router as social_router
+from app.api.routes.vip_mame import router as vip_mame_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.migrations import ensure_runtime_columns
@@ -42,4 +43,5 @@ app.include_router(mame_router, prefix="/scores")
 app.include_router(admin_router)
 app.include_router(scores_router)
 app.include_router(social_router)
+app.include_router(vip_mame_router)
 app.include_router(signaling_router)

@@ -1092,6 +1092,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSuperAdmin = localStorage.getItem('isSuperAdmin') === 'true';
+  const isVip = localStorage.getItem('isVip') === 'true';
   const availableSystems = useMemo(
     () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin),
     [isSuperAdmin],
@@ -1147,20 +1148,58 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           getLocalLibrarySetting('selectedSystems', []),
           getLocalLibrarySetting('favourites', []),
         ]);
+        const localGames = savedGames.filter((game) => game.source !== 'internet-archive-mame');
         setFolders(savedFolders);
-        setGames(savedGames);
+        setGames(localGames);
+        if (isVip) {
+          setStatus('Connecting VIP MAME library...');
+          const catalog = await apiFetch('/vip/mame/catalog');
+          const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
+          const localArcadeKeys = new Set(
+            localGames
+              .filter((game) => game.system === 'arcade')
+              .map((game) => arcadeRomKey(game.fileName)),
+          );
+          const archiveGames = (Array.isArray(catalog.roms) ? catalog.roms : [])
+            .filter((fileName) => !localArcadeKeys.has(arcadeRomKey(fileName)))
+            .map((fileName) => {
+              const romKey = arcadeRomKey(fileName);
+              const parentRomKey = canonicalArcadeParentKey(romKey);
+              const title = cleanArcadeDisplayTitle(mame2003PlusTitles[romKey]?.title)
+                || titleFromFileName(fileName);
+              const sampleFileName = [romKey, parentRomKey]
+                .map((key) => `${key}.zip`)
+                .find((name) => sampleNames.has(name)) || '';
+              return {
+                id: `archive-mame:${romKey}`,
+                title,
+                fileName,
+                path: `Internet Archive/roms/${fileName}`,
+                system: 'arcade',
+                roomSystem: 'arcade',
+                romKey,
+                parentRomKey,
+                source: 'internet-archive-mame',
+                archiveSampleFileName: sampleFileName,
+              };
+            });
+          setGames([...localGames, ...archiveGames]);
+          setStatus(`VIP MAME library ready: ${archiveGames.length} remote games.`);
+        } else {
+          setGames(localGames);
+          setStatus(localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
+        }
         const availableSystemIds = new Set(availableSystems.map((system) => system.id));
         const availableSavedSystems = savedSystems.filter((systemId) => availableSystemIds.has(systemId));
         setSelectedSystems(availableSavedSystems.length ? availableSavedSystems : availableSystems.map((system) => system.id));
         setFavourites(savedFavourites);
-        setStatus(savedGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
       } catch (err) {
         setStatus(`Could not load local library: ${err.message}`);
       }
     }
 
     loadLibrary();
-  }, [availableSystems]);
+  }, [availableSystems, isVip]);
 
   useEffect(() => {
     if (requestedSystemExists) {
@@ -1476,6 +1515,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         fileName: game.fileName,
         system: game.system,
         roomSystem: game.roomSystem,
+        source: game.source || 'local',
+        archiveSampleFileName: game.archiveSampleFileName || '',
       }));
 
       const room = await apiFetch('/rooms/create', {

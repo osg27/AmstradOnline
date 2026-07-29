@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { unzipSync } from 'fflate';
-import { apiFetch } from '../api/client';
+import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
@@ -5469,6 +5469,44 @@ export default function RoomPage() {
         if (pendingGame?.id === localGameId) {
           setLoadedDiskName(pendingGame.fileName || pendingGame.title || '');
           setStatus(`Loading local game: ${pendingGame.title || pendingGame.fileName}`);
+        }
+
+        if (pendingGame?.id === localGameId && pendingGame.source === 'internet-archive-mame') {
+          if (localStorage.getItem('isVip') !== 'true') {
+            throw new Error('VIP access is required for the remote MAME library.');
+          }
+
+          async function downloadVipArchiveFile(directory, fileName) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/vip/mame/files/${directory}/${encodeURIComponent(fileName)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${fileName}`);
+            }
+            return new Uint8Array(await response.arrayBuffer());
+          }
+
+          setStatus(`Downloading VIP MAME ROM: ${pendingGame.fileName}`);
+          addLog(`Downloading VIP MAME ROM: ${pendingGame.fileName}`);
+          const romBytes = await downloadVipArchiveFile('roms', pendingGame.fileName);
+          if (cancelled) return;
+          const file = new File([romBytes], pendingGame.fileName, { type: 'application/zip' });
+          const sampleFiles = [];
+          if (pendingGame.archiveSampleFileName) {
+            setStatus(`Downloading MAME samples: ${pendingGame.archiveSampleFileName}`);
+            const sampleBytes = await downloadVipArchiveFile('samples', pendingGame.archiveSampleFileName);
+            sampleFiles.push({
+              fileName: pendingGame.archiveSampleFileName,
+              bytes: sampleBytes,
+            });
+          }
+          if (cancelled) return;
+          await loadArcadeRomFile(file, sampleFiles);
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          return;
         }
 
         const game = await getLocalLibraryGame(localGameId);

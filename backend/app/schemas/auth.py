@@ -31,4 +31,5 @@ class AuthResponse(BaseModel):
     is_admin: bool = False
     is_super_admin: bool = False
     is_tester: bool = False
+    is_vip: bool = False
     is_xyphoe: bool = False

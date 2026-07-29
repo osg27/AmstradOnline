@@ -346,6 +346,7 @@ export default function LobbyPage() {
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
   const [isSuperAdmin, setIsSuperAdmin] = useState(localStorage.getItem('isSuperAdmin') === 'true');
   const [isTester, setIsTester] = useState(localStorage.getItem('isTester') === 'true');
+  const [isVip, setIsVip] = useState(localStorage.getItem('isVip') === 'true');
   const [isXyphoe, setIsXyphoe] = useState(localStorage.getItem('isXyphoe') === 'true');
   const [selectedPlatformId, setSelectedPlatformId] = useState('micros');
   const [selectedEra, setSelectedEra] = useState('8bit');
@@ -356,7 +357,7 @@ export default function LobbyPage() {
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
   const [librarySystems, setLibrarySystems] = useState([]);
-  const canUsePreviewSystems = isAdmin || isTester || isSuperAdmin;
+  const canUsePreviewSystems = isAdmin || isTester || isVip || isSuperAdmin;
   const allLibrarySystemIds = useMemo(
     () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin).map((system) => system.id),
     [isSuperAdmin],
@@ -416,17 +417,20 @@ export default function LobbyPage() {
         const nextIsAdmin = Boolean(session.is_admin);
         const nextIsSuperAdmin = Boolean(session.is_super_admin);
         const nextIsTester = Boolean(session.is_tester);
+        const nextIsVip = Boolean(session.is_vip);
         const nextIsXyphoe = Boolean(session.is_xyphoe);
 
         setIsAdmin(nextIsAdmin);
         setIsSuperAdmin(nextIsSuperAdmin);
         setIsTester(nextIsTester);
+        setIsVip(nextIsVip);
         setIsXyphoe(nextIsXyphoe);
         localStorage.setItem('isAdmin', nextIsAdmin ? 'true' : 'false');
         localStorage.setItem('isSuperAdmin', nextIsSuperAdmin ? 'true' : 'false');
         localStorage.setItem('isTester', nextIsTester ? 'true' : 'false');
+        localStorage.setItem('isVip', nextIsVip ? 'true' : 'false');
         localStorage.setItem('isXyphoe', nextIsXyphoe ? 'true' : 'false');
-        if (nextIsAdmin || nextIsTester) {
+        if (nextIsAdmin || nextIsTester || nextIsVip) {
           const notifications = await apiFetch('/auth/feedback/notifications');
           setFeedbackNotificationCount(notifications.filter((notification) => !notification.is_read).length);
         }
@@ -436,12 +440,14 @@ export default function LobbyPage() {
         setIsAdmin(false);
         setIsSuperAdmin(false);
         setIsTester(false);
+        setIsVip(false);
         setIsXyphoe(false);
         setFeedbackNotificationCount(0);
         setMessageUnreadCount(0);
         localStorage.removeItem('isAdmin');
         localStorage.removeItem('isSuperAdmin');
         localStorage.removeItem('isTester');
+        localStorage.removeItem('isVip');
         localStorage.removeItem('isXyphoe');
       }
     }
@@ -584,6 +590,7 @@ export default function LobbyPage() {
     localStorage.removeItem('isAdmin');
     localStorage.removeItem('isSuperAdmin');
     localStorage.removeItem('isTester');
+    localStorage.removeItem('isVip');
     localStorage.removeItem('isXyphoe');
     navigate('/login');
   }

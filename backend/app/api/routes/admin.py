@@ -14,7 +14,7 @@ from app.models.room import Room, RoomActivity
 from app.models.user import AccountToken, User
 
 router = APIRouter(prefix="/auth/admin", tags=["admin"])
-VALID_ROLES = {"user", "tester", "xyphoe", "admin"}
+VALID_ROLES = {"user", "tester", "vip", "xyphoe", "admin"}
 
 
 class UserRoleRequest(BaseModel):
