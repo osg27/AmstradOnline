@@ -148,3 +148,21 @@ def ensure_runtime_columns(engine):
                 connection.execute(text(
                     f"ALTER TABLE mame_high_scores ADD COLUMN created_at {timestamp_type} DEFAULT CURRENT_TIMESTAMP NOT NULL"
                 ))
+
+        # Remove a development-only Donkey Kong score without affecting any
+        # legitimate score the same user may achieve after this cleanup.
+        connection.execute(
+            text(
+                "DELETE FROM mame_high_scores "
+                "WHERE rom_name = 'dkong' "
+                "AND score = 765000 "
+                "AND created_at < :cutoff "
+                "AND user_id IN ("
+                "SELECT id FROM users WHERE LOWER(username) = LOWER(:username)"
+                ")"
+            ),
+            {
+                "cutoff": "2026-07-30 00:00:00+00:00",
+                "username": "OldStyleGaming",
+            },
+        )
