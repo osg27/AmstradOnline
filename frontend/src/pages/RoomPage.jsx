@@ -3194,15 +3194,7 @@ export default function RoomPage() {
     const timer = window.setTimeout(async () => {
       setMameScoreBusy(true);
       try {
-        let result = null;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          result = await submitMameScoreExtraction('automatic');
-          if ((result?.rows_inserted || 0) > 0 || result?.status === 'failed') break;
-          if (attempt < 2) {
-            setMameScoreStatus('Score data is still settling; checking again...');
-            await new Promise((resolve) => window.setTimeout(resolve, 3000));
-          }
-        }
+        await submitMameScoreExtraction('automatic');
         mameScoreProcessedTokenRef.current = mameScoreChangeToken;
       } catch (err) {
         setMameScoreStatus('Automatic score check failed. You can still save it manually.');
@@ -4694,6 +4686,14 @@ export default function RoomPage() {
         })),
       }),
     });
+    // Future writes must be compared with the file we just checked, not the
+    // original start-of-game snapshot. Otherwise one PB is rediscovered on
+    // every recursive MAME .hi save.
+    mameScoreBaselineRef.current = {
+      romName,
+      files,
+      capturedAt: Date.now(),
+    };
     const savedPaths = Array.isArray(result.saved_paths) ? result.saved_paths : [];
     addLog(
       `MAME score extraction ${result.status}: ${result.message || 'no message'}; parsed ${result.scores_parsed || 0}, inserted ${result.rows_inserted || 0}; files ${savedPaths.length ? savedPaths.join(', ') : 'none'}`
