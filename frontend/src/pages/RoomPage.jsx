@@ -793,6 +793,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const canSendPlayerInput = isHost || !isArcadeParty || Boolean(partyPlayerNumber);
   const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isDiscConsole || isC64 || isAtari8 || isAtariSt || isArcade;
+  const showFullscreenArcadeLeaderboard = isScreenFullscreen && supportsMameScoreboard && Boolean(loadedDiskName) && !remoteConnected;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isBeetleSaturn ? 'Sega Saturn Webretro Core' : isSaturn ? 'Sega Saturn' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
 
   useEffect(() => {
@@ -4718,6 +4719,27 @@ export default function RoomPage() {
     }
   }
 
+  async function clearMameLeaderboard() {
+    if (!isSuperAdmin || mameScoreBusy || !loadedDiskName) return;
+    const romName = getArcadeLeaderboardKey(loadedDiskName);
+    if (!window.confirm(`Clear every saved score for ${romName.toUpperCase()}?`)) return;
+
+    setMameScoreBusy(true);
+    try {
+      const result = await apiFetch(`/scores/mame/leaderboards/${encodeURIComponent(romName)}`, {
+        method: 'DELETE',
+      });
+      setMameLeaderboard([]);
+      setMameScoreStatus(`Leaderboard cleared (${result.rows_deleted || 0} score${result.rows_deleted === 1 ? '' : 's'} removed).`);
+      addLog(`Cleared MAME leaderboard ${romName}: ${result.rows_deleted || 0} rows`);
+    } catch (err) {
+      setMameScoreStatus('Leaderboard could not be cleared.');
+      addLog(`MAME leaderboard clear failed: ${err.message}`);
+    } finally {
+      setMameScoreBusy(false);
+    }
+  }
+
   function renderMameLeaderboardPanel(extraClass = '') {
     if (!supportsMameScoreboard || !loadedDiskName) return null;
 
@@ -4738,9 +4760,16 @@ export default function RoomPage() {
             : 'Online leaderboard not available for this game yet.'}
         </p>
         {mameLeaderboardSupported && isHost ? (
-          <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow} disabled={mameScoreBusy}>
-            {mameScoreBusy ? 'Registering score...' : 'Save MAME score now'}
-          </button>
+          <>
+            <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow} disabled={mameScoreBusy}>
+              {mameScoreBusy ? 'Updating leaderboard...' : 'Save MAME score now'}
+            </button>
+            {isSuperAdmin ? (
+              <button type="button" className="danger mame-save-score" onClick={clearMameLeaderboard} disabled={mameScoreBusy}>
+                Clear leaderboard
+              </button>
+            ) : null}
+          </>
         ) : null}
         {mameLeaderboardSupported && mameLeaderboard.length ? (
           <div className="mame-score-list">
@@ -5738,7 +5767,7 @@ export default function RoomPage() {
         <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
 
         <div className={`room-layout ${localGamePickerOpen ? 'with-local-game-picker' : ''}`}>
-          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isArcade ? 'arcade-fullscreen' : ''} ${isScreenFullscreen && isSharedCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode ? 'fullscreen-with-chat' : ''}`}>
+          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isArcade ? 'arcade-fullscreen' : ''} ${isScreenFullscreen && isSharedCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode && !showFullscreenArcadeLeaderboard ? 'fullscreen-with-chat' : ''} ${showFullscreenArcadeLeaderboard ? 'fullscreen-with-score' : ''}`}>
             {obsCaptureMode ? (
               <button type="button" className="secondary obs-capture-exit" onClick={() => setObsCaptureMode(false)}>
                 Back to room
@@ -5862,7 +5891,9 @@ export default function RoomPage() {
                         }}
                       />
                     </div>
-                    {!isScreenFullscreen ? renderMameLeaderboardPanel('side') : null}
+                    {!isScreenFullscreen || showFullscreenArcadeLeaderboard
+                      ? renderMameLeaderboardPanel(showFullscreenArcadeLeaderboard ? 'fullscreen-score-panel' : 'side')
+                      : null}
                   </div>
                 ) : (
                   <>
@@ -6418,7 +6449,7 @@ export default function RoomPage() {
               </>
             )}
 
-            {!isSoloMode ? (
+            {!isSoloMode && !showFullscreenArcadeLeaderboard ? (
               <div className="fullscreen-room-chat">
                 <RoomChat
                   messages={chatMessages}

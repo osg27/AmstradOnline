@@ -3929,6 +3929,25 @@ input:focus {
   align-items: center;
 }
 
+.video-panel.fullscreen-screen.fullscreen-with-score {
+  --fullscreen-score-width: clamp(300px, 23vw, 390px);
+  padding-right: calc(var(--fullscreen-score-width) + 1.5rem);
+  align-items: center;
+}
+
+.video-panel.fullscreen-screen .mame-score-panel.fullscreen-score-panel {
+  position: fixed;
+  z-index: 52;
+  top: 4.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  display: grid;
+  width: var(--fullscreen-score-width);
+  max-height: none;
+  overflow-y: auto;
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.4);
+}
+
 .video-panel.fullscreen-screen .fullscreen-room-chat {
   position: fixed;
   z-index: 52;
@@ -4006,6 +4025,11 @@ input:focus {
 .video-panel.fullscreen-screen.arcade-fullscreen.fullscreen-with-chat .arcade-emulator-frame {
   width: min(calc(100vw - var(--fullscreen-chat-width) - 3rem), calc((100vh - 4.4rem) * 1.333)) !important;
   height: min(calc(100vh - 4.4rem), calc((100vw - var(--fullscreen-chat-width) - 3rem) * 0.75)) !important;
+}
+
+.video-panel.fullscreen-screen.arcade-fullscreen.fullscreen-with-score .arcade-emulator-frame {
+  width: min(calc(100vw - var(--fullscreen-score-width) - 3rem), calc((100vh - 4.4rem) * 1.333)) !important;
+  height: min(calc(100vh - 4.4rem), calc((100vw - var(--fullscreen-score-width) - 3rem) * 0.75)) !important;
 }
 
 .video-panel.fullscreen-screen.party-fullscreen {
