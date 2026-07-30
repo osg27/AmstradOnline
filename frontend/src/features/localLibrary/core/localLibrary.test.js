@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createManifest } from './manifest';
 import { groupGames } from './group';
 import { normaliseFilename } from './normalise';
+import { isSupportedExtension } from './platform';
 
 function scanned(name) {
   const parsed = normaliseFilename(name);
@@ -20,6 +21,13 @@ function scanned(name) {
 }
 
 describe('TOSEC parsing and grouping', () => {
+  it.each(['d64', 'g64', 'f64', 't64', 'p00', 'p01', 'tap', 'prg', 'crt', 'zip'])(
+    'accepts the C64 %s format',
+    (extension) => {
+      expect(isSupportedExtension(extension, 'c64')).toBe(true);
+    },
+  );
+
   it('builds a single ZIP game', () => {
     const games = groupGames([scanned('Ugh! (1992)(Global Software).zip')]);
     expect(games).toHaveLength(1);

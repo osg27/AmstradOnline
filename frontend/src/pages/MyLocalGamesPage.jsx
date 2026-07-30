@@ -13,7 +13,7 @@ import {
 
 const LOCAL_PLATFORMS = [
   { id: 'amiga', label: 'Amiga', accept: '.zip,.adf,.adz,.dms,.ipf,.hdf' },
-  { id: 'c64', label: 'Commodore 64', accept: '.zip,.d64,.t64,.prg,.crt' },
+  { id: 'c64', label: 'Commodore 64', accept: '.zip,.d64,.g64,.f64,.t64,.p00,.p01,.tap,.prg,.crt' },
   { id: 'spectrum', label: 'ZX Spectrum', accept: '.zip,.tap,.tzx,.z80,.sna' },
   { id: 'amstrad', label: 'Amstrad CPC', accept: '.zip,.dsk,.cdt' },
 ];

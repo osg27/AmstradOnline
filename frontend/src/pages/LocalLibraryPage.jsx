@@ -64,7 +64,7 @@ export const SUPPORTED_SYSTEMS = [
     label: 'Commodore 64',
     shortLabel: 'C64',
     logo: c64LogoUrl,
-    extensions: ['d64', 't64', 'tap', 'prg', 'crt', 'zip', '7z'],
+    extensions: ['d64', 'g64', 'f64', 't64', 'p00', 'p01', 'tap', 'prg', 'crt', 'zip', '7z'],
     pathHints: ['c64', 'commodore'],
   },
   {
@@ -851,14 +851,22 @@ async function restoreCachedBoxArt(games) {
   await Promise.all([...gamesBySystem.entries()].map(async ([system, systemGames]) => {
     const romNames = [...new Set(systemGames.map(boxArtLookupKey).filter(Boolean))];
     if (!romNames.length) return;
-    const result = await apiFetch('/library/media/boxart/lookup', {
-      method: 'POST',
-      body: JSON.stringify({
-        system,
-        rom_names: romNames,
-      }),
-    }).catch(() => ({ matches: {} }));
-    artworkBySystem.set(system, result?.matches || {});
+    const matches = {};
+    const batchSize = 250;
+    for (let offset = 0; offset < romNames.length; offset += batchSize) {
+      const result = await apiFetch('/library/media/boxart/lookup', {
+        method: 'POST',
+        body: JSON.stringify({
+          system,
+          rom_names: romNames.slice(offset, offset + batchSize),
+        }),
+      }).catch(() => ({ matches: {} }));
+      Object.assign(matches, result?.matches || {});
+      if (offset > 0 && offset % 1000 === 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      }
+    }
+    artworkBySystem.set(system, matches);
   }));
 
   return games.map((game) => {
@@ -1816,7 +1824,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         }
         checked += 1;
         setMediaProgress({ checked, total: targets.length, found });
-        if (checked % 25 === 0 || checked === targets.length) {
+        if (checked % 500 === 0 || checked === targets.length) {
           await saveLocalLibraryGames(nextGames);
         }
         await new Promise((resolve) => window.setTimeout(resolve, 0));

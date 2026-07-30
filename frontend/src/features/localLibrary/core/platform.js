@@ -2,7 +2,7 @@ export const LOCAL_LIBRARY_PLATFORM = 'amiga';
 
 const EXTENSIONS = {
   amiga: new Set(['adf', 'adz', 'dms', 'ipf', 'hdf', 'zip']),
-  c64: new Set(['d64', 't64', 'prg', 'crt', 'zip']),
+  c64: new Set(['d64', 'g64', 'f64', 't64', 'p00', 'p01', 'prg', 'crt', 'tap', 'zip']),
   spectrum: new Set(['tap', 'tzx', 'z80', 'sna', 'zip']),
   amstrad: new Set(['dsk', 'cdt', 'zip']),
 };
@@ -17,4 +17,3 @@ export function detectPlatform(extension, requestedPlatform) {
   if (normalized === 'zip') return 'unknown';
   return Object.entries(EXTENSIONS).find(([, extensions]) => extensions.has(normalized))?.[0] || 'unknown';
 }
-
