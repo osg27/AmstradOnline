@@ -7,6 +7,10 @@ import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
 import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames } from '../localLibraryDb';
 import { takeRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
+import { normaliseFilename } from '../features/localLibrary/core/normalise';
+import { scanFiles as scanLocalReleaseFiles } from '../features/localLibrary/core/scanner';
+import { groupGames as groupLocalReleaseFiles } from '../features/localLibrary/core/group';
+import { resolveRelease } from '../features/localLibrary/storage/preferredReleaseStorage';
 import { takePreparedVipMameFile } from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
@@ -5051,6 +5055,12 @@ export default function RoomPage() {
     setCurrentLocalReleaseIndex(index);
   }
 
+  function selectNextLocalReleaseDisk() {
+    if (localReleaseFiles.length < 2) return;
+    const nextIndex = (currentLocalReleaseIndex + 1) % localReleaseFiles.length;
+    selectLocalReleaseDisk(nextIndex);
+  }
+
   function handleHostVolumeChange(event) {
     const nextVolume = Math.min(1, Math.max(0, Number(event.target.value) / 100));
     setHostVolume(nextVolume);
@@ -5566,6 +5576,56 @@ export default function RoomPage() {
         const game = await getLocalLibraryGame(localGameId);
         if (!game?.handle) {
           throw new Error('That local library game is no longer available. Re-scan your ROM folder.');
+        }
+
+        if (isAmigaFamily) {
+          const selectedTitle = normaliseFilename(game.fileName || game.title || '').cleanedTitle.toLowerCase();
+          const storedGames = await getLocalLibraryGames();
+          const siblingGames = storedGames.filter((candidate) => (
+            (candidate.system === 'amiga' || candidate.system === 'amiga_aga')
+            && candidate.handle
+            && normaliseFilename(candidate.fileName || candidate.title || '').cleanedTitle.toLowerCase() === selectedTitle
+          ));
+          const siblingFiles = [];
+          for (const sibling of siblingGames) {
+            if (typeof sibling.handle.queryPermission === 'function') {
+              let permission = await sibling.handle.queryPermission({ mode: 'read' });
+              if (permission !== 'granted' && typeof sibling.handle.requestPermission === 'function') {
+                permission = await sibling.handle.requestPermission({ mode: 'read' });
+              }
+              if (permission !== 'granted') continue;
+            }
+            siblingFiles.push(await sibling.handle.getFile());
+          }
+          if (siblingFiles.length) {
+            const scannedFiles = await scanLocalReleaseFiles(siblingFiles, { platform: 'amiga' });
+            const groupedGame = groupLocalReleaseFiles(scannedFiles)
+              .find((candidate) => candidate.title.toLowerCase() === selectedTitle);
+            const release = groupedGame ? resolveRelease(groupedGame) : null;
+            if (release?.media?.length) {
+              const releaseFiles = release.media
+                .slice()
+                .sort((left, right) => (left.diskNumber || 1) - (right.diskNumber || 1))
+                .map((media) => media.file);
+              setLocalReleaseFiles(releaseFiles);
+              setCurrentLocalReleaseIndex(0);
+              setLoadedDiskName(releaseFiles[0].name);
+              setStatus(`Loading ${groupedGame.title}: ${releaseFiles.length} disk${releaseFiles.length === 1 ? '' : 's'} available`);
+              addLog(`Resolved local Amiga release with ${releaseFiles.length} ordered disk${releaseFiles.length === 1 ? '' : 's'}`);
+              await handleDiskSelected({
+                target: {
+                  files: releaseFiles,
+                  dataset: {},
+                  value: '',
+                },
+              });
+              if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
+                await startHostSession();
+              }
+              sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+              return;
+            }
+          }
         }
 
         if (typeof game.handle.queryPermission === 'function') {
@@ -6255,8 +6315,15 @@ export default function RoomPage() {
                   ) : null}
 
                   {(isAmiga || isAmigaLink || isC64 || isAtariSt) ? (
-                    <button type="button" className="secondary" onClick={openSwapDiskPicker} disabled={!hostStarted}>
-                      {isC64
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={localReleaseFiles.length > 1 ? selectNextLocalReleaseDisk : openSwapDiskPicker}
+                      disabled={!hostStarted}
+                    >
+                      {localReleaseFiles.length > 1
+                        ? `Next disk (${currentLocalReleaseIndex + 1}/${localReleaseFiles.length})`
+                        : isC64
                         ? `Next C64 media${c64MediaCount > 1 ? ` (${c64MediaIndex + 1}/${c64MediaCount})` : ''}`
                         : isAtariSt
                           ? `Next ST disk${atariStMediaCount > 1 ? ` (${atariStMediaIndex + 1}/${atariStMediaCount})` : ''}`
