@@ -25,6 +25,9 @@ import {
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
 import { prepareVipMameFile } from '../vipMameCache';
+import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
+import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
+import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
 
 export const SUPPORTED_SYSTEMS = [
   {
@@ -1606,6 +1609,43 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     setLaunchingId(game.id);
     setStatus(`Starting ${game.title}...`);
     try {
+      if ((game.system === 'amiga' || game.system === 'amiga_aga') && game.source !== 'internet-archive-mame') {
+        const variants = game.variants || [game];
+        const files = [];
+        for (const variant of variants) {
+          if (!variant.handle) continue;
+          if (typeof variant.handle.queryPermission === 'function') {
+            let permission = await variant.handle.queryPermission({ mode: 'read' });
+            if (permission !== 'granted' && typeof variant.handle.requestPermission === 'function') {
+              permission = await variant.handle.requestPermission({ mode: 'read' });
+            }
+            if (permission !== 'granted') throw new Error('Browser permission is needed to read this Amiga release.');
+          }
+          files.push(await variant.handle.getFile());
+        }
+        if (!files.length) throw new Error('No readable files remain for this Amiga release. Re-scan the folder.');
+
+        const scanned = await scanReleaseFiles(files, { platform: 'amiga' });
+        const releaseGame = groupReleaseFiles(scanned)
+          .find((candidate) => candidate.title.toLowerCase() === game.title.toLowerCase())
+          || groupReleaseFiles(scanned)[0];
+        if (!releaseGame) throw new Error('The selected Amiga files could not be grouped into a release.');
+        const launch = prepareLocalGameLaunch(releaseGame);
+        const room = await apiFetch('/rooms/create', {
+          method: 'POST',
+          body: JSON.stringify({
+            system: launch.roomSystem,
+            party_max_players: 2,
+          }),
+        });
+        const nextParams = new URLSearchParams({
+          localRelease: launch.launchId,
+          returnTo: buildLibraryReturnPath(),
+        });
+        navigate(`/room/${room.room_code}?${nextParams.toString()}`);
+        return;
+      }
+
       if (game.source === 'internet-archive-mame') {
         const prepareFile = async (directory, fileName, label) => {
           setVipPreparation({

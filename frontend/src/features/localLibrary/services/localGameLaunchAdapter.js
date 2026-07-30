@@ -16,7 +16,7 @@ export function prepareLocalGameLaunch(game, storage = window.localStorage) {
   const launchId = `local-amiga:${game.id}:${release.id}:${Date.now()}`;
   const machine = release.metadata.machine || [];
   const roomSystem = game.platform === 'amiga'
-    ? (machine.includes('AGA') || machine.includes('CD32') || files.length > 1 ? 'amiga_aga' : 'amiga')
+    ? (machine.includes('AGA') || machine.includes('CD32') ? 'amiga_aga' : 'amiga')
     : game.platform === 'c64'
       ? 'c64'
       : game.platform === 'spectrum'

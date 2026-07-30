@@ -36,6 +36,15 @@ describe('TOSEC parsing and grouping', () => {
     expect(games[0].releases[0].isComplete).toBe(true);
   });
 
+  it('groups disks when a crack tag appears before the disk marker', () => {
+    const game = groupGames([1, 2, 3].map((disk) => (
+      scanned(`Agony (1992)(Psygnosis)[cr CSL](Disk ${disk} of 3).zip`)
+    )))[0];
+    expect(game.releases).toHaveLength(1);
+    expect(game.releases[0].isComplete).toBe(true);
+    expect(game.releases[0].media.map((item) => item.diskNumber)).toEqual([1, 2, 3]);
+  });
+
   it('separates incompatible disk totals, demos, CD32, and installed sets', () => {
     const files = [
       scanned('UFO - Enemy Unknown (1994)(MicroProse)(Disk 1 of 4).zip'),
