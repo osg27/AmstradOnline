@@ -243,7 +243,16 @@ function swapAmigaDisk(fileName, bytes) {
     return;
   }
 
-  sendPendingFileToEmulator();
+  // vAmiga needs to observe an empty DF0 before a replacement disk is
+  // inserted. Loading the next ADF immediately updates the mounted image but
+  // some games never see a drive-change event and continue asking for the old
+  // disk.
+  runScript(`
+    if (typeof wasm_eject_disk === 'function') {
+      wasm_eject_disk('df0');
+    }
+  `);
+  window.setTimeout(sendPendingFileToEmulator, 750);
 }
 
 function resetAmiga() {
