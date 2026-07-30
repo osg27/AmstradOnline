@@ -3907,6 +3907,80 @@ input:focus {
   cursor: crosshair;
 }
 
+.local-amiga-library {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem 0 3rem;
+}
+
+.local-amiga-library .local-library-titlebar input[type='search'] {
+  min-width: min(22rem, 100%);
+}
+
+.local-amiga-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.local-amiga-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(8, 14, 29, 0.88);
+}
+
+.local-amiga-card h3,
+.local-amiga-card p {
+  margin: 0;
+}
+
+.local-amiga-card-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.local-release-selector {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.local-release-selector label,
+.local-scan-progress {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.local-release-selector select {
+  width: 100%;
+}
+
+.local-release-selector ol {
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.78rem;
+}
+
+.local-release-warning {
+  color: #ffbd66;
+}
+
+.local-release-complete {
+  color: #7fe0a3;
+}
+
+.local-library-status {
+  margin: 0;
+  color: var(--muted, #aab3c5);
+}
+
 .vip-rom-loading-overlay {
   position: fixed;
   inset: 0;

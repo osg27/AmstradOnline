@@ -6,6 +6,7 @@ import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
 import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames } from '../localLibraryDb';
+import { takeRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
 import { takePreparedVipMameFile } from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
@@ -601,6 +602,7 @@ export default function RoomPage() {
   const isSuperAdmin = localStorage.getItem('isSuperAdmin') === 'true';
   const isSoloMode = searchParams.get('mode') === 'solo';
   const localGameId = searchParams.get('localGame');
+  const localReleaseId = searchParams.get('localRelease');
   const libraryReturnPath = getSafeLibraryReturnPath(searchParams.get('returnTo'));
   const [obsCaptureMode, setObsCaptureMode] = useState(false);
 
@@ -783,7 +785,7 @@ export default function RoomPage() {
   const isAtariSt = roomSystem === 'atarist';
   const isMouseComputer = isAmigaFamily || isAtariSt;
   const isArcade = roomSystem === 'arcade';
-  const isLocalLibraryHostRoom = Boolean(localGameId && isHost);
+  const isLocalLibraryHostRoom = Boolean((localGameId || localReleaseId) && isHost);
   const supportsMameScoreboard = isArcade && (isSoloMode || isLocalLibraryHostRoom);
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
@@ -5441,7 +5443,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (
-      !localGameId
+      !(localGameId || localReleaseId)
       || !room
       || !isHost
       || !canControlLocalEmulator
@@ -5459,6 +5461,28 @@ export default function RoomPage() {
 
       try {
         setError('');
+        if (localReleaseId) {
+          const runtimeRelease = takeRuntimeRelease(localReleaseId);
+          if (!runtimeRelease?.files?.length) {
+            throw new Error('These local files are no longer available. Return to My Local Games and select the folder again.');
+          }
+          setLoadedDiskName(runtimeRelease.title);
+          setStatus(`Loading local release: ${runtimeRelease.title}`);
+          addLog(`Loading ${runtimeRelease.files.length} local media file${runtimeRelease.files.length === 1 ? '' : 's'} in release order`);
+          await handleDiskSelected({
+            target: {
+              files: runtimeRelease.files,
+              dataset: {},
+              value: '',
+            },
+          });
+          if (cancelled) return;
+          if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
+            await startHostSession();
+          }
+          return;
+        }
+
         const pendingGame = (() => {
           try {
             const stored = sessionStorage.getItem('oldstylegaming:pendingLocalGame');
@@ -5589,7 +5613,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, room]);
+  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, localReleaseId, room]);
 
   async function handleKickstartSelected(event) {
     try {

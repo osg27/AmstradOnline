@@ -630,6 +630,7 @@ export default function LobbyPage() {
           <div className="account-strip">
             <span>{username}</span>
             <button className="secondary" onClick={() => navigate('/library')}>My Library</button>
+            <button className="secondary" onClick={() => navigate('/my-local-games')}>My Local Games</button>
             {canUsePreviewSystems ? (
               <button className="secondary" onClick={() => navigate('/feedback')}>
                 Feedback{feedbackNotificationCount ? ` (${feedbackNotificationCount})` : ''}
