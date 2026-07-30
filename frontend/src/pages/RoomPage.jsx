@@ -6,7 +6,7 @@ import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
 import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames } from '../localLibraryDb';
-import { takeRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
+import { registerRuntimeRelease, takeRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
 import { normaliseFilename } from '../features/localLibrary/core/normalise';
 import { scanFiles as scanLocalReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupLocalReleaseFiles } from '../features/localLibrary/core/group';
@@ -5607,6 +5607,30 @@ export default function RoomPage() {
                 .slice()
                 .sort((left, right) => (left.diskNumber || 1) - (right.diskNumber || 1))
                 .map((media) => media.file);
+              if (releaseFiles.length > 1 && !isAmigaAga) {
+                const launchId = `local-amiga:${groupedGame.id}:${release.id}:${Date.now()}`;
+                registerRuntimeRelease(launchId, {
+                  gameId: groupedGame.id,
+                  releaseId: release.id,
+                  title: groupedGame.title,
+                  files: releaseFiles,
+                  roomSystem: 'amiga_aga',
+                });
+                setStatus(`Opening ${groupedGame.title} with the multidisk PUAE player...`);
+                const multidiskRoom = await apiFetch('/rooms/create', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    system: 'amiga_aga',
+                    party_max_players: 2,
+                  }),
+                });
+                const nextParams = new URLSearchParams({
+                  localRelease: launchId,
+                  returnTo: libraryReturnPath,
+                });
+                navigate(`/room/${multidiskRoom.room_code}?${nextParams.toString()}`, { replace: true });
+                return;
+              }
               setLocalReleaseFiles(releaseFiles);
               setCurrentLocalReleaseIndex(0);
               setLoadedDiskName(releaseFiles[0].name);

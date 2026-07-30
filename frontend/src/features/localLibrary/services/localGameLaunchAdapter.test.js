@@ -34,7 +34,7 @@ describe('local game launch adapter', () => {
     expect(prepareLocalGameLaunch(game, storage).roomSystem).toBe(roomSystem);
   });
 
-  it('keeps multidisk OCS releases on the existing A500 player', () => {
+  it('routes multidisk Amiga releases through the existing PUAE M3U player', () => {
     const storage = { getItem: () => null, removeItem: () => {} };
     const game = {
       id: 'amiga-agony',
@@ -52,7 +52,7 @@ describe('local game launch adapter', () => {
       }],
     };
     const launch = prepareLocalGameLaunch(game, storage);
-    expect(launch.roomSystem).toBe('amiga');
+    expect(launch.roomSystem).toBe('amiga_aga');
     expect(launch.files).toHaveLength(3);
   });
 });
