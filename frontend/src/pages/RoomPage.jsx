@@ -630,6 +630,8 @@ export default function RoomPage() {
   const [arcadeRomScanning, setArcadeRomScanning] = useState(false);
   const [loadedAgaDiskCount, setLoadedAgaDiskCount] = useState(0);
   const [currentAgaDiskIndex, setCurrentAgaDiskIndex] = useState(0);
+  const [localReleaseFiles, setLocalReleaseFiles] = useState([]);
+  const [currentLocalReleaseIndex, setCurrentLocalReleaseIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
   const [playstationBiosName, setPlaystationBiosName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
@@ -5029,6 +5031,26 @@ export default function RoomPage() {
     setStatus(`Inserting AGA disk ${index + 1}`);
   }
 
+  async function selectLocalReleaseDisk(index) {
+    if (!canControlLocalEmulator || !hostStarted) return;
+    const file = localReleaseFiles[index];
+    if (!file) return;
+
+    if (isAmigaAga) {
+      selectAgaDisk(index);
+      setCurrentLocalReleaseIndex(index);
+      return;
+    }
+    await handleDiskSelected({
+      target: {
+        files: [file],
+        dataset: isAmigaFamily ? { mode: 'swap' } : {},
+        value: '',
+      },
+    });
+    setCurrentLocalReleaseIndex(index);
+  }
+
   function handleHostVolumeChange(event) {
     const nextVolume = Math.min(1, Math.max(0, Number(event.target.value) / 100));
     setHostVolume(nextVolume);
@@ -5467,6 +5489,8 @@ export default function RoomPage() {
             throw new Error('These local files are no longer available. Return to My Local Games and select the folder again.');
           }
           setLoadedDiskName(runtimeRelease.title);
+          setLocalReleaseFiles(runtimeRelease.files);
+          setCurrentLocalReleaseIndex(0);
           setStatus(`Loading local release: ${runtimeRelease.title}`);
           addLog(`Loading ${runtimeRelease.files.length} local media file${runtimeRelease.files.length === 1 ? '' : 's'} in release order`);
           await handleDiskSelected({
@@ -6241,6 +6265,7 @@ export default function RoomPage() {
                   ) : null}
 
                   {isAmigaAga && loadedAgaDiskCount > 0
+                    && localReleaseFiles.length === 0
                     ? Array.from({ length: loadedAgaDiskCount }, (_, index) => (
                       <button
                         key={`aga-disk-${index + 1}`}
@@ -6248,6 +6273,21 @@ export default function RoomPage() {
                         className={currentAgaDiskIndex === index ? 'active' : 'secondary'}
                         onClick={() => selectAgaDisk(index)}
                         disabled={!hostStarted}
+                      >
+                        Disk {index + 1}
+                      </button>
+                    ))
+                    : null}
+
+                  {localReleaseFiles.length > 1
+                    ? localReleaseFiles.map((file, index) => (
+                      <button
+                        key={`local-release-disk-${index + 1}-${file.name}`}
+                        type="button"
+                        className={currentLocalReleaseIndex === index ? 'active' : 'secondary'}
+                        onClick={() => selectLocalReleaseDisk(index)}
+                        disabled={!hostStarted}
+                        title={file.name}
                       >
                         Disk {index + 1}
                       </button>
