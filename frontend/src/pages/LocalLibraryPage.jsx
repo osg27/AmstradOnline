@@ -172,6 +172,7 @@ const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 
 const LIBRARY_PAGE_SIZE = 96;
 const LIBRARY_SNAPSHOT_KEY = 'oldstylegaming:librarySnapshot';
 let librarySessionCache = null;
+const groupedLibraryCache = new WeakMap();
 const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 const COMPACT_REGION_SUFFIXES = {
   U: 'USA',
@@ -1197,6 +1198,15 @@ function groupLibraryGames(games, options = {}) {
   return [...groups.values()].map(makeGroupedGame);
 }
 
+function getGroupedLibraryGames(games, options = {}) {
+  const cacheKey = options.showArcadeClones ? 'with-arcade-clones' : 'parents-only';
+  const cached = groupedLibraryCache.get(games);
+  if (cached?.[cacheKey]) return cached[cacheKey];
+  const grouped = groupLibraryGames(games, options);
+  groupedLibraryCache.set(games, { ...cached, [cacheKey]: grouped });
+  return grouped;
+}
+
 export default function LocalLibraryPage({ embedded = false, onboarding = false, onComplete = null }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -1255,6 +1265,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }
 
   useEffect(() => {
+    // Navigating within the SPA retains the authoritative records and their derived
+    // search/group indexes. Reopening IndexedDB here only replaces the same arrays and
+    // forces tens of thousands of title transforms to run again.
+    if (librarySessionCache) {
+      setLibraryLoading(false);
+      return;
+    }
+
     async function loadLibrary() {
       try {
         const [savedFolders, savedGames, savedSystems, savedFavourites] = await Promise.all([
@@ -1389,7 +1407,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }, [mediaProgress]);
 
   const groupedGames = useMemo(
-    () => groupLibraryGames(
+    () => getGroupedLibraryGames(
       games.filter((game) => (
         !isLikelySupportRom(game)
         && (showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game))
