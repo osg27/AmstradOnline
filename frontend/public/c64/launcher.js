@@ -349,6 +349,55 @@
     target.dispatchEvent(event);
   }
 
+  function dispatchPhysicalKey(key, code, keyCode, shifted = false) {
+    if (shifted) dispatchKeyboardInput('Shift', true);
+    const target = window.EJS_emulator?.elements?.parent || gameContainer;
+    const eventOptions = {
+      key,
+      code,
+      bubbles: true,
+      cancelable: true,
+      shiftKey: shifted,
+    };
+    ['keydown', 'keyup'].forEach((type) => {
+      const event = new KeyboardEvent(type, eventOptions);
+      Object.defineProperties(event, {
+        keyCode: { get: () => keyCode },
+        which: { get: () => keyCode },
+      });
+      target.dispatchEvent(event);
+    });
+    if (shifted) dispatchKeyboardInput('Shift', false);
+  }
+
+  function typeC64AutostartCommand() {
+    const keys = [
+      ...'LOAD'.split('').map((key) => [key.toLowerCase(), `Key${key}`, key.charCodeAt(0)]),
+      ['"', 'Digit2', 50, true],
+      ['*', 'Digit8', 56, true],
+      ['"', 'Digit2', 50, true],
+      [',', 'Comma', 188],
+      ['8', 'Digit8', 56],
+      [',', 'Comma', 188],
+      ['1', 'Digit1', 49],
+      ['Enter', 'Enter', 13],
+      null,
+      ...'RUN'.split('').map((key) => [key.toLowerCase(), `Key${key}`, key.charCodeAt(0)]),
+      ['Enter', 'Enter', 13],
+    ];
+    let delay = 0;
+    keys.forEach((keyDefinition) => {
+      if (!keyDefinition) {
+        delay += 3500;
+        return;
+      }
+      const [key, code, keyCode, shifted] = keyDefinition;
+      setTimeout(() => dispatchPhysicalKey(key, code, keyCode, shifted), delay);
+      delay += 45;
+    });
+    postMediaStatus('Autostarting C64 disk 1');
+  }
+
   function clearGameContainer() {
     try {
       window.EJS_emulator?.gameManager?.clearEJSResetTimer?.();
@@ -470,6 +519,9 @@
       setWarp(warpEnabled);
       postMediaStatus(currentMedia.length > 1 ? `${currentMedia.length} C64 media files mounted` : '');
       window.EJS_emulator?.elements?.parent?.focus?.();
+      if (currentMedia.length > 1) {
+        setTimeout(typeC64AutostartCommand, 1200);
+      }
     };
     window.EJS_onExit = () => {
       drawStatus('C64 stopped', fileName);
