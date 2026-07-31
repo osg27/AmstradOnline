@@ -551,7 +551,7 @@ function clearAtari8SessionStorage() {
 }
 
 function buildAmigaKickstartPayload(system, fileName, bytes) {
-  if (system === 'amiga_aga') {
+  if (system !== 'amiga_link') {
     return {
       type: 'amiga_kickstart',
       fileName,
@@ -774,6 +774,7 @@ export default function RoomPage() {
   const isAmiga = roomSystem === 'amiga';
   const isAmigaLink = roomSystem === 'amiga_link';
   const isAmigaAga = roomSystem === 'amiga_aga';
+  const isPuaeAmiga = isAmiga || isAmigaAga;
   const isAmigaFamily = isAmiga || isAmigaLink || isAmigaAga;
   const canControlLocalEmulator = isHost || isAmigaLink;
   const isMasterSystem = roomSystem === 'mastersystem';
@@ -814,14 +815,14 @@ export default function RoomPage() {
     return buildAtari8EmulatorSrc(atari8Config);
   }, [atari8Config]);
 
-  const emulatorSrc = isAmigaAga
-    ? '/amiga-aga/launcher.html?v=2026-06-13-2'
-    : isAmiga || isAmigaLink
+  const emulatorSrc = isPuaeAmiga
+    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-01-1`
+    : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
     : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-29-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
-    ? '.adf,.adz,.dms,.ipf,.zip,.7z'
+    ? '.adf,.adz,.dms,.ipf,.hdf,.lha,.zip,.7z'
     : isMasterSystem ? '.sms,.zip,.7z' : isMegaDrive ? '.bin,.gen,.md,.smd,.zip,.7z' : isNes ? '.nes,.zip,.7z' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2,.zip,.7z' : isPcEngine ? '.pce,.sgx,.zip,.7z' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isSaturn ? '.cue,.bin,.chd,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt,.zip,.7z' : isAtari8 ? '.atr,.xfd,.atx,.xex,.com,.car,.rom,.bin,.cas,.zip,.7z' : isAtariSt ? '.st,.msa,.stx,.ipf,.zip,.7z' : isArcade ? '.zip,.7z' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip,.7z' : '.dsk';
   const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMasterSystem ? 'Load Master System ROM' : isMegaDrive ? 'Load Mega Drive ROM' : isNes ? 'Load NES ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isPlayStation ? loadedDiskName ? 'Change PlayStation game' : 'Load PlayStation game' : isSaturn ? loadedDiskName ? 'Change Saturn game' : 'Load Saturn game' : isC64 ? 'Load C64 file' : isAtari8 ? loadedDiskName ? 'Change Atari 8-bit file' : 'Load Atari 8-bit file' : isAtariSt ? 'Load Atari ST disk' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
@@ -1617,7 +1618,7 @@ export default function RoomPage() {
 
   const reloadAmigaAgaFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
-    if (!frame || !isAmigaAga) return;
+    if (!frame || !isPuaeAmiga) return;
 
     stopMirrorLoop();
 
@@ -1627,17 +1628,17 @@ export default function RoomPage() {
       frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
     });
 
-    const storedKickstart = await loadStoredKickstart(AMIGA_AGA_KICKSTART_KEY);
+    const storedKickstart = await loadStoredKickstart(kickstartStorageKey);
     if (storedKickstart) {
       frame.contentWindow?.postMessage(
-        buildAmigaKickstartPayload('amiga_aga', storedKickstart.fileName, storedKickstart.bytes),
+        buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes),
         window.location.origin,
       );
     }
 
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
     startMirrorLoop(emulatorCanvas);
-  }, [emulatorSrc, isAmigaAga]);
+  }, [emulatorSrc, isPuaeAmiga, kickstartStorageKey, roomSystem]);
 
   const reloadPcEngineFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
@@ -1918,7 +1919,7 @@ export default function RoomPage() {
   }, [addLog, isAtariSt]);
 
   useEffect(() => {
-    if (!isAmigaAga) return undefined;
+    if (!isPuaeAmiga) return undefined;
 
     function handleAmigaAgaMessage(event) {
       if (event.origin !== window.location.origin) return;
@@ -1937,7 +1938,7 @@ export default function RoomPage() {
 
     window.addEventListener('message', handleAmigaAgaMessage);
     return () => window.removeEventListener('message', handleAmigaAgaMessage);
-  }, [addLog, isAmigaAga]);
+  }, [addLog, isPuaeAmiga]);
 
   useEffect(() => {
     if (!isHost || !emulatorFrameLoadCount || !kickstartStorageKey) return undefined;
@@ -3906,8 +3907,8 @@ export default function RoomPage() {
   }
 
   function getHostAudioStream(iframe) {
-    if (isAmigaAga) return iframe.contentWindow?.getAmigaAgaAudioStream?.() || null;
-    if (isAmiga) return iframe.contentWindow?.getAmigaAudioStream?.() || null;
+    if (isPuaeAmiga) return iframe.contentWindow?.getAmigaAgaAudioStream?.() || null;
+    if (isAmigaLink) return iframe.contentWindow?.getAmigaAudioStream?.() || null;
     if (isSegaConsole) return iframe.contentWindow?.getMegaDriveAudioStream?.() || null;
     if (isNes) return iframe.contentWindow?.getNesAudioStream?.() || null;
     if (isSnes) return iframe.contentWindow?.getSnesAudioStream?.() || null;
@@ -4416,10 +4417,10 @@ export default function RoomPage() {
       iframe.contentWindow?.postMessage({ type: 'emulator_set_volume', volume: hostVolumeRef.current }, window.location.origin);
       iframe.contentWindow?.postMessage({ type: 'emulator_set_paused', paused: false }, window.location.origin);
 
-      if (isAmiga || isAmigaLink) {
+      if (isAmigaLink) {
         iframe.contentWindow?.postMessage({ type: 'amiga_start' }, window.location.origin);
       }
-      if (isAmigaAga) {
+      if (isPuaeAmiga) {
         iframe.contentWindow?.postMessage({ type: 'amiga_aga_start' }, window.location.origin);
       }
       if (isSegaConsole) {
@@ -5029,7 +5030,7 @@ export default function RoomPage() {
   }
 
   function selectAgaDisk(index) {
-    if (!canControlLocalEmulator || !hostStarted || !isAmigaAga) return;
+    if (!canControlLocalEmulator || !hostStarted || !isPuaeAmiga) return;
 
     forwardInputToEmulator({ type: 'amiga_aga_select_disk', index });
     setStatus(`Inserting AGA disk ${index + 1}`);
@@ -5040,7 +5041,7 @@ export default function RoomPage() {
     const file = localReleaseFiles[index];
     if (!file) return;
 
-    if (isAmigaAga) {
+    if (isPuaeAmiga) {
       selectAgaDisk(index);
       setCurrentLocalReleaseIndex(index);
       return;
@@ -5169,9 +5170,9 @@ export default function RoomPage() {
       return;
     }
 
-    const type = isAmiga || isAmigaLink
+    const type = isAmigaLink
       ? 'amiga_reset'
-      : isAmigaAga
+      : isPuaeAmiga
         ? 'amiga_aga_reset'
       : isSegaConsole ? 'megadrive_reset' : isNes ? 'nes_reset' : isSnes ? 'snes_reset' : isPcEngine ? 'pcengine_reset' : isPlayStation ? 'playstation_reset' : isSaturn ? 'saturn_reset' : isC64 ? 'c64_reset' : isAtari8 ? 'atari8_reset' : isAtariSt ? 'atarist_reset' : isArcade ? 'arcade_reset' : isSpectrum ? 'spectrum_reset' : 'amstrad_reset';
 
@@ -5340,7 +5341,7 @@ export default function RoomPage() {
         && !isArcade
         && file.name.toLowerCase().endsWith('.zip')
         && Boolean(ROM_ZIP_EXTENSIONS[roomSystem]);
-      const filesToLoad = (isAmigaAga || isDiscConsole || isC64 || isAtariSt) && !isSwapDisk && selectedFiles.length > 1
+      const filesToLoad = (isPuaeAmiga || isDiscConsole || isC64 || isAtariSt) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
       const loadedFiles = atari8ZipFile
@@ -5368,11 +5369,12 @@ export default function RoomPage() {
       );
 
       const loadMessage = {
-        type: isSwapDisk ? 'amiga_swap_disk' : isAmigaAga ? 'amiga_aga_autoload' : isAmiga || isAmigaLink ? 'amiga_autoload' : isSegaConsole ? 'megadrive_autoload' : isNes ? 'nes_autoload' : isSnes ? 'snes_autoload' : isPcEngine ? 'pcengine_autoload' : isPlayStation ? 'playstation_autoload' : isSaturn ? 'saturn_autoload' : isC64 ? 'c64_autoload' : isAtari8 ? 'atari8_autoload' : isAtariSt ? 'atarist_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
+        type: isSwapDisk ? 'amiga_swap_disk' : isPuaeAmiga ? 'amiga_aga_autoload' : isAmigaLink ? 'amiga_autoload' : isSegaConsole ? 'megadrive_autoload' : isNes ? 'nes_autoload' : isSnes ? 'snes_autoload' : isPcEngine ? 'pcengine_autoload' : isPlayStation ? 'playstation_autoload' : isSaturn ? 'saturn_autoload' : isC64 ? 'c64_autoload' : isAtari8 ? 'atari8_autoload' : isAtariSt ? 'atarist_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: loadedFiles[0].fileName,
         bytes: isDiscConsole ? undefined : bytes,
         files: isDiscConsole ? loadedFiles : undefined,
-        disks: isAmigaAga && !isSwapDisk ? loadedFiles : undefined,
+        disks: isPuaeAmiga && !isSwapDisk ? loadedFiles : undefined,
+        profile: isPuaeAmiga ? { model: isAmigaAga ? 'A1200' : 'A500' } : undefined,
         media: isC64 || isAtariSt ? loadedFiles : undefined,
         autoloadCommand: cpcAutoloadCommand || undefined,
       };
@@ -5381,8 +5383,8 @@ export default function RoomPage() {
         setStatus('Preparing a clean C64 runtime');
         await reloadC64Frame({ start: true });
       }
-      if (isAmigaAga && loadedDiskName) {
-        setStatus('Preparing a clean Amiga AGA runtime');
+      if (isPuaeAmiga && loadedDiskName) {
+        setStatus('Preparing a clean Amiga PUAE runtime');
         await reloadAmigaAgaFrame();
       }
       if (isPcEngine && loadedDiskName) {
@@ -5436,12 +5438,12 @@ export default function RoomPage() {
         }
       }
 
-      if (isArcade || isAmigaAga || isAtariSt) {
+      if (isArcade || isPuaeAmiga || isAtariSt) {
         if (!hostStartedRef.current && !hostStartingRef.current) {
           await startHostSession();
         }
       }
-      if (isAmigaAga && !isSwapDisk) {
+      if (isPuaeAmiga && !isSwapDisk) {
         setLoadedAgaDiskCount(loadedFiles.length);
         setCurrentAgaDiskIndex(0);
       }
@@ -5646,7 +5648,7 @@ export default function RoomPage() {
                 .slice()
                 .sort((left, right) => (left.diskNumber || 1) - (right.diskNumber || 1))
                 .map((media) => media.file);
-              if (releaseFiles.length > 1 && !isAmigaAga) {
+              if (releaseFiles.length > 1 && !isPuaeAmiga) {
                 const launchId = `local-amiga:${groupedGame.id}:${release.id}:${Date.now()}`;
                 registerRuntimeRelease(launchId, {
                   gameId: groupedGame.id,
@@ -5760,7 +5762,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, localReleaseId, room]);
+  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isPuaeAmiga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, localReleaseId, room]);
 
   async function handleKickstartSelected(event) {
     try {
@@ -6001,7 +6003,7 @@ export default function RoomPage() {
                 Choose instructions ({controlProfileMatches.length})
               </button>
             ) : null}
-            {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isAmigaAga ? 'ROM: A1200 Kickstart recommended' : 'ROM: AROS'}</span> : null}
+            {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? `ROM: ${isAmigaAga ? 'A1200 Kickstart 3.1' : 'A500 Kickstart 1.3'} required` : 'ROM: AROS'}</span> : null}
             {isDiscConsole ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : isSaturn ? 'BIOS: load saturn_bios.bin locally' : 'BIOS: HLE fallback / load your own locally'}</span> : null}
             {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
             {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
@@ -6350,9 +6352,9 @@ export default function RoomPage() {
                   ) : null}
 
                   {!isAtariSt ? (
-                    <button type="button" onClick={startHostSession} disabled={hostStarted || (isAmigaAga && !loadedDiskName)}>
-                      {isAmigaAga && !loadedDiskName
-                        ? 'Load AGA file to start'
+                    <button type="button" onClick={startHostSession} disabled={hostStarted || (isPuaeAmiga && !loadedDiskName)}>
+                      {isPuaeAmiga && !loadedDiskName
+                        ? 'Load Amiga file to start'
                         : isSoloMode
                           ? hostStarted ? 'Emulator running' : 'Start emulator'
                           : isAmigaLink
@@ -6361,7 +6363,7 @@ export default function RoomPage() {
                     </button>
                   ) : null}
 
-                  <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isAmigaAga && !isAtariSt}>
+                  <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isPuaeAmiga && !isAtariSt}>
                     {mediaLabel}
                   </button>
 
@@ -6394,7 +6396,7 @@ export default function RoomPage() {
                     </button>
                   ) : null}
 
-                  {isAmigaAga && loadedAgaDiskCount > 0
+                  {isPuaeAmiga && loadedAgaDiskCount > 0
                     && localReleaseFiles.length === 0
                     ? Array.from({ length: loadedAgaDiskCount }, (_, index) => (
                       <button
@@ -6478,7 +6480,7 @@ export default function RoomPage() {
                   ) : null}
 
                   {isAmigaFamily ? (
-                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted && !isAmigaAga}>
+                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted && !isPuaeAmiga}>
                       {kickstartRomName ? 'Change Kickstart ROM' : 'Load Kickstart ROM'}
                     </button>
                   ) : null}

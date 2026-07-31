@@ -6,7 +6,6 @@ import SocialSidebar from '../components/SocialSidebar';
 import { getLocalLibrarySetting } from '../localLibraryDb';
 import LocalLibraryPage, { SUPPORTED_SYSTEMS } from './LocalLibraryPage';
 import amiga500LogoUrl from '../../assets/amiga500.svg';
-import amiga1200LogoUrl from '../../assets/amiga1200.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
 import arcadeLogoUrl from '../../assets/MAMELogo.svg';
 import atariStLogoUrl from '../../assets/atari-st.webp';
@@ -126,39 +125,16 @@ const PLATFORM_SHELVES = [
           {
             id: 'amiga',
             name: 'Commodore Amiga',
-            shortName: 'A500',
+            shortName: 'Amiga',
             accent: 'blue',
             logo: amiga500LogoUrl,
-            summary: 'Amiga 500 games with joystick and mouse support.',
-            formats: '.adf .zip',
+            summary: 'Unified A500, A600, A1200, AGA and WHDLoad play through PUAE.',
+            formats: '.adf .adz .dms .ipf .hdf .lha .zip',
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
               party: { enabled: false, note: 'Not available yet' },
               link: { enabled: true, system: 'amiga_link', testing: true },
-            },
-          },
-        ],
-      },
-      {
-        id: '32bit',
-        label: '32-bit',
-        strapline: 'Later home-computer experiments.',
-        systems: [
-          {
-            id: 'amiga_aga',
-            name: 'Amiga AGA',
-            shortName: 'A1200',
-            accent: 'blue',
-            logo: amiga1200LogoUrl,
-            summary: 'Amiga 1200 and AGA games. Multi-disk games are supported.',
-            formats: '.adf .zip',
-            testing: true,
-            modes: {
-              solo: { enabled: true },
-              hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available yet' },
-              link: { enabled: false, note: 'Not available yet' },
             },
           },
         ],

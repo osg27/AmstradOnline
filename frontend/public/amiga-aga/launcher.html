@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Amiga AGA Launcher</title>
+    <title>Amiga PUAE Launcher</title>
     <style>
       html, body {
         margin: 0;
@@ -34,7 +34,7 @@
   </head>
   <body>
     <canvas id="game" width="768" height="576" tabindex="0"></canvas>
-    <div id="status">Load an Amiga AGA file to start PUAE</div>
+    <div id="status">Load an Amiga file to start PUAE</div>
 
     <script src="/puae-wasm/puae_libretro.js"></script>
     <script>
@@ -47,17 +47,31 @@
         "/home/web_user/.config/retroarch/system",
         "/system",
       ];
-      const CORE_OPTIONS = [
-        'puae_model = "A1200"',
-        'puae_model_fd = "A1200"',
-        'puae_kickstart = "kick40068.A1200"',
-        'puae_chipset = "AGA"',
-        'puae_cpu_model = "68020"',
-        'puae_chipmem_size = "4"',
-        'puae_fastmem_size = "8"',
+      const PROFILES = {
+        A500: { model: "A500", kickstart: "kick34005.A500", chipset: "OCS", cpu: "68000", chipMemory: "1", fastMemory: "0" },
+        A500PLUS: { model: "A500+", kickstart: "kick37175.A500", chipset: "ECS", cpu: "68000", chipMemory: "2", fastMemory: "0" },
+        A600: { model: "A600", kickstart: "kick40063.A600", chipset: "ECS", cpu: "68000", chipMemory: "2", fastMemory: "0" },
+        A1200: { model: "A1200", kickstart: "kick40068.A1200", chipset: "AGA", cpu: "68020", chipMemory: "4", fastMemory: "8" },
+      };
+      const requestedModel = new URLSearchParams(window.location.search).get("model")?.toUpperCase().replace("+", "PLUS") || "A1200";
+      let activeProfile = PROFILES[requestedModel] || PROFILES.A1200;
+      let coreOptions = "";
+      let pendingContentPath = "/game.m3u";
+
+      function buildCoreOptions() {
+        coreOptions = [
+        `puae_model = "${activeProfile.model}"`,
+        `puae_model_fd = "${activeProfile.model}"`,
+        `puae_kickstart = "${activeProfile.kickstart}"`,
+        `puae_chipset = "${activeProfile.chipset}"`,
+        `puae_cpu_model = "${activeProfile.cpu}"`,
+        `puae_chipmem_size = "${activeProfile.chipMemory}"`,
+        `puae_fastmem_size = "${activeProfile.fastMemory}"`,
         'puae_floppy_multidrive = "disabled"',
         'puae_physical_keyboard_pass_through = "enabled"',
-      ].join("\n");
+        ].join("\n");
+      }
+      buildCoreOptions();
 
       let pendingGame = null;
       let pendingDisks = [];
@@ -136,7 +150,7 @@
 
       function installRuntimeFiles() {
         PUAE_SYSTEM_DIRS.forEach((dir) => {
-          writeRuntimeFile(`${dir}/kick40068.A1200`, pendingKickstart.bytes);
+          writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes);
         });
 
         const disks = pendingDisks.length
@@ -148,7 +162,9 @@
           return path;
         });
 
-        writeRuntimeFile("/game.m3u", encoder.encode(`${diskPaths.join("\n")}\n`));
+        const isWHDLoad = disks.length === 1 && /\.(lha|slave)$/i.test(disks[0].fileName);
+        pendingContentPath = isWHDLoad ? diskPaths[0] : "/game.m3u";
+        if (!isWHDLoad) writeRuntimeFile("/game.m3u", encoder.encode(`${diskPaths.join("\n")}\n`));
         writeRuntimeFile(
           "/home/web_user/.config/retroarch/retroarch.cfg",
           encoder.encode([
@@ -161,7 +177,7 @@
         );
         writeRuntimeFile(
           "/home/web_user/retroarch/userdata/config/retroarch-core-options.cfg",
-          encoder.encode(CORE_OPTIONS)
+          encoder.encode(coreOptions)
         );
       }
 
@@ -312,11 +328,11 @@
       async function startEmulator() {
         if (started) return;
         if (!pendingGame) {
-          setStatus("Choose an Amiga AGA file first");
+          setStatus("Choose an Amiga file first");
           return;
         }
         if (!pendingKickstart?.bytes?.length) {
-          setStatus("Waiting for your A1200 Kickstart ROM...");
+          setStatus(`Waiting for your ${activeProfile.model} Kickstart ROM...`);
           return;
         }
         if (typeof window.EJS_Runtime !== "function") {
@@ -335,7 +351,7 @@
             postRun: [],
             canvas: gameElement,
             callbacks: {
-              setupCoreSettingFile: (path) => writeRuntimeFile(path, encoder.encode(CORE_OPTIONS)),
+              setupCoreSettingFile: (path) => writeRuntimeFile(path, encoder.encode(coreOptions)),
             },
             parent: document.body,
             print: (message) => console.log(message),
@@ -351,7 +367,7 @@
           simulateRuntimeInput = runtimeModule.cwrap("simulate_input", null, ["number", "number", "number"]);
           setKeyboardEnabled = runtimeModule.cwrap("ejs_set_keyboard_enabled", null, ["number"]);
           setKeyboardEnabled(1);
-          runtimeModule.callMain(["/game.m3u"]);
+          runtimeModule.callMain([pendingContentPath]);
           runtimeModule.resumeMainLoop?.();
           gameElement.focus();
           statusElement.style.display = "none";
@@ -369,9 +385,14 @@
         if (event.origin !== window.location.origin) return;
         const data = event.data || {};
 
-        if (data.type === "amiga_aga_start") startEmulator();
+        if (data.type === "amiga_aga_start" || data.type === "amiga_start") startEmulator();
 
-        if (data.type === "amiga_aga_autoload") {
+        if (data.type === "amiga_aga_autoload" || data.type === "amiga_autoload") {
+          const model = String(data.profile?.model || "").toUpperCase().replace("+", "PLUS");
+          if (model && PROFILES[model]) {
+            activeProfile = PROFILES[model];
+            buildCoreOptions();
+          }
           const disks = Array.isArray(data.disks) ? data.disks : [];
           pendingDisks = disks.map((disk, index) => ({
             fileName: disk.fileName || `disk-${index + 1}.adf`,
@@ -393,8 +414,8 @@
           if (pendingGame && !started) startEmulator();
         }
 
-        if (data.type === "amiga_aga_select_disk") selectDisk(data.index);
-        if (data.type === "amiga_aga_reset") window.location.reload();
+        if (data.type === "amiga_aga_select_disk" || data.type === "amiga_select_disk") selectDisk(data.index);
+        if (data.type === "amiga_aga_reset" || data.type === "amiga_reset") window.location.reload();
         if (data.type === "amstrad_audio_unlock") capturedAudioContext?.resume();
         if (data.type === "amstrad_remote_joystick" || data.type === "joystick") {
           applyJoystickMask(data.player, data.mask);

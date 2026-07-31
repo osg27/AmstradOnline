@@ -34,8 +34,8 @@ describe('Amiga configuration', () => {
     expect(config).toMatchObject({ model: 'A1200', chipset: 'AGA', videoStandard: 'PAL', fastMemoryMb: 8, kickstartId: 'kickstart-3.1-a1200' });
   });
 
-  it('selects vAmiga for A500 and PUAE for A1200 without using disk count', () => {
-    expect(selectAmigaRuntime({ model: 'A500' }).engine).toBe('vamiga');
+  it('selects PUAE for both A500 and A1200 without using disk count', () => {
+    expect(selectAmigaRuntime({ model: 'A500' }).engine).toBe('puae');
     expect(selectAmigaRuntime({ model: 'A1200' }).engine).toBe('puae');
     expect(canonicalAmigaPlatform('amiga_aga')).toBe('amiga');
   });

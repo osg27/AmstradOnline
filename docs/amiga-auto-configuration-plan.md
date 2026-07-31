@@ -21,10 +21,11 @@ libretro core from `frontend/public/amiga-aga/launcher.html` and
 `frontend/public/puae-wasm`. Stored room IDs and URLs depend on both IDs, so the UI will
 present one `amiga` platform while treating `amiga_aga` as a compatibility alias/profile.
 
-The A500 launcher accepts one disk at a time and injects Kickstart bytes through vAmiga's
-`kickstart_rom` message. The AGA launcher writes an uploaded Kickstart into PUAE's Emscripten
-system directories as `kick40068.A1200`, writes ordered disks plus an M3U, and writes a fixed
-RetroArch core-options file. `RoomPage.jsx` stores selected ROM bytes in a separate IndexedDB
+Normal A500 and A1200/AGA rooms now share the configurable PUAE launcher. It writes the
+locally supplied Kickstart under the profile-specific core filename, writes ordered floppy
+media plus an M3U, and passes a single LHA directly to PUAE's built-in WHDLoad content path.
+The older vAmiga runtime remains temporarily available only for `amiga_link`, whose serial
+bridge has not yet been reproduced in PUAE. `RoomPage.jsx` stores selected ROM bytes in a separate IndexedDB
 database and posts them to the iframe. This is local-only, but storing whole ROM bytes will be
 replaced for the new folder workflow by retained file handles and just-in-time reads.
 
@@ -84,8 +85,8 @@ keys are retained in diagnostics. The launch requirement names a catalogue Kicks
 browser matches SHA-1, obtains the local `File`, and supplies bytes only to the local iframe.
 Missing ROMs or disks stop launch with an actionable diagnostic.
 
-The bundled PUAE wrapper currently supports A1200, ordered M3U media and runtime disk index
-changes. Its core options are presently hard-coded, and the vAmiga A500 path is a different
-emulator rather than EmulatorJS/PUAE. The integration must make the PUAE options dynamic and
-prove each translated option against the bundled core report/source; options not exposed by
-that build will be reported, not claimed as applied.
+The bundled PUAE wrapper supports A500/A500+/A600/A1200 profiles, ordered M3U media, runtime
+disk-index changes, direct LHA content and built-in WHDLoad helper/save-image handling. The
+first migration uses URL/message-selected A500 and A1200 profiles. OpenRetro-driven selection,
+WHDLoad save-image persistence and browser verification with representative user-owned media
+remain required; options not exposed by this build are reported rather than claimed as applied.
