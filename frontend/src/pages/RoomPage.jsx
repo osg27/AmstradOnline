@@ -5274,7 +5274,9 @@ export default function RoomPage() {
       if (!file) return;
 
       const isSwapDisk = isAmigaFamily && event.target.dataset.mode === 'swap';
-      const allowedExtensions = isAmigaFamily
+      const allowedExtensions = isPuaeAmiga
+        ? ['.adf', '.adz', '.dms', '.ipf', '.hdf', '.lha', '.slave', '.zip', '.7z']
+        : isAmigaLink
         ? ['.adf', '.adz', '.dms', '.ipf', '.zip', '.7z']
         : isMasterSystem ? ['.sms', '.zip', '.7z'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd', '.zip', '.7z'] : isNes ? ['.nes', '.zip', '.7z'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2', '.zip', '.7z'] : isPcEngine ? ['.pce', '.sgx', '.zip', '.7z'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isSaturn ? ['.cue', '.bin', '.chd', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt', '.zip', '.7z'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip', '.7z'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf', '.zip', '.7z'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip', '.7z'] : ['.dsk'];
 
@@ -5290,7 +5292,7 @@ export default function RoomPage() {
           event.target.value = '';
           return;
         }
-        setError(isAmigaFamily ? 'Amiga rooms support .adf, .adz, .dms, .ipf, .zip, and .7z files' : isMasterSystem ? 'Master System rooms support .sms, .zip, and .7z ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, .smd, .zip, and .7z ROM files' : isNes ? 'NES rooms support .nes, .zip, and .7z ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, .dx2, .zip, and .7z ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, .zip, and .7z ROM files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, .crt, .zip, and .7z files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, .zip, and .7z files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, .ipf, .zip, and .7z disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, .zip, and .7z files' : 'Only .dsk files are supported right now');
+        setError(isPuaeAmiga ? 'Amiga PUAE rooms support .adf, .adz, .dms, .ipf, .hdf, .lha, .slave, .zip, and .7z files' : isAmigaLink ? 'Amiga Link rooms support .adf, .adz, .dms, .ipf, .zip, and .7z files' : isMasterSystem ? 'Master System rooms support .sms, .zip, and .7z ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, .smd, .zip, and .7z ROM files' : isNes ? 'NES rooms support .nes, .zip, and .7z ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, .dx2, .zip, and .7z ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, .zip, and .7z files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, .crt, .zip, and .7z files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, .zip, and .7z files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, .ipf, .zip, and .7z disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, .zip, and .7z files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${invalidFile.name}`);
         event.target.value = '';
         return;
