@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
@@ -1100,9 +1100,8 @@ function matchesLibraryQuery(game, query) {
     normalizeSearchText(part),
     compactSearchText(part),
   ]));
-  const haystacks = uniq(searchableTitleParts(game).flatMap((part) => [
-    normalizeSearchText(part),
-    compactSearchText(part),
+  const haystacks = game.searchIndex || uniq(searchableTitleParts(game).flatMap((part) => [
+    normalizeSearchText(part), compactSearchText(part),
   ]));
 
   return queryVariants.some((queryPart) => (
@@ -1163,12 +1162,16 @@ function makeGroupedGame(variants) {
     return left.fileName.localeCompare(right.fileName);
   });
   const preferred = sortedVariants[0];
-  return {
+  const grouped = {
     ...preferred,
     title: canonicalLibraryTitle(preferred),
     variantCount: sortedVariants.length,
     variants: sortedVariants,
   };
+  grouped.searchIndex = uniq(searchableTitleParts(grouped).flatMap((part) => [
+    normalizeSearchText(part), compactSearchText(part),
+  ]));
+  return grouped;
 }
 
 function groupLibraryGames(games, options = {}) {
@@ -1205,6 +1208,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [selectedSystems, setSelectedSystems] = useState([]);
   const [activeSystem, setActiveSystem] = useState(requestedSystemExists ? requestedSystem : 'all');
   const [query, setQuery] = useState(searchParams.get('q') || '');
+  const deferredQuery = useDeferredValue(query);
   const [favourites, setFavourites] = useState([]);
   const [status, setStatus] = useState('Loading library...');
   const [scanProgress, setScanProgress] = useState(null);
@@ -1251,8 +1255,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const localGames = savedGames.filter((game) => (
           game.source !== 'internet-archive-mame' && game.source !== 'vip-c64-oneload'
         ));
-        const localGamesWithArtwork = await restoreCachedBoxArt(localGames);
+        // IndexedDB is the source of truth for the local shelf. Render it immediately;
+        // remote box-art reconciliation must never hold up the game count or navigation.
         setFolders(savedFolders);
+        setGames(localGames);
+        setStatus(localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
+        const localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         setGames(localGamesWithArtwork);
         if (isVip) {
           setStatus('Connecting VIP game libraries...');
@@ -1392,9 +1400,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const letterSourceGames = useMemo(() => {
     return activeLibraryGames
       .filter((game) => !showBoxArtOnly || (Boolean(game.boxArtUrl) && !brokenBoxArtIds.has(game.id)))
-      .filter((game) => matchesLibraryQuery(game, query))
+      .filter((game) => matchesLibraryQuery(game, deferredQuery))
       .sort((a, b) => a.title.localeCompare(b.title));
-  }, [activeLibraryGames, brokenBoxArtIds, query, showBoxArtOnly]);
+  }, [activeLibraryGames, brokenBoxArtIds, deferredQuery, showBoxArtOnly]);
   const alphabetCounts = useMemo(() => {
     const counts = Object.fromEntries(LIBRARY_ALPHABET.map((letter) => [letter, 0]));
     letterSourceGames.forEach((game) => {
