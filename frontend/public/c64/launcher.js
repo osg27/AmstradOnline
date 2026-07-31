@@ -512,7 +512,11 @@
       console.log('Old Style Gaming C64: game started');
       statusText = '';
       window.EJS_emulator?.gameManager?.setKeyboardEnabled?.(true);
-      window.EJS_emulator?.gameManager?.setControllerPortDevice?.(0, 1);
+      try {
+        window.EJS_emulator?.gameManager?.setControllerPortDevice?.(0, 1);
+      } catch (error) {
+        console.warn('Old Style Gaming C64: controller port selection is unavailable', error);
+      }
       lastSimulatedMasks = [0, 0];
       setMask(1, localMask);
       setMask(2, soloMode ? 0 : remoteMask);
