@@ -1255,18 +1255,29 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const localGames = savedGames.filter((game) => (
           game.source !== 'internet-archive-mame' && game.source !== 'vip-c64-oneload'
         ));
+        const savedVipMameGames = savedGames.filter((game) => game.source === 'internet-archive-mame');
+        const savedVipC64Games = savedGames.filter((game) => game.source === 'vip-c64-oneload');
+        const hasCompleteVipCache = savedVipMameGames.length > 0 && savedVipC64Games.length > 0;
         // IndexedDB is the source of truth for the local shelf. Render it immediately;
         // remote box-art reconciliation must never hold up the game count or navigation.
         setFolders(savedFolders);
-        setGames(localGames);
-        setStatus(localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
+        setGames(isVip ? savedGames : localGames);
+        setStatus(isVip && hasCompleteVipCache
+          ? `VIP libraries ready: ${savedVipMameGames.length} MAME and ${savedVipC64Games.length} C64 OneLoad games.`
+          : localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
         const localGamesWithArtwork = await restoreCachedBoxArt(localGames);
-        setGames(localGamesWithArtwork);
+        if (!isVip) setGames(localGamesWithArtwork);
         if (isVip) {
-          setStatus('Connecting VIP game libraries...');
+          if (hasCompleteVipCache) {
+            // These catalogues are immutable for a deployed collection. Keep the complete
+            // records (not just counts) in IndexedDB and avoid rebuilding them on navigation.
+            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games]);
+            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME and ${savedVipC64Games.length} C64 OneLoad games.`);
+          } else {
+          setStatus('Loading VIP game libraries for the first time...');
           const [catalog, c64Catalog] = await Promise.all([
             apiFetch('/auth/vip/mame/catalog').catch(() => ({ roms: [], samples: [] })),
-            apiFetch('/auth/vip/c64/catalog'),
+            apiFetch('/auth/vip/c64/catalog').catch(() => ({ games: [] })),
           ]);
           const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
           const localArcadeKeys = new Set(
@@ -1327,6 +1338,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           setGames(allGames);
           await saveLocalLibraryGames(allGames);
           setStatus(`VIP libraries ready: ${archiveGames.length} MAME and ${c64Games.length} C64 OneLoad games.`);
+          }
         } else {
           setGames(localGamesWithArtwork);
           setStatus(localGamesWithArtwork.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
