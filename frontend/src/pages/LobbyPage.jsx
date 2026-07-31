@@ -357,6 +357,7 @@ export default function LobbyPage() {
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
   const [librarySystems, setLibrarySystems] = useState([]);
+  const [openingLibrary, setOpeningLibrary] = useState(false);
   const canUsePreviewSystems = isAdmin || isTester || isVip || isSuperAdmin;
   const allLibrarySystemIds = useMemo(
     () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin).map((system) => system.id),
@@ -528,13 +529,22 @@ export default function LobbyPage() {
   function chooseSystem(system) {
     if (system.locked) return;
     if (filterToLocalLibrary) {
-      navigate(`/library?system=${encodeURIComponent(system.id)}`);
+      openLibrary(`/library?system=${encodeURIComponent(system.id)}`);
       return;
     }
     setSelectedSystemId(system.id);
     if (!system.modes[selectedMode]?.enabled) {
       setSelectedMode(system.modes.hosted?.enabled ? 'hosted' : 'solo');
     }
+  }
+
+  function openLibrary(path = '/library') {
+    if (openingLibrary) return;
+    setOpeningLibrary(true);
+    // Give React a frame to paint the acknowledgement before mounting a very large shelf.
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => navigate(path), 0);
+    });
   }
 
   async function createSession(mode = selectedMode) {
@@ -629,7 +639,9 @@ export default function LobbyPage() {
           <BrandMark />
           <div className="account-strip">
             <span>{username}</span>
-            <button className="secondary" onClick={() => navigate('/library')}>My Library</button>
+            <button className="secondary" onClick={() => openLibrary()} disabled={openingLibrary}>
+              {openingLibrary ? 'Fetching your games...' : 'My Library'}
+            </button>
             <button className="secondary" onClick={() => navigate('/my-local-games')}>My Local Games</button>
             {canUsePreviewSystems ? (
               <button className="secondary" onClick={() => navigate('/feedback')}>

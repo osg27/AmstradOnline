@@ -171,6 +171,7 @@ const arcadeParentKeyCache = new Map();
 const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 'nintendo']);
 const LIBRARY_PAGE_SIZE = 96;
 const LIBRARY_SNAPSHOT_KEY = 'oldstylegaming:librarySnapshot';
+const BOX_ART_ONLY_KEY = 'oldstylegaming:libraryBoxArtOnly';
 let librarySessionCache = null;
 const groupedLibraryCache = new WeakMap();
 const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
@@ -1231,7 +1232,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const deferredQuery = useDeferredValue(query);
   const [favourites, setFavourites] = useState(() => librarySessionCache?.favourites || []);
-  const [status, setStatus] = useState(librarySessionCache ? 'Library ready' : 'Loading saved library...');
+  const [status, setStatus] = useState(librarySessionCache ? 'Library ready' : 'Fetching your games...');
   const [libraryLoading, setLibraryLoading] = useState(!librarySessionCache);
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
@@ -1239,7 +1240,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [launchingSystemId, setLaunchingSystemId] = useState(null);
   const [vipPreparation, setVipPreparation] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(searchParams.get('clones') === '1');
-  const [showBoxArtOnly, setShowBoxArtOnly] = useState(searchParams.get('boxArt') === '1');
+  const [showBoxArtOnly, setShowBoxArtOnly] = useState(() => (
+    searchParams.has('boxArt')
+      ? searchParams.get('boxArt') === '1'
+      : localStorage.getItem(BOX_ART_ONLY_KEY) === 'true'
+  ));
   const [letterFilter, setLetterFilter] = useState(requestedLetterExists ? requestedLetter : 'all');
   const [joinCode, setJoinCode] = useState('');
   const [loadingJoin, setLoadingJoin] = useState(false);
@@ -1392,6 +1397,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       setActiveSystem(requestedSystem);
     }
   }, [requestedSystem, requestedSystemExists]);
+
+  useEffect(() => {
+    localStorage.setItem(BOX_ART_ONLY_KEY, String(showBoxArtOnly));
+  }, [showBoxArtOnly]);
 
   useEffect(() => {
     if (!mediaProgress) return undefined;
@@ -2355,7 +2364,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               </div>
             ) : (
               <div className="empty-local-library">
-                <strong>{libraryLoading ? 'Loading your saved library...' : games.length ? 'No games match that filter' : 'No local library yet'}</strong>
+                <strong>{libraryLoading ? 'Fetching your games...' : games.length ? 'No games match that filter' : 'No local library yet'}</strong>
                 <span>
                   {libraryLoading
                     ? 'Your saved game lists and folders will appear here shortly.'
