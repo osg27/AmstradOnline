@@ -21,6 +21,24 @@ function scanned(name) {
 }
 
 describe('TOSEC parsing and grouping', () => {
+  it.each(['adf', 'adz', 'dms', 'ipf', 'hdf', 'lha', 'slave', 'zip'])(
+    'accepts the Amiga %s format',
+    (extension) => {
+      expect(isSupportedExtension(extension, 'amiga')).toBe(true);
+    },
+  );
+
+  it('recognises a standalone AGA WHDLoad archive', () => {
+    const file = normaliseFilename('BlackViper_v1.0_AGA.lha');
+    expect(file.cleanedTitle).toBe('BlackViper');
+    expect(file.version).toBe('1.0');
+    expect(file.machine).toContain('AGA');
+
+    const game = groupGames([{ ...scanned('BlackViper_v1.0_AGA.lha'), extension: 'lha', ...file }])[0];
+    expect(game.releases[0].isComplete).toBe(true);
+    expect(game.releases[0].metadata.machine).toContain('AGA');
+  });
+
   it.each(['d64', 'g64', 'f64', 't64', 'p00', 'p01', 'tap', 'prg', 'crt', 'zip'])(
     'accepts the C64 %s format',
     (extension) => {

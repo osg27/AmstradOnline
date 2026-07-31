@@ -39,8 +39,10 @@ export function normaliseFilename(filename) {
   const metadataStart = stem.search(/\s*[\[(]/);
   let rawTitle = metadataStart > 0 ? stem.slice(0, metadataStart) : stem;
   const titleHasCd32 = /\bCD32\b/i.test(rawTitle);
-  rawTitle = rawTitle.replace(/\bCD32\b/gi, ' ');
-  const versionMatch = rawTitle.match(/\bv\s*([0-9]+(?:\.[0-9]+)+)\b/i);
+  const filenameMachines = [...rawTitle.matchAll(/(?:^|[_+\s-])(AGA|OCS|ECS|CD32)(?=$|[_+\s-])/gi)]
+    .map((match) => match[1].toUpperCase());
+  rawTitle = rawTitle.replace(/(?:^|[_+\s-])(?:AGA|OCS|ECS|CD32)(?=$|[_+\s-])/gi, ' ');
+  const versionMatch = rawTitle.match(/(?:^|[_+\s-])v\s*([0-9]+(?:\.[0-9]+)+)(?=$|[_+\s-])/i);
   if (versionMatch) rawTitle = rawTitle.replace(versionMatch[0], ' ');
   rawTitle = rawTitle
     .replace(/\b(?:disk|disc)\s*\d+(?:\s*(?:of|\/|-)\s*\d+)?\b/gi, ' ')
@@ -54,6 +56,9 @@ export function normaliseFilename(filename) {
     : parenthetical.find((tag) => MEDIA_ROLE.test(tag) && !/^(?:disk|disc)/i.test(tag));
   const machine = parenthetical.filter((tag) => MACHINE.test(tag)).map((tag) => tag.toUpperCase());
   if (titleHasCd32 && !machine.includes('CD32')) machine.push('CD32');
+  filenameMachines.forEach((model) => {
+    if (!machine.includes(model)) machine.push(model);
+  });
 
   const knownIndexes = new Set([yearIndex, yearIndex + 1, diskIndex]);
   if (diskRole && parenthetical[diskIndex + 1] === diskRole) knownIndexes.add(diskIndex + 1);
