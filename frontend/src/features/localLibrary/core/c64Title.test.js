@@ -12,8 +12,8 @@ describe('C64 scene title canonicalization', () => {
     ['Zork_2_fastloader.Infocom.zip', 'Zork 2'],
     ['Yie_Ar_Kung_Fu_2.Imagine.p-DD.zip', 'Yie Ar Kung Fu 2'],
     ['Zak McKracken (Disk2).d64', 'Zak McKracken'],
+    ['B.C. Bill.crt', 'B.C. Bill'],
   ])('maps %s to %s', (fileName, expected) => {
     expect(c64CanonicalTitle(fileName)).toBe(expected);
   });
 });
-

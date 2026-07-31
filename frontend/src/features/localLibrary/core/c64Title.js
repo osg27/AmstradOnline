@@ -9,7 +9,7 @@ export function c64CanonicalTitle(fileName) {
     .replace(/\([^)]*\)/g, ' ')
     .trim();
   const dotParts = withoutTags.split(/\.+/).map((part) => part.trim()).filter(Boolean);
-  const likelySceneTitle = dotParts.length > 1 && /[a-z0-9]/i.test(dotParts[0])
+  const likelySceneTitle = dotParts.length > 1 && dotParts[0].replace(/[^a-z0-9]/gi, '').length > 1
     ? dotParts[0]
     : withoutTags;
 

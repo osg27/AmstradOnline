@@ -24,7 +24,7 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
-import { prepareVipMameFile } from '../vipMameCache';
+import { prepareVipC64File, prepareVipMameFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
@@ -1259,13 +1259,18 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           getLocalLibrarySetting('favourites', []),
         ]);
         const savedArtwork = savedBoxArtByGame(savedGames);
-        const localGames = savedGames.filter((game) => game.source !== 'internet-archive-mame');
+        const localGames = savedGames.filter((game) => (
+          game.source !== 'internet-archive-mame' && game.source !== 'vip-c64-oneload'
+        ));
         const localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         setFolders(savedFolders);
         setGames(localGamesWithArtwork);
         if (isVip) {
-          setStatus('Connecting VIP MAME library...');
-          const catalog = await apiFetch('/auth/vip/mame/catalog');
+          setStatus('Connecting VIP game libraries...');
+          const [catalog, c64Catalog] = await Promise.all([
+            apiFetch('/auth/vip/mame/catalog').catch(() => ({ roms: [], samples: [] })),
+            apiFetch('/auth/vip/c64/catalog'),
+          ]);
           const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
           const localArcadeKeys = new Set(
             localGamesWithArtwork
@@ -1297,9 +1302,34 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             });
           const cachedArchiveGames = await restoreCachedBoxArt(archiveGames);
           const archiveGamesWithArtwork = await applyIndexedBoxArt(cachedArchiveGames, 'arcade');
-          setGames([...localGamesWithArtwork, ...archiveGamesWithArtwork]);
-          await saveLocalLibraryGames([...localGamesWithArtwork, ...archiveGamesWithArtwork]);
-          setStatus(`VIP MAME library ready: ${archiveGames.length} remote games.`);
+          const localC64Titles = new Set(
+            localGamesWithArtwork
+              .filter((game) => game.system === 'c64')
+              .map((game) => c64CanonicalTitle(game.fileName || game.title).toLowerCase()),
+          );
+          const c64Games = (Array.isArray(c64Catalog.games) ? c64Catalog.games : [])
+            .filter((entry) => entry?.file_name)
+            .map((entry) => {
+              const fileName = entry.file_name;
+              const title = titleCaseSmallWords(moveTrailingArticle(fileBaseName(fileName)));
+              return {
+                id: `vip-c64:${fileName}`,
+                title,
+                fileName,
+                path: `VIP C64 OneLoad/${fileName}`,
+                size: Number(entry.bytes) || 0,
+                system: 'c64',
+                roomSystem: 'c64',
+                source: 'vip-c64-oneload',
+              };
+            })
+            .filter((game) => !localC64Titles.has(game.title.toLowerCase()));
+          const cachedC64Games = await restoreCachedBoxArt(c64Games);
+          const c64GamesWithArtwork = await applyIndexedBoxArt(cachedC64Games, 'c64');
+          const allGames = [...localGamesWithArtwork, ...archiveGamesWithArtwork, ...c64GamesWithArtwork];
+          setGames(allGames);
+          await saveLocalLibraryGames(allGames);
+          setStatus(`VIP libraries ready: ${archiveGames.length} MAME and ${c64Games.length} C64 OneLoad games.`);
         } else {
           setGames(localGamesWithArtwork);
           setStatus(localGamesWithArtwork.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
@@ -1664,6 +1694,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       if (game.source === 'internet-archive-mame') {
         const prepareFile = async (directory, fileName, label) => {
           setVipPreparation({
+            badge: 'VIP MAME',
             title: game.title,
             fileName,
             label,
@@ -1674,6 +1705,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           });
           await prepareVipMameFile(directory, fileName, ({ loaded, total, attempt, retrying }) => {
             setVipPreparation({
+              badge: 'VIP MAME',
               title: game.title,
               fileName,
               label: retrying ? `Retrying ${label.toLowerCase()}...` : label,
@@ -1690,11 +1722,49 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           await prepareFile('samples', game.archiveSampleFileName, 'Downloading samples');
         }
         setVipPreparation({
+          badge: 'VIP MAME',
           title: game.title,
           fileName: game.fileName,
           label: 'ROM ready — opening room',
           loaded: 1,
           total: 1,
+          percent: 100,
+          attempt: 1,
+        });
+      }
+
+      if (game.source === 'vip-c64-oneload') {
+        setVipPreparation({
+          badge: 'VIP C64',
+          title: game.title,
+          fileName: game.fileName,
+          label: 'Downloading OneLoad cartridge',
+          loaded: 0,
+          total: game.size || 0,
+          percent: 0,
+          attempt: 1,
+        });
+        await prepareVipC64File(game.fileName, ({ loaded, total, attempt, retrying }) => {
+          setVipPreparation({
+            badge: 'VIP C64',
+            title: game.title,
+            fileName: game.fileName,
+            label: retrying ? 'Retrying cartridge download...' : 'Downloading OneLoad cartridge',
+            loaded,
+            total: total || game.size || 0,
+            percent: (total || game.size)
+              ? Math.min(100, Math.round((loaded / (total || game.size)) * 100))
+              : 0,
+            attempt,
+          });
+        });
+        setVipPreparation({
+          badge: 'VIP C64',
+          title: game.title,
+          fileName: game.fileName,
+          label: 'Cartridge ready — opening room',
+          loaded: game.size || 1,
+          total: game.size || 1,
           percent: 100,
           attempt: 1,
         });
@@ -1850,7 +1920,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       {vipPreparation ? (
         <div className="vip-rom-loading-overlay" role="status" aria-live="polite">
           <div className="vip-rom-loading-scene">
-            <span className="vip-rom-loading-badge">VIP MAME</span>
+            <span className="vip-rom-loading-badge">{vipPreparation.badge || 'VIP'}</span>
             <div className="vip-rom-loading-cabinet" aria-hidden="true">
               <i className="bi bi-joystick" />
             </div>

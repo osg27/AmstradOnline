@@ -22,8 +22,11 @@ services:
     volumes:
       - ./backend:/app
       - ./library_media:/library_media
+      - ./OneLoad64-Games-Collection-v5:/vip_c64_oneload:ro
     env_file:
       - .env
+    environment:
+      VIP_C64_ONELOAD_DIR: /vip_c64_oneload
     ports:
       - "8000:8000"
     depends_on:
