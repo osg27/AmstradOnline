@@ -28,6 +28,7 @@ import { prepareVipMameFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
+import { c64CanonicalTitle } from '../features/localLibrary/core/c64Title';
 
 export const SUPPORTED_SYSTEMS = [
   {
@@ -1011,6 +1012,7 @@ function canonicalLibraryTitle(game) {
   if (arcadeTitle) return arcadeTitle;
 
   const storedTitle = game.title || fileBaseName(game.fileName);
+  const c64Title = game.system === 'c64' ? c64CanonicalTitle(game.fileName || storedTitle) : '';
   const fileTitle = titleFromFileName(game.fileName || storedTitle);
   const knownTitle = knownCompactTitle(game.fileName || storedTitle);
   const rawTitle = knownTitle || (
@@ -1018,7 +1020,7 @@ function canonicalLibraryTitle(game) {
       ? fileTitle
       : storedTitle
   );
-  const withoutMeta = stripRegionAndMeta(rawTitle)
+  const withoutMeta = stripRegionAndMeta(c64Title || rawTitle)
     .replace(/\b(?:rev(?:ision)?|version|ver)\s*[a-z0-9.]+$/i, '')
     .replace(/\b(?:beta|proto(?:type)?|sample|demo|hack|trainer|translation|overdump|bad dump|alternate)\b.*$/i, '')
     .replace(/\b(?:sound(?:s|track)?|music|bgm|sample(?:s)?|speech|voice(?:s)?)\b$/i, '')
