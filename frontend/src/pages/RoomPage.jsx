@@ -108,6 +108,8 @@ const SNES_UNWANTED_ENTRY_PATTERNS = [
   /\b(trainer|trained|translation|translated|hack|bad|overdump|alternate|prototype|proto|beta|sample|demo)\b/i,
 ];
 const ROM_ZIP_EXTENSIONS = {
+  amiga: ['.lha', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
+  amiga_aga: ['.lha', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
   c64: ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt'],
   mastersystem: ['.sms'],
   megadrive: ['.bin', '.gen', '.md', '.smd'],
@@ -119,7 +121,7 @@ const ROM_ZIP_EXTENSIONS = {
   saturn_beetle: ['.cue', '.bin', '.chd', '.iso'],
   spectrum: ['.tap', '.tzx', '.z80', '.sna', '.szx'],
 };
-const MULTI_FILE_ZIP_SYSTEMS = new Set(['c64', 'playstation', 'saturn', 'saturn_beetle']);
+const MULTI_FILE_ZIP_SYSTEMS = new Set(['amiga', 'amiga_aga', 'c64', 'playstation', 'saturn', 'saturn_beetle']);
 const ATARI8_MODEL_OPTIONS = [
   ['400/800', '400/800'],
   ['1200xl', '1200XL'],

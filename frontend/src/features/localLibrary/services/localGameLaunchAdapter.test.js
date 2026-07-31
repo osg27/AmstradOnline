@@ -64,4 +64,18 @@ describe('local game launch adapter', () => {
     };
     expect(prepareLocalGameLaunch(game, storage).roomSystem).toBe('amiga_aga');
   });
+
+  it('routes a WHDLoad archive through the HD-capable A1200 PUAE room', () => {
+    const storage = { getItem: () => null, removeItem: () => {} };
+    const game = {
+      id: 'amiga-lotus-2', platform: 'amiga', defaultReleaseId: 'release',
+      releases: [{
+        id: 'release',
+        isComplete: true,
+        metadata: { machine: [] },
+        media: [{ name: 'Lotus2_v1.11_0497.lha', file: { name: 'Lotus2_v1.11_0497.lha' } }],
+      }],
+    };
+    expect(prepareLocalGameLaunch(game, storage).roomSystem).toBe('amiga_aga');
+  });
 });

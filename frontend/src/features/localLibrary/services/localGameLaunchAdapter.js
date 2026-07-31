@@ -16,8 +16,9 @@ export function prepareLocalGameLaunch(game, storage = window.localStorage) {
   const launchId = `local-amiga:${game.id}:${release.id}:${Date.now()}`;
   const machine = release.metadata.machine || [];
   const resolvedModel = release.amiga?.launchConfiguration?.model || release.metadata.amigaModel || '';
+  const isWhdLoad = release.media.some((media) => /\.(?:lha|slave)$/i.test(media.name || media.file?.name || ''));
   const roomSystem = game.platform === 'amiga'
-    ? (machine.includes('AGA') || machine.includes('CD32') || resolvedModel === 'A1200' ? 'amiga_aga' : 'amiga')
+    ? (isWhdLoad || machine.includes('AGA') || machine.includes('CD32') || resolvedModel === 'A1200' ? 'amiga_aga' : 'amiga')
     : game.platform === 'c64'
       ? 'c64'
       : game.platform === 'spectrum'

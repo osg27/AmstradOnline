@@ -62,12 +62,15 @@
         coreOptions = [
         `puae_model = "${activeProfile.model}"`,
         `puae_model_fd = "${activeProfile.model}"`,
+        `puae_model_hd = "${activeProfile.model === "A1200" ? "A1200" : "A600"}"`,
         `puae_kickstart = "${activeProfile.kickstart}"`,
         `puae_chipset = "${activeProfile.chipset}"`,
         `puae_cpu_model = "${activeProfile.cpu}"`,
         `puae_chipmem_size = "${activeProfile.chipMemory}"`,
         `puae_fastmem_size = "${activeProfile.fastMemory}"`,
         'puae_floppy_multidrive = "disabled"',
+        'puae_use_whdload = "files"',
+        'puae_use_whdload_prefs = "splash"',
         'puae_physical_keyboard_pass_through = "enabled"',
         ].join("\n");
       }
@@ -169,6 +172,8 @@
           "/home/web_user/.config/retroarch/retroarch.cfg",
           encoder.encode([
             'system_directory = "/home/web_user/retroarch/userdata/system"',
+            'savefile_directory = "/home/web_user/retroarch/userdata/saves"',
+            'savestate_directory = "/home/web_user/retroarch/userdata/states"',
             'core_options_path = "/home/web_user/retroarch/userdata/config/retroarch-core-options.cfg"',
             "video_vsync = true",
             "video_smooth = false",
