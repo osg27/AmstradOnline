@@ -5,7 +5,6 @@
 
   let currentMedia = [];
   let loaderScript = null;
-  let gameUrl = null;
   let sharedAudioContext = null;
   let audioDestination = null;
   let audioCaptureGain = null;
@@ -362,10 +361,6 @@
       loaderScript.remove();
       loaderScript = null;
     }
-    if (gameUrl) {
-      URL.revokeObjectURL(gameUrl);
-      gameUrl = null;
-    }
   }
 
   function configureEmulator(fileName, romUrl) {
@@ -501,9 +496,9 @@
     const gameBlob = currentMedia.length > 1
       ? createMediaBundle(currentMedia)
       : new Blob([currentMedia[0].bytes], { type: 'application/octet-stream' });
-    gameUrl = URL.createObjectURL(gameBlob);
     const gameName = currentMedia.length > 1 ? 'old-style-c64-media.zip' : currentMedia[0].fileName;
-    configureEmulator(gameName, gameUrl);
+    const gameFile = new File([gameBlob], gameName, { type: gameBlob.type || 'application/octet-stream' });
+    configureEmulator(gameName, gameFile);
     drawStatus('Loading C64', currentMedia.length > 1 ? `${currentMedia.length} media files` : currentMedia[0].fileName);
 
     loaderScript = document.createElement('script');
