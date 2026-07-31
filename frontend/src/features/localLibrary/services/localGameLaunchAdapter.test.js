@@ -34,7 +34,7 @@ describe('local game launch adapter', () => {
     expect(prepareLocalGameLaunch(game, storage).roomSystem).toBe(roomSystem);
   });
 
-  it('routes multidisk Amiga releases through the existing PUAE M3U player', () => {
+  it('does not infer A1200 merely because an Amiga release has multiple disks', () => {
     const storage = { getItem: () => null, removeItem: () => {} };
     const game = {
       id: 'amiga-agony',
@@ -52,7 +52,16 @@ describe('local game launch adapter', () => {
       }],
     };
     const launch = prepareLocalGameLaunch(game, storage);
-    expect(launch.roomSystem).toBe('amiga_aga');
+    expect(launch.roomSystem).toBe('amiga');
     expect(launch.files).toHaveLength(3);
+  });
+
+  it('routes a resolved A1200 release through PUAE', () => {
+    const storage = { getItem: () => null, removeItem: () => {} };
+    const game = {
+      id: 'amiga-aga', platform: 'amiga', defaultReleaseId: 'release',
+      releases: [{ id: 'release', isComplete: true, metadata: { machine: [] }, amiga: { launchConfiguration: { model: 'A1200' } }, media: [{ diskNumber: 1, name: 'game.adf', file: { name: 'game.adf' } }] }],
+    };
+    expect(prepareLocalGameLaunch(game, storage).roomSystem).toBe('amiga_aga');
   });
 });

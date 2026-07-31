@@ -15,8 +15,9 @@ export function prepareLocalGameLaunch(game, storage = window.localStorage) {
   const files = orderedReleaseFiles(release);
   const launchId = `local-amiga:${game.id}:${release.id}:${Date.now()}`;
   const machine = release.metadata.machine || [];
+  const resolvedModel = release.amiga?.launchConfiguration?.model || release.metadata.amigaModel || '';
   const roomSystem = game.platform === 'amiga'
-    ? (machine.includes('AGA') || machine.includes('CD32') || files.length > 1 ? 'amiga_aga' : 'amiga')
+    ? (machine.includes('AGA') || machine.includes('CD32') || resolvedModel === 'A1200' ? 'amiga_aga' : 'amiga')
     : game.platform === 'c64'
       ? 'c64'
       : game.platform === 'spectrum'
@@ -31,6 +32,7 @@ export function prepareLocalGameLaunch(game, storage = window.localStorage) {
     title: game.title,
     files,
     roomSystem,
+    amigaManifest: release.amiga?.manifest || null,
   });
   return { launchId, release, files, roomSystem };
 }

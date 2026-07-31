@@ -4,7 +4,6 @@ import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import { getMameTitleDatabase } from '../data/mameTitleLookup';
 import amigaLogoUrl from '../../assets/amiga500.svg';
-import amigaAgaLogoUrl from '../../assets/amiga1200.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
 import arcadeLogoUrl from '../../assets/MAMELogo.svg';
 import atariStLogoUrl from '../../assets/atari-st.webp';
@@ -126,19 +125,10 @@ export const SUPPORTED_SYSTEMS = [
     id: 'amiga',
     roomSystem: 'amiga',
     label: 'Amiga',
-    shortLabel: 'A500',
+    shortLabel: 'Amiga',
     logo: amigaLogoUrl,
-    extensions: ['adf', 'zip', '7z'],
-    pathHints: ['amiga', 'a500'],
-  },
-  {
-    id: 'amiga_aga',
-    roomSystem: 'amiga_aga',
-    label: 'Amiga AGA',
-    shortLabel: 'A1200',
-    logo: amigaAgaLogoUrl,
-    extensions: ['adf', 'adz', 'dms', 'ipf', 'zip', '7z'],
-    pathHints: ['amiga aga', 'amiga 1200', 'amiga1200', 'a1200', 'aga'],
+    extensions: ['adf', 'adz', 'dms', 'ipf', 'hdf', 'lha', 'zip', '7z'],
+    pathHints: ['amiga', 'a500', 'a600', 'a1200', 'aga'],
   },
   {
     id: 'atarist',
@@ -173,7 +163,6 @@ const LIBRETRO_BOXART_REPOS = {
   pcengine: ['NEC_-_PC_Engine_-_TurboGrafx_16'],
   playstation: ['Sony_-_PlayStation'],
   amiga: ['Commodore_-_Amiga'],
-  amiga_aga: ['Commodore_-_Amiga'],
   atarist: ['Atari_-_ST'],
 };
 
