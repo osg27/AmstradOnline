@@ -855,13 +855,18 @@ async function restoreCachedBoxArt(games) {
     const matches = {};
     const batchSize = 250;
     for (let offset = 0; offset < romNames.length; offset += batchSize) {
-      const result = await apiFetch('/library/media/boxart/lookup', {
-        method: 'POST',
-        body: JSON.stringify({
-          system,
-          rom_names: romNames.slice(offset, offset + batchSize),
-        }),
-      }).catch(() => ({ matches: {} }));
+      let result;
+      try {
+        result = await apiFetch('/library/media/boxart/lookup', {
+          method: 'POST',
+          body: JSON.stringify({
+            system,
+            rom_names: romNames.slice(offset, offset + batchSize),
+          }),
+        });
+      } catch {
+        break;
+      }
       Object.assign(matches, result?.matches || {});
       if (offset > 0 && offset % 1000 === 0) {
         await new Promise((resolve) => window.setTimeout(resolve, 0));
