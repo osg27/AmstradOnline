@@ -170,6 +170,8 @@ const boxArtIndexCache = new Map();
 const arcadeParentKeyCache = new Map();
 const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 'nintendo']);
 const LIBRARY_PAGE_SIZE = 96;
+const LIBRARY_SNAPSHOT_KEY = 'oldstylegaming:librarySnapshot';
+let librarySessionCache = null;
 const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 const COMPACT_REGION_SUFFIXES = {
   U: 'USA',
@@ -775,6 +777,14 @@ function isExternalBoxArtUrl(url) {
   return !url.startsWith(API_BASE_URL);
 }
 
+function readLibrarySnapshot() {
+  try {
+    return JSON.parse(localStorage.getItem(LIBRARY_SNAPSHOT_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
 function boxArtLookupKey(game) {
   if (game.system === 'arcade') {
     const romKey = game.romKey || arcadeRomKey(game.fileName || '');
@@ -1203,14 +1213,16 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const requestedLetter = searchParams.get('letter');
   const requestedLetterExists = requestedLetter === 'all' || LIBRARY_ALPHABET.includes(requestedLetter);
   const username = localStorage.getItem('username');
-  const [folders, setFolders] = useState([]);
-  const [games, setGames] = useState([]);
-  const [selectedSystems, setSelectedSystems] = useState([]);
+  const [librarySnapshot] = useState(readLibrarySnapshot);
+  const [folders, setFolders] = useState(() => librarySessionCache?.folders || []);
+  const [games, setGames] = useState(() => librarySessionCache?.games || []);
+  const [selectedSystems, setSelectedSystems] = useState(() => librarySessionCache?.selectedSystems || []);
   const [activeSystem, setActiveSystem] = useState(requestedSystemExists ? requestedSystem : 'all');
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const deferredQuery = useDeferredValue(query);
-  const [favourites, setFavourites] = useState([]);
-  const [status, setStatus] = useState('Loading library...');
+  const [favourites, setFavourites] = useState(() => librarySessionCache?.favourites || []);
+  const [status, setStatus] = useState(librarySessionCache ? 'Library ready' : 'Loading saved library...');
+  const [libraryLoading, setLibraryLoading] = useState(!librarySessionCache);
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
@@ -1349,6 +1361,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         setFavourites(savedFavourites);
       } catch (err) {
         setStatus(`Could not load local library: ${err.message}`);
+      } finally {
+        setLibraryLoading(false);
       }
     }
 
@@ -1385,9 +1399,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     [games, showArcadeClones],
   );
   const systemCounts = useMemo(() => buildSystemCounts(groupedGames), [groupedGames]);
+  const effectiveSystemCounts = games.length ? systemCounts : (librarySnapshot.systemCounts || systemCounts);
   const visibleSystems = useMemo(
-    () => availableSystems.filter((system) => (systemCounts[system.id] || 0) > 0 || folders.some((folder) => folder.system === system.id)),
-    [availableSystems, folders, systemCounts],
+    () => availableSystems.filter((system) => (effectiveSystemCounts[system.id] || 0) > 0 || folders.some((folder) => folder.system === system.id)),
+    [availableSystems, effectiveSystemCounts, folders],
   );
   const activeSystemDetails = activeSystem === 'all' || activeSystem === 'favourites'
     ? null
@@ -1443,6 +1458,28 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   );
   const displayedGames = useMemo(() => filteredGames.slice(0, renderLimit), [filteredGames, renderLimit]);
   const canShowMoreGames = filteredGames.length > displayedGames.length;
+  const snapshotActiveCount = activeSystem === 'all'
+    ? Number(librarySnapshot.totalGames || 0)
+    : Number(librarySnapshot.systemCounts?.[activeSystem] || 0);
+  const visibleFilteredCount = libraryLoading && !games.length ? snapshotActiveCount : filteredGames.length;
+  const visibleActiveCount = libraryLoading && !games.length ? snapshotActiveCount : activeLibraryGames.length;
+  const visibleFolderCount = libraryLoading && !folders.length
+    ? Number(librarySnapshot.folderCount || 0)
+    : folders.length;
+
+  useEffect(() => {
+    if (libraryLoading) return;
+    librarySessionCache = { games, folders, selectedSystems, favourites };
+    try {
+      localStorage.setItem(LIBRARY_SNAPSHOT_KEY, JSON.stringify({
+        totalGames: groupedGames.length,
+        systemCounts,
+        folderCount: folders.length,
+      }));
+    } catch {
+      // A count snapshot is an optional fast-path; IndexedDB remains authoritative.
+    }
+  }, [favourites, folders, games, groupedGames.length, libraryLoading, selectedSystems, systemCounts]);
 
   useEffect(() => {
     setRenderLimit(LIBRARY_PAGE_SIZE);
@@ -1966,7 +2003,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           </div>
           <div className="local-library-actions">
             <span>Choose a system below, then add its ROM folder.</span>
-            <span>{folders.length ? `${folders.length} folder${folders.length === 1 ? '' : 's'} connected` : 'No folders connected yet'}</span>
+            <span>{visibleFolderCount ? `${visibleFolderCount} folder${visibleFolderCount === 1 ? '' : 's'} connected` : libraryLoading ? 'Loading saved folders...' : 'No folders connected yet'}</span>
             {!onboarding ? (
               <form className="quick-join library-quick-join" onSubmit={handleJoinRoom}>
                 <label>
@@ -2033,7 +2070,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               <div className="system-picker-list platform-rail">
                 {availableSystems.map((system) => {
                   const linkedFolder = folders.find((folder) => folder.system === system.id);
-                  const count = systemCounts[system.id] || 0;
+                  const count = effectiveSystemCounts[system.id] || 0;
                   const folderLabel = linkedFolder ? linkedFolder.name : 'No folder connected';
                   return (
                     <div key={system.id} className={activeSystem === system.id ? 'system-picker-row enabled' : 'system-picker-row'}>
@@ -2133,7 +2170,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               <div>
                 <p className="lobby-eyebrow">{activeSystem === 'favourites' ? 'Saved Picks' : activeSystemDetails?.shortLabel || 'All Platforms'}</p>
                 <h2>{activeSystem === 'favourites' ? 'Favourites' : activeSystemDetails?.label || 'All Games'}</h2>
-                <span>{filteredGames.length} shown from {activeLibraryGames.length} {activeLibraryCountLabel}</span>
+                <span>{visibleFilteredCount} shown from {visibleActiveCount} {activeLibraryCountLabel}</span>
               </div>
               {activeSystemDetails ? (
                 <div className="local-library-title-actions">
@@ -2228,8 +2265,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             </div>
 
             <div className="library-summary-strip">
-              <strong>{filteredGames.length}</strong>
-              <span>shown from {activeLibraryGames.length} {activeLibraryCountLabel}{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
+              <strong>{visibleFilteredCount}</strong>
+              <span>shown from {visibleActiveCount} {activeLibraryCountLabel}{libraryLoading && !games.length ? ' - loading saved games...' : ''}{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
             {mediaProgress ? (
               <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
@@ -2300,9 +2337,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               </div>
             ) : (
               <div className="empty-local-library">
-                <strong>{games.length ? 'No games match that filter' : 'No local library yet'}</strong>
+                <strong>{libraryLoading ? 'Loading your saved library...' : games.length ? 'No games match that filter' : 'No local library yet'}</strong>
                 <span>
-                  {games.length
+                  {libraryLoading
+                    ? 'Your saved game lists and folders will appear here shortly.'
+                    : games.length
                     ? 'Try another system or search term.'
                     : activeSystemDetails
                       ? `Open a ${activeSystemDetails.label} room and upload one game, or add a folder when you are ready.`
