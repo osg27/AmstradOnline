@@ -11,7 +11,7 @@ import { normaliseFilename } from '../features/localLibrary/core/normalise';
 import { scanFiles as scanLocalReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupLocalReleaseFiles } from '../features/localLibrary/core/group';
 import { resolveRelease } from '../features/localLibrary/storage/preferredReleaseStorage';
-import { takePreparedVipC64File, takePreparedVipMameFile } from '../vipMameCache';
+import { takePreparedVipAmigaFile, takePreparedVipC64File, takePreparedVipMameFile } from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
@@ -5645,6 +5645,45 @@ export default function RoomPage() {
             },
           });
           if (cancelled) return;
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+          return;
+        }
+
+        if (pendingGame?.id === localGameId && pendingGame.source === 'vip-amiga-whdload') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) throw new Error('VIP access is required for the Amiga WHDLoad library.');
+
+          let gameBytes = await takePreparedVipAmigaFile(pendingGame.fileName);
+          if (!gameBytes) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/auth/vip/amiga/files/${encodeURIComponent(pendingGame.fileName)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+            }
+            gameBytes = new Uint8Array(await response.arrayBuffer());
+          }
+          if (cancelled) return;
+
+          const whdLoadFile = new File(
+            [gameBytes],
+            pendingGame.fileName,
+            { type: 'application/octet-stream' },
+          );
+          const gameLoaded = await handleDiskSelected({
+            target: {
+              files: [whdLoadFile],
+              dataset: {},
+              value: '',
+            },
+          });
+          if (!gameLoaded || cancelled) return;
           sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
           if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
           return;

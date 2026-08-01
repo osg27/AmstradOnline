@@ -23,7 +23,7 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
-import { prepareVipC64File, prepareVipMameFile } from '../vipMameCache';
+import { prepareVipAmigaFile, prepareVipC64File, prepareVipMameFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
@@ -1340,17 +1340,22 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         ]);
         const savedArtwork = savedBoxArtByGame(savedGames);
         const localGames = savedGames.filter((game) => (
-          game.source !== 'internet-archive-mame' && game.source !== 'vip-c64-oneload'
+          game.source !== 'internet-archive-mame'
+          && game.source !== 'vip-c64-oneload'
+          && game.source !== 'vip-amiga-whdload'
         ));
         const savedVipMameGames = savedGames.filter((game) => game.source === 'internet-archive-mame');
         const savedVipC64Games = savedGames.filter((game) => game.source === 'vip-c64-oneload');
-        const hasCompleteVipCache = savedVipMameGames.length > 0 && savedVipC64Games.length > 0;
+        const savedVipAmigaGames = savedGames.filter((game) => game.source === 'vip-amiga-whdload');
+        const hasCompleteVipCache = savedVipMameGames.length > 0
+          && savedVipC64Games.length > 0
+          && savedVipAmigaGames.length > 0;
         // IndexedDB is the source of truth for the local shelf. Render it immediately;
         // remote box-art reconciliation must never hold up the game count or navigation.
         setFolders(savedFolders);
         setGames(isVip ? savedGames : localGames);
         setStatus(isVip && hasCompleteVipCache
-          ? `VIP libraries ready: ${savedVipMameGames.length} MAME and ${savedVipC64Games.length} C64 OneLoad games.`
+          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64 and ${savedVipAmigaGames.length} Amiga WHDLoad games.`
           : localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
         const localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         if (!isVip) setGames(localGamesWithArtwork);
@@ -1358,13 +1363,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           if (hasCompleteVipCache) {
             // These catalogues are immutable for a deployed collection. Keep the complete
             // records (not just counts) in IndexedDB and avoid rebuilding them on navigation.
-            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games]);
-            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME and ${savedVipC64Games.length} C64 OneLoad games.`);
+            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmigaGames]);
+            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64 and ${savedVipAmigaGames.length} Amiga WHDLoad games.`);
           } else {
           setStatus('Loading VIP game libraries for the first time...');
-          const [catalog, c64Catalog] = await Promise.all([
+          const [catalog, c64Catalog, amigaCatalog] = await Promise.all([
             apiFetch('/auth/vip/mame/catalog').catch(() => ({ roms: [], samples: [] })),
             apiFetch('/auth/vip/c64/catalog').catch(() => ({ games: [] })),
+            apiFetch('/auth/vip/amiga/catalog').catch(() => ({ games: [] })),
           ]);
           const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
           const localArcadeKeys = new Set(
@@ -1421,10 +1427,38 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localC64Titles.has(game.title.toLowerCase()));
           const cachedC64Games = await restoreCachedBoxArt(c64Games);
           const c64GamesWithArtwork = await applyIndexedBoxArt(cachedC64Games, 'c64');
-          const allGames = [...localGamesWithArtwork, ...archiveGamesWithArtwork, ...c64GamesWithArtwork];
+          const localAmigaTitles = new Set(
+            localGamesWithArtwork
+              .filter((game) => game.system === 'amiga' || game.system === 'amiga_aga')
+              .map((game) => titleFromFileName(game.fileName || game.title).toLowerCase()),
+          );
+          const amigaGames = (Array.isArray(amigaCatalog.games) ? amigaCatalog.games : [])
+            .filter((entry) => entry?.file_name)
+            .map((entry) => {
+              const fileName = entry.file_name;
+              return {
+                id: `vip-amiga:${fileName}`,
+                title: titleFromFileName(fileName),
+                fileName,
+                path: `VIP Amiga WHDLoad/${fileName}`,
+                size: Number(entry.bytes) || 0,
+                system: 'amiga',
+                roomSystem: 'amiga_aga',
+                source: 'vip-amiga-whdload',
+              };
+            })
+            .filter((game) => !localAmigaTitles.has(game.title.toLowerCase()));
+          const cachedAmigaGames = await restoreCachedBoxArt(amigaGames);
+          const amigaGamesWithArtwork = await applyIndexedBoxArt(cachedAmigaGames, 'amiga');
+          const allGames = [
+            ...localGamesWithArtwork,
+            ...archiveGamesWithArtwork,
+            ...c64GamesWithArtwork,
+            ...amigaGamesWithArtwork,
+          ];
           setGames(allGames);
           await saveLocalLibraryGames(allGames);
-          setStatus(`VIP libraries ready: ${archiveGames.length} MAME and ${c64Games.length} C64 OneLoad games.`);
+          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64 and ${amigaGames.length} Amiga WHDLoad games.`);
           }
         } else {
           setGames(localGamesWithArtwork);
@@ -1785,7 +1819,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     setLaunchingId(game.id);
     setStatus(`Starting ${game.title}...`);
     try {
-      if ((game.system === 'amiga' || game.system === 'amiga_aga') && game.source !== 'internet-archive-mame') {
+      if (
+        (game.system === 'amiga' || game.system === 'amiga_aga')
+        && game.source !== 'vip-amiga-whdload'
+      ) {
         const variants = game.variants || [game];
         const files = [];
         for (const variant of variants) {
@@ -1894,6 +1931,42 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           title: game.title,
           fileName: game.fileName,
           label: 'Cartridge ready — opening room',
+          loaded: game.size || 1,
+          total: game.size || 1,
+          percent: 100,
+          attempt: 1,
+        });
+      }
+
+      if (game.source === 'vip-amiga-whdload') {
+        setVipPreparation({
+          badge: 'VIP Amiga',
+          title: game.title,
+          fileName: game.fileName,
+          label: 'Downloading WHDLoad game',
+          loaded: 0,
+          total: game.size || 0,
+          percent: 0,
+          attempt: 1,
+        });
+        await prepareVipAmigaFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+          const expectedTotal = total || game.size || 0;
+          setVipPreparation({
+            badge: 'VIP Amiga',
+            title: game.title,
+            fileName: game.fileName,
+            label: retrying ? 'Retrying WHDLoad download...' : 'Downloading WHDLoad game',
+            loaded,
+            total: expectedTotal,
+            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+            attempt,
+          });
+        });
+        setVipPreparation({
+          badge: 'VIP Amiga',
+          title: game.title,
+          fileName: game.fileName,
+          label: 'WHDLoad game ready — opening room',
           loaded: game.size || 1,
           total: game.size || 1,
           percent: 100,
