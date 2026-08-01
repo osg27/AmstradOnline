@@ -1347,9 +1347,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const savedVipMameGames = savedGames.filter((game) => game.source === 'internet-archive-mame');
         const savedVipC64Games = savedGames.filter((game) => game.source === 'vip-c64-oneload');
         const savedVipAmigaGames = savedGames.filter((game) => game.source === 'vip-amiga-whdload');
+        const hasCurrentVipAmigaCache = savedVipAmigaGames.some((game) => (
+          game.fileName?.toLowerCase().endsWith('.zip')
+        ));
         const hasCompleteVipCache = savedVipMameGames.length > 0
           && savedVipC64Games.length > 0
-          && savedVipAmigaGames.length > 0;
+          && savedVipAmigaGames.length > 0
+          && hasCurrentVipAmigaCache;
         // IndexedDB is the source of truth for the local shelf. Render it immediately;
         // remote box-art reconciliation must never hold up the game count or navigation.
         setFolders(savedFolders);

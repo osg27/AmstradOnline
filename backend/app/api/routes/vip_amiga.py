@@ -17,7 +17,7 @@ router = APIRouter(prefix="/auth/vip/amiga", tags=["vip-amiga"])
 ARCHIVE_ITEM = "Amiga_WHD_Games"
 ARCHIVE_DOWNLOAD_ROOT = f"https://archive.org/download/{ARCHIVE_ITEM}"
 ARCHIVE_FILES_XML = f"{ARCHIVE_DOWNLOAD_ROOT}/{ARCHIVE_ITEM}_files.xml"
-SAFE_LHA_NAME = re.compile(r"^[^/\\\x00-\x1f]+\.lha$", re.IGNORECASE)
+SAFE_WHDLOAD_NAME = re.compile(r"^[^/\\\x00-\x1f]+\.(?:lha|zip)$", re.IGNORECASE)
 CATALOG_TTL_SECONDS = 6 * 60 * 60
 _catalog_cache: tuple[float, dict] | None = None
 
@@ -47,7 +47,7 @@ def load_archive_catalog() -> dict:
     games = []
     for file_element in root.findall("file"):
         file_name = str(file_element.attrib.get("name") or "")
-        if not SAFE_LHA_NAME.fullmatch(file_name):
+        if not SAFE_WHDLOAD_NAME.fullmatch(file_name):
             continue
         size_element = file_element.find("size")
         try:
@@ -80,7 +80,7 @@ def stream_archive_response(response):
 
 @router.get("/files/{filename}")
 def get_archive_file(filename: str, _user: User = Depends(require_vip)):
-    if not SAFE_LHA_NAME.fullmatch(filename):
+    if not SAFE_WHDLOAD_NAME.fullmatch(filename):
         raise HTTPException(status_code=404, detail="Amiga WHDLoad file not found")
 
     catalog_names = {game["file_name"] for game in load_archive_catalog()["games"]}
@@ -104,4 +104,5 @@ def get_archive_file(filename: str, _user: User = Depends(require_vip)):
     content_length = response.headers.get("Content-Length")
     if content_length:
         headers["Content-Length"] = content_length
-    return StreamingResponse(stream_archive_response(response), media_type="application/octet-stream", headers=headers)
+    media_type = "application/zip" if filename.lower().endswith(".zip") else "application/octet-stream"
+    return StreamingResponse(stream_archive_response(response), media_type=media_type, headers=headers)
