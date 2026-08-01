@@ -5358,6 +5358,11 @@ export default function RoomPage() {
           fileName: selectedFile.name,
           bytes: new Uint8Array(await selectedFile.arrayBuffer()),
         })));
+      if (isPuaeAmiga && loadedFiles.some((loadedFile) => loadedFile.fileName.toLowerCase().endsWith('.ipf'))) {
+        throw new Error(
+          'This is an IPF disk image. Desktop FS-UAE can load IPF through the CAPS/SPS library, but that library is not available in this browser PUAE build. Use an ADF release or the WHDLoad .lha release of this game.',
+        );
+      }
       const bytes = loadedFiles[0].bytes;
       const cpcAutoloadCommand = isCpcSystem && !isSwapDisk
         ? detectCpcAutoloadCommand(bytes, loadedFiles[0].fileName)
