@@ -5516,13 +5516,14 @@ export default function RoomPage() {
           setCurrentLocalReleaseIndex(0);
           setStatus(`Loading local release: ${runtimeRelease.title}`);
           addLog(`Loading ${runtimeRelease.files.length} local media file${runtimeRelease.files.length === 1 ? '' : 's'} in release order`);
-          await handleDiskSelected({
+          const runtimeReleaseLoaded = await handleDiskSelected({
             target: {
               files: runtimeRelease.files,
               dataset: {},
               value: '',
             },
           });
+          if (!runtimeReleaseLoaded) return;
           if (cancelled) return;
           if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
             await startHostSession();
