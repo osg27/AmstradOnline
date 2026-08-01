@@ -632,7 +632,9 @@ function findIndexedBoxArt(game, index) {
       if (entry.looseKey === baseKey) return true;
       const entryTokenCount = entry.looseKey.split(' ').filter(Boolean).length;
       if (Math.min(baseTokenCount, entryTokenCount) < 2) return false;
-      return entry.looseKey.startsWith(`${baseKey} `) || baseKey.startsWith(`${entry.looseKey} `);
+      if (entry.looseKey.startsWith(`${baseKey} `)) return true;
+      if (game.system === 'amiga' || game.system === 'amiga_aga') return false;
+      return baseKey.startsWith(`${entry.looseKey} `);
     });
     if (startsWithMatch) return startsWithMatch;
   }
@@ -751,6 +753,7 @@ function buildBoxArtNameCandidates(game) {
     ...punctuationVariants(cleanedTitle),
     ...punctuationVariants(articleFixedTitle),
   ]);
+  const numberedTitleVariants = uniq(titleVariants.flatMap((title) => withRomanSearchAliases(title)));
 
   return uniq([
     base,
@@ -761,10 +764,10 @@ function buildBoxArtNameCandidates(game) {
     usaEuropeBrazil,
     withoutBracketMeta,
     ...compactBaseVariants,
-    ...titleVariants,
-    ...titleVariants.flatMap((title) => appendRegions(title)),
-    ...titleVariants.flatMap((title) => appendRegions(title, '(Rev 1)')),
-    ...titleVariants.flatMap((title) => appendRegions(title, '(Beta)')),
+    ...numberedTitleVariants,
+    ...numberedTitleVariants.flatMap((title) => appendRegions(title)),
+    ...numberedTitleVariants.flatMap((title) => appendRegions(title, '(Rev 1)')),
+    ...numberedTitleVariants.flatMap((title) => appendRegions(title, '(Beta)')),
   ]);
 }
 
@@ -833,6 +836,23 @@ function isAlienWorldArtworkMismatch(game) {
     // The undecoded URL is still safe to inspect.
   }
   return /(?:^|[\s/_-])alien[\s_-]+world(?:[\s/_.-]|$)/i.test(source);
+}
+
+function isAlienBreedBaseArtworkMismatch(game) {
+  if (game.system !== 'amiga' && game.system !== 'amiga_aga') return false;
+  const titleKey = normalizeExactBoxArtKey(canonicalLibraryTitle(game));
+  if (!titleKey.startsWith('alien breed ') || titleKey === 'alien breed') return false;
+  let source = String(game.boxArtSource || '');
+  try {
+    source = decodeURIComponent(source);
+  } catch {
+    // The undecoded URL is still safe to inspect.
+  }
+  return /(?:^|[\s/_-])alien[\s_-]+breed\.png(?:$|[?#])/i.test(source);
+}
+
+function isKnownBoxArtMismatch(game) {
+  return isAlienWorldArtworkMismatch(game) || isAlienBreedBaseArtworkMismatch(game);
 }
 
 function clearBoxArt(game) {
@@ -1411,7 +1431,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           getLocalLibrarySetting('favourites', []),
         ]);
         const mismatchedAlienIds = new Set(
-          loadedGames.filter(isAlienWorldArtworkMismatch).map((game) => game.id),
+          loadedGames.filter(isKnownBoxArtMismatch).map((game) => game.id),
         );
         const savedGames = mismatchedAlienIds.size
           ? loadedGames.map((game) => (mismatchedAlienIds.has(game.id) ? clearBoxArt(game) : game))
