@@ -172,6 +172,8 @@ const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 
 const LIBRARY_PAGE_SIZE = 96;
 const LIBRARY_SNAPSHOT_KEY = 'oldstylegaming:librarySnapshot';
 const BOX_ART_ONLY_KEY = 'oldstylegaming:libraryBoxArtOnly';
+const AMIGA_BOX_ART_REPAIR_KEY = 'oldstylegaming:amigaBoxArtRepair';
+const AMIGA_BOX_ART_REPAIR_VERSION = 'alien-breed-v2';
 let librarySessionCache = null;
 const groupedLibraryCache = new WeakMap();
 const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
@@ -621,10 +623,12 @@ function findIndexedBoxArt(game, index) {
     return findArcadeIndexedBoxArtByTitle(candidates, index);
   }
 
+  // WHDLoad names are structured and already expanded into exact title candidates.
+  // Guessing by prefixes or shared tokens assigns franchise artwork to the wrong sequel.
+  if (game.system === 'amiga' || game.system === 'amiga_aga') return null;
+
   const baseKey = normalizeBoxArtKey(
-    (game.system === 'amiga' || game.system === 'amiga_aga')
-      ? canonicalLibraryTitle(game)
-      : stripRegionAndMeta(fileBaseName(game.fileName)),
+    stripRegionAndMeta(fileBaseName(game.fileName)),
   );
   if (baseKey.length >= 4) {
     const baseTokenCount = baseKey.split(' ').filter(Boolean).length;
@@ -739,6 +743,7 @@ function buildBoxArtNameCandidates(game) {
   const articleFixed = moveTrailingArticle(withoutBracketMeta);
   const articleFixedTitle = titleCaseSmallWords(articleFixed);
   const titleVariants = uniq([
+    canonicalLibraryTitle(game),
     game.title,
     ...compactStoredTitleVariants,
     ...compactBaseVariants,
@@ -849,6 +854,11 @@ function isAlienBreedBaseArtworkMismatch(game) {
     // The undecoded URL is still safe to inspect.
   }
   return /(?:^|[\s/_-])alien[\s_-]+breed\.png(?:$|[?#])/i.test(source);
+}
+
+function isAlienBreedFamilyGame(game) {
+  if (game.system !== 'amiga' && game.system !== 'amiga_aga') return false;
+  return normalizeExactBoxArtKey(canonicalLibraryTitle(game)).startsWith('alien breed');
 }
 
 function isKnownBoxArtMismatch(game) {
@@ -1430,13 +1440,21 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           getLocalLibrarySetting('selectedSystems', []),
           getLocalLibrarySetting('favourites', []),
         ]);
-        const mismatchedAlienIds = new Set(
-          loadedGames.filter(isKnownBoxArtMismatch).map((game) => game.id),
-        );
+        const forceAlienBreedRepair = localStorage.getItem(AMIGA_BOX_ART_REPAIR_KEY)
+          !== AMIGA_BOX_ART_REPAIR_VERSION;
+        const mismatchedAlienIds = new Set(loadedGames
+          .filter((game) => (
+            isKnownBoxArtMismatch(game)
+            || (forceAlienBreedRepair && isAlienBreedFamilyGame(game))
+          ))
+          .map((game) => game.id));
         const savedGames = mismatchedAlienIds.size
           ? loadedGames.map((game) => (mismatchedAlienIds.has(game.id) ? clearBoxArt(game) : game))
           : loadedGames;
         if (mismatchedAlienIds.size) await saveLocalLibraryGames(savedGames);
+        if (forceAlienBreedRepair) {
+          localStorage.setItem(AMIGA_BOX_ART_REPAIR_KEY, AMIGA_BOX_ART_REPAIR_VERSION);
+        }
         const savedArtwork = savedBoxArtByGame(savedGames);
         const localGames = savedGames.filter((game) => (
           game.source !== 'internet-archive-mame'
