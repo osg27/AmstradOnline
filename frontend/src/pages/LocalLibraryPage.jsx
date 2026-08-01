@@ -173,7 +173,7 @@ const LIBRARY_PAGE_SIZE = 96;
 const LIBRARY_SNAPSHOT_KEY = 'oldstylegaming:librarySnapshot';
 const BOX_ART_ONLY_KEY = 'oldstylegaming:libraryBoxArtOnly';
 const AMIGA_BOX_ART_REPAIR_KEY = 'oldstylegaming:amigaBoxArtRepair';
-const AMIGA_BOX_ART_REPAIR_VERSION = 'alien-breed-v3';
+const AMIGA_BOX_ART_REPAIR_VERSION = 'strict-amiga-v1';
 let librarySessionCache = null;
 const groupedLibraryCache = new WeakMap();
 const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
@@ -643,8 +643,14 @@ function findIndexedBoxArt(game, index) {
   }
 
   // WHDLoad names are structured and already expanded into exact title candidates.
-  // Guessing by prefixes or shared tokens assigns franchise artwork to the wrong sequel.
-  if (game.system === 'amiga' || game.system === 'amiga_aga') return null;
+  // Only let a specific multi-word title match a longer indexed subtitle; a single
+  // franchise word such as "Batman" or "Alien" must never claim other games.
+  if (game.system === 'amiga' || game.system === 'amiga_aga') {
+    const safeKeys = uniq(looseKeys).filter((key) => key.split(' ').filter(Boolean).length >= 2);
+    return index.entries.find((entry) => safeKeys.some((key) => (
+      entry.looseKey.startsWith(`${key} `)
+    ))) || null;
+  }
 
   const baseKey = normalizeBoxArtKey(
     stripRegionAndMeta(fileBaseName(game.fileName)),
@@ -878,11 +884,6 @@ function isAlienBreedBaseArtworkMismatch(game) {
   return /(?:^|[\s/_-])alien[\s_-]+breed\.png(?:$|[?#])/i.test(source);
 }
 
-function isAlienBreedFamilyGame(game) {
-  if (game.system !== 'amiga' && game.system !== 'amiga_aga') return false;
-  return normalizeExactBoxArtKey(canonicalLibraryTitle(game)).startsWith('alien breed');
-}
-
 function isKnownBoxArtMismatch(game) {
   return isAlienWorldArtworkMismatch(game) || isAlienBreedBaseArtworkMismatch(game);
 }
@@ -956,7 +957,7 @@ async function restoreCachedBoxArt(games) {
   await Promise.all([...gamesBySystem.entries()].map(async ([system, systemGames]) => {
     const romNames = [...new Set(
       systemGames
-        .filter((game) => !isAmbiguousAlienBoxArtTitle(game))
+        .filter((game) => game.system !== 'amiga' && game.system !== 'amiga_aga')
         .map(boxArtLookupKey)
         .filter(Boolean),
     )];
@@ -1462,19 +1463,19 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           getLocalLibrarySetting('selectedSystems', []),
           getLocalLibrarySetting('favourites', []),
         ]);
-        const forceAlienBreedRepair = localStorage.getItem(AMIGA_BOX_ART_REPAIR_KEY)
+        const forceAmigaBoxArtRepair = localStorage.getItem(AMIGA_BOX_ART_REPAIR_KEY)
           !== AMIGA_BOX_ART_REPAIR_VERSION;
         const mismatchedAlienIds = new Set(loadedGames
           .filter((game) => (
             isKnownBoxArtMismatch(game)
-            || (forceAlienBreedRepair && isAlienBreedFamilyGame(game))
+            || (forceAmigaBoxArtRepair && (game.system === 'amiga' || game.system === 'amiga_aga'))
           ))
           .map((game) => game.id));
         const savedGames = mismatchedAlienIds.size
           ? loadedGames.map((game) => (mismatchedAlienIds.has(game.id) ? clearBoxArt(game) : game))
           : loadedGames;
         if (mismatchedAlienIds.size) await saveLocalLibraryGames(savedGames);
-        if (forceAlienBreedRepair) {
+        if (forceAmigaBoxArtRepair) {
           localStorage.setItem(AMIGA_BOX_ART_REPAIR_KEY, AMIGA_BOX_ART_REPAIR_VERSION);
         }
         const savedArtwork = savedBoxArtByGame(savedGames);
@@ -1500,7 +1501,21 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         setStatus(isVip && hasCompleteVipCache
           ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64 and ${savedVipAmigaGames.length} Amiga WHDLoad games.`
           : localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
-        const localGamesWithArtwork = await restoreCachedBoxArt(localGames);
+        let localGamesWithArtwork = await restoreCachedBoxArt(localGames);
+        if (forceAmigaBoxArtRepair) {
+          const localAmigaGames = localGamesWithArtwork.filter((game) => (
+            game.system === 'amiga' || game.system === 'amiga_aga'
+          ));
+          const repairedLocalAmigaGames = await applyIndexedBoxArt(localAmigaGames, 'amiga');
+          const repairedLocalById = new Map(repairedLocalAmigaGames.map((game) => [game.id, game]));
+          localGamesWithArtwork = localGamesWithArtwork.map((game) => repairedLocalById.get(game.id) || game);
+          await saveLocalLibraryGames([
+            ...localGamesWithArtwork,
+            ...savedVipMameGames,
+            ...savedVipC64Games,
+            ...savedVipAmigaGames,
+          ]);
+        }
         if (!isVip) setGames(localGamesWithArtwork);
         if (isVip) {
           if (hasCompleteVipCache) {
