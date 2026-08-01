@@ -236,6 +236,19 @@ function fileBaseName(fileName) {
   return fileName.replace(/\.[^.]+$/, '');
 }
 
+function amigaWhdLoadTitle(fileName) {
+  const baseName = fileBaseName(fileName);
+  const withoutVersion = baseName.replace(
+    /(?:[_\s-]+v\d+(?:\.\d+)*(?:[a-z])?)(?:[_\s-].*)?$/i,
+    '',
+  );
+  return titleFromFileName(withoutVersion || baseName);
+}
+
+function amigaWhdLoadVersion(fileName) {
+  return fileBaseName(fileName).match(/(?:^|[_\s-])v(\d+(?:\.\d+)*(?:[a-z])?)(?:[_\s-]|$)/i)?.[1] || '';
+}
+
 function arcadeRomKey(fileName) {
   return fileBaseName(fileName).toLowerCase();
 }
@@ -1069,7 +1082,10 @@ function canonicalLibraryTitle(game) {
   const arcadeTitle = arcadeMetadataTitle(game);
   if (arcadeTitle) return arcadeTitle;
 
-  const storedTitle = game.title || fileBaseName(game.fileName);
+  const whdLoadTitle = (game.system === 'amiga' || game.system === 'amiga_aga')
+    ? amigaWhdLoadTitle(game.fileName || game.title || '')
+    : '';
+  const storedTitle = whdLoadTitle || game.title || fileBaseName(game.fileName);
   const c64Title = game.system === 'c64' ? c64CanonicalTitle(game.fileName || storedTitle) : '';
   const fileTitle = titleFromFileName(game.fileName || storedTitle);
   const knownTitle = knownCompactTitle(game.fileName || storedTitle);
@@ -1221,6 +1237,19 @@ function variantPreferenceScore(game) {
 
 function makeGroupedGame(variants) {
   const sortedVariants = [...variants].sort((left, right) => {
+    if (
+      (left.system === 'amiga' || left.system === 'amiga_aga')
+      && (right.system === 'amiga' || right.system === 'amiga_aga')
+    ) {
+      const leftVersion = amigaWhdLoadVersion(left.fileName || '');
+      const rightVersion = amigaWhdLoadVersion(right.fileName || '');
+      if (leftVersion && rightVersion && leftVersion !== rightVersion) {
+        return rightVersion.localeCompare(leftVersion, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        });
+      }
+    }
     const score = variantPreferenceScore(left) - variantPreferenceScore(right);
     if (score !== 0) return score;
     return left.fileName.localeCompare(right.fileName);
