@@ -973,6 +973,58 @@ function getFileExtension(fileName) {
   return match ? match[1] : '';
 }
 
+const AMIGA_BROWSER_MEDIA_EXTENSIONS = ['.adf', '.adz', '.dms', '.hdf', '.lha'];
+
+async function readZipEntryNames(file) {
+  const tailLength = Math.min(file.size, 65_557);
+  const tailOffset = file.size - tailLength;
+  const tail = new Uint8Array(await file.slice(tailOffset).arrayBuffer());
+  const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+  let endOffset = -1;
+  for (let index = tail.length - 22; index >= 0; index -= 1) {
+    if (tailView.getUint32(index, true) === 0x06054b50) {
+      endOffset = index;
+      break;
+    }
+  }
+  if (endOffset < 0) return [];
+
+  const centralSize = tailView.getUint32(endOffset + 12, true);
+  const centralOffset = tailView.getUint32(endOffset + 16, true);
+  const centralBytes = centralOffset >= tailOffset && centralOffset + centralSize <= file.size
+    ? tail.subarray(centralOffset - tailOffset, centralOffset - tailOffset + centralSize)
+    : new Uint8Array(await file.slice(centralOffset, centralOffset + centralSize).arrayBuffer());
+  const view = new DataView(centralBytes.buffer, centralBytes.byteOffset, centralBytes.byteLength);
+  const decoder = new TextDecoder();
+  const names = [];
+  let offset = 0;
+  while (offset + 46 <= centralBytes.length && view.getUint32(offset, true) === 0x02014b50) {
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const nameStart = offset + 46;
+    names.push(decoder.decode(centralBytes.subarray(nameStart, nameStart + nameLength)));
+    offset = nameStart + nameLength + extraLength + commentLength;
+  }
+  return names;
+}
+
+async function isUnsupportedAmigaIpf(entry, extension) {
+  if (extension === 'ipf') return true;
+  if (extension !== 'zip') return false;
+  try {
+    const file = await entry.handle.getFile();
+    const lowerNames = (await readZipEntryNames(file)).map((name) => name.toLowerCase());
+    const containsIpf = lowerNames.some((name) => name.endsWith('.ipf'));
+    const containsBrowserMedia = lowerNames.some((name) => (
+      AMIGA_BROWSER_MEDIA_EXTENSIONS.some((mediaExtension) => name.endsWith(mediaExtension))
+    ));
+    return containsIpf && !containsBrowserMedia;
+  } catch {
+    return false;
+  }
+}
+
 function detectSystem(fileName, relativePath) {
   const extension = getFileExtension(fileName);
   const candidates = EXTENSION_SYSTEMS.get(extension) || [];
@@ -1593,6 +1645,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       const sampleHandles = [];
       let scanned = 0;
       let skippedSupport = 0;
+      let skippedUnsupported = 0;
       setScanProgress({ scanned: 0, matched: 0 });
       setStatus(`Scanning ${directoryHandle.name} for ${targetSystem.label}...`);
 
@@ -1614,6 +1667,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
         if (isLikelySupportRom(entry.name)) {
           skippedSupport += 1;
+          continue;
+        }
+
+        if (targetSystem.id === 'amiga' && await isUnsupportedAmigaIpf(entry, extension)) {
+          skippedUnsupported += 1;
           continue;
         }
 
@@ -1684,7 +1742,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       setFolders(mergedFolders);
       setGames(mergedGames);
       setScanProgress(null);
-      setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${directoryHandle.name}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}${skippedSupport ? `, skipped ${skippedSupport} support file${skippedSupport === 1 ? '' : 's'}` : ''}.`);
+      setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${directoryHandle.name}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}${skippedSupport ? `, skipped ${skippedSupport} support file${skippedSupport === 1 ? '' : 's'}` : ''}${skippedUnsupported ? `, hid ${skippedUnsupported} IPF-only release${skippedUnsupported === 1 ? '' : 's'}` : ''}.`);
     } catch (err) {
       setStatus(`Scan failed: ${err?.message || 'Could not read that folder.'}`);
       setScanProgress(null);
