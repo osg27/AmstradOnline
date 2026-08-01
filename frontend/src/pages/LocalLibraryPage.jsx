@@ -173,7 +173,7 @@ const LIBRARY_PAGE_SIZE = 96;
 const LIBRARY_SNAPSHOT_KEY = 'oldstylegaming:librarySnapshot';
 const BOX_ART_ONLY_KEY = 'oldstylegaming:libraryBoxArtOnly';
 const AMIGA_BOX_ART_REPAIR_KEY = 'oldstylegaming:amigaBoxArtRepair';
-const AMIGA_BOX_ART_REPAIR_VERSION = 'alien-breed-v2';
+const AMIGA_BOX_ART_REPAIR_VERSION = 'alien-breed-v3';
 let librarySessionCache = null;
 const groupedLibraryCache = new WeakMap();
 const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
@@ -249,6 +249,25 @@ function amigaWhdLoadTitle(fileName) {
 
 function amigaWhdLoadVersion(fileName) {
   return fileBaseName(fileName).match(/(?:^|[_\s-])v(\d+(?:\.\d+)*(?:[a-z])?)(?:[_\s-]|$)/i)?.[1] || '';
+}
+
+function amigaWhdLoadBoxArtAliases(fileName) {
+  const compact = rawCompactKey(amigaWhdLoadTitle(fileName));
+  if (compact.startsWith('alienbreed3d2')) {
+    return ['Alien Breed 3D II - The Killing Grounds'];
+  }
+  if (compact.startsWith('alienbreed3d')) return ['Alien Breed 3D'];
+  if (compact.startsWith('alienbreed2')) {
+    return ['Alien Breed II - The Horror Continues'];
+  }
+  if (compact.startsWith('alienbreedspecialedition')) {
+    return ['Alien Breed - Special Edition 92'];
+  }
+  if (compact.startsWith('alienbreedstory')) return ['Alien Breed - The Story'];
+  if (compact.startsWith('alienbreedtowerassault')) {
+    return ['Alien Breed - Tower Assault'];
+  }
+  return [];
 }
 
 function arcadeRomKey(fileName) {
@@ -744,6 +763,9 @@ function buildBoxArtNameCandidates(game) {
   const articleFixedTitle = titleCaseSmallWords(articleFixed);
   const titleVariants = uniq([
     canonicalLibraryTitle(game),
+    ...((game.system === 'amiga' || game.system === 'amiga_aga')
+      ? amigaWhdLoadBoxArtAliases(game.fileName || game.title || '')
+      : []),
     game.title,
     ...compactStoredTitleVariants,
     ...compactBaseVariants,
