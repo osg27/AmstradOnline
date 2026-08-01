@@ -5478,9 +5478,11 @@ export default function RoomPage() {
       addLog(`${isSwapDisk ? 'Swapped disk' : 'Loaded file'}: ${loadedLabel}`);
       setStatus(`${isSwapDisk ? 'Disk swapped' : 'File loaded'}: ${loadedLabel}`);
       event.target.value = '';
+      return true;
     } catch (err) {
       setError(err.message);
       addLog(`File load error: ${err.message}`);
+      return false;
     }
   }
 
@@ -5686,13 +5688,14 @@ export default function RoomPage() {
               setLoadedDiskName(releaseFiles[0].name);
               setStatus(`Loading ${groupedGame.title}: ${releaseFiles.length} disk${releaseFiles.length === 1 ? '' : 's'} available`);
               addLog(`Resolved local Amiga release with ${releaseFiles.length} ordered disk${releaseFiles.length === 1 ? '' : 's'}`);
-              await handleDiskSelected({
+              const releaseLoaded = await handleDiskSelected({
                 target: {
                   files: releaseFiles,
                   dataset: {},
                   value: '',
                 },
               });
+              if (!releaseLoaded) return;
               if (!hostStartedRef.current && !hostStartingRef.current && !isAmigaAga && !isAtariSt) {
                 await startHostSession();
               }
@@ -5744,13 +5747,14 @@ export default function RoomPage() {
           return;
         }
 
-        await handleDiskSelected({
+        const gameLoaded = await handleDiskSelected({
           target: {
             files: [file],
             dataset: {},
             value: '',
           },
         });
+        if (!gameLoaded) return;
 
         if (cancelled) return;
 
