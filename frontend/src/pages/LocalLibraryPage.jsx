@@ -621,9 +621,19 @@ function findIndexedBoxArt(game, index) {
     return findArcadeIndexedBoxArtByTitle(candidates, index);
   }
 
-  const baseKey = normalizeBoxArtKey(stripRegionAndMeta(fileBaseName(game.fileName)));
+  const baseKey = normalizeBoxArtKey(
+    (game.system === 'amiga' || game.system === 'amiga_aga')
+      ? canonicalLibraryTitle(game)
+      : stripRegionAndMeta(fileBaseName(game.fileName)),
+  );
   if (baseKey.length >= 4) {
-    const startsWithMatch = index.entries.find((entry) => entry.looseKey.startsWith(baseKey) || baseKey.startsWith(entry.looseKey));
+    const baseTokenCount = baseKey.split(' ').filter(Boolean).length;
+    const startsWithMatch = index.entries.find((entry) => {
+      if (entry.looseKey === baseKey) return true;
+      const entryTokenCount = entry.looseKey.split(' ').filter(Boolean).length;
+      if (Math.min(baseTokenCount, entryTokenCount) < 2) return false;
+      return entry.looseKey.startsWith(`${baseKey} `) || baseKey.startsWith(`${entry.looseKey} `);
+    });
     if (startsWithMatch) return startsWithMatch;
   }
 
@@ -808,6 +818,34 @@ function boxArtLookupKey(game) {
   return game.fileName || game.path || game.title || game.id;
 }
 
+function isAmbiguousAlienBoxArtTitle(game) {
+  if (game.system !== 'amiga' && game.system !== 'amiga_aga') return false;
+  const titleKey = normalizeExactBoxArtKey(canonicalLibraryTitle(game));
+  return titleKey.startsWith('alien ') && titleKey !== 'alien world';
+}
+
+function isAlienWorldArtworkMismatch(game) {
+  if (!isAmbiguousAlienBoxArtTitle(game)) return false;
+  let source = String(game.boxArtSource || '');
+  try {
+    source = decodeURIComponent(source);
+  } catch {
+    // The undecoded URL is still safe to inspect.
+  }
+  return /(?:^|[\s/_-])alien[\s_-]+world(?:[\s/_.-]|$)/i.test(source);
+}
+
+function clearBoxArt(game) {
+  const {
+    boxArtUrl: _boxArtUrl,
+    boxArtSource: _boxArtSource,
+    boxArtCached: _boxArtCached,
+    boxArtFetchedAt: _boxArtFetchedAt,
+    ...cleanGame
+  } = game;
+  return cleanGame;
+}
+
 function savedBoxArtByGame(games) {
   const artwork = new Map();
   games.forEach((game) => {
@@ -864,7 +902,12 @@ async function restoreCachedBoxArt(games) {
 
   const artworkBySystem = new Map();
   await Promise.all([...gamesBySystem.entries()].map(async ([system, systemGames]) => {
-    const romNames = [...new Set(systemGames.map(boxArtLookupKey).filter(Boolean))];
+    const romNames = [...new Set(
+      systemGames
+        .filter((game) => !isAmbiguousAlienBoxArtTitle(game))
+        .map(boxArtLookupKey)
+        .filter(Boolean),
+    )];
     if (!romNames.length) return;
     const matches = {};
     const batchSize = 250;
@@ -1361,12 +1404,19 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
     async function loadLibrary() {
       try {
-        const [savedFolders, savedGames, savedSystems, savedFavourites] = await Promise.all([
+        const [savedFolders, loadedGames, savedSystems, savedFavourites] = await Promise.all([
           getLocalLibraryFolders(),
           getLocalLibraryGames(),
           getLocalLibrarySetting('selectedSystems', []),
           getLocalLibrarySetting('favourites', []),
         ]);
+        const mismatchedAlienIds = new Set(
+          loadedGames.filter(isAlienWorldArtworkMismatch).map((game) => game.id),
+        );
+        const savedGames = mismatchedAlienIds.size
+          ? loadedGames.map((game) => (mismatchedAlienIds.has(game.id) ? clearBoxArt(game) : game))
+          : loadedGames;
+        if (mismatchedAlienIds.size) await saveLocalLibraryGames(savedGames);
         const savedArtwork = savedBoxArtByGame(savedGames);
         const localGames = savedGames.filter((game) => (
           game.source !== 'internet-archive-mame'
@@ -1396,7 +1446,20 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           if (hasCompleteVipCache) {
             // These catalogues are immutable for a deployed collection. Keep the complete
             // records (not just counts) in IndexedDB and avoid rebuilding them on navigation.
-            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmigaGames]);
+            let currentVipAmigaGames = savedVipAmigaGames;
+            if (mismatchedAlienIds.size) {
+              const repairTargets = savedVipAmigaGames.filter((game) => mismatchedAlienIds.has(game.id));
+              const repairedTargets = await applyIndexedBoxArt(repairTargets, 'amiga');
+              const repairedById = new Map(repairedTargets.map((game) => [game.id, game]));
+              currentVipAmigaGames = savedVipAmigaGames.map((game) => repairedById.get(game.id) || game);
+              await saveLocalLibraryGames([
+                ...localGamesWithArtwork,
+                ...savedVipMameGames,
+                ...savedVipC64Games,
+                ...currentVipAmigaGames,
+              ]);
+            }
+            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...currentVipAmigaGames]);
             setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64 and ${savedVipAmigaGames.length} Amiga WHDLoad games.`);
           } else {
           setStatus('Loading VIP game libraries for the first time...');
