@@ -173,7 +173,7 @@ const LIBRARY_PAGE_SIZE = 96;
 const LIBRARY_SNAPSHOT_KEY = 'oldstylegaming:librarySnapshot';
 const BOX_ART_ONLY_KEY = 'oldstylegaming:libraryBoxArtOnly';
 const AMIGA_BOX_ART_REPAIR_KEY = 'oldstylegaming:amigaBoxArtRepair';
-const AMIGA_BOX_ART_REPAIR_VERSION = 'strict-amiga-v1';
+const AMIGA_BOX_ART_REPAIR_VERSION = 'strict-amiga-v2';
 let librarySessionCache = null;
 const groupedLibraryCache = new WeakMap();
 const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
@@ -379,7 +379,9 @@ function moveTrailingArticle(value) {
 
 function stripCompactRegionSuffix(value) {
   const trimmed = value.trim();
-  const match = /^(.{3,})([UEJW])$/i.exec(trimmed);
+  // Legacy ROM sets append an uppercase one-letter region code. Treating this
+  // case-insensitively corrupts ordinary titles such as BatmanTheMovie and BattleIsle.
+  const match = /^(.{3,})([UEJW])$/.exec(trimmed);
   if (!match) return { title: trimmed, region: null };
   const looksLikeCompactRomName = !/\s/.test(trimmed)
     && (/^[0-9]/.test(trimmed) || /[a-z][A-Z0-9]/.test(trimmed) || /[A-Z][a-z]+[A-Z]$/.test(trimmed));
