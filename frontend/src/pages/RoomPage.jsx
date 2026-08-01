@@ -108,8 +108,8 @@ const SNES_UNWANTED_ENTRY_PATTERNS = [
   /\b(trainer|trained|translation|translated|hack|bad|overdump|alternate|prototype|proto|beta|sample|demo)\b/i,
 ];
 const ROM_ZIP_EXTENSIONS = {
-  amiga: ['.lha', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
-  amiga_aga: ['.lha', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
+  amiga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
+  amiga_aga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
   c64: ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt'],
   mastersystem: ['.sms'],
   megadrive: ['.bin', '.gen', '.md', '.smd'],
@@ -507,7 +507,30 @@ async function expandRomZipFile(file, system) {
     throw new Error(`Could not unzip ${file.name}: ${error.message}`);
   }
 
-  const entries = Object.entries(archive)
+  const isAmigaSystem = system === 'amiga' || system === 'amiga_aga';
+  const archiveFiles = Object.entries(archive).filter(([entryName]) => {
+    const normalized = entryName.replace(/\\/g, '/');
+    return !normalized.endsWith('/')
+      && !normalized.split('/').some((part) => part === '..' || part.toLowerCase() === '__macosx');
+  });
+  const whdLoadSlave = isAmigaSystem
+    ? archiveFiles.find(([entryName]) => entryName.toLowerCase().endsWith('.slave'))
+    : null;
+  if (whdLoadSlave) {
+    return archiveFiles
+      .sort(([leftName], [rightName]) => (
+        Number(!leftName.toLowerCase().endsWith('.slave')) - Number(!rightName.toLowerCase().endsWith('.slave'))
+        || leftName.localeCompare(rightName, undefined, { numeric: true, sensitivity: 'base' })
+      ))
+      .map(([entryName, bytes]) => ({
+        fileName: entryName.split(/[\\/]/).pop() || entryName,
+        bytes,
+        archiveEntryName: entryName.replace(/\\/g, '/').replace(/^\/+/, ''),
+        whdLoadArchive: true,
+      }));
+  }
+
+  const entries = archiveFiles
     .filter(([entryName]) => {
       const lowerName = entryName.toLowerCase();
       return !lowerName.endsWith('/')
@@ -818,7 +841,7 @@ export default function RoomPage() {
   }, [atari8Config]);
 
   const emulatorSrc = isPuaeAmiga
-    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-01-1`
+    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-01-2`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
     : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-07-29-2' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
@@ -5382,7 +5405,8 @@ export default function RoomPage() {
         fileName: loadedFiles[0].fileName,
         bytes: isDiscConsole ? undefined : bytes,
         files: isDiscConsole ? loadedFiles : undefined,
-        disks: isPuaeAmiga && !isSwapDisk ? loadedFiles : undefined,
+        disks: isPuaeAmiga && !isSwapDisk && !loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
+        whdLoadFiles: isPuaeAmiga && loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
         profile: isPuaeAmiga ? { model: isAmigaAga ? 'A1200' : 'A500' } : undefined,
         media: isC64 || isAtariSt ? loadedFiles : undefined,
         autoloadCommand: cpcAutoloadCommand || undefined,

@@ -78,6 +78,7 @@
 
       let pendingGame = null;
       let pendingDisks = [];
+      let pendingWhdLoadFiles = [];
       let pendingKickstart = null;
       let started = false;
       let runtimeModule = null;
@@ -156,6 +157,20 @@
           writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes);
         });
 
+        if (pendingWhdLoadFiles.length) {
+          const paths = pendingWhdLoadFiles.map((entry) => {
+            const relativePath = String(entry.archiveEntryName || entry.fileName || "file")
+              .replace(/\\/g, "/")
+              .split("/")
+              .filter((part) => part && part !== "." && part !== "..")
+              .join("/");
+            const path = `/whdload-content/${relativePath}`;
+            writeRuntimeFile(path, entry.bytes);
+            return { path, fileName: entry.fileName };
+          });
+          pendingContentPath = paths.find((entry) => /\.slave$/i.test(entry.fileName))?.path || paths[0].path;
+        }
+
         const disks = pendingDisks.length
           ? pendingDisks
           : [{ fileName: pendingGame.fileName || "game.adf", bytes: pendingGame.bytes }];
@@ -166,8 +181,10 @@
         });
 
         const isWHDLoad = disks.length === 1 && /\.(lha|slave)$/i.test(disks[0].fileName);
-        pendingContentPath = isWHDLoad ? diskPaths[0] : "/game.m3u";
-        if (!isWHDLoad) writeRuntimeFile("/game.m3u", encoder.encode(`${diskPaths.join("\n")}\n`));
+        if (!pendingWhdLoadFiles.length) {
+          pendingContentPath = isWHDLoad ? diskPaths[0] : "/game.m3u";
+          if (!isWHDLoad) writeRuntimeFile("/game.m3u", encoder.encode(`${diskPaths.join("\n")}\n`));
+        }
         writeRuntimeFile(
           "/home/web_user/.config/retroarch/retroarch.cfg",
           encoder.encode([
@@ -399,13 +416,20 @@
             buildCoreOptions();
           }
           const disks = Array.isArray(data.disks) ? data.disks : [];
+          const whdLoadFiles = Array.isArray(data.whdLoadFiles) ? data.whdLoadFiles : [];
+          pendingWhdLoadFiles = whdLoadFiles.map((entry) => ({
+            fileName: entry.fileName || "game.slave",
+            archiveEntryName: entry.archiveEntryName || entry.fileName || "game.slave",
+            bytes: new Uint8Array(entry.bytes || []),
+          })).filter((entry) => entry.bytes.length);
           pendingDisks = disks.map((disk, index) => ({
             fileName: disk.fileName || `disk-${index + 1}.adf`,
             bytes: new Uint8Array(disk.bytes || []),
           })).filter((disk) => disk.bytes.length);
           pendingGame = {
-            fileName: pendingDisks[0]?.fileName || data.fileName || "game.adf",
-            bytes: pendingDisks[0]?.bytes || new Uint8Array(data.bytes || []),
+            fileName: pendingWhdLoadFiles.find((entry) => /\.slave$/i.test(entry.fileName))?.fileName
+              || pendingDisks[0]?.fileName || data.fileName || "game.adf",
+            bytes: pendingWhdLoadFiles[0]?.bytes || pendingDisks[0]?.bytes || new Uint8Array(data.bytes || []),
           };
           startEmulator();
         }
