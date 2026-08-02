@@ -855,7 +855,7 @@ export default function RoomPage() {
     ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-01-2`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-02-3' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-07-07-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-1' : isSpectrum ? '/spectrum/index.html?v=2026-07-07-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.hdf,.lha,.zip,.7z'
@@ -4978,7 +4978,7 @@ export default function RoomPage() {
     }
   }
 
-  async function loadArcadeRomFile(file, sampleFiles = []) {
+  async function loadArcadeRomFile(file, sampleFiles = [], tournamentHiSize = 0) {
     if (!file) return;
 
     if (!/\.(zip|7z)$/i.test(file.name)) {
@@ -5001,6 +5001,7 @@ export default function RoomPage() {
       bytes,
       samples: sampleFiles,
       saveNamespace: tournamentCode ? `tournament-${tournamentCode}` : '',
+      blankHiSize: tournamentCode ? Number(tournamentHiSize) || 0 : 0,
     }, window.location.origin);
 
     if (hostStartedRef.current) {
@@ -5626,7 +5627,7 @@ export default function RoomPage() {
           }
           if (cancelled) return;
           const file = new File([romBytes], pendingGame.fileName, { type: 'application/zip' });
-          await loadArcadeRomFile(file);
+          await loadArcadeRomFile(file, [], pendingGame.tournamentHiSize);
           sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
           return;
         }

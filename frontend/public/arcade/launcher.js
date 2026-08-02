@@ -14,6 +14,7 @@
   let romStartedAt = 0;
   let currentSampleFiles = [];
   let currentSaveNamespace = '';
+  let currentBlankHiSize = 0;
   let scoreFileWatchTimer = null;
   let lastScoreFileSignature = '';
   const playerMasks = [0, 0, 0, 0];
@@ -853,9 +854,15 @@
       if (!/\.zip$/i.test(safeName)) return;
       window.EJS_rawFiles[`/home/web_user/retroarch/system/mame2003-plus/samples/${safeName}`] = sample.bytes;
     });
-    loadLocalMameSaveFiles(fileName).forEach((file) => {
-      window.EJS_rawFiles[file.path] = file.bytes;
-    });
+    if (currentBlankHiSize > 0) {
+      const romKey = normaliseRomKey(fileName);
+      window.EJS_rawFiles[`${saveDirectory}/${romKey}.hi`] = new Uint8Array(currentBlankHiSize);
+      postArcadeLog(`Created clean tournament .hi: ${saveDirectory}/${romKey}.hi (${currentBlankHiSize} bytes)`);
+    } else {
+      loadLocalMameSaveFiles(fileName).forEach((file) => {
+        window.EJS_rawFiles[file.path] = file.bytes;
+      });
+    }
     window.EJS_retroarchOpts = [
       {
         name: 'audio_latency',
@@ -1055,6 +1062,7 @@
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, '')
         .slice(0, 64);
+      currentBlankHiSize = Math.max(0, Math.min(1024 * 1024, Number(message.blankHiSize) || 0));
       currentRom = {
         fileName: message.fileName || 'game.zip',
         bytes: new Uint8Array(message.bytes || []),

@@ -24,6 +24,7 @@ from app.schemas.tournament import TournamentCreate, TournamentScoreSubmit
 from app.services.mame_high_scores import (
     extract_mame_scores,
     load_supported_mame_games,
+    load_tournament_mame_hi_sizes,
     load_tournament_mame_roms,
     normalise_rom_name,
 )
@@ -88,6 +89,7 @@ def require_entry(tournament: Tournament, user: User, db: Session) -> None:
 
 
 def tournament_ready_games() -> list[dict]:
+    hi_sizes = load_tournament_mame_hi_sizes()
     archive_files = load_tournament_mame_roms()
     archive_by_rom = {
         normalise_rom_name(filename): filename
@@ -97,11 +99,12 @@ def tournament_ready_games() -> list[dict]:
     games = []
     for rom_name, display_name, _parser in load_supported_mame_games():
         filename = archive_by_rom.get(rom_name)
-        if filename:
+        if filename and rom_name in hi_sizes:
             games.append({
                 "rom_name": rom_name,
                 "display_name": display_name or rom_name,
                 "file_name": filename,
+                "hi_size": hi_sizes[rom_name],
             })
     return sorted(games, key=lambda game: (game["display_name"].casefold(), game["rom_name"]))
 
@@ -234,6 +237,7 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
         "title": tournament.display_name,
         "file_name": filename,
         "rom_name": tournament.rom_name,
+        "hi_size": load_tournament_mame_hi_sizes().get(tournament.rom_name),
     }
 
 

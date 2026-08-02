@@ -148,6 +148,7 @@ export default function TournamentsPage() {
         id: game.id,
         title: game.title,
         fileName: game.file_name,
+        tournamentHiSize: game.hi_size,
         system: 'arcade',
         roomSystem: 'arcade',
         source: 'tournament-mame',

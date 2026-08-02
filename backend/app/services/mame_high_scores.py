@@ -72,6 +72,7 @@ DKONG_HI_GAMES = {
 MAME_HI_RULES_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_hi_rules.json"
 MAME_HI2TXT_ROMS_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_hi2txt_roms.json"
 MAME_TOURNAMENT_ROMS_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_tournament_roms.json"
+MAME_TOURNAMENT_HI_SIZES_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_tournament_hi_sizes.json"
 DISABLED_MAME_SCORE_GAMES = {
     # MAME2003-Plus writes Robotron scores to nvram in this browser setup, but
     # the exported file has repeatedly contained only the factory/default tables.
@@ -236,6 +237,20 @@ def load_tournament_mame_roms() -> tuple[str, ...]:
         for filename in filenames
         if re.fullmatch(r"[a-zA-Z0-9_.+ -]+\.zip", str(filename))
     )
+
+
+@lru_cache(maxsize=1)
+def load_tournament_mame_hi_sizes() -> dict[str, int]:
+    try:
+        values = json.loads(MAME_TOURNAMENT_HI_SIZES_PATH.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.error("Could not load tournament MAME .hi sizes from %s: %s", MAME_TOURNAMENT_HI_SIZES_PATH, exc)
+        return {}
+    return {
+        normalise_rom_name_value(rom_name): int(size)
+        for rom_name, size in values.items()
+        if 0 < int(size) <= 1024 * 1024
+    }
 
 
 @dataclass
