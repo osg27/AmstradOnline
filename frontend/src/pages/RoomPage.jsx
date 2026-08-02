@@ -11,7 +11,12 @@ import { normaliseFilename } from '../features/localLibrary/core/normalise';
 import { scanFiles as scanLocalReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupLocalReleaseFiles } from '../features/localLibrary/core/group';
 import { resolveRelease } from '../features/localLibrary/storage/preferredReleaseStorage';
-import { takePreparedVipAmigaFile, takePreparedVipC64File, takePreparedVipMameFile } from '../vipMameCache';
+import {
+  takePreparedTournamentMameFile,
+  takePreparedVipAmigaFile,
+  takePreparedVipC64File,
+  takePreparedVipMameFile,
+} from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
@@ -56,10 +61,14 @@ function getSafeLibraryReturnPath(value) {
     if (url.origin === window.location.origin && url.pathname === '/library') {
       return `${url.pathname}${url.search}`;
     }
+    if (url.origin === window.location.origin && /^\/tournaments\/[A-Z0-9]+$/i.test(url.pathname)) {
+      return url.pathname;
+    }
   } catch {
     if (value === '/library' || value.startsWith('/library?')) {
       return value;
     }
+    if (/^\/tournaments\/[A-Z0-9]+$/i.test(value)) return value;
   }
 
   return '/library';
@@ -632,6 +641,7 @@ export default function RoomPage() {
   const isSoloMode = searchParams.get('mode') === 'solo';
   const localGameId = searchParams.get('localGame');
   const localReleaseId = searchParams.get('localRelease');
+  const tournamentCode = searchParams.get('tournament')?.toUpperCase() || '';
   const libraryReturnPath = getSafeLibraryReturnPath(searchParams.get('returnTo'));
   const [obsCaptureMode, setObsCaptureMode] = useState(false);
 
@@ -4693,6 +4703,14 @@ export default function RoomPage() {
 
     try {
       setMameScoreStatus('Loading scoreboard...');
+      if (tournamentCode) {
+        const scores = await apiFetch(`/tournaments/${encodeURIComponent(tournamentCode)}/leaderboard`);
+        const scoreList = Array.isArray(scores) ? scores : [];
+        setMameLeaderboard(scoreList);
+        setMameLeaderboardSupported(true);
+        setMameScoreStatus(scoreList.length ? '' : 'Tournament active. No verified scores yet.');
+        return;
+      }
       const games = await apiFetch('/scores/mame/leaderboards');
       const gameList = Array.isArray(games) ? games : [];
       const romKey = getArcadeLeaderboardKey(fileName, gameList);
@@ -4765,11 +4783,14 @@ export default function RoomPage() {
       };
     }
 
-    const result = await apiFetch(`/scores/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`, {
+    const extractionPath = tournamentCode
+      ? `/tournaments/${encodeURIComponent(tournamentCode)}/sessions/${encodeURIComponent(sessionId)}/extract-score`
+      : `/scores/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`;
+    const result = await apiFetch(extractionPath, {
       method: 'POST',
       body: JSON.stringify({
         rom_name: romName,
-        leaderboard_rom_name: leaderboardRomName,
+        ...(tournamentCode ? {} : { leaderboard_rom_name: leaderboardRomName }),
         save_files: files.map((file) => ({
           path: file.path,
           data: bytesToBase64(file.bytes),
@@ -4828,8 +4849,8 @@ export default function RoomPage() {
       <div className={`mame-score-panel ${extraClass}`}>
         <div className="mame-score-panel-header">
           <div>
-            <span>MAME leaderboard</span>
-            <strong>{getArcadeLeaderboardKey(loadedDiskName)}</strong>
+            <span>{tournamentCode ? 'Tournament standings' : 'MAME leaderboard'}</span>
+            <strong>{tournamentCode || getArcadeLeaderboardKey(loadedDiskName)}</strong>
           </div>
           <em>{mameLeaderboardSupported ? 'live' : 'off'}</em>
         </div>
@@ -4837,12 +4858,12 @@ export default function RoomPage() {
           {mameScoreStatus === 'Loading scoreboard...'
             ? mameScoreStatus
             : mameLeaderboardSupported
-            ? mameScoreStatus || 'Scores are extracted from MAME save files.'
+            ? mameScoreStatus || (tournamentCode ? 'Only your best tournament score counts.' : 'Scores are extracted from MAME save files.')
             : 'Online leaderboard not available for this game yet.'}
         </p>
         {mameLeaderboardSupported && isHost ? (
           <button type="button" className="primary mame-save-score" onClick={saveMameScoreNow} disabled={mameScoreBusy}>
-            {mameScoreBusy ? 'Registering score...' : 'Save MAME score now'}
+            {mameScoreBusy ? 'Registering score...' : tournamentCode ? 'Submit tournament score' : 'Save MAME score now'}
           </button>
         ) : null}
         {mameLeaderboardSupported && mameLeaderboard.length ? (
@@ -5568,6 +5589,29 @@ export default function RoomPage() {
           setStatus(`Loading local game: ${pendingGame.title || pendingGame.fileName}`);
         }
 
+        if (pendingGame?.id === localGameId && pendingGame.source === 'tournament-mame') {
+          const code = pendingGame.tournamentCode || tournamentCode;
+          if (!code) throw new Error('This tournament launch is missing its tournament code.');
+          let romBytes = await takePreparedTournamentMameFile(code, pendingGame.fileName);
+          if (!romBytes) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/tournaments/${encodeURIComponent(code)}/files/${encodeURIComponent(pendingGame.fileName)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+            }
+            romBytes = new Uint8Array(await response.arrayBuffer());
+          }
+          if (cancelled) return;
+          const file = new File([romBytes], pendingGame.fileName, { type: 'application/zip' });
+          await loadArcadeRomFile(file);
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          return;
+        }
+
         if (pendingGame?.id === localGameId && pendingGame.source === 'internet-archive-mame') {
           const hasVipAccess = localStorage.getItem('isVip') === 'true'
             || localStorage.getItem('isAdmin') === 'true'
@@ -5839,7 +5883,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isPuaeAmiga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, localReleaseId, room]);
+  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isPuaeAmiga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, localReleaseId, room, tournamentCode]);
 
   async function handleKickstartSelected(event) {
     try {
@@ -5999,8 +6043,8 @@ export default function RoomPage() {
           </div>
 
           <div className="room-actions">
-            <Link className="button-like secondary" to="/library">
-              Library
+            <Link className="button-like secondary" to={tournamentCode ? `/tournaments/${tournamentCode}` : '/library'}>
+              {tournamentCode ? 'Tournament' : 'Library'}
             </Link>
             {isSoloMode && isHost ? (
               <button type="button" className="secondary" onClick={invitePlayerFromSolo} disabled={soloInviteBusy}>

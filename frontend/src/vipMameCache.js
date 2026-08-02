@@ -3,6 +3,7 @@ import { API_BASE_URL } from './api/client';
 const VIP_MAME_CACHE = 'oldstylegaming-vip-mame-v1';
 const VIP_C64_CACHE = 'oldstylegaming-vip-c64-v1';
 const VIP_AMIGA_CACHE = 'oldstylegaming-vip-amiga-v1';
+const TOURNAMENT_MAME_CACHE = 'oldstylegaming-tournament-mame-v1';
 
 function cacheRequest(directory, fileName) {
   return new Request(
@@ -216,6 +217,57 @@ export async function takePreparedVipAmigaFile(fileName) {
   if (!('caches' in window)) return null;
   const cache = await caches.open(VIP_AMIGA_CACHE);
   const request = amigaCacheRequest(fileName);
+  const response = await cache.match(request);
+  if (!response) return null;
+  await cache.delete(request);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+function tournamentCacheRequest(code, fileName) {
+  return new Request(
+    `${window.location.origin}/__tournament-mame-cache__/${encodeURIComponent(code)}/${encodeURIComponent(fileName)}`,
+  );
+}
+
+export async function prepareTournamentMameFile(code, fileName, onProgress = () => {}) {
+  const token = localStorage.getItem('token');
+  const response = await fetch(
+    `${API_BASE_URL}/tournaments/${encodeURIComponent(code)}/files/${encodeURIComponent(fileName)}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  );
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null);
+    throw new Error(errorBody?.detail || `Could not download ${fileName}`);
+  }
+  const total = Number(response.headers.get('Content-Length')) || 0;
+  const reader = response.body?.getReader();
+  const chunks = [];
+  let loaded = 0;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      onProgress({ loaded, total });
+    }
+  } else {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    chunks.push(bytes);
+    loaded = bytes.byteLength;
+    onProgress({ loaded, total: total || loaded });
+  }
+  if (total && total !== loaded) throw new Error(`Download ended early for ${fileName}`);
+  const blob = new Blob(chunks, { type: 'application/zip' });
+  const cache = await caches.open(TOURNAMENT_MAME_CACHE);
+  await cache.put(tournamentCacheRequest(code, fileName), new Response(blob));
+  return blob.size;
+}
+
+export async function takePreparedTournamentMameFile(code, fileName) {
+  if (!('caches' in window)) return null;
+  const cache = await caches.open(TOURNAMENT_MAME_CACHE);
+  const request = tournamentCacheRequest(code, fileName);
   const response = await cache.match(request);
   if (!response) return null;
   await cache.delete(request);

@@ -929,6 +929,7 @@ def extract_mame_scores(
     username: str | None = None,
     save_files: list[dict],
     baseline_save_files: list[dict] | None = None,
+    persist: bool = True,
 ) -> dict:
     source_rom_name = normalise_rom_name(rom_name)
     rom_name = canonical_mame_rom_name(leaderboard_rom_name or source_rom_name)
@@ -1048,6 +1049,23 @@ def extract_mame_scores(
                 "baseline_scores": baseline_scores_debug,
                 "expected_initials": expected_initials,
             }
+        player_scores = serialize_parsed_scores(parsed_scores)
+        if not persist:
+            return {
+                "status": "ok",
+                "rom_name": rom_name,
+                "message": None,
+                "parser": game.parser,
+                "source_path": str(source_path.relative_to(session_path)),
+                "saved_paths": saved_paths,
+                "scores_parsed": len(parsed_scores),
+                "rows_inserted": 0,
+                "parsed_scores": parsed_scores_debug,
+                "player_scores": player_scores,
+                "baseline_scores": baseline_scores_debug,
+                "expected_initials": expected_initials,
+            }
+
         inserted = 0
         updated = 0
         for parsed in parsed_scores:
@@ -1090,6 +1108,7 @@ def extract_mame_scores(
             "scores_parsed": len(parsed_scores),
             "rows_inserted": inserted + updated,
             "parsed_scores": parsed_scores_debug,
+            "player_scores": player_scores,
             "baseline_scores": baseline_scores_debug,
             "expected_initials": expected_initials,
         }

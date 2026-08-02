@@ -4375,3 +4375,95 @@ ul {
   image-rendering: pixelated;
   outline: none;
 }
+
+.tournaments-page {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.tournament-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 18px;
+  max-width: 1200px;
+  margin: 20px auto;
+}
+
+.tournament-layout .panel {
+  border: 1px solid var(--line, #34433e);
+  border-radius: 10px;
+  background: #101614;
+  padding: 22px;
+}
+
+.tournament-hero,
+.tournament-current {
+  grid-column: 1 / -1;
+}
+
+.tournament-join-form,
+.tournament-create form {
+  display: grid;
+  gap: 12px;
+}
+
+.tournament-join-form {
+  grid-template-columns: minmax(180px, 1fr) auto;
+  max-width: 560px;
+}
+
+.tournament-create label {
+  display: grid;
+  gap: 6px;
+}
+
+.tournament-title-row,
+.tournament-facts,
+.tournament-scoreboard li,
+.tournament-list a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.tournament-code {
+  display: grid;
+  padding: 12px 18px;
+  border: 1px solid #3f705e;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.tournament-code strong {
+  color: #ffd25a;
+  font-size: 1.5rem;
+  letter-spacing: .12em;
+}
+
+.tournament-state {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #26312e;
+  text-transform: uppercase;
+  font-size: .75rem;
+}
+
+.tournament-state.active { color: #78f0b6; }
+.tournament-state.completed { color: #ffd25a; }
+.tournament-facts { flex-wrap: wrap; margin: 16px 0; color: #c9c5b5; }
+.tournament-scoreboard { margin-top: 22px; }
+.tournament-scoreboard ol { margin: 0; padding: 0; list-style: none; }
+.tournament-scoreboard li { padding: 10px 0; border-top: 1px solid #2e3935; }
+.tournament-scoreboard li span { margin-left: auto; color: #ffd25a; font-size: 1.15rem; }
+.tournament-list a { padding: 12px 0; border-top: 1px solid #2e3935; color: inherit; text-decoration: none; }
+.tournament-list a span { margin-left: auto; }
+.tournament-list a small { color: #9eaa9f; }
+
+@media (max-width: 760px) {
+  .tournaments-page { padding: 12px; }
+  .tournament-layout { grid-template-columns: 1fr; }
+  .tournament-join-form { grid-template-columns: 1fr; }
+  .tournament-title-row, .tournament-scoreboard li, .tournament-list a { align-items: flex-start; flex-direction: column; }
+}
