@@ -746,6 +746,7 @@ export default function RoomPage() {
   const localLibraryLoadAttemptedRef = useRef(false);
   const loadedDiskNameRef = useRef('');
   const mameScoreBaselineRef = useRef(null);
+  const tournamentScoreArmedAtRef = useRef(0);
   const mameScoreProcessedTokenRef = useRef(0);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
@@ -3247,6 +3248,7 @@ export default function RoomPage() {
     }
 
     mameScoreBaselineRef.current = null;
+    tournamentScoreArmedAtRef.current = tournamentCode ? Date.now() + 30000 : 0;
     refreshMameLeaderboard(loadedDiskName);
     if (!supportsMameScoreboard || !isHost) return undefined;
 
@@ -4766,6 +4768,22 @@ export default function RoomPage() {
       setMameScoreStatus(`No MAME score files found for extraction. Browser FS scan saw ${scannedCount} files.`);
       addLog(`MAME score extraction skipped: no upload candidates (${reason}); scanned files ${scannedCount}`);
       return null;
+    }
+
+    if (tournamentCode && Date.now() < tournamentScoreArmedAtRef.current) {
+      mameScoreBaselineRef.current = {
+        romName,
+        files,
+        capturedAt: Date.now(),
+      };
+      const seconds = Math.max(1, Math.ceil((tournamentScoreArmedAtRef.current - Date.now()) / 1000));
+      setMameScoreStatus(`Preparing clean tournament baseline… ${seconds}s`);
+      addLog(`Tournament MAME baseline refreshed during ${seconds}s cabinet-table warm-up for ${romName}`);
+      return {
+        status: 'baseline',
+        rom_name: leaderboardRomName || romName,
+        rows_inserted: 0,
+      };
     }
 
     if (reason === 'automatic' && !baseline.length) {
