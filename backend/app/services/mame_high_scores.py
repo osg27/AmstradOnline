@@ -70,6 +70,7 @@ DKONG_HI_GAMES = {
 }
 
 MAME_HI_RULES_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_hi_rules.json"
+MAME_HI2TXT_ROMS_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_hi2txt_roms.json"
 DISABLED_MAME_SCORE_GAMES = {
     # MAME2003-Plus writes Robotron scores to nvram in this browser setup, but
     # the exported file has repeatedly contained only the factory/default tables.
@@ -198,8 +199,21 @@ def load_supported_mame_games() -> tuple[tuple[str, str, str], ...]:
         normalise_rom_name_value(rom_name): (normalise_rom_name_value(rom_name), display_name, parser)
         for rom_name, display_name, parser in DEFAULT_MAME_GAMES
     }
-    for rom_name, display_name, parser in load_hi2txt_xml_games():
+    xml_games = load_hi2txt_xml_games()
+    for rom_name, display_name, parser in xml_games:
         games.setdefault(rom_name, (rom_name, display_name, parser))
+    try:
+        manifest_roms = json.loads(MAME_HI2TXT_ROMS_PATH.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Could not load fallback hi2txt ROM manifest from %s: %s", MAME_HI2TXT_ROMS_PATH, exc)
+        manifest_roms = []
+    for value in manifest_roms:
+        rom_name = normalise_rom_name_value(str(value))
+        if rom_name and rom_name not in DISABLED_MAME_SCORE_GAMES:
+            display_name = rom_name.replace("_", " ").replace("-", " ").strip().title() or rom_name
+            games.setdefault(rom_name, (rom_name, display_name, HI2TXT_PARSER))
+    if manifest_roms and not xml_games:
+        logger.info("Loaded %s fallback hi2txt ROM definitions", len(manifest_roms))
     return tuple(
         game
         for game in games.values()
