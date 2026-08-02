@@ -48,11 +48,11 @@ export default function TournamentsPage() {
   async function loadTournament(code) {
     const normalized = code.trim().toUpperCase();
     if (!normalized) return;
-    const details = await apiFetch(`/tournaments/${encodeURIComponent(normalized)}`);
+    const details = await apiFetch(`/auth/tournaments/${encodeURIComponent(normalized)}`);
     setTournament(details);
     setJoinCode(normalized);
     if (details.joined) {
-      const scores = await apiFetch(`/tournaments/${encodeURIComponent(normalized)}/leaderboard`);
+      const scores = await apiFetch(`/auth/tournaments/${encodeURIComponent(normalized)}/leaderboard`);
       setLeaderboard(Array.isArray(scores) ? scores : []);
     } else {
       setLeaderboard([]);
@@ -61,8 +61,8 @@ export default function TournamentsPage() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch('/tournaments/mine'),
-      isVip ? apiFetch('/tournaments/games') : Promise.resolve([]),
+      apiFetch('/auth/tournaments/mine'),
+      isVip ? apiFetch('/auth/tournaments/games') : Promise.resolve([]),
     ]).then(([myTournaments, availableGames]) => {
       setMine(Array.isArray(myTournaments) ? myTournaments : []);
       setGames(Array.isArray(availableGames) ? availableGames : []);
@@ -86,8 +86,8 @@ export default function TournamentsPage() {
     if (!tournament?.joined) return undefined;
     const timer = window.setInterval(() => {
       Promise.all([
-        apiFetch(`/tournaments/${encodeURIComponent(tournament.code)}`),
-        apiFetch(`/tournaments/${encodeURIComponent(tournament.code)}/leaderboard`),
+        apiFetch(`/auth/tournaments/${encodeURIComponent(tournament.code)}`),
+        apiFetch(`/auth/tournaments/${encodeURIComponent(tournament.code)}/leaderboard`),
       ]).then(([details, scores]) => {
         setTournament(details);
         setLeaderboard(Array.isArray(scores) ? scores : []);
@@ -103,7 +103,7 @@ export default function TournamentsPage() {
     setBusy(true);
     setStatus('Joining tournament…');
     try {
-      await apiFetch(`/tournaments/${encodeURIComponent(normalized)}/join`, { method: 'POST' });
+      await apiFetch(`/auth/tournaments/${encodeURIComponent(normalized)}/join`, { method: 'POST' });
       navigate(`/tournaments/${normalized}`);
       await loadTournament(normalized);
       setStatus('Tournament joined.');
@@ -119,7 +119,7 @@ export default function TournamentsPage() {
     setBusy(true);
     setStatus('Creating tournament…');
     try {
-      const created = await apiFetch('/tournaments', {
+      const created = await apiFetch('/auth/tournaments', {
         method: 'POST',
         body: JSON.stringify({ name, rom_name: romName, duration_hours: Number(durationHours) }),
       });
@@ -140,7 +140,7 @@ export default function TournamentsPage() {
     setBusy(true);
     setStatus('Preparing tournament game…');
     try {
-      const game = await apiFetch(`/tournaments/${encodeURIComponent(tournament.code)}/game`);
+      const game = await apiFetch(`/auth/tournaments/${encodeURIComponent(tournament.code)}/game`);
       await prepareTournamentMameFile(tournament.code, game.file_name, ({ loaded, total }) => {
         setProgress({ loaded, total, percent: total ? Math.round((loaded / total) * 100) : 0 });
       });

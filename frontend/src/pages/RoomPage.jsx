@@ -4704,7 +4704,7 @@ export default function RoomPage() {
     try {
       setMameScoreStatus('Loading scoreboard...');
       if (tournamentCode) {
-        const scores = await apiFetch(`/tournaments/${encodeURIComponent(tournamentCode)}/leaderboard`);
+        const scores = await apiFetch(`/auth/tournaments/${encodeURIComponent(tournamentCode)}/leaderboard`);
         const scoreList = Array.isArray(scores) ? scores : [];
         setMameLeaderboard(scoreList);
         setMameLeaderboardSupported(true);
@@ -4784,7 +4784,7 @@ export default function RoomPage() {
     }
 
     const extractionPath = tournamentCode
-      ? `/tournaments/${encodeURIComponent(tournamentCode)}/sessions/${encodeURIComponent(sessionId)}/extract-score`
+      ? `/auth/tournaments/${encodeURIComponent(tournamentCode)}/sessions/${encodeURIComponent(sessionId)}/extract-score`
       : `/scores/mame/sessions/${encodeURIComponent(sessionId)}/extract-scores`;
     const result = await apiFetch(extractionPath, {
       method: 'POST',
@@ -5596,7 +5596,7 @@ export default function RoomPage() {
           if (!romBytes) {
             const token = localStorage.getItem('token');
             const response = await fetch(
-              `${API_BASE_URL}/tournaments/${encodeURIComponent(code)}/files/${encodeURIComponent(pendingGame.fileName)}`,
+              `${API_BASE_URL}/auth/tournaments/${encodeURIComponent(code)}/files/${encodeURIComponent(pendingGame.fileName)}`,
               { headers: token ? { Authorization: `Bearer ${token}` } : {} },
             );
             if (!response.ok) {

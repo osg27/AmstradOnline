@@ -232,7 +232,7 @@ function tournamentCacheRequest(code, fileName) {
 export async function prepareTournamentMameFile(code, fileName, onProgress = () => {}) {
   const token = localStorage.getItem('token');
   const response = await fetch(
-    `${API_BASE_URL}/tournaments/${encodeURIComponent(code)}/files/${encodeURIComponent(fileName)}`,
+    `${API_BASE_URL}/auth/tournaments/${encodeURIComponent(code)}/files/${encodeURIComponent(fileName)}`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   );
   if (!response.ok) {
