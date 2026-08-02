@@ -31,6 +31,7 @@ export default function TournamentsPage() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [mine, setMine] = useState([]);
   const [games, setGames] = useState([]);
+  const [gamesLoading, setGamesLoading] = useState(isVip);
   const [name, setName] = useState('');
   const [romName, setRomName] = useState('');
   const [durationHours, setDurationHours] = useState(24);
@@ -67,7 +68,8 @@ export default function TournamentsPage() {
       setGames(Array.isArray(availableGames) ? availableGames : []);
       if (!romName && availableGames?.[0]?.rom_name) setRomName(availableGames[0].rom_name);
       if (isVip && !availableGames?.length) setStatus('No score-supported Archive MAME games were found.');
-    }).catch((error) => setStatus(`Could not load tournament games: ${error.message}`));
+    }).catch((error) => setStatus(`Could not load tournament games: ${error.message}`))
+      .finally(() => setGamesLoading(false));
   }, [isVip]);
 
   useEffect(() => {
@@ -245,7 +247,7 @@ export default function TournamentsPage() {
             <p>Only VIPs can create tournaments. Any registered player can enter with the code.</p>
             <form onSubmit={create}>
               <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Friday night high score" minLength={3} maxLength={120} required /></label>
-              <label>Game<select value={romName} onChange={(event) => setRomName(event.target.value)}>{games.map((game) => <option key={game.rom_name} value={game.rom_name}>{game.display_name}</option>)}</select></label>
+              <label>Game<select value={romName} onChange={(event) => setRomName(event.target.value)}>{gamesLoading ? <option value="">Loading tournament games…</option> : null}{games.map((game) => <option key={game.rom_name} value={game.rom_name}>{game.display_name} ({game.rom_name})</option>)}</select></label>
               <label>Duration<select value={durationHours} onChange={(event) => setDurationHours(Number(event.target.value))}><option value={1}>1 hour</option><option value={6}>6 hours</option><option value={12}>12 hours</option><option value={24}>24 hours</option><option value={72}>3 days</option><option value={168}>1 week</option></select></label>
               <button type="submit" disabled={busy || !name.trim() || !selectedGame}>Create tournament</button>
             </form>

@@ -15,7 +15,6 @@ from app.api.routes.auth import get_current_user, is_vip_user
 from app.api.routes.vip_mame import (
     ARCHIVE_DOWNLOAD_ROOT,
     archive_request,
-    load_archive_catalog,
     stream_archive_response,
 )
 from app.core.database import get_db
@@ -25,6 +24,7 @@ from app.schemas.tournament import TournamentCreate, TournamentScoreSubmit
 from app.services.mame_high_scores import (
     extract_mame_scores,
     load_supported_mame_games,
+    load_tournament_mame_roms,
     normalise_rom_name,
 )
 
@@ -87,7 +87,7 @@ def require_entry(tournament: Tournament, user: User, db: Session) -> None:
 
 
 def tournament_ready_games() -> list[dict]:
-    archive_files = load_archive_catalog()["roms"]
+    archive_files = load_tournament_mame_roms()
     archive_by_rom = {
         normalise_rom_name(filename): filename
         for filename in archive_files
@@ -207,7 +207,7 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
         raise HTTPException(status_code=409, detail="Tournament play is not currently active")
     archive_by_rom = {
         normalise_rom_name(filename): filename
-        for filename in load_archive_catalog()["roms"]
+        for filename in load_tournament_mame_roms()
     }
     filename = archive_by_rom.get(tournament.rom_name)
     if not filename:
@@ -226,7 +226,7 @@ def tournament_file(code: str, filename: str, user: User = Depends(get_current_u
     require_entry(tournament, user, db)
     if tournament_status(tournament) != "active" or normalise_rom_name(filename) != tournament.rom_name:
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
-    if filename not in load_archive_catalog()["roms"]:
+    if filename not in load_tournament_mame_roms():
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
     try:
         response = urlopen(archive_request(f"{ARCHIVE_DOWNLOAD_ROOT}/roms/{quote(filename)}"), timeout=60)

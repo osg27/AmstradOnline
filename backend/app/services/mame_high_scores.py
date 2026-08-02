@@ -71,6 +71,7 @@ DKONG_HI_GAMES = {
 
 MAME_HI_RULES_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_hi_rules.json"
 MAME_HI2TXT_ROMS_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_hi2txt_roms.json"
+MAME_TOURNAMENT_ROMS_PATH = Path(__file__).resolve().parents[1] / "data" / "mame_tournament_roms.json"
 DISABLED_MAME_SCORE_GAMES = {
     # MAME2003-Plus writes Robotron scores to nvram in this browser setup, but
     # the exported file has repeatedly contained only the factory/default tables.
@@ -219,6 +220,21 @@ def load_supported_mame_games() -> tuple[tuple[str, str, str], ...]:
         for game in games.values()
         if game[0] not in DISABLED_MAME_SCORE_GAMES
         and (game[2] in {HI2TXT_PARSER, TAPPER_NVRAM_PARSER} or game[0] in SUPPORTED_EXACT_HI_GAMES)
+    )
+
+
+@lru_cache(maxsize=1)
+def load_tournament_mame_roms() -> tuple[str, ...]:
+    """Exact Archive filenames known to have a trusted score definition."""
+    try:
+        filenames = json.loads(MAME_TOURNAMENT_ROMS_PATH.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.error("Could not load tournament MAME manifest from %s: %s", MAME_TOURNAMENT_ROMS_PATH, exc)
+        return ()
+    return tuple(
+        str(filename)
+        for filename in filenames
+        if re.fullmatch(r"[a-zA-Z0-9_.+ -]+\.zip", str(filename))
     )
 
 
