@@ -11,7 +11,7 @@ from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user, is_vip_user
+from app.api.routes.auth import get_current_user, is_super_admin_user, is_vip_user
 from app.api.routes.vip_mame import (
     ARCHIVE_DOWNLOAD_ROOT,
     archive_request,
@@ -30,7 +30,17 @@ from app.services.mame_high_scores import (
 )
 
 
-router = APIRouter(prefix="/tournaments", tags=["tournaments"])
+def require_tournament_preview_access(user: User = Depends(get_current_user)) -> User:
+    if not is_super_admin_user(user):
+        raise HTTPException(status_code=403, detail="Tournament preview is restricted to the superadmin")
+    return user
+
+
+router = APIRouter(
+    prefix="/tournaments",
+    tags=["tournaments"],
+    dependencies=[Depends(require_tournament_preview_access)],
+)
 CODE_CHARS = string.ascii_uppercase + string.digits
 
 
