@@ -200,6 +200,19 @@
     return `${localSavePrefix}${namespace}${normaliseRomKey(fileName)}`;
   }
 
+  function currentMameSaveDirectory() {
+    return currentSaveNamespace
+      ? `/data/tournament-saves/${currentSaveNamespace}`
+      : '/data/saves';
+  }
+
+  function isActiveMameSavePath(path) {
+    if (!currentSaveNamespace) return true;
+    const normalised = toAbsoluteFsPath(path).toLowerCase();
+    const saveDirectory = currentMameSaveDirectory().toLowerCase();
+    return normalised === saveDirectory || normalised.startsWith(`${saveDirectory}/`);
+  }
+
   function isPersistentMameSavePath(path) {
     const normalised = normaliseFsPath(path).replace(/^\/+/, '');
     const lowerPath = normalised.toLowerCase();
@@ -243,7 +256,7 @@
       const saved = JSON.parse(localStorage.getItem(key) || 'null');
       if (!saved || !Array.isArray(saved.files)) return [];
       return saved.files
-        .filter((file) => file?.path && file?.data && isPersistentMameSavePath(file.path))
+        .filter((file) => file?.path && file?.data && isPersistentMameSavePath(file.path) && isActiveMameSavePath(file.path))
         .map((file) => ({
           path: toAbsoluteFsPath(file.path),
           bytes: base64ToBytes(file.data),
@@ -256,7 +269,7 @@
 
   function persistLocalMameSaveFiles(files, fileName = currentRom?.fileName) {
     const persistentFiles = (files || [])
-      .filter((file) => file?.path && file?.bytes?.length && isPersistentMameSavePath(file.path) && isCurrentRomGeneratedSaveFile(file))
+      .filter((file) => file?.path && file?.bytes?.length && isPersistentMameSavePath(file.path) && isActiveMameSavePath(file.path) && isCurrentRomGeneratedSaveFile(file))
       .map((file) => ({
         path: normaliseFsPath(file.path).replace(/^\/+/, ''),
         data: bytesToBase64(file.bytes),
@@ -474,7 +487,7 @@
         if (lowerPath.endsWith('.hi')) debug.hiFiles.push(fileInfo);
         if (changedSinceRomStart) debug.changedFiles.push(fileInfo);
 
-        if (isMameScoreCandidate(childPath, stat)) {
+        if (isMameScoreCandidate(childPath, stat) && isActiveMameSavePath(childPath)) {
           addUploadFile(childPath, stat, lowerPath.endsWith('.hi') ? '.hi' : segments.includes('nvram') ? 'nvram' : segments.includes('hi') ? 'hi-folder' : lowerPath.endsWith('.cfg') ? '.cfg' : lowerPath.endsWith('.fs') ? '.fs' : 'candidate');
         } else if (isHiscoreDat(childPath)) {
           addUploadFile(childPath, stat, 'hiscore.dat-debug');
@@ -801,6 +814,7 @@
   }
 
   function configureEmulator(fileName, romFile) {
+    const saveDirectory = currentMameSaveDirectory();
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#mame-container';
     window.EJS_core = 'mame2003_plus';
@@ -855,12 +869,12 @@
       },
       {
         name: 'savefile_directory',
-        default: '/data/saves',
+        default: saveDirectory,
         isString: true,
       },
       {
         name: 'savestate_directory',
-        default: '/data/saves',
+        default: saveDirectory,
         isString: true,
       },
     ];
