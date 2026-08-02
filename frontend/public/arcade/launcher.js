@@ -13,6 +13,7 @@
   let emulatorPaused = false;
   let romStartedAt = 0;
   let currentSampleFiles = [];
+  let currentSaveNamespace = '';
   let scoreFileWatchTimer = null;
   let lastScoreFileSignature = '';
   const playerMasks = [0, 0, 0, 0];
@@ -195,7 +196,8 @@
   }
 
   function localSaveKey(fileName = currentRom?.fileName) {
-    return `${localSavePrefix}${normaliseRomKey(fileName)}`;
+    const namespace = currentSaveNamespace ? `${currentSaveNamespace}:` : '';
+    return `${localSavePrefix}${namespace}${normaliseRomKey(fileName)}`;
   }
 
   function isPersistentMameSavePath(path) {
@@ -1035,6 +1037,10 @@
     }
 
     if (message.type === 'arcade_autoload') {
+      currentSaveNamespace = String(message.saveNamespace || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '')
+        .slice(0, 64);
       currentRom = {
         fileName: message.fileName || 'game.zip',
         bytes: new Uint8Array(message.bytes || []),
