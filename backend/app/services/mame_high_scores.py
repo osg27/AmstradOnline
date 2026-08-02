@@ -191,6 +191,23 @@ def load_hi2txt_xml_games() -> tuple[tuple[str, str, str], ...]:
     return tuple((rom_name, display_name, HI2TXT_PARSER) for rom_name, display_name in sorted(games.items()))
 
 
+@lru_cache(maxsize=1)
+def load_supported_mame_games() -> tuple[tuple[str, str, str], ...]:
+    """Return trusted score-capable games without touching the database."""
+    games = {
+        normalise_rom_name_value(rom_name): (normalise_rom_name_value(rom_name), display_name, parser)
+        for rom_name, display_name, parser in DEFAULT_MAME_GAMES
+    }
+    for rom_name, display_name, parser in load_hi2txt_xml_games():
+        games.setdefault(rom_name, (rom_name, display_name, parser))
+    return tuple(
+        game
+        for game in games.values()
+        if game[0] not in DISABLED_MAME_SCORE_GAMES
+        and (game[2] in {HI2TXT_PARSER, TAPPER_NVRAM_PARSER} or game[0] in SUPPORTED_EXACT_HI_GAMES)
+    )
+
+
 @dataclass
 class ParsedMameScore:
     score: int
@@ -283,18 +300,8 @@ def cleanup_duplicate_mame_scores(db: Session) -> int:
 
 
 def seed_default_mame_games(db: Session) -> None:
-    seed_games = {
-        normalise_rom_name_value(rom_name): (normalise_rom_name_value(rom_name), display_name, parser)
-        for rom_name, display_name, parser in DEFAULT_MAME_GAMES
-    }
-    for rom_name, display_name, parser in load_hi2txt_xml_games():
-        seed_games.setdefault(rom_name, (rom_name, display_name, parser))
-
-    for rom_name, display_name, parser in seed_games.values():
-        supported = (
-            rom_name not in DISABLED_MAME_SCORE_GAMES
-            and (parser in {HI2TXT_PARSER, TAPPER_NVRAM_PARSER} or rom_name in SUPPORTED_EXACT_HI_GAMES)
-        )
+    for rom_name, display_name, parser in load_supported_mame_games():
+        supported = True
         existing = db.query(MameLeaderboardGame).filter(MameLeaderboardGame.rom_name == rom_name).first()
         if existing:
             existing.display_name = display_name

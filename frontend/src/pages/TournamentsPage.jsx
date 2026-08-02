@@ -60,13 +60,14 @@ export default function TournamentsPage() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch('/tournaments/mine').catch(() => []),
-      isVip ? apiFetch('/tournaments/games').catch(() => []) : Promise.resolve([]),
+      apiFetch('/tournaments/mine'),
+      isVip ? apiFetch('/tournaments/games') : Promise.resolve([]),
     ]).then(([myTournaments, availableGames]) => {
       setMine(Array.isArray(myTournaments) ? myTournaments : []);
       setGames(Array.isArray(availableGames) ? availableGames : []);
       if (!romName && availableGames?.[0]?.rom_name) setRomName(availableGames[0].rom_name);
-    });
+      if (isVip && !availableGames?.length) setStatus('No score-supported Archive MAME games were found.');
+    }).catch((error) => setStatus(`Could not load tournament games: ${error.message}`));
   }, [isVip]);
 
   useEffect(() => {

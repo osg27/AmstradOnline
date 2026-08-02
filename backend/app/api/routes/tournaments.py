@@ -19,11 +19,14 @@ from app.api.routes.vip_mame import (
     stream_archive_response,
 )
 from app.core.database import get_db
-from app.models.mame_leaderboard import MameLeaderboardGame
 from app.models.tournament import Tournament, TournamentEntry, TournamentScore
 from app.models.user import User
 from app.schemas.tournament import TournamentCreate, TournamentScoreSubmit
-from app.services.mame_high_scores import extract_mame_scores, normalise_rom_name, seed_default_mame_games
+from app.services.mame_high_scores import (
+    extract_mame_scores,
+    load_supported_mame_games,
+    normalise_rom_name,
+)
 
 
 router = APIRouter(prefix="/tournaments", tags=["tournaments"])
@@ -83,21 +86,30 @@ def require_entry(tournament: Tournament, user: User, db: Session) -> None:
         raise HTTPException(status_code=403, detail="Join this tournament before playing")
 
 
+def tournament_ready_games() -> list[dict]:
+    archive_files = load_archive_catalog()["roms"]
+    archive_by_rom = {
+        normalise_rom_name(filename): filename
+        for filename in archive_files
+        if filename.lower().endswith(".zip")
+    }
+    games = []
+    for rom_name, display_name, _parser in load_supported_mame_games():
+        filename = archive_by_rom.get(rom_name)
+        if filename:
+            games.append({
+                "rom_name": rom_name,
+                "display_name": display_name or rom_name,
+                "file_name": filename,
+            })
+    return sorted(games, key=lambda game: (game["display_name"].casefold(), game["rom_name"]))
+
+
 @router.get("/games")
-def tournament_games(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def tournament_games(_user: User = Depends(get_current_user)):
     if not is_vip_user(_user):
         raise HTTPException(status_code=403, detail="Only VIPs can create tournaments")
-    seed_default_mame_games(db)
-    archive_roms = set(load_archive_catalog()["roms"])
-    games = db.query(MameLeaderboardGame).filter(
-        MameLeaderboardGame.enabled == True,  # noqa: E712
-        MameLeaderboardGame.leaderboard_supported == True,  # noqa: E712
-    ).order_by(MameLeaderboardGame.display_name).all()
-    return [
-        {"rom_name": game.rom_name, "display_name": game.display_name}
-        for game in games
-        if f"{game.rom_name}.zip" in archive_roms
-    ]
+    return tournament_ready_games()
 
 
 @router.post("")
@@ -108,14 +120,9 @@ def create_tournament(
 ):
     if not is_vip_user(user):
         raise HTTPException(status_code=403, detail="Only VIPs can create tournaments")
-    seed_default_mame_games(db)
     rom_name = normalise_rom_name(payload.rom_name)
-    game = db.query(MameLeaderboardGame).filter(
-        MameLeaderboardGame.rom_name == rom_name,
-        MameLeaderboardGame.enabled == True,  # noqa: E712
-        MameLeaderboardGame.leaderboard_supported == True,  # noqa: E712
-    ).first()
-    if not game or f"{rom_name}.zip" not in set(load_archive_catalog()["roms"]):
+    ready_game = next((item for item in tournament_ready_games() if item["rom_name"] == rom_name), None)
+    if not ready_game:
         raise HTTPException(status_code=400, detail="That MAME game is not tournament-ready")
 
     starts_at = payload.starts_at or utc_now()
@@ -127,7 +134,7 @@ def create_tournament(
         name=payload.name.strip(),
         creator_user_id=user.id,
         rom_name=rom_name,
-        display_name=game.display_name or rom_name,
+        display_name=ready_game["display_name"],
         starts_at=starts_at,
         ends_at=starts_at + timedelta(hours=payload.duration_hours),
     )
@@ -198,10 +205,17 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
     require_entry(tournament, user, db)
     if tournament_status(tournament) != "active":
         raise HTTPException(status_code=409, detail="Tournament play is not currently active")
+    archive_by_rom = {
+        normalise_rom_name(filename): filename
+        for filename in load_archive_catalog()["roms"]
+    }
+    filename = archive_by_rom.get(tournament.rom_name)
+    if not filename:
+        raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
     return {
         "id": f"tournament:{tournament.code}:{tournament.rom_name}",
         "title": tournament.display_name,
-        "file_name": f"{tournament.rom_name}.zip",
+        "file_name": filename,
         "rom_name": tournament.rom_name,
     }
 
@@ -210,7 +224,7 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
 def tournament_file(code: str, filename: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     tournament = get_tournament(code, db)
     require_entry(tournament, user, db)
-    if tournament_status(tournament) != "active" or filename != f"{tournament.rom_name}.zip":
+    if tournament_status(tournament) != "active" or normalise_rom_name(filename) != tournament.rom_name:
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
     if filename not in load_archive_catalog()["roms"]:
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
