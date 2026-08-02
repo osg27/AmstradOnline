@@ -4454,6 +4454,8 @@ ul {
 .tournament-state.completed { color: #ffd25a; }
 .tournament-facts { flex-wrap: wrap; margin: 16px 0; color: #c9c5b5; }
 .tournament-scoreboard { margin-top: 22px; }
+.tournament-scoreboard-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tournament-scoreboard-heading h3 { margin: 0; }
 .tournament-scoreboard ol { margin: 0; padding: 0; list-style: none; }
 .tournament-scoreboard li { padding: 10px 0; border-top: 1px solid #2e3935; }
 .tournament-scoreboard li span { margin-left: auto; color: #ffd25a; font-size: 1.15rem; }

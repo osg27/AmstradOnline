@@ -62,6 +62,7 @@ def serialize_tournament(tournament: Tournament, db: Session, user_id: int) -> d
         "rom_name": tournament.rom_name,
         "display_name": tournament.display_name,
         "creator_user_id": tournament.creator_user_id,
+        "is_creator": tournament.creator_user_id == user_id,
         "starts_at": tournament.starts_at,
         "ends_at": tournament.ends_at,
         "status": tournament_status(tournament),
@@ -197,6 +198,22 @@ def tournament_leaderboard(
         }
         for index, (score, username) in enumerate(rows)
     ]
+
+
+@router.delete("/{code}/leaderboard")
+def reset_tournament_leaderboard(
+    code: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tournament = get_tournament(code, db)
+    if tournament.creator_user_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the tournament creator can reset its standings")
+    deleted = db.query(TournamentScore).filter(TournamentScore.tournament_id == tournament.id).delete(
+        synchronize_session=False,
+    )
+    db.commit()
+    return {"deleted": deleted}
 
 
 @router.get("/{code}/game")

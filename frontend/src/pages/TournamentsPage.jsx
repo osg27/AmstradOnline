@@ -178,6 +178,21 @@ export default function TournamentsPage() {
     setStatus('Tournament invite copied.');
   }
 
+  async function resetStandings() {
+    if (!tournament?.is_creator || !window.confirm('Clear every submitted score from this tournament?')) return;
+    setBusy(true);
+    setStatus('Resetting tournament standings…');
+    try {
+      await apiFetch(`/auth/tournaments/${encodeURIComponent(tournament.code)}/leaderboard`, { method: 'DELETE' });
+      setLeaderboard([]);
+      setStatus('Tournament standings reset. Normal game scores were not changed.');
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="page tournaments-page">
       <header className="lobby-header">
@@ -224,7 +239,10 @@ export default function TournamentsPage() {
 
             {tournament.joined ? (
               <div className="tournament-scoreboard">
-                <h3>{tournament.status === 'completed' ? 'Final standings' : 'Live standings'}</h3>
+                <div className="tournament-scoreboard-heading">
+                  <h3>{tournament.status === 'completed' ? 'Final standings' : 'Live standings'}</h3>
+                  {tournament.is_creator ? <button className="secondary" type="button" disabled={busy || !leaderboard.length} onClick={resetStandings}>Reset standings</button> : null}
+                </div>
                 {leaderboard.length ? (
                   <ol>
                     {leaderboard.map((entry) => (
