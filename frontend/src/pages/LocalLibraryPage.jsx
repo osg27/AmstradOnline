@@ -487,7 +487,8 @@ function appendRegions(title, revision = '') {
 }
 
 function normalizeBoxArtKey(value) {
-  return value
+  return String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .toLowerCase()
     .replace(/\.[^.]+$/, '')
     .replace(/\bh\s*\.?\s*q\.?\b/g, 'hq')
@@ -502,7 +503,8 @@ function normalizeBoxArtKey(value) {
 }
 
 function normalizeExactBoxArtKey(value) {
-  return value
+  return String(value || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .toLowerCase()
     .replace(/\.[^.]+$/, '')
     .replace(/\bh\s*\.?\s*q\.?\b/g, 'hq')
@@ -546,11 +548,15 @@ function knownBoxArtUrl(game) {
   const knownNames = {
     spectrum: {
       robocop: 'RoboCop (Ocean Software Ltd)',
+      'robo cop': 'RoboCop (Ocean Software Ltd)',
       'robocop 2': 'RoboCop 2 (Ocean Software Ltd)',
+      'robo cop 2': 'RoboCop 2 (Ocean Software Ltd)',
     },
     cpc: {
       robocop: 'Robocop (1988)(Ocean)',
+      'robo cop': 'Robocop (1988)(Ocean)',
       'robocop 2': 'Robocop 2 (1990)(Ocean)',
+      'robo cop 2': 'Robocop 2 (1990)(Ocean)',
     },
   };
   const fileName = knownNames[game.system]?.[titleKey];
