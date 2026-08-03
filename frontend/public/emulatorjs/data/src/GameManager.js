@@ -50,7 +50,7 @@ class EJS_GameManager {
                 this.saveSaveFiles();
             }
             this.toggleMainLoop(0);
-            this.FS.unmount("/data/saves");
+            this.FS.unmount(this.getSaveDirectory());
             setTimeout(() => {
                 try {
                     this.Module.abort();
@@ -60,6 +60,10 @@ class EJS_GameManager {
             }, 1000);
         })
     }
+    getSaveDirectory() {
+        const configured = String(this.EJS.config.saveDirectory || "").replace(/\/+$/, "");
+        return /^\/data\/[a-zA-Z0-9/_-]+$/.test(configured) ? configured : "/data/saves";
+    }
     setupPreLoadSettings() {
         this.Module.callbacks.setupCoreSettingFile = (filePath) => {
             if (this.EJS.debug) console.log("Setting up core settings with path:", filePath);
@@ -68,9 +72,13 @@ class EJS_GameManager {
     }
     mountFileSystems() {
         return new Promise(async resolve => {
-            this.mkdir("/data");
-            this.mkdir("/data/saves");
-            this.FS.mount(this.FS.filesystems.IDBFS, { autoPersist: true }, "/data/saves");
+            const saveDirectory = this.getSaveDirectory();
+            let current = "";
+            saveDirectory.split("/").filter(Boolean).forEach(part => {
+                current += `/${part}`;
+                this.mkdir(current);
+            });
+            this.FS.mount(this.FS.filesystems.IDBFS, { autoPersist: true }, saveDirectory);
             this.FS.syncfs(true, resolve);
         });
     }
@@ -165,7 +173,7 @@ class EJS_GameManager {
             "slowmotion_ratio = 3.0\n" +
             (this.EJS.rewindEnabled ? "rewind_enable = true\n" : "") +
             (this.EJS.rewindEnabled ? "rewind_granularity = 6\n" : "") +
-            "savefile_directory = \"/data/saves\"\n";
+            `savefile_directory = "${this.getSaveDirectory()}"\n`;
 
         if (this.EJS.getCore() === "flycast") {
             cfg += "system_directory = \"/\"\n";

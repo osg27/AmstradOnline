@@ -828,7 +828,7 @@
       'cache.js': '/emulatorjs/data/src/cache.js',
       'compression.js': '/emulatorjs/data/src/compression.js',
       'consts.js': '/emulatorjs/data/src/consts.js',
-      'GameManager.js': '/emulatorjs/data/src/GameManager.js',
+      'GameManager.js': '/emulatorjs/data/src/GameManager.js?v=2026-08-03-3',
       'gamepad.js': '/emulatorjs/data/src/gamepad.js',
       'license.js': '/emulatorjs/data/src/license.js',
       'netplay.js': '/emulatorjs/data/src/netplay.js',
@@ -844,6 +844,7 @@
     window.EJS_forceLegacyCores = false;
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
+    window.EJS_saveDirectory = saveDirectory;
     window.EJS_defaultOptions = {
       'mame2003-plus_autosave_hiscore': 'recursively',
     };

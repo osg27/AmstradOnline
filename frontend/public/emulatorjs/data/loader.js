@@ -190,6 +190,7 @@ const config = {
     capture: window.EJS_screenCapture,
     externalFiles: window.EJS_externalFiles,
     rawFiles: window.EJS_rawFiles,
+    saveDirectory: window.EJS_saveDirectory,
     retroarchOpts: window.EJS_retroarchOpts,
     dontExtractRom: window.EJS_dontExtractRom,
     dontExtractBIOS: window.EJS_dontExtractBIOS,
