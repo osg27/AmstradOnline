@@ -807,22 +807,35 @@ def build_hi2txt_commands(rom_name: str, source_path: Path) -> list[list[str]]:
     )
 
 
-def parse_hi2txt_output(output: str, rom_name: str) -> list[ParsedMameScore]:
+def parse_hi2txt_output(output: str, rom_name: str, minimum_score: int = 100) -> list[ParsedMameScore]:
     parsed: list[ParsedMameScore] = []
     seen: set[tuple[int, str]] = set()
     ignored_words = {"RANK", "SCORE", "NAME", "INITIALS", "HI", "HIGH", "PLAYER", "ROM"}
+    score_column = None
 
     for line in output.splitlines():
         clean = line.strip()
+        columns = [column.strip() for column in clean.split("|")]
+        upper_columns = [column.upper() for column in columns]
+        if "SCORE" in upper_columns:
+            score_column = upper_columns.index("SCORE")
+            continue
         if not clean or not any(char.isdigit() for char in clean):
             continue
 
-        numbers = [
-            int(match.replace(",", ""))
-            for match in re.findall(r"\b\d[\d,]*\b", clean)
-            if match.replace(",", "").isdigit()
-        ]
-        scores = [score for score in numbers if plausible_arcade_score(score, rom_name)]
+        if score_column is not None and score_column < len(columns):
+            value = columns[score_column].replace(",", "").strip()
+            scores = [int(value)] if value.isdigit() and int(value) >= minimum_score else []
+        else:
+            numbers = [
+                int(match.replace(",", ""))
+                for match in re.findall(r"\b\d[\d,]*\b", clean)
+                if match.replace(",", "").isdigit()
+            ]
+            scores = [
+                score for score in numbers
+                if score >= minimum_score and (minimum_score < 100 or plausible_arcade_score(score, rom_name))
+            ]
         if not scores:
             continue
 
@@ -842,7 +855,7 @@ def parse_hi2txt_output(output: str, rom_name: str) -> list[ParsedMameScore]:
     return parsed[:10]
 
 
-def parse_hi2txt(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
+def parse_hi2txt(source_path: Path, rom_name: str, minimum_score: int = 100) -> list[ParsedMameScore]:
     if not source_path.is_file() or not source_path.name.lower().endswith(".hi"):
         raise ValueError(f"Refusing to parse non-score MAME file with hi2txt: {source_path.name}")
 
@@ -864,7 +877,7 @@ def parse_hi2txt(source_path: Path, rom_name: str) -> list[ParsedMameScore]:
             continue
 
         output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
-        scores = parse_hi2txt_output(output, rom_name) if result.returncode == 0 else []
+        scores = parse_hi2txt_output(output, rom_name, minimum_score) if result.returncode == 0 else []
         attempts.append(
             f"{command!r} -> exit {result.returncode}, parsed {len(scores)}, output: {output[:500] or '<empty>'}"
         )
@@ -902,6 +915,8 @@ def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMam
 
 def parse_tournament_hi_scores(source_path: Path, rule: dict) -> list[ParsedMameScore]:
     """Decode a tournament table directly, independently of normal leaderboard thresholds."""
+    if rule.get("parser") == "hi2txt":
+        return parse_hi2txt(source_path, source_path.stem, max(1, int(rule.get("minimum_score", 1))))
     data = source_path.read_bytes()
     offset = int(rule.get("offset", 0))
     stride = int(rule.get("stride", 0))
