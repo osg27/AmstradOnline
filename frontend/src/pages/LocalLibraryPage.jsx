@@ -541,6 +541,23 @@ function libretroBoxArtUrl(repo, fileName) {
   return `https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/${encodeURIComponent(fileName)}.png`;
 }
 
+function knownBoxArtUrl(game) {
+  const titleKey = normalizeExactBoxArtKey(canonicalLibraryTitle(game));
+  const knownNames = {
+    spectrum: {
+      robocop: 'RoboCop (Ocean Software Ltd)',
+      'robocop 2': 'RoboCop 2 (Ocean Software Ltd)',
+    },
+    cpc: {
+      robocop: 'Robocop (1988)(Ocean)',
+      'robocop 2': 'Robocop 2 (1990)(Ocean)',
+    },
+  };
+  const fileName = knownNames[game.system]?.[titleKey];
+  const repo = LIBRETRO_BOXART_REPOS[game.system]?.[0];
+  return fileName && repo ? libretroBoxArtUrl(repo, fileName) : null;
+}
+
 function makeBoxArtEntry(repo, fileName, url) {
   return {
     title: fileName,
@@ -930,6 +947,11 @@ async function applyIndexedBoxArt(games, system) {
   const index = await getBoxArtIndex(system);
   const matches = new Map();
   missingGames.forEach((game) => {
+    const knownUrl = knownBoxArtUrl(game);
+    if (knownUrl) {
+      matches.set(game.id, knownUrl);
+      return;
+    }
     const match = findIndexedBoxArt(game, index);
     if (match) matches.set(game.id, match.url);
   });
@@ -1032,6 +1054,12 @@ async function buildBoxArtMedia(game, sourceUrl) {
 }
 
 async function findBoxArtForGame(game) {
+  const knownUrl = knownBoxArtUrl(game);
+  if (knownUrl) {
+    const imageUrl = await probeImageUrl(knownUrl);
+    if (imageUrl) return buildBoxArtMedia(game, imageUrl);
+  }
+
   const index = await getBoxArtIndex(game.system);
   const indexedMatch = findIndexedBoxArt(game, index);
   if (indexedMatch) {
