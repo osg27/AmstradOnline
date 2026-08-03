@@ -900,6 +900,28 @@ def parse_scores(game: MameLeaderboardGame, source_path: Path) -> list[ParsedMam
     return []
 
 
+def parse_tournament_hi_scores(source_path: Path, rule: dict) -> list[ParsedMameScore]:
+    """Decode a tournament table directly, independently of normal leaderboard thresholds."""
+    data = source_path.read_bytes()
+    offset = int(rule.get("offset", 0))
+    stride = int(rule.get("stride", 0))
+    count = int(rule.get("count", 0))
+    length = int(rule.get("length", 0))
+    minimum_score = max(1, int(rule.get("minimum_score", 1)))
+    if rule.get("encoding") != "packed_bcd" or min(offset, stride, count, length) < 0 or not stride or not count or not length:
+        raise ValueError("Invalid tournament high-score rule")
+    if offset + ((count - 1) * stride) + length > len(data):
+        raise ValueError("Tournament high-score file is shorter than its configured rule")
+
+    parsed: list[ParsedMameScore] = []
+    for index in range(count):
+        chunk = data[offset + (index * stride):offset + (index * stride) + length]
+        score = decode_bcd_score(chunk)
+        if score is not None and score >= minimum_score:
+            parsed.append(ParsedMameScore(score=score, rank_in_game=index + 1))
+    return sorted(parsed, key=lambda item: item.score, reverse=True)
+
+
 def normalise_initials(value: str | None) -> str:
     return re.sub(r"[^A-Z0-9]", "", (value or "").upper())[:5]
 
@@ -982,6 +1004,7 @@ def extract_mame_scores(
     save_files: list[dict],
     baseline_save_files: list[dict] | None = None,
     persist: bool = True,
+    tournament_rule: dict | None = None,
 ) -> dict:
     source_rom_name = normalise_rom_name(rom_name)
     rom_name = canonical_mame_rom_name(leaderboard_rom_name or source_rom_name)
@@ -1032,7 +1055,7 @@ def extract_mame_scores(
         baseline_scores_debug: list[dict] = []
         expected_initials: list[str] = []
         try:
-            parsed_scores = parse_scores(game, source_path)
+            parsed_scores = parse_tournament_hi_scores(source_path, tournament_rule) if tournament_rule else parse_scores(game, source_path)
             parsed_scores_debug = serialize_parsed_scores(parsed_scores)
             baseline_scores: list[ParsedMameScore] | None = None
             if baseline_save_files:
@@ -1040,17 +1063,30 @@ def extract_mame_scores(
                 write_save_files(baseline_path, baseline_save_files)
                 baseline_source = find_score_source(baseline_path, source_rom_name, game.score_source)
                 if baseline_source:
-                    baseline_scores = parse_scores(game, baseline_source)
+                    baseline_scores = parse_tournament_hi_scores(baseline_source, tournament_rule) if tournament_rule else parse_scores(game, baseline_source)
                     baseline_scores_debug = serialize_parsed_scores(baseline_scores)
-            filtered_scores = filter_hi2txt_player_scores(
-                db=db,
-                game=game,
-                rom_name=rom_name,
-                user_id=user_id,
-                username=username,
-                current_scores=parsed_scores,
-                baseline_scores=baseline_scores,
-            )
+            if tournament_rule:
+                if baseline_scores is None:
+                    raise MameNoPlayerScore("Tournament score needs a start-of-game snapshot.")
+                added_scores = scores_added_since_baseline(parsed_scores, baseline_scores)
+                if not added_scores:
+                    raise MameNoPlayerScore("No new tournament score was found since the previous snapshot.")
+                filtered_scores = FilteredMameScores(
+                    scores=sorted(added_scores, key=lambda item: item.score, reverse=True)[:1],
+                    expected_initials=[],
+                    parsed_scores=serialize_parsed_scores(parsed_scores),
+                    baseline_scores=serialize_parsed_scores(baseline_scores),
+                )
+            else:
+                filtered_scores = filter_hi2txt_player_scores(
+                    db=db,
+                    game=game,
+                    rom_name=rom_name,
+                    user_id=user_id,
+                    username=username,
+                    current_scores=parsed_scores,
+                    baseline_scores=baseline_scores,
+                )
             parsed_scores = filtered_scores.scores
             parsed_scores_debug = filtered_scores.parsed_scores
             baseline_scores_debug = filtered_scores.baseline_scores

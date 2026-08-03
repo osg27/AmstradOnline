@@ -48,15 +48,17 @@ CODE_CHARS = string.ascii_uppercase + string.digits
 TOURNAMENT_HI_TEMPLATES_PATH = Path(__file__).resolve().parents[2] / "data" / "mame_tournament_hi_templates.json"
 
 
-def load_tournament_hi_templates() -> dict[str, str]:
+def load_tournament_hi_templates() -> dict[str, dict]:
     try:
         payload = json.loads(TOURNAMENT_HI_TEMPLATES_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return {
-        normalise_rom_name(rom_name): encoded
-        for rom_name, encoded in payload.items()
-        if isinstance(encoded, str) and encoded
+        normalise_rom_name(rom_name): config
+        for rom_name, config in payload.items()
+        if isinstance(config, dict)
+        and isinstance(config.get("template"), str)
+        and isinstance(config.get("score_rule"), dict)
     }
 
 
@@ -257,7 +259,8 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
         for filename in load_tournament_mame_roms()
     }
     filename = archive_by_rom.get(tournament.rom_name)
-    hi_template = load_tournament_hi_templates().get(tournament.rom_name)
+    hi_config = load_tournament_hi_templates().get(tournament.rom_name)
+    hi_template = hi_config.get("template") if hi_config else None
     if not filename or not hi_template:
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
     try:
@@ -318,6 +321,7 @@ def extract_tournament_score(
         save_files=[item.model_dump() for item in payload.save_files],
         baseline_save_files=[item.model_dump() for item in payload.baseline_save_files],
         persist=False,
+        tournament_rule=(load_tournament_hi_templates().get(tournament.rom_name) or {}).get("score_rule"),
     )
     player_scores = result.get("player_scores") or []
     if not player_scores:
