@@ -14,7 +14,7 @@
   let romStartedAt = 0;
   let currentSampleFiles = [];
   let currentSaveNamespace = '';
-  let currentBlankHiSize = 0;
+  let currentHiTemplate = null;
   let scoreFileWatchTimer = null;
   let lastScoreFileSignature = '';
   const playerMasks = [0, 0, 0, 0];
@@ -854,10 +854,10 @@
       if (!/\.zip$/i.test(safeName)) return;
       window.EJS_rawFiles[`/home/web_user/retroarch/system/mame2003-plus/samples/${safeName}`] = sample.bytes;
     });
-    if (currentBlankHiSize > 0) {
+    if (currentHiTemplate?.length) {
       const romKey = normaliseRomKey(fileName);
-      window.EJS_rawFiles[`${saveDirectory}/${romKey}.hi`] = new Uint8Array(currentBlankHiSize);
-      postArcadeLog(`Created clean tournament .hi: ${saveDirectory}/${romKey}.hi (${currentBlankHiSize} bytes)`);
+      window.EJS_rawFiles[`${saveDirectory}/${romKey}.hi`] = currentHiTemplate.slice();
+      postArcadeLog(`Loaded verified tournament .hi: ${saveDirectory}/${romKey}.hi (${currentHiTemplate.length} bytes)`);
     } else {
       loadLocalMameSaveFiles(fileName).forEach((file) => {
         window.EJS_rawFiles[file.path] = file.bytes;
@@ -1062,7 +1062,12 @@
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, '')
         .slice(0, 64);
-      currentBlankHiSize = Math.max(0, Math.min(1024 * 1024, Number(message.blankHiSize) || 0));
+      try {
+        currentHiTemplate = message.hiTemplate ? base64ToBytes(message.hiTemplate) : null;
+      } catch (error) {
+        currentHiTemplate = null;
+        postArcadeLog(`Tournament .hi template could not be decoded: ${error.message}`, 'error');
+      }
       currentRom = {
         fileName: message.fileName || 'game.zip',
         bytes: new Uint8Array(message.bytes || []),

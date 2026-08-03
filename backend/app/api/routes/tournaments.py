@@ -1,6 +1,9 @@
+import base64
+import json
 import random
 import string
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import urlopen
@@ -42,6 +45,19 @@ router = APIRouter(
     dependencies=[Depends(require_tournament_preview_access)],
 )
 CODE_CHARS = string.ascii_uppercase + string.digits
+TOURNAMENT_HI_TEMPLATES_PATH = Path(__file__).resolve().parents[2] / "data" / "mame_tournament_hi_templates.json"
+
+
+def load_tournament_hi_templates() -> dict[str, str]:
+    try:
+        payload = json.loads(TOURNAMENT_HI_TEMPLATES_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {
+        normalise_rom_name(rom_name): encoded
+        for rom_name, encoded in payload.items()
+        if isinstance(encoded, str) and encoded
+    }
 
 
 def utc_now() -> datetime:
@@ -100,6 +116,7 @@ def require_entry(tournament: Tournament, user: User, db: Session) -> None:
 
 def tournament_ready_games() -> list[dict]:
     hi_sizes = load_tournament_mame_hi_sizes()
+    hi_templates = load_tournament_hi_templates()
     archive_files = load_tournament_mame_roms()
     archive_by_rom = {
         normalise_rom_name(filename): filename
@@ -109,7 +126,7 @@ def tournament_ready_games() -> list[dict]:
     games = []
     for rom_name, display_name, _parser in load_supported_mame_games():
         filename = archive_by_rom.get(rom_name)
-        if filename and rom_name in hi_sizes:
+        if filename and rom_name in hi_sizes and rom_name in hi_templates:
             games.append({
                 "rom_name": rom_name,
                 "display_name": display_name or rom_name,
@@ -240,14 +257,20 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
         for filename in load_tournament_mame_roms()
     }
     filename = archive_by_rom.get(tournament.rom_name)
-    if not filename:
+    hi_template = load_tournament_hi_templates().get(tournament.rom_name)
+    if not filename or not hi_template:
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
+    try:
+        hi_size = len(base64.b64decode(hi_template, validate=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail="Tournament high-score template is invalid") from exc
     return {
         "id": f"tournament:{tournament.code}:{tournament.rom_name}",
         "title": tournament.display_name,
         "file_name": filename,
         "rom_name": tournament.rom_name,
-        "hi_size": load_tournament_mame_hi_sizes().get(tournament.rom_name),
+        "hi_size": hi_size,
+        "hi_template": hi_template,
     }
 
 
