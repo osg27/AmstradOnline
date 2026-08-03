@@ -318,7 +318,9 @@ function extractCpcDskCatalog(bytes) {
   const seen = new Set();
   let trackOffset = 256;
 
-  layout.sizes.forEach((trackSize) => {
+  // The CP/M directory lives on the first track. Later tracks can reuse the
+  // same sector IDs for game data and must not be treated as catalogue rows.
+  layout.sizes.slice(0, 1).forEach((trackSize) => {
     if (!trackSize || trackOffset + 256 > bytes.length) {
       trackOffset += trackSize || 0;
       return;
@@ -348,7 +350,9 @@ function extractCpcDskCatalog(bytes) {
 
           const base = cpcDiskText(bytes, offset + 1, 8).replace(/\s+/g, '').trim();
           const ext = cpcDiskText(bytes, offset + 9, 3).replace(/\s+/g, '').trim().toUpperCase();
-          if (!base || !ext) continue;
+          // CPC loaders are often deliberately extensionless (for example
+          // HARVEY); rejecting them makes us autorun HARVEY1.BIN data instead.
+          if (!base) continue;
 
           const key = `${base}.${ext}`.toUpperCase();
           if (seen.has(key)) continue;
@@ -372,7 +376,7 @@ function pickCpcAutoloadEntry(entries, fileName) {
   const basEntries = entries.filter((entry) => entry.ext === 'BAS');
   if (basEntries.length === 1) return basEntries[0];
 
-  const runnable = entries.filter((entry) => ['BAS', 'BIN'].includes(entry.ext));
+  const runnable = entries.filter((entry) => !entry.ext || ['BAS', 'BIN'].includes(entry.ext));
   const candidates = runnable.length ? runnable : entries;
   const diskTokens = searchTokens(fileName);
   const loaderWords = /\b(loader|load|menu|disc|disk|start|boot|run|intro)\b/i;
@@ -383,6 +387,7 @@ function pickCpcAutoloadEntry(entries, fileName) {
       const baseTokens = searchTokens(entry.base);
       let score = tokenSimilarity(baseTokens, diskTokens) * 4;
 
+      if (!entry.ext) score += 35;
       if (entry.ext === 'BAS') score += 30;
       if (loaderWords.test(entry.base)) score += 20;
       if (badWords.test(entry.base)) score -= 40;
