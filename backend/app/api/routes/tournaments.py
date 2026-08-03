@@ -277,6 +277,7 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
         "title": tournament.display_name,
         "file_name": filename,
         "rom_name": tournament.rom_name,
+        "save_namespace": f"tournament-{tournament.code}-entrant-{user.id}",
         "hi_size": hi_size,
         "hi_template": hi_template,
     }

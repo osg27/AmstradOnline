@@ -4978,7 +4978,7 @@ export default function RoomPage() {
     }
   }
 
-  async function loadArcadeRomFile(file, sampleFiles = [], tournamentHiTemplate = '') {
+  async function loadArcadeRomFile(file, sampleFiles = [], tournamentHiTemplate = '', tournamentSaveNamespace = '') {
     if (!file) return;
 
     if (!/\.(zip|7z)$/i.test(file.name)) {
@@ -5000,7 +5000,9 @@ export default function RoomPage() {
       fileName: file.name,
       bytes,
       samples: sampleFiles,
-      saveNamespace: tournamentCode ? `tournament-${tournamentCode}` : '',
+      saveNamespace: tournamentCode
+        ? tournamentSaveNamespace || `tournament-${tournamentCode}-${username || 'entrant'}`
+        : '',
       hiTemplate: tournamentCode ? tournamentHiTemplate : '',
     }, window.location.origin);
 
@@ -5627,7 +5629,12 @@ export default function RoomPage() {
           }
           if (cancelled) return;
           const file = new File([romBytes], pendingGame.fileName, { type: 'application/zip' });
-          await loadArcadeRomFile(file, [], pendingGame.tournamentHiTemplate);
+          await loadArcadeRomFile(
+            file,
+            [],
+            pendingGame.tournamentHiTemplate,
+            pendingGame.tournamentSaveNamespace,
+          );
           sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
           return;
         }

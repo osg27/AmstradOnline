@@ -157,6 +157,7 @@ export default function TournamentsPage() {
         title: game.title,
         fileName: game.file_name,
         tournamentHiTemplate: game.hi_template,
+        tournamentSaveNamespace: game.save_namespace,
         system: 'arcade',
         roomSystem: 'arcade',
         source: 'tournament-mame',

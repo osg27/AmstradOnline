@@ -855,14 +855,18 @@
       if (!/\.zip$/i.test(safeName)) return;
       window.EJS_rawFiles[`/home/web_user/retroarch/system/mame2003-plus/samples/${safeName}`] = sample.bytes;
     });
-    if (currentHiTemplate?.length) {
-      const romKey = normaliseRomKey(fileName);
-      window.EJS_rawFiles[`${saveDirectory}/${romKey}.hi`] = currentHiTemplate.slice();
-      postArcadeLog(`Loaded verified tournament .hi: ${saveDirectory}/${romKey}.hi (${currentHiTemplate.length} bytes)`);
-    } else {
-      loadLocalMameSaveFiles(fileName).forEach((file) => {
+    const romKey = normaliseRomKey(fileName);
+    const entrantSaveFiles = loadLocalMameSaveFiles(fileName);
+    if (entrantSaveFiles.length) {
+      entrantSaveFiles.forEach((file) => {
         window.EJS_rawFiles[file.path] = file.bytes;
       });
+      postArcadeLog(`Restored ${entrantSaveFiles.length} entrant tournament save file(s) for ${romKey}`);
+    } else if (currentHiTemplate?.length) {
+      window.EJS_rawFiles[`${saveDirectory}/${romKey}.hi`] = currentHiTemplate.slice();
+      postArcadeLog(`Started entrant with a clean tournament .hi: ${saveDirectory}/${romKey}.hi (${currentHiTemplate.length} bytes)`);
+    } else {
+      postArcadeLog(`No saved MAME state found for ${romKey}`);
     }
     window.EJS_retroarchOpts = [
       {
