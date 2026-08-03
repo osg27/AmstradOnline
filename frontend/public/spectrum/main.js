@@ -48,7 +48,12 @@ function installAudioBridge() {
       const bridge = ensureAudioBridgeForContext(this.context);
       if (bridge) {
         try {
-          return originalConnect.call(this, audioCaptureGain || bridge, ...args);
+          // Keep JSSpeccy's normal speaker connection and fan the same audio
+          // into the room capture stream. Replacing the destination entirely
+          // left some browsers with a silent local Spectrum.
+          const result = originalConnect.call(this, destination, ...args);
+          originalConnect.call(this, audioDestination);
+          return result;
         } catch {
           // Some nodes cannot be connected twice; normal audio should still work.
         }
@@ -63,6 +68,12 @@ function installAudioBridge() {
 
 function resumeSpectrumAudio() {
   audioContext?.resume?.().catch(() => {});
+}
+
+// Chromium will often create JSSpeccy's AudioContext suspended. Resume it in
+// the iframe itself as well as through the room's Capture button.
+for (const eventName of ["pointerdown", "keydown", "touchstart"]) {
+  window.addEventListener(eventName, resumeSpectrumAudio, { passive: true });
 }
 
 function setEmulatorVolume(volume) {
@@ -211,6 +222,7 @@ function applyInput(key, action, player) {
 
   if (action !== "down" && action !== "up") return;
 
+  if (action === "down") resumeSpectrumAudio();
   applyKeys(getInputKeys(key, player), action);
 }
 
@@ -234,6 +246,7 @@ function applyJoystickMask(mask, player) {
   if (!speccy || !ready) return;
 
   const nextMask = Number(mask) || 0;
+  if (nextMask) resumeSpectrumAudio();
   const joystickPlayer = player === 2 ? 2 : 1;
   const previousMask = previousJoystickMasks.get(joystickPlayer) || 0;
 
