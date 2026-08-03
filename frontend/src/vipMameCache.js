@@ -4,6 +4,7 @@ const VIP_MAME_CACHE = 'oldstylegaming-vip-mame-v1';
 const VIP_C64_CACHE = 'oldstylegaming-vip-c64-v1';
 const VIP_AMIGA_CACHE = 'oldstylegaming-vip-amiga-v1';
 const VIP_AMSTRAD_CACHE = 'oldstylegaming-vip-amstrad-v1';
+const VIP_SPECTRUM_CACHE = 'oldstylegaming-vip-spectrum-v1';
 const TOURNAMENT_MAME_CACHE = 'oldstylegaming-tournament-mame-v1';
 
 function cacheRequest(directory, fileName) {
@@ -284,6 +285,72 @@ export async function takePreparedVipAmstradFile(fileName) {
   if (!('caches' in window)) return null;
   const cache = await caches.open(VIP_AMSTRAD_CACHE);
   const request = amstradCacheRequest(fileName);
+  const response = await cache.match(request);
+  if (!response) return null;
+  await cache.delete(request);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+function spectrumCacheRequest(fileName) {
+  return new Request(
+    `${window.location.origin}/__vip-spectrum-cache__/${encodeURIComponent(fileName)}`,
+  );
+}
+
+async function authenticatedSpectrumResponse(fileName) {
+  const token = localStorage.getItem('token');
+  return fetch(
+    `${API_BASE_URL}/auth/vip/spectrum/files/${encodeURIComponent(fileName)}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  );
+}
+
+export async function prepareVipSpectrumFile(fileName, onProgress = () => {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await authenticatedSpectrumResponse(fileName);
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.detail || `Could not download ${fileName}`);
+      }
+      const total = Number(response.headers.get('Content-Length')) || 0;
+      const reader = response.body?.getReader();
+      const chunks = [];
+      let loaded = 0;
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          loaded += value.byteLength;
+          onProgress({ loaded, total, attempt });
+        }
+      } else {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        chunks.push(bytes);
+        loaded = bytes.byteLength;
+        onProgress({ loaded, total: total || loaded, attempt });
+      }
+      if (total && loaded !== total) throw new Error(`Download ended early for ${fileName}`);
+      const blob = new Blob(chunks, { type: 'application/zip' });
+      const cache = await caches.open(VIP_SPECTRUM_CACHE);
+      await cache.put(spectrumCacheRequest(fileName), new Response(blob, {
+        headers: { 'Content-Type': 'application/zip', 'Content-Length': String(blob.size) },
+      }));
+      return blob.size;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) onProgress({ loaded: 0, total: 0, attempt: attempt + 1, retrying: true });
+    }
+  }
+  throw lastError;
+}
+
+export async function takePreparedVipSpectrumFile(fileName) {
+  if (!('caches' in window)) return null;
+  const cache = await caches.open(VIP_SPECTRUM_CACHE);
+  const request = spectrumCacheRequest(fileName);
   const response = await cache.match(request);
   if (!response) return null;
   await cache.delete(request);

@@ -17,6 +17,7 @@ import {
   takePreparedVipAmstradFile,
   takePreparedVipC64File,
   takePreparedVipMameFile,
+  takePreparedVipSpectrumFile,
 } from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
@@ -120,6 +121,7 @@ const SNES_UNWANTED_ENTRY_PATTERNS = [
 const ROM_ZIP_EXTENSIONS = {
   cpc: ['.dsk'],
   cpc_party: ['.dsk'],
+  spectrum: ['.tap', '.tzx', '.z80', '.sna', '.szx'],
   amiga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
   amiga_aga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
   c64: ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt'],
@@ -131,7 +133,6 @@ const ROM_ZIP_EXTENSIONS = {
   playstation: ['.cue', '.bin', '.chd', '.pbp', '.iso'],
   saturn: ['.cue', '.bin', '.chd', '.iso'],
   saturn_beetle: ['.cue', '.bin', '.chd', '.iso'],
-  spectrum: ['.tap', '.tzx', '.z80', '.sna', '.szx'],
 };
 const MULTI_FILE_ZIP_SYSTEMS = new Set(['amiga', 'amiga_aga', 'c64', 'playstation', 'saturn', 'saturn_beetle']);
 const ATARI8_MODEL_OPTIONS = [
@@ -5786,6 +5787,36 @@ export default function RoomPage() {
             const token = localStorage.getItem('token');
             const response = await fetch(
               `${API_BASE_URL}/auth/vip/amstrad/files/${encodeURIComponent(pendingGame.fileName)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+            }
+            gameBytes = new Uint8Array(await response.arrayBuffer());
+          }
+          if (cancelled) return;
+          const file = new File([gameBytes], pendingGame.fileName, { type: 'application/zip' });
+          const loaded = await handleDiskSelected({
+            target: { files: [file], dataset: {}, value: '' },
+          });
+          if (!loaded || cancelled) return;
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+          return;
+        }
+
+        if (pendingGame?.id === localGameId && pendingGame.source === 'vip-spectrum-z80') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) throw new Error('VIP access is required for the ZX Spectrum archive library.');
+
+          let gameBytes = await takePreparedVipSpectrumFile(pendingGame.fileName);
+          if (!gameBytes) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/auth/vip/spectrum/files/${encodeURIComponent(pendingGame.fileName)}`,
               { headers: token ? { Authorization: `Bearer ${token}` } : {} },
             );
             if (!response.ok) {

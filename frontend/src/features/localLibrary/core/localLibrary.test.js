@@ -76,6 +76,19 @@ describe('TOSEC parsing and grouping', () => {
     expect(preferred.media.map((media) => media.diskNumber)).toEqual([1, 2]);
   });
 
+  it('prefers a clean ZX Spectrum Z80 release over alternate dumps', () => {
+    const game = groupGames([
+      scanned('1942 (1986)(Elite Systems).zip', 'spectrum'),
+      scanned('1942 (1986)(Elite Systems)[a2].zip', 'spectrum'),
+      scanned('1942 (1986)(Elite Systems)[a].zip', 'spectrum'),
+    ])[0];
+    const preferred = game.releases.find((release) => release.id === game.defaultReleaseId);
+
+    expect(game.title).toBe('1942');
+    expect(preferred.metadata.tags).toEqual([]);
+    expect(preferred.media[0].name).toBe('1942 (1986)(Elite Systems).zip');
+  });
+
   it('groups disks when a crack tag appears before the disk marker', () => {
     const game = groupGames([1, 2, 3].map((disk) => (
       scanned(`Agony (1992)(Psygnosis)[cr CSL](Disk ${disk} of 3).zip`)
