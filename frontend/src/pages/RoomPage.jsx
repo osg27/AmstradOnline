@@ -641,6 +641,9 @@ export default function RoomPage() {
   const [searchParams] = useSearchParams();
   const username = localStorage.getItem('username');
   const isSuperAdmin = localStorage.getItem('isSuperAdmin') === 'true';
+  const hasVipAccess = localStorage.getItem('isVip') === 'true'
+    || localStorage.getItem('isAdmin') === 'true'
+    || isSuperAdmin;
   const isSoloMode = searchParams.get('mode') === 'solo';
   const localGameId = searchParams.get('localGame');
   const localReleaseId = searchParams.get('localRelease');
@@ -675,6 +678,7 @@ export default function RoomPage() {
   const [localReleaseFiles, setLocalReleaseFiles] = useState([]);
   const [currentLocalReleaseIndex, setCurrentLocalReleaseIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
+  const [vipKickstartBusy, setVipKickstartBusy] = useState(false);
   const [playstationBiosName, setPlaystationBiosName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -5074,6 +5078,49 @@ export default function RoomPage() {
     kickstartInputRef.current?.click();
   }
 
+  async function loadVipKickstart() {
+    if (!canControlLocalEmulator || !isPuaeAmiga || !hasVipAccess || vipKickstartBusy) return;
+
+    const model = isAmigaAga ? 'a1200' : 'a500';
+    const expectedSize = isAmigaAga ? 512 * 1024 : 256 * 1024;
+    setVipKickstartBusy(true);
+    setError('');
+    setStatus(`Downloading VIP ${isAmigaAga ? 'A1200 Kickstart 3.1' : 'A500 Kickstart 1.3'}...`);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${API_BASE_URL}/auth/vip/amiga/kickstarts/${model}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.detail || 'Could not download the Kickstart ROM');
+      }
+      const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
+      const romEntry = Object.entries(archive).find(([entryName, bytes]) => (
+        /\.rom$/i.test(entryName) && bytes.length === expectedSize
+      ));
+      if (!romEntry) throw new Error(`The downloaded archive did not contain the expected ${expectedSize / 1024} KB ROM`);
+
+      const [entryName, bytes] = romEntry;
+      const fileName = entryName.split(/[\\/]/).pop() || entryName;
+      if (kickstartStorageKey) {
+        savedSystemMediaRef.current.set(kickstartStorageKey, { fileName, bytes });
+        await saveStoredKickstart(kickstartStorageKey, fileName, bytes);
+      }
+      forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, fileName, bytes));
+      setKickstartRomName(`${fileName} (VIP saved)`);
+      setStatus(`Kickstart loaded and saved: ${fileName}`);
+      addLog(`Loaded VIP Kickstart ROM: ${fileName}`);
+    } catch (err) {
+      setError(err.message);
+      setStatus('VIP Kickstart could not be loaded');
+      addLog(`VIP Kickstart load error: ${err.message}`);
+    } finally {
+      setVipKickstartBusy(false);
+    }
+  }
+
   function openPlayStationBiosPicker() {
     if (!canControlLocalEmulator || !isDiscConsole) return;
 
@@ -6667,6 +6714,14 @@ export default function RoomPage() {
                   {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted && !isPuaeAmiga}>
                       {kickstartRomName ? 'Change Kickstart ROM' : 'Load Kickstart ROM'}
+                    </button>
+                  ) : null}
+
+                  {isPuaeAmiga && hasVipAccess ? (
+                    <button type="button" className="secondary" onClick={loadVipKickstart} disabled={vipKickstartBusy}>
+                      {vipKickstartBusy
+                        ? 'Downloading Kickstart...'
+                        : `Use VIP ${isAmigaAga ? 'A1200 3.1' : 'A500 1.3'} ROM`}
                     </button>
                   ) : null}
 

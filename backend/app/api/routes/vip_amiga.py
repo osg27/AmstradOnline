@@ -20,6 +20,11 @@ ARCHIVE_FILES_XML = f"{ARCHIVE_DOWNLOAD_ROOT}/{ARCHIVE_ITEM}_files.xml"
 SAFE_WHDLOAD_NAME = re.compile(r"^[^/\\\x00-\x1f]+\.(?:lha|zip)$", re.IGNORECASE)
 CATALOG_TTL_SECONDS = 6 * 60 * 60
 _catalog_cache: tuple[float, dict] | None = None
+FIRMWARE_ARCHIVE_ROOT = "https://archive.org/download/commodore-amiga-firmware"
+KICKSTART_ARCHIVES = {
+    "a500": "Kickstart v1.3 r34.005 (1987-12)(Commodore)(A500-A1000-A2000-CDTV)[!].zip",
+    "a1200": "Kickstart v3.1 r40.068 (1993-12)(Commodore)(A1200)[!].zip",
+}
 
 
 def require_vip(user: User = Depends(get_current_user)) -> User:
@@ -76,6 +81,29 @@ def stream_archive_response(response):
             yield chunk
     finally:
         response.close()
+
+
+@router.get("/kickstarts/{model}")
+def get_kickstart_archive(model: str, _user: User = Depends(require_vip)):
+    filename = KICKSTART_ARCHIVES.get(model.lower())
+    if not filename:
+        raise HTTPException(status_code=404, detail="Kickstart ROM not found")
+    try:
+        response = urlopen(archive_request(f"{FIRMWARE_ARCHIVE_ROOT}/{quote(filename)}"), timeout=60)
+    except HTTPError as exc:
+        if exc.code == 404:
+            raise HTTPException(status_code=404, detail="Kickstart ROM not found") from exc
+        raise HTTPException(status_code=502, detail="Internet Archive Kickstart download failed") from exc
+    except (URLError, TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail=f"Internet Archive Kickstart download failed: {exc}") from exc
+
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+        "Cache-Control": "private, max-age=3600",
+    }
+    if response.headers.get("Content-Length"):
+        headers["Content-Length"] = response.headers["Content-Length"]
+    return StreamingResponse(stream_archive_response(response), media_type="application/zip", headers=headers)
 
 
 @router.get("/files/{filename}")
