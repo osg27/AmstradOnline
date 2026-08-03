@@ -1453,6 +1453,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
+  const [selectedVariantIds, setSelectedVariantIds] = useState({});
   const [launchingSystemId, setLaunchingSystemId] = useState(null);
   const [vipPreparation, setVipPreparation] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(searchParams.get('clones') === '1');
@@ -2815,6 +2816,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                   const system = SYSTEM_BY_ID[game.system];
                   const favourite = game.variants.some((variant) => favouriteSet.has(variant.id));
                   const hasBoxArt = Boolean(game.boxArtUrl) && !brokenBoxArtIds.has(game.id);
+                  const selectedVariant = game.variants.find((variant) => (
+                    variant.id === selectedVariantIds[game.id]
+                  )) || game;
                   return (
                     <article key={game.id} className={hasBoxArt ? 'local-game-card has-box-art' : 'local-game-card'}>
                       <div className={hasBoxArt ? 'local-game-art has-art' : 'local-game-art'}>
@@ -2862,8 +2866,27 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                       <h3>{game.title}</h3>
                       <p>{system?.label || 'Unknown system'}</p>
                       <small>{game.variantCount > 1 ? `${game.variantCount} versions available` : 'Ready to play'}</small>
-                      <button type="button" onClick={() => launchGame(game)} disabled={launchingId === game.id}>
-                        {launchingId === game.id ? 'Starting...' : 'Play'}
+                      {game.variantCount > 1 ? (
+                        <label className="library-version-picker">
+                          <span>Version</span>
+                          <select
+                            value={selectedVariant.id}
+                            onChange={(event) => setSelectedVariantIds((current) => ({
+                              ...current,
+                              [game.id]: event.target.value,
+                            }))}
+                            title={`Choose which version of ${game.title} to play`}
+                          >
+                            {game.variants.map((variant, index) => (
+                              <option key={variant.id} value={variant.id}>
+                                {index + 1}. {variant.fileName || variant.title}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <button type="button" onClick={() => launchGame(selectedVariant)} disabled={launchingId === selectedVariant.id}>
+                        {launchingId === selectedVariant.id ? 'Starting...' : 'Play'}
                       </button>
                     </article>
                   );

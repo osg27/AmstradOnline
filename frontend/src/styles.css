@@ -1852,6 +1852,33 @@ input:focus {
   max-height: 46px;
 }
 
+.library-version-picker {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.library-version-picker span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.library-version-picker select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0.35rem 0.45rem;
+  overflow: hidden;
+  border: 1px solid rgba(228, 174, 56, 0.32);
+  border-radius: 6px;
+  background: #101413;
+  color: #fff7dd;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+}
+
 .local-game-art {
   position: relative;
   display: grid;
@@ -1983,12 +2010,12 @@ input:focus {
 }
 
 .local-game-card.has-box-art {
-  grid-template-rows: 306px auto auto;
+  grid-template-rows: 306px auto auto auto;
   min-height: 404px;
 }
 
 .local-game-card.has-box-art > button {
-  grid-row: 3;
+  grid-row: auto;
 }
 
 .library-scroll-status {
