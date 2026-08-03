@@ -1,4 +1,5 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
@@ -29,6 +30,16 @@ import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/g
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
 import { c64CanonicalTitle } from '../features/localLibrary/core/c64Title';
 import { normaliseFilename } from '../features/localLibrary/core/normalise';
+
+const PREFERRED_VARIANTS_KEY = 'localLibraryPreferredVariants';
+
+function readPreferredVariants() {
+  try {
+    return JSON.parse(localStorage.getItem(PREFERRED_VARIANTS_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
 
 export const SUPPORTED_SYSTEMS = [
   {
@@ -1453,7 +1464,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
-  const [selectedVariantIds, setSelectedVariantIds] = useState({});
+  const [selectedVariantIds, setSelectedVariantIds] = useState(readPreferredVariants);
+  const [versionPickerGame, setVersionPickerGame] = useState(null);
   const [launchingSystemId, setLaunchingSystemId] = useState(null);
   const [vipPreparation, setVipPreparation] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(searchParams.get('clones') === '1');
@@ -1788,6 +1800,19 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   useEffect(() => {
     localStorage.setItem(BOX_ART_ONLY_KEY, String(showBoxArtOnly));
   }, [showBoxArtOnly]);
+
+  useEffect(() => {
+    localStorage.setItem(PREFERRED_VARIANTS_KEY, JSON.stringify(selectedVariantIds));
+  }, [selectedVariantIds]);
+
+  useEffect(() => {
+    if (!versionPickerGame) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setVersionPickerGame(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [versionPickerGame]);
 
   useEffect(() => {
     if (!mediaProgress) return undefined;
@@ -2851,7 +2876,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                       <div className="local-game-card-head">
                         <span>{system?.shortLabel || game.system}</span>
                         {game.variantCount > 1 ? (
-                          <em>{game.variantCount} versions</em>
+                          <button
+                            type="button"
+                            className="library-versions-button"
+                            onClick={() => setVersionPickerGame(game)}
+                            aria-haspopup="dialog"
+                          >
+                            {game.variantCount} versions
+                          </button>
                         ) : null}
                         <button
                           type="button"
@@ -2865,26 +2897,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                       </div>
                       <h3>{game.title}</h3>
                       <p>{system?.label || 'Unknown system'}</p>
-                      <small>{game.variantCount > 1 ? `${game.variantCount} versions available` : 'Ready to play'}</small>
-                      {game.variantCount > 1 ? (
-                        <label className="library-version-picker">
-                          <span>Version</span>
-                          <select
-                            value={selectedVariant.id}
-                            onChange={(event) => setSelectedVariantIds((current) => ({
-                              ...current,
-                              [game.id]: event.target.value,
-                            }))}
-                            title={`Choose which version of ${game.title} to play`}
-                          >
-                            {game.variants.map((variant, index) => (
-                              <option key={variant.id} value={variant.id}>
-                                {index + 1}. {variant.fileName || variant.title}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
+                      <small>{game.variantCount > 1 ? 'Preferred version ready' : 'Ready to play'}</small>
                       <button type="button" onClick={() => launchGame(selectedVariant)} disabled={launchingId === selectedVariant.id}>
                         {launchingId === selectedVariant.id ? 'Starting...' : 'Play'}
                       </button>
@@ -2922,11 +2935,56 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     </div>
   );
 
-  if (embedded) return content;
+  const versionPicker = versionPickerGame ? createPortal(
+    <div className="library-version-overlay" role="presentation" onMouseDown={() => setVersionPickerGame(null)}>
+      <section
+        className="library-version-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="library-version-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="library-version-dialog-head">
+          <div>
+            <span>Choose preferred version</span>
+            <h2 id="library-version-title">{versionPickerGame.title}</h2>
+          </div>
+          <button type="button" className="secondary icon-button" onClick={() => setVersionPickerGame(null)} aria-label="Close version picker">
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="library-version-options">
+          {versionPickerGame.variants.map((variant, index) => {
+            const preferred = (selectedVariantIds[versionPickerGame.id] || versionPickerGame.id) === variant.id;
+            return (
+              <button
+                type="button"
+                key={variant.id}
+                className={preferred ? 'library-version-option active' : 'library-version-option'}
+                onClick={() => {
+                  setSelectedVariantIds((current) => ({ ...current, [versionPickerGame.id]: variant.id }));
+                  setVersionPickerGame(null);
+                }}
+              >
+                <span className="library-version-number">{index + 1}</span>
+                <span className="library-version-name">{variant.fileName || variant.title}</span>
+                <span className="library-version-choice">{preferred ? 'Preferred' : 'Choose'}</span>
+              </button>
+            );
+          })}
+        </div>
+        <small>Choosing a version saves it as the default for this game on this device.</small>
+      </section>
+    </div>,
+    document.body,
+  ) : null;
+
+  if (embedded) return <>{content}{versionPicker}</>;
 
   return (
     <div className="page local-library-page">
       {content}
+      {versionPicker}
     </div>
   );
 }

@@ -1852,31 +1852,104 @@ input:focus {
   max-height: 46px;
 }
 
-.library-version-picker {
-  display: grid;
-  min-width: 0;
-  gap: 0.25rem;
+.library-versions-button {
+  min-height: 0;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgba(228, 174, 56, 0.32);
+  border-radius: 999px;
+  background: rgba(52, 39, 8, 0.72);
+  color: #ffd45d;
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 
-.library-version-picker span {
-  color: var(--muted);
-  font-size: 0.72rem;
+.library-version-overlay {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(4px);
+}
+
+.library-version-dialog {
+  display: grid;
+  width: min(620px, 100%);
+  max-height: min(720px, calc(100vh - 2rem));
+  gap: 1rem;
+  padding: 1.15rem;
+  overflow: hidden;
+  border: 1px solid #40504b;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #18201e, #0e1211);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+}
+
+.library-version-dialog-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.library-version-dialog-head span {
+  color: #72ecb7;
+  font-size: 0.75rem;
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.library-version-picker select {
+.library-version-dialog-head h2 {
+  margin: 0.2rem 0 0;
+}
+
+.library-version-options {
+  display: grid;
+  gap: 0.55rem;
+  overflow-y: auto;
+}
+
+.library-version-option {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
   width: 100%;
-  min-width: 0;
-  min-height: 36px;
-  padding: 0.35rem 0.45rem;
+  min-height: 54px;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #35423e;
+  background: #151a19;
+  text-align: left;
+}
+
+.library-version-option.active {
+  border-color: #47ba8d;
+  background: rgba(36, 103, 79, 0.3);
+}
+
+.library-version-number {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: #29312f;
+  color: #ffd45d;
+}
+
+.library-version-name {
   overflow: hidden;
-  border: 1px solid rgba(228, 174, 56, 0.32);
-  border-radius: 6px;
-  background: #101413;
   color: #fff7dd;
-  font-size: 0.78rem;
   text-overflow: ellipsis;
+}
+
+.library-version-choice {
+  color: #72ecb7;
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .local-game-art {
