@@ -166,3 +166,18 @@ def ensure_runtime_columns(engine):
                 "username": "OldStyleGaming",
             },
         )
+
+        # The former Donkey Kong parser scanned every three-byte window in the
+        # .hi file and misread non-score row data as 900,000 for this account.
+        # Correct the confirmed personal best while deploying the fixed parser.
+        connection.execute(
+            text(
+                "UPDATE mame_high_scores SET score = 49000 "
+                "WHERE rom_name = 'dkong' "
+                "AND score = 900000 "
+                "AND user_id IN ("
+                "SELECT id FROM users WHERE LOWER(username) = LOWER(:username)"
+                ")"
+            ),
+            {"username": "OldStyleGaming"},
+        )

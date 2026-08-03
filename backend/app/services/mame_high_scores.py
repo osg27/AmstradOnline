@@ -541,22 +541,27 @@ def parse_dkong_hi(source_path: Path) -> list[ParsedMameScore]:
     # mame2003-plus metadata/hiscore.dat saves dkong as:
     # 0:6100:AA, 0:60B8:03, then six one-byte video RAM sentinels.
     # The 0x60B8 range starts after the first 0xAA bytes. Scores are stored as
-    # little-endian BCD: factory bytes 50 76 00 => 007650. Older code only read
-    # the first/top score slot; scan the file so runs saved lower in the game's
-    # own high-score table are still seen.
-    if len(data) < 3:
+    # little-endian BCD. The file contains five fixed 34-byte leaderboard rows,
+    # with each three-byte score at row offset 29. Do not scan arbitrary byte
+    # windows: unrelated row data can be valid BCD and previously produced
+    # false scores such as 900,000.
+    row_size = 34
+    score_offset = 29
+    row_count = 5
+    if len(data) < (row_count - 1) * row_size + score_offset + 3:
         return []
 
     parsed: list[ParsedMameScore] = []
     seen: set[int] = set()
-    for offset in range(0, len(data) - 2):
+    for row_index in range(row_count):
+        offset = row_index * row_size + score_offset
         score = decode_bcd_score(data[offset:offset + 3][::-1])
         if score is None:
             continue
         if score in DKONG_FACTORY_SCORES or not plausible_arcade_score(score, "dkong") or score in seen:
             continue
         seen.add(score)
-        parsed.append(ParsedMameScore(score=score, rank_in_game=len(parsed) + 1))
+        parsed.append(ParsedMameScore(score=score, rank_in_game=row_index + 1))
 
     return sorted(parsed, key=lambda item: item.score, reverse=True)
 
