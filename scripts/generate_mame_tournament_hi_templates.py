@@ -12,6 +12,7 @@ XML_DIR = REPO_ROOT / "backend" / "app" / "data" / "hi2txt-xml"
 ARCHIVE_MANIFEST = REPO_ROOT / "backend" / "app" / "data" / "mame_tournament_roms.json"
 SIZE_MANIFEST = REPO_ROOT / "backend" / "app" / "data" / "mame_tournament_hi_sizes.json"
 OUTPUT_PATH = REPO_ROOT / "backend" / "app" / "data" / "mame_tournament_hi_templates.json"
+NAMES_PATH = REPO_ROOT / "backend" / "app" / "data" / "mame_tournament_names.json"
 
 
 def structure_sizes(structure: ET.Element) -> set[int]:
@@ -142,6 +143,18 @@ def main() -> int:
         raise SystemExit(f"hi2txt sample directory not found: {samples_root}")
     output, stats = build(samples_root)
     OUTPUT_PATH.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if len(sys.argv) > 2:
+        metadata_path = Path(sys.argv[2]).resolve()
+        names: dict[str, str] = {}
+        for _event, element in ET.iterparse(metadata_path, events=("end",)):
+            if element.tag == "game":
+                rom_name = str(element.attrib.get("name") or "").lower()
+                description = element.findtext("description") or ""
+                if rom_name in output and description.strip():
+                    names[rom_name] = description.strip()
+                element.clear()
+        NAMES_PATH.write_text(json.dumps(names, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        stats["named"] = len(names)
     print(json.dumps(stats, sort_keys=True))
     return 0 if output else 1
 

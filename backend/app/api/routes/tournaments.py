@@ -14,7 +14,7 @@ from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user, is_super_admin_user, is_vip_user
+from app.api.routes.auth import get_current_user, is_vip_user
 from app.api.routes.vip_mame import (
     ARCHIVE_DOWNLOAD_ROOT,
     archive_request,
@@ -33,19 +33,10 @@ from app.services.mame_high_scores import (
 )
 
 
-def require_tournament_preview_access(user: User = Depends(get_current_user)) -> User:
-    if not is_super_admin_user(user):
-        raise HTTPException(status_code=403, detail="Tournament preview is restricted to the superadmin")
-    return user
-
-
-router = APIRouter(
-    prefix="/tournaments",
-    tags=["tournaments"],
-    dependencies=[Depends(require_tournament_preview_access)],
-)
+router = APIRouter(prefix="/tournaments", tags=["tournaments"])
 CODE_CHARS = string.ascii_uppercase + string.digits
 TOURNAMENT_HI_TEMPLATES_PATH = Path(__file__).resolve().parents[2] / "data" / "mame_tournament_hi_templates.json"
+TOURNAMENT_NAMES_PATH = Path(__file__).resolve().parents[2] / "data" / "mame_tournament_names.json"
 
 
 def load_tournament_hi_templates() -> dict[str, dict]:
@@ -59,6 +50,18 @@ def load_tournament_hi_templates() -> dict[str, dict]:
         if isinstance(config, dict)
         and isinstance(config.get("template"), str)
         and isinstance(config.get("score_rule"), dict)
+    }
+
+
+def load_tournament_names() -> dict[str, str]:
+    try:
+        payload = json.loads(TOURNAMENT_NAMES_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {
+        normalise_rom_name(rom_name): str(display_name).strip()
+        for rom_name, display_name in payload.items()
+        if str(display_name).strip()
     }
 
 
@@ -119,6 +122,7 @@ def require_entry(tournament: Tournament, user: User, db: Session) -> None:
 def tournament_ready_games() -> list[dict]:
     hi_sizes = load_tournament_mame_hi_sizes()
     hi_templates = load_tournament_hi_templates()
+    canonical_names = load_tournament_names()
     archive_files = load_tournament_mame_roms()
     archive_by_rom = {
         normalise_rom_name(filename): filename
@@ -131,7 +135,8 @@ def tournament_ready_games() -> list[dict]:
         if filename and rom_name in hi_sizes and rom_name in hi_templates:
             games.append({
                 "rom_name": rom_name,
-                "display_name": display_name or rom_name,
+                "display_name": canonical_names.get(rom_name) or display_name or rom_name,
+                "system": "MAME Arcade",
                 "file_name": filename,
                 "hi_size": hi_sizes[rom_name],
             })
@@ -141,7 +146,7 @@ def tournament_ready_games() -> list[dict]:
 @router.get("/games")
 def tournament_games(_user: User = Depends(get_current_user)):
     if not is_vip_user(_user):
-        raise HTTPException(status_code=403, detail="Only VIPs can create tournaments")
+        raise HTTPException(status_code=403, detail="Only VIPs and admins can create tournaments")
     return tournament_ready_games()
 
 
@@ -152,7 +157,7 @@ def create_tournament(
     db: Session = Depends(get_db),
 ):
     if not is_vip_user(user):
-        raise HTTPException(status_code=403, detail="Only VIPs can create tournaments")
+        raise HTTPException(status_code=403, detail="Only VIPs and admins can create tournaments")
     rom_name = normalise_rom_name(payload.rom_name)
     ready_game = next((item for item in tournament_ready_games() if item["rom_name"] == rom_name), None)
     if not ready_game:

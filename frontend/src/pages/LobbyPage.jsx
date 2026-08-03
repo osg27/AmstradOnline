@@ -619,7 +619,7 @@ export default function LobbyPage() {
               {openingLibrary ? 'Fetching your games...' : 'My Library'}
             </button>
             <button className="secondary" onClick={() => navigate('/my-local-games')}>My Local Games</button>
-            {isSuperAdmin ? <button className="secondary" onClick={() => navigate('/tournaments')}>Tournaments</button> : null}
+            <button className="secondary" onClick={() => navigate('/tournaments')}>Tournaments</button>
             {canUsePreviewSystems ? (
               <button className="secondary" onClick={() => navigate('/feedback')}>
                 Feedback{feedbackNotificationCount ? ` (${feedbackNotificationCount})` : ''}

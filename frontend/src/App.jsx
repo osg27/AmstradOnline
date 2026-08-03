@@ -33,12 +33,6 @@ function PrivateRoute({ children }) {
   return token ? children : <Navigate to="/login" replace />;
 }
 
-function SuperAdminRoute({ children }) {
-  return localStorage.getItem('isSuperAdmin') === 'true'
-    ? children
-    : <Navigate to="/lobby" replace />;
-}
-
 export default function App() {
   return (
     <Routes>
@@ -77,7 +71,7 @@ export default function App() {
         path="/tournaments"
         element={(
           <PrivateRoute>
-            <SuperAdminRoute><TournamentsPage /></SuperAdminRoute>
+            <TournamentsPage />
           </PrivateRoute>
         )}
       />
@@ -85,7 +79,7 @@ export default function App() {
         path="/tournaments/:code"
         element={(
           <PrivateRoute>
-            <SuperAdminRoute><TournamentsPage /></SuperAdminRoute>
+            <TournamentsPage />
           </PrivateRoute>
         )}
       />

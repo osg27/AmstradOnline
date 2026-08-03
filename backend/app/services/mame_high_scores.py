@@ -169,11 +169,15 @@ def _hi2txt_display_name(xml_path: Path) -> str:
     except (ET.ParseError, OSError):
         return xml_path.stem
 
-    for element in root.iter():
-        for attr_name in ("description", "display", "title", "name"):
-            value = str(element.attrib.get(attr_name) or "").strip()
-            if value and normalise_rom_name_value(value) != xml_path.stem:
-                return value
+    label = str(root.attrib.get("label") or "").strip()
+    if label:
+        return label
+    same_as = root.find("sameas")
+    target = str(same_as.attrib.get("id") or "").strip() if same_as is not None else ""
+    if target:
+        target_path = xml_path.with_name(f"{target}.xml")
+        if target_path.is_file() and target_path != xml_path:
+            return _hi2txt_display_name(target_path)
     return xml_path.stem.replace("_", " ").replace("-", " ").strip().title() or xml_path.stem
 
 
