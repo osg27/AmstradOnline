@@ -5303,6 +5303,10 @@ export default function RoomPage() {
       fileName: game.fileName,
       system: game.system,
       roomSystem: game.roomSystem,
+      source: game.source || 'local',
+      size: game.size || 0,
+      archiveSampleFileName: game.archiveSampleFileName || '',
+      archiveFileNames: game.archiveFileNames || [],
     }));
     localLibraryLoadAttemptedRef.current = false;
     setLocalGamePickerOpen(false);
