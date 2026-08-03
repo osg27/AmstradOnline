@@ -859,11 +859,6 @@ function toApiMediaUrl(path) {
   return `${API_BASE_URL}${normalizedPath}`;
 }
 
-function isExternalBoxArtUrl(url) {
-  if (!/^https?:\/\//i.test(url || '')) return false;
-  return !url.startsWith(API_BASE_URL);
-}
-
 function readLibrarySnapshot() {
   try {
     return JSON.parse(localStorage.getItem(LIBRARY_SNAPSHOT_KEY)) || {};
@@ -2436,10 +2431,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }
 
   async function downloadBoxArt() {
-    const skippedArcadeClones = filteredGames.filter((game) => game.system === 'arcade' && !isArcadeParentRom(game) && !game.boxArtUrl).length;
+    const needsArtwork = (game) => !game.boxArtUrl || brokenBoxArtIds.has(game.id);
+    const skippedArcadeClones = filteredGames.filter((game) => (
+      game.system === 'arcade'
+      && !isArcadeParentRom(game)
+      && needsArtwork(game)
+    )).length;
     const targets = filteredGames.filter((game) => (
       isArcadeParentRom(game)
-      && (!game.boxArtUrl || brokenBoxArtIds.has(game.id) || isExternalBoxArtUrl(game.boxArtUrl))
+      && needsArtwork(game)
     ));
     if (!targets.length) {
       setStatus(skippedArcadeClones
