@@ -14,6 +14,7 @@ from app.api.routes.vip_amiga import router as vip_amiga_router
 from app.api.routes.vip_amstrad import router as vip_amstrad_router
 from app.api.routes.vip_c64 import router as vip_c64_router
 from app.api.routes.vip_mame import router as vip_mame_router
+from app.api.routes.vip_megadrive import router as vip_megadrive_router
 from app.api.routes.vip_spectrum import router as vip_spectrum_router
 from app.core.config import settings
 from app.core.database import Base, engine
@@ -55,4 +56,5 @@ app.include_router(vip_c64_router)
 app.include_router(vip_amiga_router)
 app.include_router(vip_amstrad_router)
 app.include_router(vip_spectrum_router)
+app.include_router(vip_megadrive_router)
 app.include_router(signaling_router)

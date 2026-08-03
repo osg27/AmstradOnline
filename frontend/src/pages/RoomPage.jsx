@@ -17,6 +17,7 @@ import {
   takePreparedVipAmstradFile,
   takePreparedVipC64File,
   takePreparedVipMameFile,
+  takePreparedVipMegadriveFile,
   takePreparedVipSpectrumFile,
 } from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
@@ -5822,6 +5823,36 @@ export default function RoomPage() {
             const token = localStorage.getItem('token');
             const response = await fetch(
               `${API_BASE_URL}/auth/vip/spectrum/files/${encodeURIComponent(pendingGame.fileName)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+            }
+            gameBytes = new Uint8Array(await response.arrayBuffer());
+          }
+          if (cancelled) return;
+          const file = new File([gameBytes], pendingGame.fileName, { type: 'application/zip' });
+          const loaded = await handleDiskSelected({
+            target: { files: [file], dataset: {}, value: '' },
+          });
+          if (!loaded || cancelled) return;
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+          return;
+        }
+
+        if (pendingGame?.id === localGameId && pendingGame.source === 'vip-megadrive-ghostware') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) throw new Error('VIP access is required for the Mega Drive archive library.');
+
+          let gameBytes = await takePreparedVipMegadriveFile(pendingGame.fileName);
+          if (!gameBytes) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/auth/vip/megadrive/files/${encodeURIComponent(pendingGame.fileName)}`,
               { headers: token ? { Authorization: `Bearer ${token}` } : {} },
             );
             if (!response.ok) {
