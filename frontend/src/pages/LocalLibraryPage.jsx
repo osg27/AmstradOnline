@@ -23,11 +23,12 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
-import { prepareVipAmigaFile, prepareVipC64File, prepareVipMameFile } from '../vipMameCache';
+import { prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
 import { c64CanonicalTitle } from '../features/localLibrary/core/c64Title';
+import { normaliseFilename } from '../features/localLibrary/core/normalise';
 
 export const SUPPORTED_SYSTEMS = [
   {
@@ -1321,6 +1322,10 @@ function variantPreferenceScore(game) {
   const haystack = `${game.fileName} ${game.path}`.toLowerCase();
   let score = 0;
 
+  if (game.source === 'vip-amstrad-ghostware' && Number.isFinite(game.sorterScore)) {
+    score -= game.sorterScore * 10;
+  }
+
   if (game.boxArtUrl) score -= 1000;
   if (/\(europe\)|\b\(e\)\b/.test(haystack)) score -= 90;
   if (/\(world\)/.test(haystack)) score -= 80;
@@ -1485,23 +1490,26 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           game.source !== 'internet-archive-mame'
           && game.source !== 'vip-c64-oneload'
           && game.source !== 'vip-amiga-whdload'
+          && game.source !== 'vip-amstrad-ghostware'
         ));
         const savedVipMameGames = savedGames.filter((game) => game.source === 'internet-archive-mame');
         const savedVipC64Games = savedGames.filter((game) => game.source === 'vip-c64-oneload');
         const savedVipAmigaGames = savedGames.filter((game) => game.source === 'vip-amiga-whdload');
+        const savedVipAmstradGames = savedGames.filter((game) => game.source === 'vip-amstrad-ghostware');
         const hasCurrentVipAmigaCache = savedVipAmigaGames.some((game) => (
           game.fileName?.toLowerCase().endsWith('.zip')
         ));
         const hasCompleteVipCache = savedVipMameGames.length > 0
           && savedVipC64Games.length > 0
           && savedVipAmigaGames.length > 0
+          && savedVipAmstradGames.length > 0
           && hasCurrentVipAmigaCache;
         // IndexedDB is the source of truth for the local shelf. Render it immediately;
         // remote box-art reconciliation must never hold up the game count or navigation.
         setFolders(savedFolders);
         setGames(isVip ? savedGames : localGames);
         setStatus(isVip && hasCompleteVipCache
-          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64 and ${savedVipAmigaGames.length} Amiga WHDLoad games.`
+          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad and ${savedVipAmigaGames.length} Amiga WHDLoad files.`
           : localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
         let localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         if (forceAmigaBoxArtRepair) {
@@ -1516,6 +1524,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ...savedVipMameGames,
             ...savedVipC64Games,
             ...savedVipAmigaGames,
+            ...savedVipAmstradGames,
           ]);
         }
         if (!isVip) setGames(localGamesWithArtwork);
@@ -1536,14 +1545,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 ...currentVipAmigaGames,
               ]);
             }
-            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...currentVipAmigaGames]);
-            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64 and ${savedVipAmigaGames.length} Amiga WHDLoad games.`);
+            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmstradGames, ...currentVipAmigaGames]);
+            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad and ${savedVipAmigaGames.length} Amiga WHDLoad files.`);
           } else {
           setStatus('Loading VIP game libraries for the first time...');
-          const [catalog, c64Catalog, amigaCatalog] = await Promise.all([
+          const [catalog, c64Catalog, amigaCatalog, amstradCatalog] = await Promise.all([
             apiFetch('/auth/vip/mame/catalog').catch(() => ({ roms: [], samples: [] })),
             apiFetch('/auth/vip/c64/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/amiga/catalog').catch(() => ({ games: [] })),
+            apiFetch('/auth/vip/amstrad/catalog').catch(() => ({ games: [] })),
           ]);
           const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
           const localArcadeKeys = new Set(
@@ -1623,15 +1633,56 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localAmigaTitles.has(game.title.toLowerCase()));
           const cachedAmigaGames = await restoreCachedBoxArt(amigaGames);
           const amigaGamesWithArtwork = await applyIndexedBoxArt(cachedAmigaGames, 'amiga');
+          const localAmstradTitles = new Set(
+            localGamesWithArtwork
+              .filter((game) => game.system === 'cpc')
+              .map((game) => canonicalLibraryTitle(game).toLowerCase()),
+          );
+          const amstradSortedFiles = (Array.isArray(amstradCatalog.games) ? amstradCatalog.games : [])
+            .filter((entry) => entry?.file_name)
+            .map((entry) => {
+              const fileName = entry.file_name;
+              const sorted = normaliseFilename(fileName);
+              return {
+                id: `vip-amstrad-file:${fileName}`,
+                name: fileName,
+                path: fileName,
+                extension: 'zip',
+                size: Number(entry.bytes) || 0,
+                platform: 'amstrad',
+                ...sorted,
+              };
+            });
+          const amstradGames = groupReleaseFiles(amstradSortedFiles)
+            .flatMap((sortedGame) => sortedGame.releases.map((release) => {
+              const primary = release.media[0];
+              return {
+                id: `vip-amstrad:${release.id}:${primary.name}`,
+                title: sortedGame.title,
+                fileName: primary.name,
+                path: `VIP Amstrad Ghostware/${primary.name}`,
+                size: release.media.reduce((total, media) => total + (Number(media.size) || 0), 0),
+                system: 'cpc',
+                roomSystem: 'cpc',
+                source: 'vip-amstrad-ghostware',
+                sorterScore: release.score,
+                sorterWarnings: release.warnings,
+                archiveFileNames: release.media.map((media) => media.name),
+              };
+            }))
+            .filter((game) => !localAmstradTitles.has(game.title.toLowerCase()));
+          const cachedAmstradGames = await restoreCachedBoxArt(amstradGames);
+          const amstradGamesWithArtwork = await applyIndexedBoxArt(cachedAmstradGames, 'cpc');
           const allGames = [
             ...localGamesWithArtwork,
             ...archiveGamesWithArtwork,
             ...c64GamesWithArtwork,
+            ...amstradGamesWithArtwork,
             ...amigaGamesWithArtwork,
           ];
           setGames(allGames);
           await saveLocalLibraryGames(allGames);
-          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64 and ${amigaGames.length} Amiga WHDLoad games.`);
+          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64, ${amstradGames.length} Amstrad and ${amigaGames.length} Amiga WHDLoad files.`);
           }
         } else {
           setGames(localGamesWithArtwork);
@@ -2140,6 +2191,42 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           title: game.title,
           fileName: game.fileName,
           label: 'WHDLoad game ready — opening room',
+          loaded: game.size || 1,
+          total: game.size || 1,
+          percent: 100,
+          attempt: 1,
+        });
+      }
+
+      if (game.source === 'vip-amstrad-ghostware') {
+        setVipPreparation({
+          badge: 'VIP Amstrad',
+          title: game.title,
+          fileName: game.fileName,
+          label: 'Downloading sorted CPC release',
+          loaded: 0,
+          total: game.size || 0,
+          percent: 0,
+          attempt: 1,
+        });
+        await prepareVipAmstradFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+          const expectedTotal = total || game.size || 0;
+          setVipPreparation({
+            badge: 'VIP Amstrad',
+            title: game.title,
+            fileName: game.fileName,
+            label: retrying ? 'Retrying CPC download...' : 'Downloading sorted CPC release',
+            loaded,
+            total: expectedTotal,
+            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+            attempt,
+          });
+        });
+        setVipPreparation({
+          badge: 'VIP Amstrad',
+          title: game.title,
+          fileName: game.fileName,
+          label: 'CPC release ready â€” opening room',
           loaded: game.size || 1,
           total: game.size || 1,
           percent: 100,

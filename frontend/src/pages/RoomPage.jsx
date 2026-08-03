@@ -14,6 +14,7 @@ import { resolveRelease } from '../features/localLibrary/storage/preferredReleas
 import {
   takePreparedTournamentMameFile,
   takePreparedVipAmigaFile,
+  takePreparedVipAmstradFile,
   takePreparedVipC64File,
   takePreparedVipMameFile,
 } from '../vipMameCache';
@@ -117,6 +118,8 @@ const SNES_UNWANTED_ENTRY_PATTERNS = [
   /\b(trainer|trained|translation|translated|hack|bad|overdump|alternate|prototype|proto|beta|sample|demo)\b/i,
 ];
 const ROM_ZIP_EXTENSIONS = {
+  cpc: ['.dsk'],
+  cpc_party: ['.dsk'],
   amiga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
   amiga_aga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
   c64: ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt'],
@@ -5346,7 +5349,7 @@ export default function RoomPage() {
         ? ['.adf', '.adz', '.dms', '.ipf', '.hdf', '.lha', '.slave', '.zip', '.7z']
         : isAmigaLink
         ? ['.adf', '.adz', '.dms', '.ipf', '.zip', '.7z']
-        : isMasterSystem ? ['.sms', '.zip', '.7z'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd', '.zip', '.7z'] : isNes ? ['.nes', '.zip', '.7z'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2', '.zip', '.7z'] : isPcEngine ? ['.pce', '.sgx', '.zip', '.7z'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isSaturn ? ['.cue', '.bin', '.chd', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt', '.zip', '.7z'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip', '.7z'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf', '.zip', '.7z'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip', '.7z'] : ['.dsk'];
+        : isMasterSystem ? ['.sms', '.zip', '.7z'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd', '.zip', '.7z'] : isNes ? ['.nes', '.zip', '.7z'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2', '.zip', '.7z'] : isPcEngine ? ['.pce', '.sgx', '.zip', '.7z'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isSaturn ? ['.cue', '.bin', '.chd', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt', '.zip', '.7z'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip', '.7z'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf', '.zip', '.7z'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip', '.7z'] : ['.dsk', '.zip'];
 
       const invalidFile = selectedFiles.find((selectedFile) => {
         const selectedLowerName = selectedFile.name.toLowerCase();
@@ -5716,6 +5719,36 @@ export default function RoomPage() {
             },
           });
           if (cancelled) return;
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+          return;
+        }
+
+        if (pendingGame?.id === localGameId && pendingGame.source === 'vip-amstrad-ghostware') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) throw new Error('VIP access is required for the Amstrad CPC archive library.');
+
+          let gameBytes = await takePreparedVipAmstradFile(pendingGame.fileName);
+          if (!gameBytes) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/auth/vip/amstrad/files/${encodeURIComponent(pendingGame.fileName)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+            }
+            gameBytes = new Uint8Array(await response.arrayBuffer());
+          }
+          if (cancelled) return;
+          const file = new File([gameBytes], pendingGame.fileName, { type: 'application/zip' });
+          const loaded = await handleDiskSelected({
+            target: { files: [file], dataset: {}, value: '' },
+          });
+          if (!loaded || cancelled) return;
           sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
           if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
           return;

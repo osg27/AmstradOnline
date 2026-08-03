@@ -11,6 +11,7 @@ from app.api.routes.scores import router as scores_router
 from app.api.routes.social import router as social_router
 from app.api.routes.tournaments import router as tournaments_router
 from app.api.routes.vip_amiga import router as vip_amiga_router
+from app.api.routes.vip_amstrad import router as vip_amstrad_router
 from app.api.routes.vip_c64 import router as vip_c64_router
 from app.api.routes.vip_mame import router as vip_mame_router
 from app.core.config import settings
@@ -51,4 +52,5 @@ app.include_router(tournaments_router, prefix="/auth")
 app.include_router(vip_mame_router)
 app.include_router(vip_c64_router)
 app.include_router(vip_amiga_router)
+app.include_router(vip_amstrad_router)
 app.include_router(signaling_router)

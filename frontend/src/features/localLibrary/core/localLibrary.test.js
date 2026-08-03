@@ -4,7 +4,7 @@ import { groupGames } from './group';
 import { normaliseFilename } from './normalise';
 import { isSupportedExtension } from './platform';
 
-function scanned(name) {
+function scanned(name, platform = 'amiga') {
   const parsed = normaliseFilename(name);
   return {
     id: name,
@@ -15,7 +15,7 @@ function scanned(name) {
     type: 'application/zip',
     lastModified: 1,
     file: { name },
-    platform: 'amiga',
+    platform,
     ...parsed,
   };
 }
@@ -60,6 +60,20 @@ describe('TOSEC parsing and grouping', () => {
     ]);
     expect(games[0].releases[0].media.map((item) => item.diskNumber)).toEqual([1, 2]);
     expect(games[0].releases[0].isComplete).toBe(true);
+  });
+
+  it('sorts Amstrad clean, cracked, trained, and multi-disk archive releases', () => {
+    const game = groupGames([
+      scanned('Example (1989)(Publisher)(Disk 1 of 2).zip', 'amstrad'),
+      scanned('Example (1989)(Publisher)(Disk 2 of 2).zip', 'amstrad'),
+      scanned('Example (1989)(Publisher)[cr Group][t +2 Group](Disk 1 of 2).zip', 'amstrad'),
+    ])[0];
+    const preferred = game.releases.find((release) => release.id === game.defaultReleaseId);
+
+    expect(game.title).toBe('Example');
+    expect(preferred.isComplete).toBe(true);
+    expect(preferred.metadata.tags).toEqual([]);
+    expect(preferred.media.map((media) => media.diskNumber)).toEqual([1, 2]);
   });
 
   it('groups disks when a crack tag appears before the disk marker', () => {
