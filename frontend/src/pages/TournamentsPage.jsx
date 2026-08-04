@@ -40,6 +40,7 @@ export default function TournamentsPage() {
   const [mine, setMine] = useState([]);
   const [games, setGames] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(isVip);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [name, setName] = useState('');
   const [romName, setRomName] = useState('');
   const [gameQuery, setGameQuery] = useState('');
@@ -185,11 +186,30 @@ export default function TournamentsPage() {
     }
   }
 
-  async function copyInvite() {
+  async function copyTournamentCode() {
     if (!tournament) return;
-    const url = `${window.location.origin}/tournaments/${tournament.code}`;
-    await navigator.clipboard.writeText(`${tournament.name}: ${url} (code ${tournament.code})`);
-    setStatus('Tournament invite copied.');
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(tournament.code);
+      } else {
+        const copyField = document.createElement('textarea');
+        copyField.value = tournament.code;
+        copyField.setAttribute('readonly', '');
+        copyField.style.position = 'fixed';
+        copyField.style.opacity = '0';
+        document.body.appendChild(copyField);
+        copyField.select();
+        const copied = document.execCommand('copy');
+        copyField.remove();
+        if (!copied) throw new Error('Clipboard copy was rejected');
+      }
+      setCodeCopied(true);
+      setStatus(`Tournament code ${tournament.code} copied.`);
+      window.setTimeout(() => setCodeCopied(false), 1800);
+    } catch {
+      setCodeCopied(false);
+      setStatus(`Could not copy automatically. Tournament code: ${tournament.code}`);
+    }
   }
 
   async function resetStandings() {
@@ -237,7 +257,7 @@ export default function TournamentsPage() {
                 <h2>{tournament.name}</h2>
                 <p>{tournament.display_name}</p>
               </div>
-              <div className="tournament-code"><small>CODE</small><strong>{tournament.code}</strong><button type="button" className="secondary" onClick={copyInvite}>Copy invite</button></div>
+              <div className="tournament-code"><small>CODE</small><strong>{tournament.code}</strong><button type="button" className="secondary" onClick={copyTournamentCode}>{codeCopied ? 'Copied' : 'Copy code'}</button></div>
             </div>
             <div className="tournament-facts">
               <span>Starts: {formatDate(tournament.starts_at)}</span>
