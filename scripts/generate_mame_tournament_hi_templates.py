@@ -13,6 +13,7 @@ ARCHIVE_MANIFEST = REPO_ROOT / "backend" / "app" / "data" / "mame_tournament_rom
 SIZE_MANIFEST = REPO_ROOT / "backend" / "app" / "data" / "mame_tournament_hi_sizes.json"
 OUTPUT_PATH = REPO_ROOT / "backend" / "app" / "data" / "mame_tournament_hi_templates.json"
 NAMES_PATH = REPO_ROOT / "backend" / "app" / "data" / "mame_tournament_names.json"
+RULES_PATH = REPO_ROOT / "backend" / "app" / "data" / "mame_hi_rules.json"
 
 
 def structure_sizes(structure: ET.Element) -> set[int]:
@@ -78,6 +79,33 @@ def find_samples(samples_root: Path) -> dict[str, list[Path]]:
     return samples
 
 
+def configured_score_layout(rule: dict, data_size: int) -> tuple[list[tuple[int, int]], dict] | None:
+    """Translate an existing calibrated leaderboard rule into a tournament rule."""
+    if rule.get("encoding") != "bcd_be":
+        return None
+    offset = int(rule.get("score_offset", 0))
+    stride = int(rule.get("row_size", 0))
+    count = int(rule.get("row_count", 0))
+    score_start = int(rule.get("score_start", 0))
+    length = int(rule.get("score_length", 0))
+    ranges = [(offset + (index * stride) + score_start, length) for index in range(count)]
+    if min(offset, stride, count, score_start, length) < 0 or not stride or not count or not length:
+        return None
+    if any(start + size > data_size for start, size in ranges):
+        return None
+    tournament_rule = {
+        "parser": "configured",
+        "encoding": "packed_bcd",
+        "offset": offset + score_start,
+        "stride": stride,
+        "count": count,
+        "length": length,
+        "multiplier": max(1, int(rule.get("multiplier", 1))),
+        "minimum_score": 1,
+    }
+    return ranges, tournament_rule
+
+
 def build(samples_root: Path) -> tuple[dict[str, dict], dict[str, int]]:
     archive_roms = {
         Path(filename).stem.lower()
@@ -88,6 +116,7 @@ def build(samples_root: Path) -> tuple[dict[str, dict], dict[str, int]]:
         for rom_name, size in json.loads(SIZE_MANIFEST.read_text(encoding="utf-8-sig")).items()
     }
     samples = find_samples(samples_root)
+    configured_rules = json.loads(RULES_PATH.read_text(encoding="utf-8-sig"))
     output: dict[str, dict] = {}
     stats = {"archive_roms": len(archive_roms), "compiled": 0, "no_sample": 0, "no_layout": 0}
 
@@ -118,13 +147,17 @@ def build(samples_root: Path) -> tuple[dict[str, dict], dict[str, int]]:
                 ranges = score_ranges(structure)
             except (TypeError, ValueError):
                 continue
+            score_rule = {"parser": "hi2txt", "minimum_score": 1}
             if not ranges or any(offset + size > len(data) for offset, size in ranges):
-                continue
+                fallback = configured_score_layout(configured_rules.get(rom_name, {}), len(data))
+                if fallback is None:
+                    continue
+                ranges, score_rule = fallback
             for offset, size in ranges:
                 data[offset:offset + size] = bytes(size)
             compiled = {
                 "template": base64.b64encode(data).decode("ascii"),
-                "score_rule": {"parser": "hi2txt", "minimum_score": 1},
+                "score_rule": score_rule,
             }
             break
 

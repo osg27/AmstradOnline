@@ -931,6 +931,7 @@ def parse_tournament_hi_scores(source_path: Path, rule: dict) -> list[ParsedMame
     stride = int(rule.get("stride", 0))
     count = int(rule.get("count", 0))
     length = int(rule.get("length", 0))
+    multiplier = max(1, int(rule.get("multiplier", 1)))
     minimum_score = max(1, int(rule.get("minimum_score", 1)))
     if rule.get("encoding") != "packed_bcd" or min(offset, stride, count, length) < 0 or not stride or not count or not length:
         raise ValueError("Invalid tournament high-score rule")
@@ -940,7 +941,8 @@ def parse_tournament_hi_scores(source_path: Path, rule: dict) -> list[ParsedMame
     parsed: list[ParsedMameScore] = []
     for index in range(count):
         chunk = data[offset + (index * stride):offset + (index * stride) + length]
-        score = decode_bcd_score(chunk)
+        raw_score = decode_bcd_score(chunk)
+        score = raw_score * multiplier if raw_score is not None else None
         if score is not None and score >= minimum_score:
             parsed.append(ParsedMameScore(score=score, rank_in_game=index + 1))
     return sorted(parsed, key=lambda item: item.score, reverse=True)
