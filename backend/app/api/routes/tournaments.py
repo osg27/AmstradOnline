@@ -230,7 +230,6 @@ def tournament_leaderboard(
             "username": username,
             "initials": score.initials,
             "score": score.score,
-            "attempts": score.attempts,
             "created_at": score.achieved_at,
         }
         for index, (score, username) in enumerate(rows)
@@ -340,20 +339,18 @@ def extract_tournament_score(
     now = utc_now()
     improved = existing is None or int(best["score"]) > existing.score
     if existing:
-        existing.attempts += 1
-        existing.updated_at = now
         if improved:
             existing.score = int(best["score"])
             existing.initials = best.get("initials")
             existing.session_id = session_id[:128]
             existing.achieved_at = now
+            existing.updated_at = now
     else:
         db.add(TournamentScore(
             tournament_id=tournament.id,
             user_id=user.id,
             score=int(best["score"]),
             initials=best.get("initials"),
-            attempts=1,
             session_id=session_id[:128],
             achieved_at=now,
             updated_at=now,

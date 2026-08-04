@@ -259,7 +259,6 @@ export default function TournamentsPage() {
                       <li key={entry.username}>
                         <strong>#{entry.rank} {entry.username}</strong>
                         <span>{Number(entry.score).toLocaleString()}</span>
-                        <small>{entry.attempts} attempt{entry.attempts === 1 ? '' : 's'}</small>
                       </li>
                     ))}
                   </ol>
