@@ -255,10 +255,10 @@
       loaderScript.remove();
       loaderScript = null;
     }
-    if (gameUrl) {
+    if (typeof gameUrl === 'string' && gameUrl.startsWith('blob:')) {
       URL.revokeObjectURL(gameUrl);
-      gameUrl = null;
     }
+    gameUrl = null;
   }
 
   function resetToReady() {
@@ -372,8 +372,14 @@
     }
 
     clearGameContainer();
-    const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
-    gameUrl = URL.createObjectURL(gameBlob);
+    // A named File lets EmulatorJS identify .zip/.7z content, extract it and pass
+    // the inner .pce/.sgx ROM to Beetle PCE. A blob URL loses the archive name and
+    // causes the core to start with the blob UUID as empty/unsupported content.
+    gameUrl = new File([currentRom.bytes], currentRom.fileName, {
+      type: currentRom.fileName.toLowerCase().endsWith('.7z')
+        ? 'application/x-7z-compressed'
+        : 'application/octet-stream',
+    });
     configureEmulator(currentRom.fileName, gameUrl);
     drawStatus('Loading PC Engine', currentRom.fileName);
 
