@@ -19,6 +19,7 @@ export const cores = {
     "mame": ["mame2003_plus", "mame2003"],
     "ngp": ["mednafen_ngp"],
     "pce": ["mednafen_pce"],
+    "x68000": ["px68k"],
     "pcfx": ["mednafen_pcfx"],
     "psx": ["pcsx_rearmed", "mednafen_psx_hw"],
     "ws": ["mednafen_wswan"],

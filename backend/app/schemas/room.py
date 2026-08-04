@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 
 
-VALID_SYSTEMS = {"cpc", "cpc_party", "spectrum", "c64", "atari8", "atarist", "amiga", "amiga_link", "amiga_aga", "mastersystem", "megadrive", "saturn", "saturn_beetle", "nes", "snes", "pcengine", "playstation", "arcade"}
+VALID_SYSTEMS = {"cpc", "cpc_party", "spectrum", "c64", "atari8", "atarist", "x68000", "amiga", "amiga_link", "amiga_aga", "mastersystem", "megadrive", "saturn", "saturn_beetle", "nes", "snes", "pcengine", "playstation", "arcade"}
 
 
 class RoomCreateRequest(BaseModel):

@@ -2,8 +2,14 @@
   const screen = document.getElementById('pcengine-screen');
   const gameContainer = document.getElementById('game');
   const context = screen.getContext('2d', { alpha: false });
+  const isX68000 = window.location.pathname.includes('/x68000/');
+  const systemName = isX68000 ? 'Sharp X68000' : 'PC Engine';
+  const messagePrefix = isX68000 ? 'x68000' : 'pcengine';
 
   let currentRom = null;
+  let firmware = null;
+  let firmwareUrl = null;
+  let externalGameUrls = [];
   let loaderScript = null;
   let gameUrl = null;
   let sharedAudioContext = null;
@@ -15,7 +21,7 @@
   let localMask = 0;
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
-  let statusText = 'PC Engine ready';
+  let statusText = `${systemName} ready`;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -93,6 +99,7 @@
     audioContext?.resume?.().catch(() => {});
     return audioDestination?.stream || null;
   };
+  window.getX68000AudioStream = window.getPcEngineAudioStream;
 
   function setEmulatorVolume(volume) {
     emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
@@ -259,6 +266,8 @@
       URL.revokeObjectURL(gameUrl);
     }
     gameUrl = null;
+    externalGameUrls.forEach((url) => URL.revokeObjectURL(url));
+    externalGameUrls = [];
   }
 
   function resetToReady() {
@@ -266,15 +275,17 @@
     localMask = 0;
     remoteMask = 0;
     clearGameContainer();
-    drawStatus('PC Engine ready', 'Load a PC Engine / TurboGrafx ROM from the room');
+    drawStatus(`${systemName} ready`, `Load a ${systemName} game from the room`);
   }
 
-  function configureEmulator(fileName, romUrl) {
+  function configureEmulator(fileName, romUrl, externalFiles = {}) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
-    window.EJS_core = 'pce';
+    window.EJS_core = isX68000 ? 'x68000' : 'pce';
+    window.EJS_biosUrl = isX68000 ? firmwareUrl : undefined;
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
+    window.EJS_externalFiles = externalFiles;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
       'emulator.js': '/emulatorjs/data/src/emulator.js',
@@ -345,48 +356,66 @@
     };
 
     window.EJS_ready = () => {
-      console.log('Old Style Gaming PC Engine: EmulatorJS ready');
+      console.log(`Old Style Gaming ${systemName}: EmulatorJS ready`);
     };
     window.EJS_onGameStart = () => {
-      console.log('Old Style Gaming PC Engine: game started');
+      console.log(`Old Style Gaming ${systemName}: game started`);
       statusText = '';
     };
     window.EJS_onExit = () => {
-      drawStatus('PC Engine stopped', fileName);
+      drawStatus(`${systemName} stopped`, fileName);
     };
   }
 
   async function loadCurrentRom() {
     if (!currentRom) {
-      drawStatus('PC Engine ready', 'Load a PC Engine / TurboGrafx ROM from the room');
+      drawStatus(`${systemName} ready`, `Load a ${systemName} game from the room`);
+      return;
+    }
+    if (isX68000 && !firmware) {
+      drawStatus('X68000 firmware required', 'Load iplrom.dat and cgrom.dat from the room controls');
       return;
     }
 
     ensureAudio()?.resume?.().catch(() => {});
-    drawStatus('Checking PC Engine runtime', currentRom.fileName);
+    drawStatus(`Checking ${systemName} runtime`, currentRom.fileName);
     try {
       await preflightEmulatorJs();
     } catch (error) {
-      drawStatus('PC Engine runtime missing', error.message);
+      drawStatus(`${systemName} runtime missing`, error.message);
       return;
     }
 
     clearGameContainer();
+    if (firmwareUrl) URL.revokeObjectURL(firmwareUrl);
+    firmwareUrl = firmware ? new File([firmware.bytes], firmware.fileName, { type: 'application/zip' }) : null;
     // A named File lets EmulatorJS identify .zip/.7z content, extract it and pass
     // the inner .pce/.sgx ROM to Beetle PCE. A blob URL loses the archive name and
     // causes the core to start with the blob UUID as empty/unsupported content.
-    gameUrl = new File([currentRom.bytes], currentRom.fileName, {
+    const gameFiles = currentRom.files?.length ? currentRom.files : [currentRom];
+    let primaryGame = gameFiles[0];
+    const externalFiles = {};
+    if (isX68000 && gameFiles.length > 1) {
+      gameFiles.forEach((file) => {
+        const url = URL.createObjectURL(new Blob([file.bytes], { type: 'application/octet-stream' }));
+        externalGameUrls.push(url);
+        externalFiles[file.fileName] = url;
+      });
+      const playlist = gameFiles.map((file) => file.fileName).join('\n');
+      primaryGame = { fileName: 'game.m3u', bytes: new TextEncoder().encode(playlist) };
+    }
+    gameUrl = new File([primaryGame.bytes], primaryGame.fileName, {
       type: currentRom.fileName.toLowerCase().endsWith('.7z')
         ? 'application/x-7z-compressed'
         : 'application/octet-stream',
     });
-    configureEmulator(currentRom.fileName, gameUrl);
-    drawStatus('Loading PC Engine', currentRom.fileName);
+    configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
+    drawStatus(`Loading ${systemName}`, currentRom.fileName);
 
     loaderScript = document.createElement('script');
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
     loaderScript.async = true;
-    loaderScript.onerror = () => drawStatus('PC Engine failed to load', 'Could not load EmulatorJS');
+    loaderScript.onerror = () => drawStatus(`${systemName} failed to load`, 'Could not load EmulatorJS');
     document.body.appendChild(loaderScript);
   }
 
@@ -396,7 +425,7 @@
       '/emulatorjs/data/src/emulator.js',
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extractzip.js',
-      '/emulatorjs/data/cores/mednafen_pce-wasm.data',
+      `/emulatorjs/data/cores/${isX68000 ? 'px68k' : 'mednafen_pce'}-wasm.data`,
     ];
 
     for (const path of required) {
@@ -412,13 +441,13 @@
   window.addEventListener('error', (event) => {
     const where = event.filename ? `${event.filename.split('/').slice(-3).join('/')} ${event.lineno || ''}`.trim() : '';
     const message = [event.message || 'Check browser console', where].filter(Boolean).join(' - ');
-    console.error('Old Style Gaming PC Engine error:', event.error || event.message, event.filename);
-    drawStatus('PC Engine error', message);
+    console.error(`Old Style Gaming ${systemName} error:`, event.error || event.message, event.filename);
+    drawStatus(`${systemName} error`, message);
   });
 
   window.addEventListener('unhandledrejection', (event) => {
-    console.error('Old Style Gaming PC Engine promise error:', event.reason);
-    drawStatus('PC Engine error', event.reason?.message || 'Check browser console');
+    console.error(`Old Style Gaming ${systemName} promise error:`, event.reason);
+    drawStatus(`${systemName} error`, event.reason?.message || 'Check browser console');
   });
 
   function mirrorEmulatorCanvas() {
@@ -447,21 +476,28 @@
     if (event.origin !== window.location.origin) return;
 
     const message = event.data || {};
-    if (message.type === 'pcengine_start') {
+    if (message.type === `${messagePrefix}_start`) {
       window.getPcEngineAudioStream();
       return;
     }
 
-    if (message.type === 'pcengine_autoload') {
+    if (message.type === 'x68000_firmware') {
+      firmware = { fileName: message.fileName || 'x68000-firmware.zip', bytes: new Uint8Array(message.bytes || []) };
+      if (currentRom) loadCurrentRom();
+      return;
+    }
+
+    if (message.type === `${messagePrefix}_autoload`) {
       currentRom = {
-        fileName: message.fileName || 'game.pce',
+        fileName: message.fileName || (isX68000 ? 'game.dim' : 'game.pce'),
         bytes: new Uint8Array(message.bytes || []),
+        files: (message.files || []).map((file) => ({ fileName: file.fileName, bytes: new Uint8Array(file.bytes || []) })),
       };
       loadCurrentRom();
       return;
     }
 
-    if (message.type === 'pcengine_reset') {
+    if (message.type === `${messagePrefix}_reset`) {
       resetToReady();
       return;
     }
@@ -496,6 +532,6 @@
     window.focus();
   });
 
-  drawStatus('PC Engine ready', 'Load a PC Engine / TurboGrafx ROM from the room');
+  drawStatus(`${systemName} ready`, `Load a ${systemName} game from the room`);
   mirrorEmulatorCanvas();
 })();

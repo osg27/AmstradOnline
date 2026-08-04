@@ -14,6 +14,7 @@ const SYSTEM_OPTIONS = [
   ['megadrive', 'Mega Drive'],
   ['snes', 'SNES'],
   ['pcengine', 'PC Engine / TurboGrafx-16'],
+  ['x68000', 'Sharp X68000'],
   ['playstation', 'Sony PlayStation'],
   ['arcade', 'Arcade / MAME'],
 ];

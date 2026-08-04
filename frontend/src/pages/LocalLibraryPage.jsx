@@ -134,6 +134,16 @@ export const SUPPORTED_SYSTEMS = [
     pathHints: ['playstation', 'ps1', 'psx'],
   },
   {
+    id: 'x68000',
+    roomSystem: 'x68000',
+    label: 'Sharp X68000',
+    shortLabel: 'X68K',
+    logo: null,
+    extensions: ['dim', 'img', 'd88', '88d', 'hdm', 'dup', '2hd', 'xdf', 'hdf', 'cmd', 'm3u', 'zip'],
+    pathHints: ['x68000', 'x68k', 'sharp'],
+    note: 'Requires your own IPL and CG ROM firmware',
+  },
+  {
     id: 'amiga',
     roomSystem: 'amiga',
     label: 'Amiga',

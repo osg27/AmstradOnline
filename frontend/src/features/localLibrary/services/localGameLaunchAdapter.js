@@ -25,6 +25,8 @@ export function prepareLocalGameLaunch(game, storage = window.localStorage) {
         ? 'spectrum'
         : game.platform === 'amstrad'
           ? 'cpc'
+          : game.platform === 'x68000'
+            ? 'x68000'
           : null;
   if (!roomSystem) throw new Error(`There is no local player adapter for ${game.platform}.`);
   registerRuntimeRelease(launchId, {

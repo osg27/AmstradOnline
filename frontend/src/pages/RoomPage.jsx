@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { unzipSync } from 'fflate';
+import { unzipSync, zipSync } from 'fflate';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
@@ -35,6 +35,7 @@ const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 const SATURN_BIOS_KEY = 'saturn-bios';
 const ATARI_ST_TOS_KEY = 'atari-st-tos';
+const X68000_FIRMWARE_KEY = 'x68000-firmware';
 const CONTROL_MATCH_LIMIT = 6;
 const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
 const BUILTIN_MAME_LEADERBOARD_ROMS = new Set([
@@ -55,6 +56,7 @@ const ROOM_SYSTEM_OPTIONS = [
   ['nes', 'NES'],
   ['snes', 'SNES'],
   ['pcengine', 'PC Engine / TurboGrafx-16'],
+  ['x68000', 'Sharp X68000'],
   ['playstation', 'Sony PlayStation'],
   ['arcade', 'MAME Arcade'],
 ];
@@ -134,11 +136,12 @@ const ROM_ZIP_EXTENSIONS = {
   nes: ['.nes'],
   snes: ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2'],
   pcengine: ['.pce', '.sgx'],
+  x68000: ['.dim', '.img', '.d88', '.88d', '.hdm', '.dup', '.2hd', '.xdf', '.hdf', '.cmd', '.m3u'],
   playstation: ['.cue', '.bin', '.chd', '.pbp', '.iso'],
   saturn: ['.cue', '.bin', '.chd', '.iso'],
   saturn_beetle: ['.cue', '.bin', '.chd', '.iso'],
 };
-const MULTI_FILE_ZIP_SYSTEMS = new Set(['amiga', 'amiga_aga', 'c64', 'playstation', 'saturn', 'saturn_beetle']);
+const MULTI_FILE_ZIP_SYSTEMS = new Set(['amiga', 'amiga_aga', 'c64', 'x68000', 'playstation', 'saturn', 'saturn_beetle']);
 const ATARI8_MODEL_OPTIONS = [
   ['400/800', '400/800'],
   ['1200xl', '1200XL'],
@@ -688,6 +691,7 @@ export default function RoomPage() {
   const [localReleaseFiles, setLocalReleaseFiles] = useState([]);
   const [currentLocalReleaseIndex, setCurrentLocalReleaseIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
+  const [x68000FirmwareName, setX68000FirmwareName] = useState('');
   const [vipKickstartBusy, setVipKickstartBusy] = useState(false);
   const [playstationBiosName, setPlaystationBiosName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
@@ -742,6 +746,7 @@ export default function RoomPage() {
   const fileInputRef = useRef(null);
   const swapDiskInputRef = useRef(null);
   const kickstartInputRef = useRef(null);
+  const x68000FirmwareInputRef = useRef(null);
   const atariTosInputRef = useRef(null);
   const playstationBiosInputRef = useRef(null);
   const pcRef = useRef(null);
@@ -836,6 +841,7 @@ export default function RoomPage() {
   const isNes = roomSystem === 'nes';
   const isSnes = roomSystem === 'snes';
   const isPcEngine = roomSystem === 'pcengine';
+  const isX68000 = roomSystem === 'x68000';
   const isPlayStation = roomSystem === 'playstation';
   const isBeetleSaturn = roomSystem === 'saturn_beetle';
   const isSaturn = roomSystem === 'saturn' || isBeetleSaturn;
@@ -843,11 +849,11 @@ export default function RoomPage() {
   const isC64 = roomSystem === 'c64';
   const isAtari8 = roomSystem === 'atari8';
   const isAtariSt = roomSystem === 'atarist';
-  const isMouseComputer = isAmigaFamily || isAtariSt;
+  const isMouseComputer = isAmigaFamily || isAtariSt || isX68000;
   const isArcade = roomSystem === 'arcade';
   const isLocalLibraryHostRoom = Boolean((localGameId || localReleaseId) && isHost);
   const supportsMameScoreboard = isArcade && (isSoloMode || isLocalLibraryHostRoom);
-  const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : '';
+  const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : isX68000 ? X68000_FIRMWARE_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const isC64Party = isC64 && !isSoloMode && partyMaxPlayers > 2;
   const isArcadeParty = isArcade && !isSoloMode && partyMaxPlayers > 2;
@@ -855,9 +861,9 @@ export default function RoomPage() {
   const isMultiPeerParty = isSharedCpcParty || isC64Party || isArcadeParty;
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const canSendPlayerInput = isHost || !isArcadeParty || Boolean(partyPlayerNumber);
-  const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isDiscConsole || isC64 || isAtari8 || isAtariSt || isArcade;
+  const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isX68000 || isDiscConsole || isC64 || isAtari8 || isAtariSt || isArcade;
   const showFullscreenArcadeLeaderboard = isScreenFullscreen && supportsMameScoreboard && Boolean(loadedDiskName) && !remoteConnected;
-  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isPlayStation ? 'Sony PlayStation' : isBeetleSaturn ? 'Sega Saturn Webretro Core' : isSaturn ? 'Sega Saturn' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isX68000 ? 'Sharp X68000' : isPlayStation ? 'Sony PlayStation' : isBeetleSaturn ? 'Sega Saturn Webretro Core' : isSaturn ? 'Sega Saturn' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
 
   useEffect(() => {
     setSelectedRoomSystem(roomSystem);
@@ -872,12 +878,12 @@ export default function RoomPage() {
     ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-01-2`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-07-07-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-08-04-1' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.hdf,.lha,.zip,.7z'
-    : isMasterSystem ? '.sms,.zip,.7z' : isMegaDrive ? '.bin,.gen,.md,.smd,.zip,.7z' : isNes ? '.nes,.zip,.7z' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2,.zip,.7z' : isPcEngine ? '.pce,.sgx,.zip,.7z' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isSaturn ? '.cue,.bin,.chd,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt,.zip,.7z' : isAtari8 ? '.atr,.xfd,.atx,.xex,.com,.car,.rom,.bin,.cas,.zip,.7z' : isAtariSt ? '.st,.msa,.stx,.ipf,.zip,.7z' : isArcade ? '.zip,.7z' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip,.7z' : '.dsk';
-  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMasterSystem ? 'Load Master System ROM' : isMegaDrive ? 'Load Mega Drive ROM' : isNes ? 'Load NES ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isPlayStation ? loadedDiskName ? 'Change PlayStation game' : 'Load PlayStation game' : isSaturn ? loadedDiskName ? 'Change Saturn game' : 'Load Saturn game' : isC64 ? 'Load C64 file' : isAtari8 ? loadedDiskName ? 'Change Atari 8-bit file' : 'Load Atari 8-bit file' : isAtariSt ? 'Load Atari ST disk' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
+    : isMasterSystem ? '.sms,.zip,.7z' : isMegaDrive ? '.bin,.gen,.md,.smd,.zip,.7z' : isNes ? '.nes,.zip,.7z' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2,.zip,.7z' : isPcEngine ? '.pce,.sgx,.zip,.7z' : isX68000 ? '.dim,.img,.d88,.88d,.hdm,.dup,.2hd,.xdf,.hdf,.cmd,.m3u,.zip' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isSaturn ? '.cue,.bin,.chd,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt,.zip,.7z' : isAtari8 ? '.atr,.xfd,.atx,.xex,.com,.car,.rom,.bin,.cas,.zip,.7z' : isAtariSt ? '.st,.msa,.stx,.ipf,.zip,.7z' : isArcade ? '.zip,.7z' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip,.7z' : '.dsk';
+  const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMasterSystem ? 'Load Master System ROM' : isMegaDrive ? 'Load Mega Drive ROM' : isNes ? 'Load NES ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isX68000 ? loadedDiskName ? 'Change X68000 game' : 'Load X68000 game' : isPlayStation ? loadedDiskName ? 'Change PlayStation game' : 'Load PlayStation game' : isSaturn ? loadedDiskName ? 'Change Saturn game' : 'Load Saturn game' : isC64 ? 'Load C64 file' : isAtari8 ? loadedDiskName ? 'Change Atari 8-bit file' : 'Load Atari 8-bit file' : isAtariSt ? 'Load Atari ST disk' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
   const controlLabel = !room
     ? 'Loading controls'
     : isSoloMode
@@ -1695,7 +1701,7 @@ export default function RoomPage() {
 
   const reloadPcEngineFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
-    if (!frame || !isPcEngine) return;
+    if (!frame || (!isPcEngine && !isX68000)) return;
 
     stopMirrorLoop();
 
@@ -1719,7 +1725,7 @@ export default function RoomPage() {
     }
 
     hostAudioStreamRef.current = nextAudioStream || null;
-  }, [emulatorSrc, isPcEngine, isSoloMode]);
+  }, [emulatorSrc, isPcEngine, isSoloMode, isX68000]);
 
   const reloadNesFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
@@ -2012,7 +2018,9 @@ export default function RoomPage() {
 
         if (cancelled || !storedKickstart) return;
 
-        const payload = isDiscConsole
+        const payload = isX68000
+          ? { type: 'x68000_firmware', fileName: storedKickstart.fileName, bytes: storedKickstart.bytes }
+          : isDiscConsole
           ? {
             type: isSaturn ? 'saturn_bios' : 'playstation_bios',
             fileName: storedKickstart.fileName,
@@ -2035,7 +2043,10 @@ export default function RoomPage() {
           timers.push(retryTimer);
         });
 
-        if (isDiscConsole) {
+        if (isX68000) {
+          setX68000FirmwareName(`${storedKickstart.fileName} (saved locally)`);
+          addLog(`Loaded saved X68000 firmware: ${storedKickstart.fileName}`);
+        } else if (isDiscConsole) {
           setPlaystationBiosName(`${storedKickstart.fileName} (saved locally)`);
           addLog(`Loaded saved ${isSaturn ? 'Saturn' : 'PlayStation'} BIOS: ${storedKickstart.fileName}`);
         } else if (isAtariSt) {
@@ -2057,7 +2068,7 @@ export default function RoomPage() {
       window.clearTimeout(timer);
       timers.forEach((retryTimer) => window.clearTimeout(retryTimer));
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isDiscConsole, isHost, isSaturn, kickstartStorageKey, emulatorSessionKey, roomSystem]);
+  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isDiscConsole, isHost, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -3966,7 +3977,7 @@ export default function RoomPage() {
     if (isSegaConsole) return iframe.contentWindow?.getMegaDriveAudioStream?.() || null;
     if (isNes) return iframe.contentWindow?.getNesAudioStream?.() || null;
     if (isSnes) return iframe.contentWindow?.getSnesAudioStream?.() || null;
-    if (isPcEngine) return iframe.contentWindow?.getPcEngineAudioStream?.() || null;
+    if (isPcEngine || isX68000) return iframe.contentWindow?.getPcEngineAudioStream?.() || null;
     if (isDiscConsole) return iframe.contentWindow?.[isSaturn ? 'getSaturnAudioStream' : 'getPlayStationAudioStream']?.() || null;
     if (isC64) return iframe.contentWindow?.getC64AudioStream?.() || null;
     if (isAtari8) return null;
@@ -4486,8 +4497,8 @@ export default function RoomPage() {
       if (isSnes) {
         iframe.contentWindow?.postMessage({ type: 'snes_start' }, window.location.origin);
       }
-      if (isPcEngine) {
-        iframe.contentWindow?.postMessage({ type: 'pcengine_start' }, window.location.origin);
+      if (isPcEngine || isX68000) {
+        iframe.contentWindow?.postMessage({ type: isX68000 ? 'x68000_start' : 'pcengine_start' }, window.location.origin);
       }
       if (isDiscConsole) {
         iframe.contentWindow?.postMessage({ type: isSaturn ? 'saturn_start' : 'playstation_start' }, window.location.origin);
@@ -5095,6 +5106,46 @@ export default function RoomPage() {
     kickstartInputRef.current?.click();
   }
 
+  function openX68000FirmwarePicker() {
+    if (!canControlLocalEmulator || !isX68000) return;
+    x68000FirmwareInputRef.current?.click();
+  }
+
+  async function handleX68000FirmwareSelected(event) {
+    try {
+      const files = Array.from(event.target.files || []);
+      if (!files.length) return;
+      const entries = {};
+      if (files.length === 1 && files[0].name.toLowerCase().endsWith('.zip')) {
+        const archive = unzipSync(new Uint8Array(await files[0].arrayBuffer()));
+        Object.entries(archive).forEach(([name, bytes]) => {
+          const baseName = name.split(/[\\/]/).pop()?.toLowerCase();
+          if (baseName) entries[baseName] = bytes;
+        });
+      } else {
+        for (const file of files) entries[file.name.toLowerCase()] = new Uint8Array(await file.arrayBuffer());
+      }
+      if (!entries['iplrom.dat'] || !entries['cgrom.dat']) {
+        throw new Error('Select both iplrom.dat and cgrom.dat, or a ZIP containing both files');
+      }
+      const bytes = zipSync({
+        'keropi/iplrom.dat': entries['iplrom.dat'],
+        'keropi/cgrom.dat': entries['cgrom.dat'],
+      }, { level: 0 });
+      const fileName = 'x68000-firmware.zip';
+      savedSystemMediaRef.current.set(X68000_FIRMWARE_KEY, { fileName, bytes });
+      await saveStoredKickstart(X68000_FIRMWARE_KEY, fileName, bytes);
+      forwardInputToEmulator({ type: 'x68000_firmware', fileName, bytes });
+      setX68000FirmwareName('IPL + CG ROM (saved locally)');
+      setError('');
+      setStatus('X68000 firmware loaded and saved in this browser');
+      event.target.value = '';
+    } catch (err) {
+      setError(err.message);
+      event.target.value = '';
+    }
+  }
+
   async function loadVipKickstart() {
     if (!canControlLocalEmulator || !isPuaeAmiga || !hasVipAccess || vipKickstartBusy) return;
 
@@ -5309,7 +5360,7 @@ export default function RoomPage() {
       ? 'amiga_reset'
       : isPuaeAmiga
         ? 'amiga_aga_reset'
-      : isSegaConsole ? 'megadrive_reset' : isNes ? 'nes_reset' : isSnes ? 'snes_reset' : isPcEngine ? 'pcengine_reset' : isPlayStation ? 'playstation_reset' : isSaturn ? 'saturn_reset' : isC64 ? 'c64_reset' : isAtari8 ? 'atari8_reset' : isAtariSt ? 'atarist_reset' : isArcade ? 'arcade_reset' : isSpectrum ? 'spectrum_reset' : 'amstrad_reset';
+      : isSegaConsole ? 'megadrive_reset' : isNes ? 'nes_reset' : isSnes ? 'snes_reset' : isPcEngine ? 'pcengine_reset' : isX68000 ? 'x68000_reset' : isPlayStation ? 'playstation_reset' : isSaturn ? 'saturn_reset' : isC64 ? 'c64_reset' : isAtari8 ? 'atari8_reset' : isAtariSt ? 'atarist_reset' : isArcade ? 'arcade_reset' : isSpectrum ? 'spectrum_reset' : 'amstrad_reset';
 
     forwardInputToEmulator({ type });
     addLog('Reset emulator');
@@ -5417,7 +5468,7 @@ export default function RoomPage() {
         ? ['.adf', '.adz', '.dms', '.ipf', '.hdf', '.lha', '.slave', '.zip', '.7z']
         : isAmigaLink
         ? ['.adf', '.adz', '.dms', '.ipf', '.zip', '.7z']
-        : isMasterSystem ? ['.sms', '.zip', '.7z'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd', '.zip', '.7z'] : isNes ? ['.nes', '.zip', '.7z'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2', '.zip', '.7z'] : isPcEngine ? ['.pce', '.sgx', '.zip', '.7z'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isSaturn ? ['.cue', '.bin', '.chd', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt', '.zip', '.7z'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip', '.7z'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf', '.zip', '.7z'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip', '.7z'] : ['.dsk', '.zip'];
+        : isMasterSystem ? ['.sms', '.zip', '.7z'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd', '.zip', '.7z'] : isNes ? ['.nes', '.zip', '.7z'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2', '.zip', '.7z'] : isPcEngine ? ['.pce', '.sgx', '.zip', '.7z'] : isX68000 ? ['.dim', '.img', '.d88', '.88d', '.hdm', '.dup', '.2hd', '.xdf', '.hdf', '.cmd', '.m3u', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isSaturn ? ['.cue', '.bin', '.chd', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt', '.zip', '.7z'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip', '.7z'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf', '.zip', '.7z'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip', '.7z'] : ['.dsk', '.zip'];
 
       const invalidFile = selectedFiles.find((selectedFile) => {
         const selectedLowerName = selectedFile.name.toLowerCase();
@@ -5482,7 +5533,7 @@ export default function RoomPage() {
         && !isArcade
         && file.name.toLowerCase().endsWith('.zip')
         && Boolean(ROM_ZIP_EXTENSIONS[roomSystem]);
-      const filesToLoad = (isPuaeAmiga || isDiscConsole || isC64 || isAtariSt) && !isSwapDisk && selectedFiles.length > 1
+      const filesToLoad = (isPuaeAmiga || isDiscConsole || isC64 || isAtariSt || isX68000) && !isSwapDisk && selectedFiles.length > 1
         ? selectedFiles.slice().sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }))
         : [file];
       const loadedFiles = atari8ZipFile
@@ -5515,10 +5566,10 @@ export default function RoomPage() {
       );
 
       const loadMessage = {
-        type: isSwapDisk ? 'amiga_swap_disk' : isPuaeAmiga ? 'amiga_aga_autoload' : isAmigaLink ? 'amiga_autoload' : isSegaConsole ? 'megadrive_autoload' : isNes ? 'nes_autoload' : isSnes ? 'snes_autoload' : isPcEngine ? 'pcengine_autoload' : isPlayStation ? 'playstation_autoload' : isSaturn ? 'saturn_autoload' : isC64 ? 'c64_autoload' : isAtari8 ? 'atari8_autoload' : isAtariSt ? 'atarist_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
+        type: isSwapDisk ? 'amiga_swap_disk' : isPuaeAmiga ? 'amiga_aga_autoload' : isAmigaLink ? 'amiga_autoload' : isSegaConsole ? 'megadrive_autoload' : isNes ? 'nes_autoload' : isSnes ? 'snes_autoload' : isPcEngine ? 'pcengine_autoload' : isX68000 ? 'x68000_autoload' : isPlayStation ? 'playstation_autoload' : isSaturn ? 'saturn_autoload' : isC64 ? 'c64_autoload' : isAtari8 ? 'atari8_autoload' : isAtariSt ? 'atarist_autoload' : isArcade ? 'arcade_autoload' : isSpectrum ? 'spectrum_autoload' : 'amstrad_autoload',
         fileName: loadedFiles[0].fileName,
         bytes: isDiscConsole ? undefined : bytes,
-        files: isDiscConsole ? loadedFiles : undefined,
+        files: isDiscConsole || isX68000 ? loadedFiles : undefined,
         disks: isPuaeAmiga && !isSwapDisk && !loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
         whdLoadFiles: isPuaeAmiga && loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
         profile: isPuaeAmiga ? { model: isAmigaAga ? 'A1200' : 'A500' } : undefined,
@@ -6574,7 +6625,7 @@ export default function RoomPage() {
                   ref={fileInputRef}
                   type="file"
                   accept={acceptedMedia}
-                  multiple={isAmigaFamily || isDiscConsole || isC64 || isAtariSt}
+                  multiple={isAmigaFamily || isDiscConsole || isC64 || isAtariSt || isX68000}
                   data-mode="load"
                   onChange={handleDiskSelected}
                   style={{ display: 'none' }}
@@ -6617,6 +6668,17 @@ export default function RoomPage() {
                     type="file"
                     accept=".img,.rom,.bin"
                     onChange={handleAtariTosSelected}
+                    style={{ display: 'none' }}
+                  />
+                ) : null}
+
+                {isX68000 ? (
+                  <input
+                    ref={x68000FirmwareInputRef}
+                    type="file"
+                    accept=".dat,.zip"
+                    multiple
+                    onChange={handleX68000FirmwareSelected}
                     style={{ display: 'none' }}
                   />
                 ) : null}
@@ -6873,6 +6935,12 @@ export default function RoomPage() {
                   {isAtariSt ? (
                     <button type="button" className="secondary" onClick={openAtariTosPicker}>
                       {atariTosName ? 'Change local Atari TOS' : 'Load local Atari TOS'}
+                    </button>
+                  ) : null}
+
+                  {isX68000 ? (
+                    <button type="button" className="secondary" onClick={openX68000FirmwarePicker}>
+                      {x68000FirmwareName ? 'Change X68000 firmware' : 'Load X68000 firmware'}
                     </button>
                   ) : null}
 
