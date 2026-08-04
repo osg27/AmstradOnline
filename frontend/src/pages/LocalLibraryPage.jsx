@@ -24,7 +24,7 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
-import { prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMegadriveFile, prepareVipSpectrumFile } from '../vipMameCache';
+import { prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMegadriveFile, prepareVipPcengineFile, prepareVipSpectrumFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
@@ -1365,7 +1365,8 @@ function variantPreferenceScore(game) {
   if (
     (game.source === 'vip-amstrad-ghostware'
       || game.source === 'vip-spectrum-z80'
-      || game.source === 'vip-megadrive-ghostware')
+      || game.source === 'vip-megadrive-ghostware'
+      || game.source === 'vip-pcengine-nointro')
     && Number.isFinite(game.sorterScore)
   ) {
     score -= game.sorterScore * 10;
@@ -1540,6 +1541,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           && game.source !== 'vip-amstrad-ghostware'
           && game.source !== 'vip-spectrum-z80'
           && game.source !== 'vip-megadrive-ghostware'
+          && game.source !== 'vip-pcengine-nointro'
         ));
         const savedVipMameGames = savedGames.filter((game) => game.source === 'internet-archive-mame');
         const savedVipC64Games = savedGames.filter((game) => game.source === 'vip-c64-oneload');
@@ -1547,6 +1549,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const savedVipAmstradGames = savedGames.filter((game) => game.source === 'vip-amstrad-ghostware');
         const savedVipSpectrumGames = savedGames.filter((game) => game.source === 'vip-spectrum-z80');
         const savedVipMegadriveGames = savedGames.filter((game) => game.source === 'vip-megadrive-ghostware');
+        const savedVipPcengineGames = savedGames.filter((game) => game.source === 'vip-pcengine-nointro');
         const hasCurrentVipAmigaCache = savedVipAmigaGames.some((game) => (
           game.fileName?.toLowerCase().endsWith('.zip')
         ));
@@ -1556,13 +1559,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           && savedVipAmstradGames.length > 0
           && savedVipSpectrumGames.length > 0
           && savedVipMegadriveGames.length > 0
+          && savedVipPcengineGames.length > 0
           && hasCurrentVipAmigaCache;
         // IndexedDB is the source of truth for the local shelf. Render it immediately;
         // remote box-art reconciliation must never hold up the game count or navigation.
         setFolders(savedFolders);
         setGames(isVip ? savedGames : localGames);
         setStatus(isVip && hasCompleteVipCache
-          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMegadriveGames.length} Mega Drive and ${savedVipAmigaGames.length} Amiga files.`
+          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`
           : localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
         let localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         if (forceAmigaBoxArtRepair) {
@@ -1580,6 +1584,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ...savedVipAmstradGames,
             ...savedVipSpectrumGames,
             ...savedVipMegadriveGames,
+            ...savedVipPcengineGames,
           ]);
         }
         if (!isVip) setGames(localGamesWithArtwork);
@@ -1600,20 +1605,22 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 ...savedVipAmstradGames,
                 ...savedVipSpectrumGames,
                 ...savedVipMegadriveGames,
+                ...savedVipPcengineGames,
                 ...currentVipAmigaGames,
               ]);
             }
-            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmstradGames, ...savedVipSpectrumGames, ...savedVipMegadriveGames, ...currentVipAmigaGames]);
-            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMegadriveGames.length} Mega Drive and ${savedVipAmigaGames.length} Amiga files.`);
+            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmstradGames, ...savedVipSpectrumGames, ...savedVipMegadriveGames, ...savedVipPcengineGames, ...currentVipAmigaGames]);
+            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`);
           } else {
           setStatus('Loading VIP game libraries for the first time...');
-          const [catalog, c64Catalog, amigaCatalog, amstradCatalog, spectrumCatalog, megadriveCatalog] = await Promise.all([
+          const [catalog, c64Catalog, amigaCatalog, amstradCatalog, spectrumCatalog, megadriveCatalog, pcengineCatalog] = await Promise.all([
             apiFetch('/auth/vip/mame/catalog').catch(() => ({ roms: [], samples: [] })),
             apiFetch('/auth/vip/c64/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/amiga/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/amstrad/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/spectrum/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/megadrive/catalog').catch(() => ({ games: [] })),
+            apiFetch('/auth/vip/pcengine/catalog').catch(() => ({ games: [] })),
           ]);
           const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
           const localArcadeKeys = new Set(
@@ -1809,6 +1816,44 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localMegadriveTitles.has(game.title.toLowerCase()));
           const cachedMegadriveGames = await restoreCachedBoxArt(megadriveGames);
           const megadriveGamesWithArtwork = await applyIndexedBoxArt(cachedMegadriveGames, 'megadrive');
+          const localPcengineTitles = new Set(
+            localGamesWithArtwork
+              .filter((game) => game.system === 'pcengine')
+              .map((game) => canonicalLibraryTitle(game).toLowerCase()),
+          );
+          const pcengineSortedFiles = (Array.isArray(pcengineCatalog.games) ? pcengineCatalog.games : [])
+            .filter((entry) => entry?.file_name)
+            .map((entry) => {
+              const fileName = entry.file_name;
+              return {
+                id: `vip-pcengine-file:${fileName}`,
+                name: fileName,
+                path: fileName,
+                extension: '7z',
+                size: Number(entry.bytes) || 0,
+                platform: 'pcengine',
+                ...normaliseFilename(fileName),
+              };
+            });
+          const pcengineGames = groupReleaseFiles(pcengineSortedFiles)
+            .flatMap((sortedGame) => sortedGame.releases.map((release) => {
+              const primary = release.media[0];
+              return {
+                id: `vip-pcengine:${release.id}:${primary.name}`,
+                title: sortedGame.title,
+                fileName: primary.name,
+                path: `VIP PC Engine No-Intro/${primary.name}`,
+                size: Number(primary.size) || 0,
+                system: 'pcengine',
+                roomSystem: 'pcengine',
+                source: 'vip-pcengine-nointro',
+                sorterScore: release.score,
+                sorterWarnings: release.warnings,
+              };
+            }))
+            .filter((game) => !localPcengineTitles.has(game.title.toLowerCase()));
+          const cachedPcengineGames = await restoreCachedBoxArt(pcengineGames);
+          const pcengineGamesWithArtwork = await applyIndexedBoxArt(cachedPcengineGames, 'pcengine');
           const allGames = [
             ...localGamesWithArtwork,
             ...archiveGamesWithArtwork,
@@ -1816,11 +1861,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ...amstradGamesWithArtwork,
             ...spectrumGamesWithArtwork,
             ...megadriveGamesWithArtwork,
+            ...pcengineGamesWithArtwork,
             ...amigaGamesWithArtwork,
           ];
           setGames(allGames);
           await saveLocalLibraryGames(allGames);
-          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64, ${amstradGames.length} Amstrad, ${spectrumGames.length} ZX Spectrum, ${megadriveGames.length} Mega Drive and ${amigaGames.length} Amiga files.`);
+          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64, ${amstradGames.length} Amstrad, ${spectrumGames.length} ZX Spectrum, ${megadriveGames.length} Mega Drive, ${pcengineGames.length} PC Engine and ${amigaGames.length} Amiga files.`);
           }
         } else {
           setGames(localGamesWithArtwork);
@@ -2450,6 +2496,42 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           title: game.title,
           fileName: game.fileName,
           label: 'Mega Drive release ready — opening room',
+          loaded: game.size || 1,
+          total: game.size || 1,
+          percent: 100,
+          attempt: 1,
+        });
+      }
+
+      if (game.source === 'vip-pcengine-nointro') {
+        setVipPreparation({
+          badge: 'VIP PC Engine',
+          title: game.title,
+          fileName: game.fileName,
+          label: 'Downloading sorted PC Engine release',
+          loaded: 0,
+          total: game.size || 0,
+          percent: 0,
+          attempt: 1,
+        });
+        await prepareVipPcengineFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+          const expectedTotal = total || game.size || 0;
+          setVipPreparation({
+            badge: 'VIP PC Engine',
+            title: game.title,
+            fileName: game.fileName,
+            label: retrying ? 'Retrying PC Engine download...' : 'Downloading sorted PC Engine release',
+            loaded,
+            total: expectedTotal,
+            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+            attempt,
+          });
+        });
+        setVipPreparation({
+          badge: 'VIP PC Engine',
+          title: game.title,
+          fileName: game.fileName,
+          label: 'PC Engine release ready — opening room',
           loaded: game.size || 1,
           total: game.size || 1,
           percent: 100,

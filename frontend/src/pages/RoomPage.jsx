@@ -18,6 +18,7 @@ import {
   takePreparedVipC64File,
   takePreparedVipMameFile,
   takePreparedVipMegadriveFile,
+  takePreparedVipPcengineFile,
   takePreparedVipSpectrumFile,
 } from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
@@ -5870,6 +5871,36 @@ export default function RoomPage() {
           }
           if (cancelled) return;
           const file = new File([gameBytes], pendingGame.fileName, { type: 'application/zip' });
+          const loaded = await handleDiskSelected({
+            target: { files: [file], dataset: {}, value: '' },
+          });
+          if (!loaded || cancelled) return;
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+          return;
+        }
+
+        if (pendingGame?.id === localGameId && pendingGame.source === 'vip-pcengine-nointro') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) throw new Error('VIP access is required for the PC Engine archive library.');
+
+          let gameBytes = await takePreparedVipPcengineFile(pendingGame.fileName);
+          if (!gameBytes) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/auth/vip/pcengine/files/${encodeURIComponent(pendingGame.fileName)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+            }
+            gameBytes = new Uint8Array(await response.arrayBuffer());
+          }
+          if (cancelled) return;
+          const file = new File([gameBytes], pendingGame.fileName, { type: 'application/x-7z-compressed' });
           const loaded = await handleDiskSelected({
             target: { files: [file], dataset: {}, value: '' },
           });
