@@ -732,7 +732,12 @@ class EmulatorJS {
 
             // Download the core
             console.log("[EJS Core] Downloading core:", filename);
-            const corePath = "cores/" + filename;
+            // The cache previously used only the core filename as its key. That meant
+            // replacing a broken core on the server could leave browsers running the
+            // old binary from IndexedDB for days (a hard refresh does not clear it).
+            // Tie the URL/cache identity to the report's build timestamp instead.
+            const coreVersion = encodeURIComponent(String(rep.buildStart));
+            const corePath = "cores/" + filename + "?v=" + coreVersion;
             let res = await this.downloadFile(corePath, this.downloadType.core.name, (progress) => {
                 this.textElem.innerText = this.localization("Download Game Core") + progress;
             }, false, { responseType: "arraybuffer", method: "GET" }, true, this.downloadType.core.dontCache);
