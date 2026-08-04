@@ -14,6 +14,7 @@ from app.api.routes.vip_amiga import router as vip_amiga_router
 from app.api.routes.vip_amstrad import router as vip_amstrad_router
 from app.api.routes.vip_c64 import router as vip_c64_router
 from app.api.routes.vip_mame import router as vip_mame_router
+from app.api.routes.vip_mastersystem import router as vip_mastersystem_router
 from app.api.routes.vip_megadrive import router as vip_megadrive_router
 from app.api.routes.vip_pcengine import router as vip_pcengine_router
 from app.api.routes.vip_spectrum import router as vip_spectrum_router
@@ -53,6 +54,7 @@ app.include_router(social_router)
 app.include_router(tournaments_router)
 app.include_router(tournaments_router, prefix="/auth")
 app.include_router(vip_mame_router)
+app.include_router(vip_mastersystem_router)
 app.include_router(vip_c64_router)
 app.include_router(vip_amiga_router)
 app.include_router(vip_amstrad_router)

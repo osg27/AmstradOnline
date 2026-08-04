@@ -12,11 +12,13 @@ import { scanFiles as scanLocalReleaseFiles } from '../features/localLibrary/cor
 import { groupGames as groupLocalReleaseFiles } from '../features/localLibrary/core/group';
 import { resolveRelease } from '../features/localLibrary/storage/preferredReleaseStorage';
 import {
+  extractPrepared7zFile,
   takePreparedTournamentMameFile,
   takePreparedVipAmigaFile,
   takePreparedVipAmstradFile,
   takePreparedVipC64File,
   takePreparedVipMameFile,
+  takePreparedVipMastersystemFile,
   takePreparedVipMegadriveFile,
   takePreparedVipPcengineFile,
   takePreparedVipSpectrumFile,
@@ -5901,6 +5903,38 @@ export default function RoomPage() {
           }
           if (cancelled) return;
           const file = new File([gameBytes], pendingGame.fileName, { type: 'application/x-7z-compressed' });
+          const loaded = await handleDiskSelected({
+            target: { files: [file], dataset: {}, value: '' },
+          });
+          if (!loaded || cancelled) return;
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+          return;
+        }
+
+        if (pendingGame?.id === localGameId && pendingGame.source === 'vip-mastersystem-nointro') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) throw new Error('VIP access is required for the Master System archive library.');
+
+          let archiveBytes = await takePreparedVipMastersystemFile(pendingGame.fileName);
+          if (!archiveBytes) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/auth/vip/mastersystem/files/${encodeURIComponent(pendingGame.fileName)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+            }
+            archiveBytes = new Uint8Array(await response.arrayBuffer());
+          }
+          if (cancelled) return;
+          setStatus('Extracting Master System ROM');
+          const extracted = await extractPrepared7zFile(archiveBytes, ['.sms']);
+          const file = new File([extracted.bytes], extracted.fileName, { type: 'application/octet-stream' });
           const loaded = await handleDiskSelected({
             target: { files: [file], dataset: {}, value: '' },
           });

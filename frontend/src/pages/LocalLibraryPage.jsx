@@ -24,7 +24,7 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
-import { prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMegadriveFile, prepareVipPcengineFile, prepareVipSpectrumFile } from '../vipMameCache';
+import { prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMastersystemFile, prepareVipMegadriveFile, prepareVipPcengineFile, prepareVipSpectrumFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
@@ -1366,7 +1366,8 @@ function variantPreferenceScore(game) {
     (game.source === 'vip-amstrad-ghostware'
       || game.source === 'vip-spectrum-z80'
       || game.source === 'vip-megadrive-ghostware'
-      || game.source === 'vip-pcengine-nointro')
+      || game.source === 'vip-pcengine-nointro'
+      || game.source === 'vip-mastersystem-nointro')
     && Number.isFinite(game.sorterScore)
   ) {
     score -= game.sorterScore * 10;
@@ -1542,6 +1543,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           && game.source !== 'vip-spectrum-z80'
           && game.source !== 'vip-megadrive-ghostware'
           && game.source !== 'vip-pcengine-nointro'
+          && game.source !== 'vip-mastersystem-nointro'
         ));
         const savedVipMameGames = savedGames.filter((game) => game.source === 'internet-archive-mame');
         const savedVipC64Games = savedGames.filter((game) => game.source === 'vip-c64-oneload');
@@ -1550,6 +1552,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const savedVipSpectrumGames = savedGames.filter((game) => game.source === 'vip-spectrum-z80');
         const savedVipMegadriveGames = savedGames.filter((game) => game.source === 'vip-megadrive-ghostware');
         const savedVipPcengineGames = savedGames.filter((game) => game.source === 'vip-pcengine-nointro');
+        const savedVipMastersystemGames = savedGames.filter((game) => game.source === 'vip-mastersystem-nointro');
         const hasCurrentVipAmigaCache = savedVipAmigaGames.some((game) => (
           game.fileName?.toLowerCase().endsWith('.zip')
         ));
@@ -1560,13 +1563,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           && savedVipSpectrumGames.length > 0
           && savedVipMegadriveGames.length > 0
           && savedVipPcengineGames.length > 0
+          && savedVipMastersystemGames.length > 0
           && hasCurrentVipAmigaCache;
         // IndexedDB is the source of truth for the local shelf. Render it immediately;
         // remote box-art reconciliation must never hold up the game count or navigation.
         setFolders(savedFolders);
         setGames(isVip ? savedGames : localGames);
         setStatus(isVip && hasCompleteVipCache
-          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`
+          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMastersystemGames.length} Master System, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`
           : localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
         let localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         if (forceAmigaBoxArtRepair) {
@@ -1585,6 +1589,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ...savedVipSpectrumGames,
             ...savedVipMegadriveGames,
             ...savedVipPcengineGames,
+            ...savedVipMastersystemGames,
           ]);
         }
         if (!isVip) setGames(localGamesWithArtwork);
@@ -1606,19 +1611,21 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 ...savedVipSpectrumGames,
                 ...savedVipMegadriveGames,
                 ...savedVipPcengineGames,
+                ...savedVipMastersystemGames,
                 ...currentVipAmigaGames,
               ]);
             }
-            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmstradGames, ...savedVipSpectrumGames, ...savedVipMegadriveGames, ...savedVipPcengineGames, ...currentVipAmigaGames]);
-            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`);
+            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmstradGames, ...savedVipSpectrumGames, ...savedVipMastersystemGames, ...savedVipMegadriveGames, ...savedVipPcengineGames, ...currentVipAmigaGames]);
+            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMastersystemGames.length} Master System, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`);
           } else {
           setStatus('Loading VIP game libraries for the first time...');
-          const [catalog, c64Catalog, amigaCatalog, amstradCatalog, spectrumCatalog, megadriveCatalog, pcengineCatalog] = await Promise.all([
+          const [catalog, c64Catalog, amigaCatalog, amstradCatalog, spectrumCatalog, mastersystemCatalog, megadriveCatalog, pcengineCatalog] = await Promise.all([
             apiFetch('/auth/vip/mame/catalog').catch(() => ({ roms: [], samples: [] })),
             apiFetch('/auth/vip/c64/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/amiga/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/amstrad/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/spectrum/catalog').catch(() => ({ games: [] })),
+            apiFetch('/auth/vip/mastersystem/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/megadrive/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/pcengine/catalog').catch(() => ({ games: [] })),
           ]);
@@ -1778,6 +1785,44 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localSpectrumTitles.has(game.title.toLowerCase()));
           const cachedSpectrumGames = await restoreCachedBoxArt(spectrumGames);
           const spectrumGamesWithArtwork = await applyIndexedBoxArt(cachedSpectrumGames, 'spectrum');
+          const localMastersystemTitles = new Set(
+            localGamesWithArtwork
+              .filter((game) => game.system === 'mastersystem')
+              .map((game) => canonicalLibraryTitle(game).toLowerCase()),
+          );
+          const mastersystemSortedFiles = (Array.isArray(mastersystemCatalog.games) ? mastersystemCatalog.games : [])
+            .filter((entry) => entry?.file_name)
+            .map((entry) => {
+              const fileName = entry.file_name;
+              return {
+                id: `vip-mastersystem-file:${fileName}`,
+                name: fileName,
+                path: fileName,
+                extension: '7z',
+                size: Number(entry.bytes) || 0,
+                platform: 'mastersystem',
+                ...normaliseFilename(fileName),
+              };
+            });
+          const mastersystemGames = groupReleaseFiles(mastersystemSortedFiles)
+            .flatMap((sortedGame) => sortedGame.releases.map((release) => {
+              const primary = release.media[0];
+              return {
+                id: `vip-mastersystem:${release.id}:${primary.name}`,
+                title: sortedGame.title,
+                fileName: primary.name,
+                path: `VIP Master System No-Intro/${primary.name}`,
+                size: Number(primary.size) || 0,
+                system: 'mastersystem',
+                roomSystem: 'mastersystem',
+                source: 'vip-mastersystem-nointro',
+                sorterScore: release.score,
+                sorterWarnings: release.warnings,
+              };
+            }))
+            .filter((game) => !localMastersystemTitles.has(game.title.toLowerCase()));
+          const cachedMastersystemGames = await restoreCachedBoxArt(mastersystemGames);
+          const mastersystemGamesWithArtwork = await applyIndexedBoxArt(cachedMastersystemGames, 'mastersystem');
           const localMegadriveTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'megadrive')
@@ -1860,13 +1905,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ...c64GamesWithArtwork,
             ...amstradGamesWithArtwork,
             ...spectrumGamesWithArtwork,
+            ...mastersystemGamesWithArtwork,
             ...megadriveGamesWithArtwork,
             ...pcengineGamesWithArtwork,
             ...amigaGamesWithArtwork,
           ];
           setGames(allGames);
           await saveLocalLibraryGames(allGames);
-          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64, ${amstradGames.length} Amstrad, ${spectrumGames.length} ZX Spectrum, ${megadriveGames.length} Mega Drive, ${pcengineGames.length} PC Engine and ${amigaGames.length} Amiga files.`);
+          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64, ${amstradGames.length} Amstrad, ${spectrumGames.length} ZX Spectrum, ${mastersystemGames.length} Master System, ${megadriveGames.length} Mega Drive, ${pcengineGames.length} PC Engine and ${amigaGames.length} Amiga files.`);
           }
         } else {
           setGames(localGamesWithArtwork);
@@ -2536,6 +2582,29 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           total: game.size || 1,
           percent: 100,
           attempt: 1,
+        });
+      }
+
+      if (game.source === 'vip-mastersystem-nointro') {
+        setVipPreparation({
+          badge: 'VIP Master System', title: game.title, fileName: game.fileName,
+          label: 'Downloading sorted Master System release', loaded: 0,
+          total: game.size || 0, percent: 0, attempt: 1,
+        });
+        await prepareVipMastersystemFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+          const expectedTotal = total || game.size || 0;
+          setVipPreparation({
+            badge: 'VIP Master System', title: game.title, fileName: game.fileName,
+            label: retrying ? 'Retrying Master System download...' : 'Downloading sorted Master System release',
+            loaded, total: expectedTotal,
+            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+            attempt,
+          });
+        });
+        setVipPreparation({
+          badge: 'VIP Master System', title: game.title, fileName: game.fileName,
+          label: 'Master System release ready — opening room', loaded: game.size || 1,
+          total: game.size || 1, percent: 100, attempt: 1,
         });
       }
 
