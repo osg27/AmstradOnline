@@ -2016,6 +2016,23 @@ export default function RoomPage() {
           }
         }
 
+        if (!storedKickstart && isX68000 && hasVipAccess) {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_BASE_URL}/auth/vip/amiga/x68000-firmware`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (!response.ok) {
+            const body = await response.json().catch(() => null);
+            throw new Error(body?.detail || 'VIP X68000 firmware could not be downloaded');
+          }
+          storedKickstart = {
+            fileName: 'x68000-firmware.zip',
+            bytes: new Uint8Array(await response.arrayBuffer()),
+          };
+          savedSystemMediaRef.current.set(kickstartStorageKey, storedKickstart);
+          await saveStoredKickstart(kickstartStorageKey, storedKickstart.fileName, storedKickstart.bytes);
+        }
+
         if (cancelled || !storedKickstart) return;
 
         const payload = isX68000
@@ -2068,7 +2085,7 @@ export default function RoomPage() {
       window.clearTimeout(timer);
       timers.forEach((retryTimer) => window.clearTimeout(retryTimer));
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, isAtariSt, isDiscConsole, isHost, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
+  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAtariSt, isDiscConsole, isHost, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;

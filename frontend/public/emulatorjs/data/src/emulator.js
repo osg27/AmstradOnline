@@ -761,9 +761,8 @@ class EmulatorJS {
     initGameCore(js, wasm, thread) {
         let script = this.createElement("script");
         const runtimeSource = new Blob([
-            "(typeof window !== 'undefined' ? window : globalThis).EJS_Runtime = (function () {\n",
             js,
-            "\nreturn typeof EJS_Runtime === 'function' ? EJS_Runtime : null;\n}());",
+            "\n;(typeof window !== 'undefined' ? window : globalThis).EJS_Runtime = EJS_Runtime;",
         ], { type: "application/javascript" });
         const runtimeUrl = URL.createObjectURL(runtimeSource);
         script.src = runtimeUrl;

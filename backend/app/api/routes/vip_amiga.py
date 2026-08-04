@@ -1,12 +1,15 @@
 import re
 import time
+from io import BytesIO
+from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 import xml.etree.ElementTree as ET
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from app.api.routes.auth import get_current_user, is_vip_user
 from app.models.user import User
@@ -24,6 +27,11 @@ FIRMWARE_ARCHIVE_ROOT = "https://archive.org/download/commodore-amiga-firmware"
 KICKSTART_ARCHIVES = {
     "a500": "Kickstart v1.3 r34.005 (1987-12)(Commodore)(A500-A1000-A2000-CDTV)[!].zip",
     "a1200": "Kickstart v3.1 r40.068 (1993-12)(Commodore)(A1200)[!].zip",
+}
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+X68000_FIRMWARE_FILES = {
+    "keropi/iplrom.dat": REPOSITORY_ROOT / "iplrom.dat",
+    "keropi/cgrom.dat": REPOSITORY_ROOT / "cgrom.dat",
 }
 
 
@@ -104,6 +112,27 @@ def get_kickstart_archive(model: str, _user: User = Depends(require_vip)):
     if response.headers.get("Content-Length"):
         headers["Content-Length"] = response.headers["Content-Length"]
     return StreamingResponse(stream_archive_response(response), media_type="application/zip", headers=headers)
+
+
+@router.get("/x68000-firmware")
+def get_x68000_firmware(_user: User = Depends(require_vip)):
+    missing = [path.name for path in X68000_FIRMWARE_FILES.values() if not path.is_file()]
+    if missing:
+        raise HTTPException(status_code=503, detail=f"X68000 firmware is unavailable: {', '.join(missing)}")
+
+    archive = BytesIO()
+    with ZipFile(archive, "w", compression=ZIP_DEFLATED) as bundle:
+        for archive_name, source_path in X68000_FIRMWARE_FILES.items():
+            bundle.writestr(archive_name, source_path.read_bytes())
+
+    return Response(
+        content=archive.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": 'attachment; filename="x68000-firmware.zip"',
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
 
 
 @router.get("/files/{filename}")
