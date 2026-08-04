@@ -77,10 +77,6 @@ export default function TournamentsPage() {
     ]).then(([myTournaments, availableGames]) => {
       setMine(Array.isArray(myTournaments) ? myTournaments : []);
       setGames(Array.isArray(availableGames) ? availableGames : []);
-      if (!romName && availableGames?.[0]?.rom_name) {
-        setRomName(availableGames[0].rom_name);
-        setGameQuery(gameOptionLabel(availableGames[0]));
-      }
       if (isVip && !availableGames?.length) setStatus('No score-supported Archive MAME games were found.');
     }).catch((error) => setStatus(`Could not load tournament games: ${error.message}`))
       .finally(() => setGamesLoading(false));
@@ -150,6 +146,8 @@ export default function TournamentsPage() {
       setTournament(created);
       setMine((current) => [created, ...current]);
       setName('');
+      setRomName('');
+      setGameQuery('');
       setCreateOpen(false);
       setStatus(`Tournament created. Share code ${created.code}.`);
     } catch (error) {
