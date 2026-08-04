@@ -24,6 +24,37 @@
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
   let statusText = `${systemName} ready`;
+  let traceSequence = 0;
+
+  function px68kTrace(stage, detail = '') {
+    if (!isX68000) return;
+    const entry = {
+      sequence: ++traceSequence,
+      stage,
+      detail: String(detail || ''),
+      elapsedMs: Math.round(performance.now()),
+      timestamp: new Date().toISOString(),
+    };
+    console.log(`[PX68k trace ${entry.sequence}] ${stage}`, entry.detail);
+    try { localStorage.setItem('osg-px68k-last-trace', JSON.stringify(entry)); } catch {}
+    try { window.parent.postMessage({ type: 'x68000_trace', ...entry }, window.location.origin); } catch {}
+  }
+
+  window.EJS_px68kTrace = px68kTrace;
+  if (isX68000) {
+    try {
+      const previous = localStorage.getItem('osg-px68k-last-trace');
+      if (previous) {
+        window.parent.postMessage({
+          type: 'x68000_trace',
+          sequence: 0,
+          stage: 'previous-session-last-stage',
+          detail: previous,
+        }, window.location.origin);
+      }
+    } catch {}
+  }
+  px68kTrace('launcher-initialised', `launcher=2026-08-05-3 href=${window.location.href}`);
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -359,9 +390,11 @@
 
     window.EJS_ready = () => {
       console.log(`Old Style Gaming ${systemName}: EmulatorJS ready`);
+      px68kTrace('emulatorjs-ready');
     };
     window.EJS_onGameStart = () => {
       console.log(`Old Style Gaming ${systemName}: game started`);
+      px68kTrace('emulatorjs-start-event');
       romLoadInProgress = false;
       statusText = '';
     };
@@ -371,7 +404,10 @@
   }
 
   async function loadCurrentRom() {
-    if (romLoadInProgress) return;
+    if (romLoadInProgress) {
+      px68kTrace('rom-load-ignored', 'another load is already in progress');
+      return;
+    }
     if (!currentRom) {
       drawStatus(`${systemName} ready`, `Load a ${systemName} game from the room`);
       return;
@@ -381,11 +417,13 @@
       return;
     }
     romLoadInProgress = true;
+    px68kTrace('rom-load-begin', `${currentRom.fileName} bytes=${currentRom.bytes?.byteLength || 0} files=${currentRom.files?.length || 0}`);
 
     ensureAudio()?.resume?.().catch(() => {});
     drawStatus(`Checking ${systemName} runtime`, currentRom.fileName);
     try {
       await preflightEmulatorJs();
+      px68kTrace('preflight-complete');
     } catch (error) {
       romLoadInProgress = false;
       drawStatus(`${systemName} runtime missing`, error.message);
@@ -395,6 +433,7 @@
     clearGameContainer();
     if (firmwareUrl) URL.revokeObjectURL(firmwareUrl);
     firmwareUrl = firmware ? new File([firmware.bytes], firmware.fileName, { type: 'application/zip' }) : null;
+    px68kTrace('firmware-file-created', `${firmware?.fileName || 'none'} bytes=${firmware?.bytes?.byteLength || 0}`);
     // A named File lets EmulatorJS identify .zip/.7z content, extract it and pass
     // the inner .pce/.sgx ROM to Beetle PCE. A blob URL loses the archive name and
     // causes the core to start with the blob UUID as empty/unsupported content.
@@ -416,6 +455,7 @@
         : 'application/octet-stream',
     });
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
+    px68kTrace('emulator-configured', `primary=${primaryGame.fileName} bytes=${primaryGame.bytes?.byteLength || 0} external=${Object.keys(externalFiles).length}`);
     drawStatus(`Loading ${systemName}`, currentRom.fileName);
 
     loaderScript = document.createElement('script');
@@ -426,6 +466,7 @@
       drawStatus(`${systemName} failed to load`, 'Could not load EmulatorJS');
     };
     document.body.appendChild(loaderScript);
+    px68kTrace('loader-script-appended', loaderScript.src);
   }
 
   async function preflightEmulatorJs() {
@@ -496,6 +537,7 @@
       if (nextFirmwareKey === firmwareKey) return;
       firmwareKey = nextFirmwareKey;
       firmware = { fileName: message.fileName || 'x68000-firmware.zip', bytes };
+      px68kTrace('firmware-received', nextFirmwareKey);
       if (currentRom) loadCurrentRom();
       return;
     }
@@ -506,6 +548,7 @@
         bytes: new Uint8Array(message.bytes || []),
         files: (message.files || []).map((file) => ({ fileName: file.fileName, bytes: new Uint8Array(file.bytes || []) })),
       };
+      px68kTrace('rom-received', `${currentRom.fileName} bytes=${currentRom.bytes.byteLength} files=${currentRom.files.length}`);
       loadCurrentRom();
       return;
     }

@@ -1870,6 +1870,21 @@ export default function RoomPage() {
     };
   }, [addLog, forwardInputToEmulator]);
 
+  useEffect(() => {
+    if (!isX68000) return undefined;
+
+    function handleX68000Trace(event) {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== emulatorFrameRef.current?.contentWindow) return;
+      const message = event.data || {};
+      if (message.type !== 'x68000_trace') return;
+      addLog(`PX68k #${message.sequence} ${message.stage}${message.detail ? ` — ${message.detail}` : ''}`);
+    }
+
+    window.addEventListener('message', handleX68000Trace);
+    return () => window.removeEventListener('message', handleX68000Trace);
+  }, [addLog, isX68000]);
+
   const handleHostDataMessage = useCallback((rawMessage) => {
     try {
       const parsed = JSON.parse(rawMessage);

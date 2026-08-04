@@ -759,6 +759,7 @@ class EmulatorJS {
                 console.warn("File was not found locally, but was found on the emulatorjs cdn.\nIt is recommended to download the stable release from here: https://cdn.emulatorjs.org/releases/");
             }
 
+            window.EJS_px68kTrace?.("core-package-ready", `url=${corePath} bytes=${res.data?.files?.[0]?.bytes?.byteLength || 0}`);
             // Core download and caching handled by EJS_Download
             gotCore(res.data);
         });
@@ -1148,6 +1149,7 @@ class EmulatorJS {
         })();
     }
     initModule(wasmData, threadData) {
+        window.EJS_px68kTrace?.("runtime-init-enter", `wasm=${wasmData?.byteLength || 0} thread=${threadData?.byteLength || 0}`);
         if (typeof window.EJS_Runtime !== "function") {
             console.warn("EJS_Runtime is not defined!");
             this.startGameError(this.localization("Error loading EmulatorJS runtime"));
@@ -1198,6 +1200,7 @@ class EmulatorJS {
                 return this.showInputPrompt(options);
             }
         }).then(module => {
+            window.EJS_px68kTrace?.("runtime-initialised");
             this.Module = module;
             this.downloadFiles();
         }).catch(e => {
@@ -1207,6 +1210,7 @@ class EmulatorJS {
     }
     startGame() {
         try {
+            window.EJS_px68kTrace?.("start-game-enter", `core=${this.getCore()} file=${this.fileName || "none"}`);
             if (this.getCore() === "px68k") {
                 const requiredFirmware = ["/keropi/iplrom.dat", "/keropi/cgrom.dat"];
                 const missingFirmware = requiredFirmware.filter((path) => !this.Module.FS.analyzePath(path).exists);
@@ -1216,7 +1220,11 @@ class EmulatorJS {
                     this.startGameError(message);
                     throw new Error(message);
                 }
+                const firmwareSizes = requiredFirmware.map((path) => `${path}=${this.Module.FS.stat(path).size}`).join(" ");
+                const gamePath = `/${this.fileName}`;
+                const gameSize = this.Module.FS.analyzePath(gamePath).exists ? this.Module.FS.stat(gamePath).size : -1;
                 console.log("[PX68k] Firmware mounted and game selected:", this.fileName);
+                window.EJS_px68kTrace?.("filesystem-validated", `${firmwareSizes} ${gamePath}=${gameSize}`);
             }
             const args = [];
             if (this.debug) args.push("-v");
@@ -1224,13 +1232,16 @@ class EmulatorJS {
                 args.push("/" + this.fileName);
             }
             if (this.debug) console.log(args);
+            window.EJS_px68kTrace?.("call-main-enter", JSON.stringify(args));
             this.Module.callMain(args);
+            window.EJS_px68kTrace?.("call-main-returned");
             if (typeof this.config.softLoad === "number" && this.config.softLoad > 0) {
                 this.resetTimeout = setTimeout(() => {
                     this.gameManager.restart();
                 }, this.config.softLoad * 1000);
             }
             this.Module.resumeMainLoop();
+            window.EJS_px68kTrace?.("main-loop-resumed");
             this.checkSupportedOpts();
             this.setupDisksMenu();
             // hide the disks menu if the disk count is not greater than 1
