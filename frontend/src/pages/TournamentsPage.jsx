@@ -24,6 +24,10 @@ function gameOptionLabel(game) {
   return `${game.display_name} — MAME Arcade [${game.rom_name}]`;
 }
 
+function tournamentMedal(rank) {
+  return ({ 1: '🥇', 2: '🥈', 3: '🥉' })[rank] || '';
+}
+
 export default function TournamentsPage() {
   const { code: routeCode } = useParams();
   const navigate = useNavigate();
@@ -257,7 +261,14 @@ export default function TournamentsPage() {
                   <ol>
                     {leaderboard.map((entry) => (
                       <li key={entry.username}>
-                        <strong>#{entry.rank} {entry.username}</strong>
+                        <strong>
+                          {tournamentMedal(entry.rank) ? (
+                            <span className="tournament-medal" role="img" aria-label={`${entry.rank === 1 ? 'Gold' : entry.rank === 2 ? 'Silver' : 'Bronze'} medal`}>
+                              {tournamentMedal(entry.rank)}
+                            </span>
+                          ) : `#${entry.rank}`}
+                          {' '}{entry.username}
+                        </strong>
                         <span>{Number(entry.score).toLocaleString()}</span>
                       </li>
                     ))}

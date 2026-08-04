@@ -4902,7 +4902,14 @@ export default function RoomPage() {
           <div className="mame-score-list">
             {mameLeaderboard.slice(0, 10).map((entry) => (
               <div key={`${entry.rank}-${entry.username}-${entry.score}`}>
-                <strong>{entry.rank}</strong>
+                <strong
+                  className={tournamentCode && entry.rank <= 3 ? 'tournament-rank-medal' : ''}
+                  aria-label={tournamentCode && entry.rank <= 3 ? `${entry.rank === 1 ? 'Gold' : entry.rank === 2 ? 'Silver' : 'Bronze'} medal` : undefined}
+                >
+                  {tournamentCode && entry.rank <= 3
+                    ? ({ 1: '🥇', 2: '🥈', 3: '🥉' })[entry.rank]
+                    : entry.rank}
+                </strong>
                 <span>{entry.username}</span>
                 <small>{entry.initials || '---'}</small>
                 <b>{entry.score.toLocaleString()}</b>

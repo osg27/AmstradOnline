@@ -4559,6 +4559,8 @@ ul {
 .tournament-scoreboard ol { margin: 0; padding: 0; list-style: none; }
 .tournament-scoreboard li { padding: 10px 0; border-top: 1px solid #2e3935; }
 .tournament-scoreboard li span { margin-left: auto; color: #ffd25a; font-size: 1.15rem; }
+.tournament-medal { display: inline-block; min-width: 1.5em; font-size: 1.25rem; line-height: 1; vertical-align: -0.12em; }
+.mame-score-list .tournament-rank-medal { font-size: 1.25rem; line-height: 1; }
 .tournament-list a { padding: 12px 0; border-top: 1px solid #2e3935; color: inherit; text-decoration: none; }
 .tournament-list a span { margin-left: auto; }
 .tournament-list a small { color: #9eaa9f; }
