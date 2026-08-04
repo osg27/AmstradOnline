@@ -4,6 +4,7 @@
   "buildEnd": "2026-08-04T23:00:00+00:00",
   "options": {
     "defaultWebGL2": true,
-    "supportsMouse": true
+    "supportsMouse": true,
+    "useKeyboard": true
   }
 }

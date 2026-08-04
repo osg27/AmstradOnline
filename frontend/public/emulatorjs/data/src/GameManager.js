@@ -175,7 +175,7 @@ class EJS_GameManager {
             (this.EJS.rewindEnabled ? "rewind_granularity = 6\n" : "") +
             `savefile_directory = "${this.getSaveDirectory()}"\n`;
 
-        if (this.EJS.getCore() === "flycast") {
+        if (this.EJS.getCore() === "flycast" || this.EJS.getCore() === "px68k") {
             cfg += "system_directory = \"/\"\n";
         }
 

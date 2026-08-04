@@ -1202,6 +1202,17 @@ class EmulatorJS {
     }
     startGame() {
         try {
+            if (this.getCore() === "px68k") {
+                const requiredFirmware = ["/keropi/iplrom.dat", "/keropi/cgrom.dat"];
+                const missingFirmware = requiredFirmware.filter((path) => !this.Module.FS.analyzePath(path).exists);
+                if (missingFirmware.length) {
+                    const message = `PX68k firmware was not mounted at ${missingFirmware.join(", ")}`;
+                    console.error(message);
+                    this.startGameError(message);
+                    throw new Error(message);
+                }
+                console.log("[PX68k] Firmware mounted and game selected:", this.fileName);
+            }
             const args = [];
             if (this.debug) args.push("-v");
             if (this.fileName) {
