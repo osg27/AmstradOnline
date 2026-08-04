@@ -8,6 +8,8 @@
 
   let currentRom = null;
   let firmware = null;
+  let firmwareKey = '';
+  let romLoadInProgress = false;
   let firmwareUrl = null;
   let externalGameUrls = [];
   let loaderScript = null;
@@ -360,6 +362,7 @@
     };
     window.EJS_onGameStart = () => {
       console.log(`Old Style Gaming ${systemName}: game started`);
+      romLoadInProgress = false;
       statusText = '';
     };
     window.EJS_onExit = () => {
@@ -368,6 +371,7 @@
   }
 
   async function loadCurrentRom() {
+    if (romLoadInProgress) return;
     if (!currentRom) {
       drawStatus(`${systemName} ready`, `Load a ${systemName} game from the room`);
       return;
@@ -376,12 +380,14 @@
       drawStatus('X68000 firmware required', 'Load iplrom.dat and cgrom.dat from the room controls');
       return;
     }
+    romLoadInProgress = true;
 
     ensureAudio()?.resume?.().catch(() => {});
     drawStatus(`Checking ${systemName} runtime`, currentRom.fileName);
     try {
       await preflightEmulatorJs();
     } catch (error) {
+      romLoadInProgress = false;
       drawStatus(`${systemName} runtime missing`, error.message);
       return;
     }
@@ -415,7 +421,10 @@
     loaderScript = document.createElement('script');
     loaderScript.src = `/emulatorjs/data/loader.js?v=${Date.now()}`;
     loaderScript.async = true;
-    loaderScript.onerror = () => drawStatus(`${systemName} failed to load`, 'Could not load EmulatorJS');
+    loaderScript.onerror = () => {
+      romLoadInProgress = false;
+      drawStatus(`${systemName} failed to load`, 'Could not load EmulatorJS');
+    };
     document.body.appendChild(loaderScript);
   }
 
@@ -482,7 +491,11 @@
     }
 
     if (message.type === 'x68000_firmware') {
-      firmware = { fileName: message.fileName || 'x68000-firmware.zip', bytes: new Uint8Array(message.bytes || []) };
+      const bytes = new Uint8Array(message.bytes || []);
+      const nextFirmwareKey = `${message.fileName || 'x68000-firmware.zip'}:${bytes.byteLength}`;
+      if (nextFirmwareKey === firmwareKey) return;
+      firmwareKey = nextFirmwareKey;
+      firmware = { fileName: message.fileName || 'x68000-firmware.zip', bytes };
       if (currentRom) loadCurrentRom();
       return;
     }
