@@ -48,6 +48,7 @@ export default function TournamentsPage() {
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [, setClock] = useState(0);
 
   const selectedGame = useMemo(
@@ -96,6 +97,15 @@ export default function TournamentsPage() {
   }, []);
 
   useEffect(() => {
+    if (!createOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape' && !busy) setCreateOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [createOpen, busy]);
+
+  useEffect(() => {
     if (!tournament?.joined) return undefined;
     const timer = window.setInterval(() => {
       Promise.all([
@@ -140,6 +150,7 @@ export default function TournamentsPage() {
       setTournament(created);
       setMine((current) => [created, ...current]);
       setName('');
+      setCreateOpen(false);
       setStatus(`Tournament created. Share code ${created.code}.`);
     } catch (error) {
       setStatus(error.message);
@@ -239,13 +250,18 @@ export default function TournamentsPage() {
 
       <main className="tournament-layout">
         <section className="panel tournament-hero">
-          <p className="eyebrow">MAME COMPETITION</p>
-          <h1>Tournaments</h1>
-          <p>Play as often as you like before time expires. Only your best verified score counts.</p>
-          <form className="tournament-join-form" onSubmit={join}>
-            <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Tournament code" maxLength={12} />
-            <button type="submit" disabled={busy || !joinCode.trim()}>Join tournament</button>
-          </form>
+          <div className="tournament-hero-copy">
+            <p className="eyebrow">MAME COMPETITION</p>
+            <h1>Tournaments</h1>
+            <p>Play as often as you like. Your best verified score before the clock expires is the one that counts.</p>
+          </div>
+          <div className="tournament-hero-actions">
+            <form className="tournament-join-form" onSubmit={join}>
+              <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Enter tournament code" maxLength={12} />
+              <button type="submit" disabled={busy || !joinCode.trim()}>Join</button>
+            </form>
+            {isVip ? <button type="button" onClick={() => setCreateOpen(true)}>Create tournament</button> : null}
+          </div>
           {status ? <p className="status-message">{status}</p> : null}
         </section>
 
@@ -299,11 +315,31 @@ export default function TournamentsPage() {
           </section>
         ) : null}
 
-        {isVip ? (
-          <section className="panel tournament-create">
-            <h2>Create a tournament</h2>
-            <p>VIPs and admins can create tournaments. Any registered player can enter with the code.</p>
-            <form onSubmit={create}>
+        <section className={`panel tournament-list${tournament ? '' : ' tournament-list-wide'}`}>
+          <div className="tournament-list-heading">
+            <div><p className="eyebrow">YOUR COMPETITIONS</p><h2>My tournaments</h2></div>
+            {isVip ? <button type="button" className="secondary" onClick={() => setCreateOpen(true)}>Create new</button> : null}
+          </div>
+          {mine.length ? <div className="tournament-list-grid">{mine.map((item) => (
+            <Link key={item.code} to={`/tournaments/${item.code}`}>
+              <span className={`tournament-state ${item.status}`}>{item.status}</span>
+              <strong>{item.name}</strong>
+              <span className="tournament-list-game">{item.display_name}</span>
+              <small>{item.code}</small>
+            </Link>
+          ))}</div> : <div className="tournament-empty"><strong>No tournaments yet</strong><p>Enter a code above to join one{isVip ? ', or create your own.' : '.'}</p></div>}
+        </section>
+      </main>
+
+      {isVip && createOpen ? (
+        <div className="tournament-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCreateOpen(false); }}>
+          <section className="tournament-modal" role="dialog" aria-modal="true" aria-labelledby="create-tournament-title">
+            <div className="tournament-modal-heading">
+              <div><p className="eyebrow">NEW COMPETITION</p><h2 id="create-tournament-title">Create a tournament</h2></div>
+              <button type="button" className="secondary tournament-modal-close" aria-label="Close" disabled={busy} onClick={() => setCreateOpen(false)}>×</button>
+            </div>
+            <p>Choose a game and time limit. Any registered player can enter using the tournament code.</p>
+            <form className="tournament-create-form" onSubmit={create}>
               <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Friday night high score" minLength={3} maxLength={120} required /></label>
               <label>
                 Game
@@ -328,20 +364,14 @@ export default function TournamentsPage() {
                 <small>{selectedGame ? `Selected system: MAME Arcade · ROM: ${selectedGame.rom_name}` : 'Choose a MAME Arcade game from the search results.'}</small>
               </label>
               <label>Duration<select value={durationHours} onChange={(event) => setDurationHours(Number(event.target.value))}><option value={1}>1 hour</option><option value={6}>6 hours</option><option value={12}>12 hours</option><option value={24}>24 hours</option><option value={72}>3 days</option><option value={168}>1 week</option></select></label>
-              <button type="submit" disabled={busy || !name.trim() || !selectedGame}>Create tournament</button>
+              <div className="tournament-modal-actions">
+                <button type="button" className="secondary" disabled={busy} onClick={() => setCreateOpen(false)}>Cancel</button>
+                <button type="submit" disabled={busy || !name.trim() || !selectedGame}>{busy ? 'Creating…' : 'Create tournament'}</button>
+              </div>
             </form>
           </section>
-        ) : null}
-
-        <section className="panel tournament-list">
-          <h2>My tournaments</h2>
-          {mine.length ? mine.map((item) => (
-            <Link key={item.code} to={`/tournaments/${item.code}`}>
-              <strong>{item.name}</strong><span>{item.display_name}</span><small>{item.status} · {item.code}</small>
-            </Link>
-          )) : <p>You have not joined a tournament yet.</p>}
-        </section>
-      </main>
+        </div>
+      ) : null}
     </div>
   );
 }
