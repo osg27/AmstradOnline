@@ -315,7 +315,10 @@
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
     window.EJS_core = isX68000 ? 'x68000' : 'pce';
-    window.EJS_biosUrl = isX68000 ? firmwareUrl : undefined;
+    window.EJS_biosUrl = undefined;
+    window.EJS_rawFiles = isX68000
+      ? Object.fromEntries((firmware?.files || []).map((file) => [`/${file.fileName}`, file.bytes]))
+      : undefined;
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
@@ -432,8 +435,8 @@
 
     clearGameContainer();
     if (firmwareUrl) URL.revokeObjectURL(firmwareUrl);
-    firmwareUrl = firmware ? new File([firmware.bytes], firmware.fileName, { type: 'application/zip' }) : null;
-    px68kTrace('firmware-file-created', `${firmware?.fileName || 'none'} bytes=${firmware?.bytes?.byteLength || 0}`);
+    firmwareUrl = null;
+    px68kTrace('firmware-raw-files-ready', `${firmware?.fileName || 'none'} files=${firmware?.files?.length || 0} bytes=${(firmware?.files || []).reduce((total, file) => total + file.bytes.byteLength, 0)}`);
     // A named File lets EmulatorJS identify .zip/.7z content, extract it and pass
     // the inner .pce/.sgx ROM to Beetle PCE. A blob URL loses the archive name and
     // causes the core to start with the blob UUID as empty/unsupported content.
@@ -532,11 +535,15 @@
     }
 
     if (message.type === 'x68000_firmware') {
-      const bytes = new Uint8Array(message.bytes || []);
-      const nextFirmwareKey = `${message.fileName || 'x68000-firmware.zip'}:${bytes.byteLength}`;
+      const files = (message.files || []).map((file) => ({
+        fileName: String(file.fileName || ''),
+        bytes: new Uint8Array(file.bytes || []),
+      })).filter((file) => file.fileName && file.bytes.byteLength);
+      const totalBytes = files.reduce((total, file) => total + file.bytes.byteLength, 0);
+      const nextFirmwareKey = `${message.fileName || 'x68000-firmware.zip'}:${files.length}:${totalBytes}`;
       if (nextFirmwareKey === firmwareKey) return;
       firmwareKey = nextFirmwareKey;
-      firmware = { fileName: message.fileName || 'x68000-firmware.zip', bytes };
+      firmware = { fileName: message.fileName || 'x68000-firmware.zip', files };
       px68kTrace('firmware-received', nextFirmwareKey);
       if (currentRom) loadCurrentRom();
       return;

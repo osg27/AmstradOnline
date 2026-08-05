@@ -61,6 +61,26 @@ const ROOM_SYSTEM_OPTIONS = [
   ['arcade', 'MAME Arcade'],
 ];
 
+function buildX68000FirmwarePayload(fileName, archiveBytes) {
+  const archive = unzipSync(new Uint8Array(archiveBytes));
+  const supportedNames = new Set(['iplrom.dat', 'cgrom.dat', 'iplrom30.dat', 'iplromco.dat', 'iplromxv.dat']);
+  const files = [];
+
+  Object.entries(archive).forEach(([name, bytes]) => {
+    const baseName = name.split(/[\\/]/).pop()?.toLowerCase();
+    if (baseName && supportedNames.has(baseName)) {
+      files.push({ fileName: `keropi/${baseName}`, bytes });
+    }
+  });
+
+  if (!files.some((file) => file.fileName === 'keropi/iplrom.dat')
+      || !files.some((file) => file.fileName === 'keropi/cgrom.dat')) {
+    throw new Error('X68000 firmware must contain iplrom.dat and cgrom.dat');
+  }
+
+  return { type: 'x68000_firmware', fileName, files };
+}
+
 function getSafeLibraryReturnPath(value) {
   if (!value) return '/library';
 
@@ -2051,7 +2071,7 @@ export default function RoomPage() {
         if (cancelled || !storedKickstart) return;
 
         const payload = isX68000
-          ? { type: 'x68000_firmware', fileName: storedKickstart.fileName, bytes: storedKickstart.bytes }
+          ? buildX68000FirmwarePayload(storedKickstart.fileName, storedKickstart.bytes)
           : isDiscConsole
           ? {
             type: isSaturn ? 'saturn_bios' : 'playstation_bios',
@@ -5167,7 +5187,7 @@ export default function RoomPage() {
       const fileName = 'x68000-firmware.zip';
       savedSystemMediaRef.current.set(X68000_FIRMWARE_KEY, { fileName, bytes });
       await saveStoredKickstart(X68000_FIRMWARE_KEY, fileName, bytes);
-      forwardInputToEmulator({ type: 'x68000_firmware', fileName, bytes });
+      forwardInputToEmulator(buildX68000FirmwarePayload(fileName, bytes));
       setX68000FirmwareName('IPL + CG ROM (saved locally)');
       setError('');
       setStatus('X68000 firmware loaded and saved in this browser');
