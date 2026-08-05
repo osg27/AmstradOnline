@@ -6,6 +6,7 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.feedback import router as feedback_router
 from app.api.routes.library_media import router as library_media_router
 from app.api.routes.mame import router as mame_router
+from app.api.routes.profile import router as profile_router
 from app.api.routes.rooms import router as rooms_router
 from app.api.routes.scores import router as scores_router
 from app.api.routes.social import router as social_router
@@ -49,6 +50,7 @@ app.include_router(feedback_router)
 app.include_router(library_media_router)
 app.include_router(mame_router)
 app.include_router(mame_router, prefix="/scores")
+app.include_router(profile_router)
 app.include_router(admin_router)
 app.include_router(scores_router)
 app.include_router(social_router)

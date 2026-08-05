@@ -16,6 +16,7 @@ class User(Base):
     email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
     role = Column(String(20), nullable=False, default="user", server_default="user")
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    avatar_id = Column(String(32), nullable=False, default="arcade-green", server_default="arcade-green")
 
 
 class AccountToken(Base):

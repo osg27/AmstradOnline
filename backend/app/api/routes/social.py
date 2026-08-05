@@ -38,6 +38,7 @@ def user_summary(user: User, now: datetime) -> dict:
     return {
         "id": user.id,
         "username": user.username,
+        "avatar_id": user.avatar_id,
         "is_online": is_online(user, now),
     }
 

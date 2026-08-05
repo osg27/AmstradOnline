@@ -49,6 +49,9 @@ def ensure_runtime_columns(engine):
         if "last_seen_at" not in user_columns:
             connection.execute(text(f"ALTER TABLE users ADD COLUMN last_seen_at {timestamp_type}"))
 
+        if "avatar_id" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN avatar_id VARCHAR(32) NOT NULL DEFAULT 'arcade-green'"))
+
         if "system" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN system VARCHAR(32) NOT NULL DEFAULT 'cpc'"))
 

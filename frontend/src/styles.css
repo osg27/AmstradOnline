@@ -250,7 +250,7 @@ input:focus {
   gap: 1rem;
 }
 
-.account-strip span {
+.account-strip > span {
   border: 1px solid rgba(122, 217, 155, 0.22);
   border-radius: 999px;
   color: #dfe6dd;
@@ -4646,4 +4646,116 @@ ul {
   .tournament-title-row, .tournament-scoreboard li { align-items: flex-start; flex-direction: column; }
   .tournament-modal { padding: 18px; }
   .tournament-modal-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
+
+/* Player profile and achievements */
+.player-avatar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 2px solid color-mix(in srgb, var(--avatar-main), white 18%);
+  border-radius: 26%;
+  background:
+    radial-gradient(circle at 35% 22%, color-mix(in srgb, var(--avatar-main), white 22%), transparent 25%),
+    linear-gradient(145deg, var(--avatar-shadow), #0a0d0c 82%);
+  box-shadow: inset 0 0 0 3px rgba(0,0,0,.3), 0 7px 18px rgba(0,0,0,.34);
+}
+.player-avatar::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(0,0,0,.12) 3px 4px); pointer-events: none; }
+.player-avatar > span { position: relative; z-index: 1; padding: 0; border: 0; background: none; line-height: 1; filter: drop-shadow(0 3px 1px rgba(0,0,0,.45)); }
+.player-avatar-small { width: 46px; height: 46px; font-size: 1.65rem; }
+.player-avatar-medium { width: 70px; height: 70px; font-size: 2.4rem; }
+.player-avatar-hero { width: clamp(112px, 14vw, 156px); height: clamp(112px, 14vw, 156px); font-size: clamp(4rem, 8vw, 6rem); border-width: 3px; }
+
+.player-bubble {
+  display: inline-flex;
+  gap: .7rem;
+  padding: .35rem .55rem .35rem .35rem;
+  border-radius: 999px;
+  border-color: rgba(122,217,155,.38);
+  background: linear-gradient(120deg, #202825, #151817);
+  text-align: left;
+}
+.player-bubble:hover { border-color: var(--green-bright); transform: translateY(-1px); }
+.account-strip .player-bubble > span:not(.player-avatar) { display: grid; gap: .05rem; min-width: 86px; padding: 0; border: 0; border-radius: 0; background: none; }
+.account-strip .player-bubble .player-avatar { padding: 0; border-radius: 26%; }
+.player-bubble small { color: #7ad99b; font-size: .59rem; letter-spacing: .12em; }
+.player-bubble strong { color: var(--text); font-size: .88rem; }
+.player-bubble i { color: var(--muted); font-size: .72rem; }
+
+.profile-page { align-items: flex-start; display: block; padding: clamp(12px, 2vw, 28px); }
+.profile-topbar { width: min(1380px, 100%); margin: 0 auto 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.profile-topbar .brand-mark img { width: 62px; height: 62px; }
+.profile-topbar > div { display: flex; gap: 10px; }
+.profile-shell { width: min(1380px, 100%); margin: auto; display: grid; gap: 16px; }
+.profile-loading { width: min(1380px, 100%); margin: auto; }
+.profile-identity-card {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(20px, 4vw, 48px);
+  overflow: hidden;
+  min-height: 220px;
+  padding: clamp(24px, 4vw, 52px);
+  border: 1px solid #46695c;
+  border-radius: 14px;
+  background: radial-gradient(circle at 15% 20%, rgba(122,217,155,.2), transparent 28%), linear-gradient(120deg, #18241f, #101412 70%);
+  box-shadow: 0 25px 75px rgba(0,0,0,.35), inset 0 1px rgba(255,255,255,.07);
+}
+.profile-scanlines { position: absolute; z-index: -1; inset: 0; opacity: .26; background: repeating-linear-gradient(0deg, transparent 0 5px, rgba(0,0,0,.2) 5px 6px), repeating-linear-gradient(90deg, transparent 0 79px, rgba(122,217,155,.08) 79px 80px); }
+.profile-identity-copy > span, .profile-section-heading p { color: #7ad99b; font-size: .72rem; font-weight: 800; letter-spacing: .16em; }
+.profile-identity-copy h1 { margin: .22rem 0 .35rem; font-size: clamp(2.4rem, 6vw, 5rem); line-height: .95; text-shadow: 0 5px #0a0d0b; }
+.profile-identity-copy p { margin: 0; color: var(--muted); }
+.profile-level-chip { display: grid; min-width: 130px; padding: 18px; border: 1px solid rgba(243,198,107,.45); border-radius: 10px; background: rgba(0,0,0,.24); text-align: center; }
+.profile-level-chip small { color: var(--gold); letter-spacing: .1em; }
+.profile-level-chip strong { color: #fff3ce; font-size: 2rem; }
+.profile-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.profile-stat-grid article { display: grid; grid-template-columns: 1fr auto; align-items: end; padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: linear-gradient(145deg, #191d1b, #111312); }
+.profile-stat-grid small { grid-column: 1 / -1; color: #87ceb3; letter-spacing: .11em; }
+.profile-stat-grid strong { font-size: clamp(2rem, 4vw, 3.2rem); line-height: 1; }
+.profile-stat-grid span { color: var(--muted); padding-bottom: .25rem; }
+.profile-content-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, .75fr); gap: 16px; align-items: start; }
+.profile-side-column { display: grid; gap: 16px; }
+.profile-section-heading { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+.profile-section-heading p { margin: 0 0 .25rem; }
+.profile-section-heading h2 { margin: 0; font-size: 1.75rem; }
+.profile-section-heading > span { color: var(--gold); }
+.achievement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.achievement-grid article { position: relative; display: grid; grid-template-columns: 52px 1fr; gap: 12px; min-height: 108px; padding: 14px; border: 1px solid #35403c; border-radius: 9px; background: rgba(255,255,255,.02); }
+.achievement-grid article.unlocked { border-color: rgba(122,217,155,.42); background: linear-gradient(130deg, rgba(122,217,155,.09), rgba(255,255,255,.015)); }
+.achievement-grid article.locked { filter: grayscale(1); opacity: .48; }
+.achievement-icon { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid #52635d; border-radius: 50%; color: var(--gold); background: #171c1a; font-size: 1.55rem; }
+.achievement-grid article p { margin: .3rem 0 0; color: var(--muted); font-size: .84rem; }
+.achievement-grid article > span { grid-column: 2; align-self: end; color: #75c8a8; font-size: .62rem; font-weight: 800; letter-spacing: .12em; }
+.medal-shelf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.medal-shelf article { display: grid; place-items: center; padding: 13px 5px; border: 1px solid #3b4541; border-radius: 9px; background: #151918; }
+.medal-shelf article span { font-size: 2rem; filter: drop-shadow(0 5px 7px rgba(0,0,0,.5)); }
+.medal-shelf article strong { font-size: 1.6rem; }
+.medal-shelf article small { color: var(--muted); font-size: .62rem; letter-spacing: .1em; }
+.podium-history { display: grid; gap: 4px; }
+.podium-history > div { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; padding: 9px 0; border-top: 1px solid #303936; }
+.podium-history p { display: grid; margin: 0; }
+.podium-history small { color: var(--muted); }
+.podium-history b { color: var(--gold); }
+.profile-empty { padding: 16px; border: 1px dashed #394540; border-radius: 8px; color: var(--muted); text-align: center; }
+.avatar-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.avatar-options button { padding: 5px; background: #151918; border-color: #353e3b; }
+.avatar-options button.selected { border-color: var(--green-bright); outline: 2px solid rgba(122,217,155,.18); }
+.avatar-locker > small { color: var(--muted); }
+
+@media (max-width: 900px) {
+  .profile-content-grid { grid-template-columns: 1fr; }
+  .profile-stat-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 620px) {
+  .profile-identity-card { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .profile-level-chip { width: 100%; }
+  .profile-stat-grid, .achievement-grid { grid-template-columns: 1fr; }
+  .profile-topbar { align-items: flex-start; }
+  .profile-topbar > div { display: grid; }
+  .account-strip .player-bubble > span:not(.player-avatar) { display: none; }
+  .player-bubble { padding-right: .35rem; }
 }

@@ -15,6 +15,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ResendVerificationPage from './pages/ResendVerificationPage';
 import TournamentsPage from './pages/TournamentsPage';
+import ProfilePage from './pages/ProfilePage';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
@@ -64,6 +65,14 @@ export default function App() {
         element={(
           <PrivateRoute>
             <MyLocalGamesPage />
+          </PrivateRoute>
+        )}
+      />
+      <Route
+        path="/profile"
+        element={(
+          <PrivateRoute>
+            <ProfilePage />
           </PrivateRoute>
         )}
       />

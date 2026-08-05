@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
+import PlayerBubble from '../components/PlayerBubble';
 import SocialSidebar from '../components/SocialSidebar';
 import { getLocalLibrarySetting } from '../localLibraryDb';
 import LocalLibraryPage, { SUPPORTED_SYSTEMS } from './LocalLibraryPage';
@@ -595,6 +596,7 @@ export default function LobbyPage() {
     localStorage.removeItem('isTester');
     localStorage.removeItem('isVip');
     localStorage.removeItem('isXyphoe');
+    localStorage.removeItem('playerAvatar');
     navigate('/login');
   }
 
@@ -604,7 +606,7 @@ export default function LobbyPage() {
         <header className="lobby-header welcome-home-header">
           <BrandMark />
           <div className="account-strip">
-            <span>{username}</span>
+            <PlayerBubble />
             <button className="secondary" onClick={logout}>Logout</button>
           </div>
         </header>
@@ -631,7 +633,7 @@ export default function LobbyPage() {
         <header className="lobby-header">
           <BrandMark />
           <div className="account-strip">
-            <span>{username}</span>
+            <PlayerBubble />
             <button className="secondary" onClick={() => openLibrary()} disabled={openingLibrary}>
               {openingLibrary ? 'Fetching your games...' : 'My Library'}
             </button>
