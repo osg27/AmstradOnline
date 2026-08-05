@@ -54,7 +54,7 @@
       }
     } catch {}
   }
-  px68kTrace('launcher-initialised', `launcher=2026-08-05-3 href=${window.location.href}`);
+  px68kTrace('launcher-initialised', `launcher=2026-08-05-4 href=${window.location.href}`);
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -321,12 +321,12 @@
     window.EJS_externalFiles = externalFiles;
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
-      'emulator.js': '/emulatorjs/data/src/emulator.js',
+      'emulator.js': isX68000 ? '/emulatorjs/data/src/emulator.js?v=2026-08-05-4' : '/emulatorjs/data/src/emulator.js',
       'emulator.css': '/emulatorjs/data/emulator.css',
       'cache.js': '/emulatorjs/data/src/cache.js',
       'compression.js': '/emulatorjs/data/src/compression.js',
       'consts.js': '/emulatorjs/data/src/consts.js',
-      'GameManager.js': '/emulatorjs/data/src/GameManager.js',
+      'GameManager.js': isX68000 ? '/emulatorjs/data/src/GameManager.js?v=2026-08-05-4' : '/emulatorjs/data/src/GameManager.js',
       'gamepad.js': '/emulatorjs/data/src/gamepad.js',
       'license.js': '/emulatorjs/data/src/license.js',
       'netplay.js': '/emulatorjs/data/src/netplay.js',

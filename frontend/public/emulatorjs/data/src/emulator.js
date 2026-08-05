@@ -848,6 +848,7 @@ class EmulatorJS {
      * @returns 
      */
     download(url, type) {
+        window.EJS_px68kTrace?.("download-enter", `${type.name} ${url instanceof File ? `${url.name} bytes=${url.size}` : String(url || "none")}`);
         if (url === undefined || url === null || url === "") {
             if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] No URL provided, skipping download.");
             return new Promise((resolve) => {
@@ -877,11 +878,13 @@ class EmulatorJS {
                 // Convert File to Uint8Array
                 const arrayBuffer = await url.arrayBuffer();
                 const inData = new Uint8Array(arrayBuffer);
+                window.EJS_px68kTrace?.("file-read", `${type.name} ${url.name} bytes=${inData.byteLength}`);
 
                 // check cache
                 let key = this.storageCache.generateCacheKey(inData);
                 let cachedItem = type.dontCache ? null : await this.storageCache.get(key);
                 if (cachedItem) {
+                    window.EJS_px68kTrace?.("download-cache-hit", `${type.name} ${url.name} files=${cachedItem.files?.length || 0}`);
                     if (this.debug) console.log("[EJS " + type.name.toUpperCase() + "] Using cached content for " + url.name);
                     returnData = cachedItem;
                 } else {
@@ -889,6 +892,7 @@ class EmulatorJS {
                     // Not in cache - decompress
                     let files = [];
                     if (dontExtract === false) {
+                        window.EJS_px68kTrace?.("extract-enter", `${type.name} ${url.name}`);
                         const decompressedData = await this.compression.decompress(inData, (m, appendMsg) => {
                             this.textElem.innerText = appendMsg ? (this.localization("Decompress Game Core") + m) : m;
                         }, (fileName, fileData) => {
@@ -912,6 +916,7 @@ class EmulatorJS {
                                 files.push(new EJS_FileItem(fileName, bytes));
                             }
                         });
+                        window.EJS_px68kTrace?.("extract-returned", `${type.name} ${url.name} files=${files.length}`);
                     } else {
                         // If we shouldn't extract, just treat the whole file as a single item
                         files.push(new EJS_FileItem(url.name, inData));
@@ -997,6 +1002,8 @@ class EmulatorJS {
                 }
             }
 
+            window.EJS_px68kTrace?.("download-complete", `${type.name} files=${returnData?.files?.length || 0}`);
+
             resolve(returnData);
         });
     }
@@ -1004,9 +1011,13 @@ class EmulatorJS {
      * Initialize GameManager and load external files and file systems
      */
     async initializeGameManager() {
+        window.EJS_px68kTrace?.("game-manager-create-enter");
         this.gameManager = new EJS_GameManager(this.Module, this);
+        window.EJS_px68kTrace?.("game-manager-created");
         await this.gameManager.loadExternalFiles();
+        window.EJS_px68kTrace?.("external-files-loaded");
         await this.gameManager.mountFileSystems();
+        window.EJS_px68kTrace?.("filesystems-mounted");
         this.callEvent("saveDatabaseLoaded", this.gameManager.FS);
         if (this.getCore() === "ppsspp") {
             await this.gameManager.loadPpssppAssets();
@@ -1128,6 +1139,7 @@ class EmulatorJS {
      */
     downloadFiles() {
         (async () => {
+            window.EJS_px68kTrace?.("download-files-enter");
             await this.initializeGameManager();
 
             if (this.config.noGame) {
@@ -1138,13 +1150,18 @@ class EmulatorJS {
                 return;
             }
 
+            window.EJS_px68kTrace?.("rom-download-enter");
             const romData = await this.download(this.config.gameUrl, this.downloadType.rom);
+            window.EJS_px68kTrace?.("rom-download-returned", `files=${romData?.files?.length || 0}`);
+            window.EJS_px68kTrace?.("bios-download-enter");
             await this.download(this.config.biosUrl, this.downloadType.bios);
+            window.EJS_px68kTrace?.("bios-download-returned");
             await this.downloadStartState();
             await this.download(this.config.gameParentUrl, this.downloadType.parent);
             await this.download(this.config.gamePatchUrl, this.downloadType.patch);
 
             this.determineCueSettings();
+            window.EJS_px68kTrace?.("start-from-download", `files=${romData?.files?.length || 0}`);
             this.startGameFromDownload(romData);
         })();
     }

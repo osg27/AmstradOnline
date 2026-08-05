@@ -71,6 +71,10 @@ class EJS_GameManager {
         }
     }
     mountFileSystems() {
+        if (this.EJS.getCore() === "px68k") {
+            window.EJS_px68kTrace?.("save-filesystem-skipped", "PX68k does not support EmulatorJS save-state persistence");
+            return Promise.resolve();
+        }
         return new Promise(async resolve => {
             const saveDirectory = this.getSaveDirectory();
             let current = "";
