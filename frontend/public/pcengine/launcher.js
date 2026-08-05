@@ -54,7 +54,7 @@
       }
     } catch {}
   }
-  px68kTrace('launcher-initialised', `launcher=2026-08-05-6 href=${window.location.href}`);
+  px68kTrace('launcher-initialised', `launcher=2026-08-05-7 href=${window.location.href}`);
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -503,7 +503,20 @@
 
   window.addEventListener('unhandledrejection', (event) => {
     console.error(`Old Style Gaming ${systemName} promise error:`, event.reason);
-    drawStatus(`${systemName} error`, event.reason?.message || 'Check browser console');
+    const reason = event.reason;
+    let detail = reason?.message || String(reason || 'Check browser console');
+    if (reason && typeof reason === 'object') {
+      try {
+        const properties = Object.getOwnPropertyNames(reason).reduce((result, key) => {
+          result[key] = reason[key];
+          return result;
+        }, {});
+        detail = properties.message || JSON.stringify(properties) || detail;
+        console.error(`Old Style Gaming ${systemName} rejection details:`, properties);
+        px68kTrace('unhandled-rejection', JSON.stringify(properties));
+      } catch {}
+    }
+    drawStatus(`${systemName} error`, detail);
   });
 
   function mirrorEmulatorCanvas() {
