@@ -146,6 +146,7 @@ const PLATFORM_SHELVES = [
             summary: 'Japanese 16/32-bit computer games through PX68k.',
             formats: '.dim .img .d88 .88d .hdm .2hd .xdf .hdf .m3u',
             testing: true,
+            superAdminOnly: true,
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
@@ -361,7 +362,7 @@ export default function LobbyPage() {
     ...platform,
     eras: platform.eras.map((era) => ({
       ...era,
-      systems: era.systems.map((system) => {
+      systems: era.systems.filter((system) => !system.superAdminOnly || isSuperAdmin).map((system) => {
         const locked = Boolean(system.underConstruction);
         return {
           ...system,
@@ -370,7 +371,7 @@ export default function LobbyPage() {
         };
       }),
     })).filter((era) => era.systems.length > 0),
-  })).filter((platform) => platform.eras.length > 0), [canUsePreviewSystems]);
+  })).filter((platform) => platform.eras.length > 0), [canUsePreviewSystems, isSuperAdmin]);
 
   const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];

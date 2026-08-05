@@ -142,6 +142,7 @@ export const SUPPORTED_SYSTEMS = [
     extensions: ['dim', 'img', 'd88', '88d', 'hdm', 'dup', '2hd', 'xdf', 'hdf', 'cmd', 'm3u', 'zip'],
     pathHints: ['x68000', 'x68k', 'sharp'],
     note: 'Requires your own IPL and CG ROM firmware',
+    superAdminOnly: true,
   },
   {
     id: 'amiga',

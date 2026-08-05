@@ -27,7 +27,7 @@ UNAVAILABLE_SYSTEMS = {"saturn", "saturn_beetle"}
 ADMIN_ONLY_SYSTEMS = set()
 SUPER_ADMIN_ONLY_SYSTEMS = {"saturn", "saturn_beetle"}
 XYPHOE_SYSTEMS = set()
-PRIVATE_SUPER_ADMIN_SYSTEMS = set()
+PRIVATE_SUPER_ADMIN_SYSTEMS = {"x68000"}
 PARTY_SYSTEMS = {"cpc_party", "c64", "arcade"}
 
 

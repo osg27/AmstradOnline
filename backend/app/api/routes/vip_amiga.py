@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
-from app.api.routes.auth import get_current_user, is_vip_user
+from app.api.routes.auth import get_current_user, is_super_admin_user, is_vip_user
 from app.models.user import User
 
 
@@ -41,6 +41,12 @@ X68000_FIRMWARE_FILES = {
 def require_vip(user: User = Depends(get_current_user)) -> User:
     if not is_vip_user(user):
         raise HTTPException(status_code=403, detail="VIP access required")
+    return user
+
+
+def require_super_admin(user: User = Depends(get_current_user)) -> User:
+    if not is_super_admin_user(user):
+        raise HTTPException(status_code=403, detail="Super admin access required")
     return user
 
 
@@ -118,7 +124,7 @@ def get_kickstart_archive(model: str, _user: User = Depends(require_vip)):
 
 
 @router.get("/x68000-firmware")
-def get_x68000_firmware(_user: User = Depends(require_vip)):
+def get_x68000_firmware(_user: User = Depends(require_super_admin)):
     missing = [path.name for path in X68000_FIRMWARE_FILES.values() if not path.is_file()]
     if missing:
         raise HTTPException(status_code=503, detail=f"X68000 firmware is unavailable: {', '.join(missing)}")

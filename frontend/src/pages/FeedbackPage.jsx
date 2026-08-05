@@ -51,6 +51,7 @@ export default function FeedbackPage() {
   const [commentingId, setCommentingId] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const isAdmin = localStorage.getItem('isAdmin') === 'true';
+  const isSuperAdmin = localStorage.getItem('isSuperAdmin') === 'true';
 
   async function loadFeedback() {
     setError('');
@@ -215,7 +216,7 @@ export default function FeedbackPage() {
               <label>
                 <span>System</span>
                 <select value={system} onChange={(event) => setSystem(event.target.value)}>
-                  {SYSTEM_OPTIONS.map(([value, label]) => (
+                  {SYSTEM_OPTIONS.filter(([value]) => value !== 'x68000' || isSuperAdmin).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
