@@ -20,6 +20,7 @@ import {
   takePreparedVipMameFile,
   takePreparedVipMastersystemFile,
   takePreparedVipMegadriveFile,
+  takePreparedVipNesFile,
   takePreparedVipPcengineFile,
   takePreparedVipSpectrumFile,
 } from '../vipMameCache';
@@ -6038,6 +6039,36 @@ export default function RoomPage() {
           setStatus('Extracting Master System ROM');
           const extracted = await extractPrepared7zFile(archiveBytes, ['.sms']);
           const file = new File([extracted.bytes], extracted.fileName, { type: 'application/octet-stream' });
+          const loaded = await handleDiskSelected({
+            target: { files: [file], dataset: {}, value: '' },
+          });
+          if (!loaded || cancelled) return;
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+          return;
+        }
+
+        if (pendingGame?.id === localGameId && pendingGame.source === 'vip-nes-megapack') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) throw new Error('VIP access is required for the NES archive library.');
+
+          let gameBytes = await takePreparedVipNesFile(pendingGame.archiveMemberPath);
+          if (!gameBytes) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${API_BASE_URL}/auth/vip/nes/file?member=${encodeURIComponent(pendingGame.archiveMemberPath)}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => null);
+              throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+            }
+            gameBytes = new Uint8Array(await response.arrayBuffer());
+          }
+          if (cancelled) return;
+          const file = new File([gameBytes], pendingGame.fileName, { type: 'application/octet-stream' });
           const loaded = await handleDiskSelected({
             target: { files: [file], dataset: {}, value: '' },
           });

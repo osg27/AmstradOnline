@@ -8,6 +8,7 @@ const VIP_SPECTRUM_CACHE = 'oldstylegaming-vip-spectrum-v1';
 const VIP_MEGADRIVE_CACHE = 'oldstylegaming-vip-megadrive-v1';
 const VIP_PCENGINE_CACHE = 'oldstylegaming-vip-pcengine-v1';
 const VIP_MASTERSYSTEM_CACHE = 'oldstylegaming-vip-mastersystem-v1';
+const VIP_NES_CACHE = 'oldstylegaming-vip-nes-v1';
 const TOURNAMENT_MAME_CACHE = 'oldstylegaming-tournament-mame-v1';
 
 function cacheRequest(directory, fileName) {
@@ -549,6 +550,69 @@ export async function takePreparedVipMastersystemFile(fileName) {
   if (!('caches' in window)) return null;
   const cache = await caches.open(VIP_MASTERSYSTEM_CACHE);
   const request = mastersystemCacheRequest(fileName);
+  const response = await cache.match(request);
+  if (!response) return null;
+  await cache.delete(request);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+function nesCacheRequest(memberPath) {
+  return new Request(`${window.location.origin}/__vip-nes-cache__/${encodeURIComponent(memberPath)}`);
+}
+
+async function authenticatedNesResponse(memberPath) {
+  const token = localStorage.getItem('token');
+  return fetch(`${API_BASE_URL}/auth/vip/nes/file?member=${encodeURIComponent(memberPath)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+}
+
+export async function prepareVipNesFile(memberPath, onProgress = () => {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await authenticatedNesResponse(memberPath);
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.detail || `Could not download ${memberPath}`);
+      }
+      const total = Number(response.headers.get('Content-Length')) || 0;
+      const reader = response.body?.getReader();
+      const chunks = [];
+      let loaded = 0;
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          loaded += value.byteLength;
+          onProgress({ loaded, total, attempt });
+        }
+      } else {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        chunks.push(bytes);
+        loaded = bytes.byteLength;
+        onProgress({ loaded, total: total || loaded, attempt });
+      }
+      if (total && loaded !== total) throw new Error(`Download ended early for ${memberPath}`);
+      const blob = new Blob(chunks, { type: 'application/octet-stream' });
+      const cache = await caches.open(VIP_NES_CACHE);
+      await cache.put(nesCacheRequest(memberPath), new Response(blob, {
+        headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(blob.size) },
+      }));
+      return blob.size;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) onProgress({ loaded: 0, total: 0, attempt: attempt + 1, retrying: true });
+    }
+  }
+  throw lastError;
+}
+
+export async function takePreparedVipNesFile(memberPath) {
+  if (!('caches' in window)) return null;
+  const cache = await caches.open(VIP_NES_CACHE);
+  const request = nesCacheRequest(memberPath);
   const response = await cache.match(request);
   if (!response) return null;
   await cache.delete(request);
