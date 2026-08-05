@@ -30,8 +30,11 @@ KICKSTART_ARCHIVES = {
 }
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 X68000_FIRMWARE_FILES = {
-    "keropi/iplrom.dat": REPOSITORY_ROOT / "iplrom.dat",
-    "keropi/cgrom.dat": REPOSITORY_ROOT / "cgrom.dat",
+    "keropi/iplrom.dat": REPOSITORY_ROOT / "keropi" / "iplrom.dat",
+    "keropi/cgrom.dat": REPOSITORY_ROOT / "keropi" / "cgrom.dat",
+    "keropi/iplrom30.dat": REPOSITORY_ROOT / "keropi" / "iplrom30.dat",
+    "keropi/iplromco.dat": REPOSITORY_ROOT / "keropi" / "iplromco.dat",
+    "keropi/iplromxv.dat": REPOSITORY_ROOT / "keropi" / "iplromxv.dat",
 }
 
 
