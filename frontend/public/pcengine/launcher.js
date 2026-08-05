@@ -54,7 +54,7 @@
       }
     } catch {}
   }
-  px68kTrace('launcher-initialised', `launcher=2026-08-05-4 href=${window.location.href}`);
+  px68kTrace('launcher-initialised', `launcher=2026-08-05-6 href=${window.location.href}`);
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -314,11 +314,11 @@
   function configureEmulator(fileName, romUrl, externalFiles = {}) {
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
-    window.EJS_core = isX68000 ? 'x68000' : 'pce';
-    window.EJS_biosUrl = undefined;
-    window.EJS_rawFiles = isX68000
-      ? Object.fromEntries((firmware?.files || []).map((file) => [`/${file.fileName}`, file.bytes]))
+    window.EJS_core = isX68000 ? 'px68k' : 'pce';
+    window.EJS_biosUrl = isX68000 && firmware?.bytes
+      ? new File([firmware.bytes], firmware.fileName || 'keropi.zip', { type: 'application/zip' })
       : undefined;
+    window.EJS_rawFiles = undefined;
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_externalFiles = externalFiles;
@@ -436,14 +436,15 @@
     clearGameContainer();
     if (firmwareUrl) URL.revokeObjectURL(firmwareUrl);
     firmwareUrl = null;
-    px68kTrace('firmware-raw-files-ready', `${firmware?.fileName || 'none'} files=${firmware?.files?.length || 0} bytes=${(firmware?.files || []).reduce((total, file) => total + file.bytes.byteLength, 0)}`);
+    px68kTrace('firmware-archive-ready', `${firmware?.fileName || 'none'} bytes=${firmware?.bytes?.byteLength || 0}`);
     // A named File lets EmulatorJS identify .zip/.7z content, extract it and pass
     // the inner .pce/.sgx ROM to Beetle PCE. A blob URL loses the archive name and
     // causes the core to start with the blob UUID as empty/unsupported content.
     const gameFiles = currentRom.files?.length ? currentRom.files : [currentRom];
-    let primaryGame = gameFiles[0];
+    const originalIsArchive = /\.(zip|7z)$/i.test(currentRom.fileName) && currentRom.bytes?.byteLength;
+    let primaryGame = originalIsArchive ? currentRom : gameFiles[0];
     const externalFiles = {};
-    if (isX68000 && gameFiles.length > 1) {
+    if (isX68000 && !originalIsArchive && gameFiles.length > 1) {
       gameFiles.forEach((file) => {
         const url = URL.createObjectURL(new Blob([file.bytes], { type: 'application/octet-stream' }));
         externalGameUrls.push(url);
@@ -453,8 +454,10 @@
       primaryGame = { fileName: 'game.m3u', bytes: new TextEncoder().encode(playlist) };
     }
     gameUrl = new File([primaryGame.bytes], primaryGame.fileName, {
-      type: currentRom.fileName.toLowerCase().endsWith('.7z')
+      type: primaryGame.fileName.toLowerCase().endsWith('.7z')
         ? 'application/x-7z-compressed'
+        : primaryGame.fileName.toLowerCase().endsWith('.zip')
+          ? 'application/zip'
         : 'application/octet-stream',
     });
     configureEmulator(primaryGame.fileName, gameUrl, externalFiles);
@@ -539,11 +542,12 @@
         fileName: String(file.fileName || ''),
         bytes: new Uint8Array(file.bytes || []),
       })).filter((file) => file.fileName && file.bytes.byteLength);
-      const totalBytes = files.reduce((total, file) => total + file.bytes.byteLength, 0);
+      const archiveBytes = new Uint8Array(message.bytes || []);
+      const totalBytes = archiveBytes.byteLength || files.reduce((total, file) => total + file.bytes.byteLength, 0);
       const nextFirmwareKey = `${message.fileName || 'x68000-firmware.zip'}:${files.length}:${totalBytes}`;
       if (nextFirmwareKey === firmwareKey) return;
       firmwareKey = nextFirmwareKey;
-      firmware = { fileName: message.fileName || 'x68000-firmware.zip', files };
+      firmware = { fileName: message.fileName || 'x68000-firmware.zip', bytes: archiveBytes, files };
       px68kTrace('firmware-received', nextFirmwareKey);
       if (currentRom) loadCurrentRom();
       return;
