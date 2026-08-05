@@ -14,7 +14,7 @@ from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user, is_vip_user
+from app.api.routes.auth import get_current_user, is_admin_user, is_vip_user
 from app.api.routes.vip_mame import (
     ARCHIVE_DOWNLOAD_ROOT,
     archive_request,
@@ -101,6 +101,10 @@ def serialize_tournament(tournament: Tournament, db: Session, user_id: int) -> d
         "joined": joined,
         "entry_count": entry_count,
     }
+
+
+def can_manage_tournament(tournament: Tournament, user: User) -> bool:
+    return is_admin_user(user)
 
 
 def get_tournament(code: str, db: Session) -> Tournament:
@@ -196,7 +200,24 @@ def my_tournaments(user: User = Depends(get_current_user), db: Session = Depends
 
 @router.get("/{code}")
 def tournament_details(code: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return serialize_tournament(get_tournament(code, db), db, user.id)
+    tournament = get_tournament(code, db)
+    return {**serialize_tournament(tournament, db, user.id), "can_delete": can_manage_tournament(tournament, user)}
+
+
+@router.delete("/{code}")
+def delete_tournament(code: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    tournament = get_tournament(code, db)
+    if not can_manage_tournament(tournament, user):
+        raise HTTPException(status_code=403, detail="Only an admin can delete tournaments")
+    db.query(TournamentScore).filter(TournamentScore.tournament_id == tournament.id).delete(
+        synchronize_session=False,
+    )
+    db.query(TournamentEntry).filter(TournamentEntry.tournament_id == tournament.id).delete(
+        synchronize_session=False,
+    )
+    db.delete(tournament)
+    db.commit()
+    return {"deleted": True, "code": tournament.code}
 
 
 @router.post("/{code}/join")

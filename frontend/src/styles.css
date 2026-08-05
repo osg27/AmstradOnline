@@ -4582,6 +4582,7 @@ ul {
 .tournament-scoreboard { margin-top: 22px; }
 .tournament-scoreboard-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .tournament-scoreboard-heading h3 { margin: 0; }
+.tournament-manage-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .tournament-scoreboard ol { margin: 0; padding: 0; list-style: none; }
 .tournament-scoreboard li { padding: 10px 0; border-top: 1px solid #2e3935; }
 .tournament-scoreboard li span { margin-left: auto; color: #ffd25a; font-size: 1.15rem; }
@@ -4590,6 +4591,21 @@ ul {
 .tournament-list-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
 .tournament-list-heading h2, .tournament-list-heading .eyebrow { margin-bottom: 0; }
 .tournament-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.tournament-list-item { position: relative; min-width: 0; }
+.tournament-list-item > a { height: 100%; }
+.tournament-list-delete {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  opacity: .78;
+}
+.tournament-list-delete:hover,
+.tournament-list-delete:focus-visible { opacity: 1; }
+.tournament-list-item:has(.tournament-list-delete) > a { padding-right: 54px; }
 .tournament-list a {
   display: grid;
   justify-content: stretch;

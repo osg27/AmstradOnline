@@ -34,6 +34,8 @@ export default function TournamentsPage() {
   const isVip = localStorage.getItem('isVip') === 'true'
     || localStorage.getItem('isAdmin') === 'true'
     || localStorage.getItem('isSuperAdmin') === 'true';
+  const canDeleteTournaments = localStorage.getItem('isAdmin') === 'true'
+    || localStorage.getItem('isSuperAdmin') === 'true';
   const [joinCode, setJoinCode] = useState(routeCode || '');
   const [tournament, setTournament] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
@@ -236,6 +238,28 @@ export default function TournamentsPage() {
     }
   }
 
+  async function deleteTournament(item) {
+    if (!canDeleteTournaments || !item) return;
+    if (!window.confirm(`Permanently delete "${item.name}"? Its entries, scores and profile medals will also be removed.`)) return;
+    setBusy(true);
+    setStatus(`Deleting ${item.name}â€¦`);
+    try {
+      await apiFetch(`/auth/tournaments/${encodeURIComponent(item.code)}`, { method: 'DELETE' });
+      setMine((current) => current.filter((entry) => entry.code !== item.code));
+      if (tournament?.code === item.code) {
+        setTournament(null);
+        setLeaderboard([]);
+        setJoinCode('');
+        navigate('/tournaments', { replace: true });
+      }
+      setStatus(`Tournament "${item.name}" deleted. Its medals have been removed from player profiles.`);
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="page tournaments-page">
       <header className="lobby-header">
@@ -289,7 +313,10 @@ export default function TournamentsPage() {
               <div className="tournament-scoreboard">
                 <div className="tournament-scoreboard-heading">
                   <h3>{tournament.status === 'completed' ? 'Final standings' : 'Live standings'}</h3>
-                  {tournament.is_creator ? <button className="secondary" type="button" disabled={busy || !leaderboard.length} onClick={resetStandings}>Reset standings</button> : null}
+                  <div className="tournament-manage-actions">
+                    {tournament.is_creator ? <button className="secondary" type="button" disabled={busy || !leaderboard.length} onClick={resetStandings}>Reset standings</button> : null}
+                    {canDeleteTournaments ? <button className="danger" type="button" disabled={busy} onClick={() => deleteTournament(tournament)}>Delete tournament</button> : null}
+                  </div>
                 </div>
                 {leaderboard.length ? (
                   <ol>
@@ -319,12 +346,15 @@ export default function TournamentsPage() {
             {isVip ? <button type="button" className="secondary" onClick={() => setCreateOpen(true)}>Create new</button> : null}
           </div>
           {mine.length ? <div className="tournament-list-grid">{mine.map((item) => (
-            <Link key={item.code} to={`/tournaments/${item.code}`}>
-              <span className={`tournament-state ${item.status}`}>{item.status}</span>
-              <strong>{item.name}</strong>
-              <span className="tournament-list-game">{item.display_name}</span>
-              <small>{item.code}</small>
-            </Link>
+            <article className="tournament-list-item" key={item.code}>
+              <Link to={`/tournaments/${item.code}`}>
+                <span className={`tournament-state ${item.status}`}>{item.status}</span>
+                <strong>{item.name}</strong>
+                <span className="tournament-list-game">{item.display_name}</span>
+                <small>{item.code}</small>
+              </Link>
+              {canDeleteTournaments ? <button type="button" className="danger tournament-list-delete" disabled={busy} onClick={() => deleteTournament(item)} aria-label={`Delete ${item.name}`} title="Delete tournament"><i className="bi bi-trash3" aria-hidden="true" /></button> : null}
+            </article>
           ))}</div> : <div className="tournament-empty"><strong>No tournaments yet</strong><p>Enter a code above to join one{isVip ? ', or create your own.' : '.'}</p></div>}
         </section>
       </main>
