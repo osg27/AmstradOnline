@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     CORS_ORIGINS: list[str] | str = ["http://localhost:5173"]
     ADMIN_USERNAME: str | None = None
     SUPER_ADMIN_USERNAME: str = "OldStyleGaming"

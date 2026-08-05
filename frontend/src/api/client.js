@@ -18,6 +18,7 @@ function getDefaultWsBaseUrl() {
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || getDefaultApiBaseUrl();
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || getDefaultWsBaseUrl();
+let refreshPromise = null;
 
 function formatApiErrorDetail(detail) {
   if (!detail) return 'Request failed';
@@ -38,7 +39,40 @@ function formatApiErrorDetail(detail) {
   return JSON.stringify(detail);
 }
 
-export async function apiFetch(path, options = {}) {
+function storeAuthSession(data) {
+  if (!data?.access_token) return;
+  localStorage.setItem('token', data.access_token);
+  localStorage.setItem('username', data.username);
+  localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
+  localStorage.setItem('isSuperAdmin', data.is_super_admin ? 'true' : 'false');
+  localStorage.setItem('isTester', data.is_tester ? 'true' : 'false');
+  localStorage.setItem('isVip', data.is_vip || data.is_admin || data.is_super_admin ? 'true' : 'false');
+  localStorage.setItem('isXyphoe', data.is_xyphoe ? 'true' : 'false');
+}
+
+export function clearAuthSession() {
+  ['token', 'username', 'isAdmin', 'isSuperAdmin', 'isTester', 'isVip', 'isXyphoe', 'playerAvatar']
+    .forEach((key) => localStorage.removeItem(key));
+}
+
+export async function renewSession() {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error('Session expired');
+    const data = await response.json();
+    storeAuthSession(data);
+    return data.access_token;
+  })().finally(() => { refreshPromise = null; });
+  return refreshPromise;
+}
+
+export async function apiFetch(path, options = {}, hasRetried = false) {
   const token = localStorage.getItem('token');
 
   const headers = {
@@ -53,15 +87,25 @@ export async function apiFetch(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
+    credentials: options.credentials || 'include',
   });
 
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    if (response.status === 401 && !path.startsWith('/auth/')) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('username');
-      window.location.assign('/login');
+    const canRefresh = response.status === 401
+      && !hasRetried
+      && path !== '/auth/login'
+      && path !== '/auth/refresh';
+    if (canRefresh) {
+      try {
+        await renewSession();
+        return apiFetch(path, options, true);
+      } catch {
+        clearAuthSession();
+        window.dispatchEvent(new CustomEvent('auth-session-expired'));
+        if (!window.location.pathname.startsWith('/room/')) window.location.assign('/login');
+      }
     }
 
     throw new Error(formatApiErrorDetail(data?.detail));

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { apiFetch } from './api/client';
+import { apiFetch, renewSession } from './api/client';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import LobbyPage from './pages/LobbyPage';
@@ -26,9 +26,20 @@ function PrivateRoute({ children }) {
     const sendHeartbeat = () => {
       apiFetch('/auth/social/heartbeat', { method: 'POST' }).catch(() => {});
     };
+    const renewActiveSession = () => renewSession().catch(() => {});
     sendHeartbeat();
+    renewActiveSession();
     const heartbeatTimer = window.setInterval(sendHeartbeat, 30000);
-    return () => window.clearInterval(heartbeatTimer);
+    const renewalTimer = window.setInterval(renewActiveSession, 30 * 60 * 1000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') renewActiveSession();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.clearInterval(heartbeatTimer);
+      window.clearInterval(renewalTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [token]);
 
   return token ? children : <Navigate to="/login" replace />;

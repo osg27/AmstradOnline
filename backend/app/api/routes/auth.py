@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timezone
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 VERIFY_EMAIL = "verify_email"
 RESET_PASSWORD = "reset_password"
+REFRESH_SESSION = "refresh_session"
+REFRESH_COOKIE = "osg_refresh"
 
 
 def is_super_admin_user(user: User) -> bool:
@@ -84,6 +86,52 @@ def create_account_token(db: Session, user: User, purpose: str, expires_minutes:
         )
     )
     return token
+
+
+def auth_response(user: User) -> AuthResponse:
+    return AuthResponse(
+        access_token=create_access_token(str(user.id)),
+        username=user.username,
+        is_admin=is_admin_user(user),
+        is_super_admin=is_super_admin_user(user),
+        is_tester=is_tester_user(user),
+        is_vip=is_vip_user(user),
+        is_xyphoe=is_xyphoe_user(user),
+    )
+
+
+def set_refresh_cookie(response: Response, request: Request, token: str) -> None:
+    configured_url = settings.APP_BASE_URL or settings.PUBLIC_APP_URL or ""
+    secure = request.url.scheme == "https" or configured_url.lower().startswith("https://")
+    response.set_cookie(
+        key=REFRESH_COOKIE,
+        value=token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/auth",
+    )
+
+
+def issue_refresh_session(db: Session, user: User, response: Response, request: Request) -> None:
+    db.query(AccountToken).filter(
+        AccountToken.purpose == REFRESH_SESSION,
+        or_(
+            AccountToken.expires_at <= datetime.now(timezone.utc),
+            AccountToken.used_at.is_not(None),
+        ),
+    ).delete(synchronize_session=False)
+    token = secrets.token_urlsafe(32)
+    db.add(
+        AccountToken(
+            user_id=user.id,
+            token_hash=hash_account_token(token),
+            purpose=REFRESH_SESSION,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+    )
+    set_refresh_cookie(response, request, token)
 
 
 def use_account_token(db: Session, token: str, purpose: str) -> tuple[AccountToken, User]:
@@ -175,7 +223,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -187,16 +235,65 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    token = create_access_token(str(user.id))
-    return AuthResponse(
-        access_token=token,
-        username=user.username,
-        is_admin=is_admin_user(user),
-        is_super_admin=is_super_admin_user(user),
-        is_tester=is_tester_user(user),
-        is_vip=is_vip_user(user),
-        is_xyphoe=is_xyphoe_user(user),
-    )
+    issue_refresh_session(db, user, response, request)
+    db.commit()
+    return auth_response(user)
+
+
+@router.post("/refresh", response_model=AuthResponse)
+def refresh_session(
+    request: Request,
+    response: Response,
+    osg_refresh: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    user = None
+    if osg_refresh:
+        account_token = (
+            db.query(AccountToken)
+            .filter(
+                AccountToken.token_hash == hash_account_token(osg_refresh),
+                AccountToken.purpose == REFRESH_SESSION,
+                AccountToken.used_at.is_(None),
+                AccountToken.expires_at > datetime.now(timezone.utc),
+            )
+            .first()
+        )
+        if account_token:
+            user = db.query(User).filter(User.id == account_token.user_id).first()
+            account_token.used_at = datetime.now(timezone.utc)
+
+    # Seamlessly establish a refresh session for users logged in before this feature deployed.
+    if user is None and authorization and authorization.startswith("Bearer "):
+        payload = decode_access_token(authorization.split(" ", 1)[1])
+        if payload and payload.get("sub"):
+            user = db.query(User).filter(User.id == int(payload["sub"])).first()
+
+    if user is None:
+        response.delete_cookie(REFRESH_COOKIE, path="/auth")
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    issue_refresh_session(db, user, response, request)
+    user.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+    return auth_response(user)
+
+
+@router.post("/logout", status_code=204)
+def logout(
+    response: Response,
+    osg_refresh: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+):
+    if osg_refresh:
+        db.query(AccountToken).filter(
+            AccountToken.token_hash == hash_account_token(osg_refresh),
+            AccountToken.purpose == REFRESH_SESSION,
+        ).delete(synchronize_session=False)
+        db.commit()
+    response.delete_cookie(REFRESH_COOKIE, path="/auth")
+    return response
 
 
 @router.post("/verify-email")

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiFetch } from '../api/client';
+import { apiFetch, clearAuthSession } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import PlayerBubble from '../components/PlayerBubble';
 import SocialSidebar from '../components/SocialSidebar';
@@ -589,14 +589,8 @@ export default function LobbyPage() {
   }
 
   function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('isAdmin');
-    localStorage.removeItem('isSuperAdmin');
-    localStorage.removeItem('isTester');
-    localStorage.removeItem('isVip');
-    localStorage.removeItem('isXyphoe');
-    localStorage.removeItem('playerAvatar');
+    apiFetch('/auth/logout', { method: 'POST' }).catch(() => {});
+    clearAuthSession();
     navigate('/login');
   }
 
