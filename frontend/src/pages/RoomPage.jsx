@@ -2493,7 +2493,7 @@ export default function RoomPage() {
       cancelAnimationFrame(animationFrame);
       sendLocalJoystickMask(0);
     };
-  }, [inputCaptured, sendLocalJoystickMask]);
+  }, [controllerCapturingInput, inputCaptured, sendLocalJoystickMask]);
 
   useEffect(() => {
     function handleGamepadConnected(event) {
