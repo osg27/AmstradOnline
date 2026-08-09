@@ -20,6 +20,7 @@ import {
   getLocalLibraryFolders,
   getLocalLibraryGames,
   getLocalLibrarySetting,
+  migrateLegacyVipLibraryGames,
   saveLocalLibraryFolders,
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
@@ -1379,7 +1380,8 @@ function variantPreferenceScore(game) {
       || game.source === 'vip-megadrive-ghostware'
       || game.source === 'vip-pcengine-nointro'
       || game.source === 'vip-mastersystem-nointro'
-      || game.source === 'vip-nes-megapack')
+      || game.source === 'vip-nes-megapack'
+      || game.source === 'vip-snes-gameplay')
     && Number.isFinite(game.sorterScore)
   ) {
     score -= game.sorterScore * 10;
@@ -1542,6 +1544,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const savedGames = mismatchedAlienIds.size
           ? loadedGames.map((game) => (mismatchedAlienIds.has(game.id) ? clearBoxArt(game) : game))
           : loadedGames;
+        // One-time migration from thousands of VIP rows to a single catalogue snapshot.
+        // Do not hold the first render up while IndexedDB compacts the legacy cache.
+        void migrateLegacyVipLibraryGames(savedGames).catch(() => {});
         if (mismatchedAlienIds.size) await saveLocalLibraryGames(savedGames);
         if (forceAmigaBoxArtRepair) {
           localStorage.setItem(AMIGA_BOX_ART_REPAIR_KEY, AMIGA_BOX_ART_REPAIR_VERSION);
@@ -1557,6 +1562,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           && game.source !== 'vip-pcengine-nointro'
           && game.source !== 'vip-mastersystem-nointro'
           && game.source !== 'vip-nes-megapack'
+          && game.source !== 'vip-snes-gameplay'
         ));
         const savedVipMameGames = savedGames.filter((game) => game.source === 'internet-archive-mame');
         const savedVipC64Games = savedGames.filter((game) => game.source === 'vip-c64-oneload');
@@ -1567,6 +1573,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const savedVipPcengineGames = savedGames.filter((game) => game.source === 'vip-pcengine-nointro');
         const savedVipMastersystemGames = savedGames.filter((game) => game.source === 'vip-mastersystem-nointro');
         const savedVipNesGames = savedGames.filter((game) => game.source === 'vip-nes-megapack');
+        const savedVipSnesGames = savedGames.filter((game) => game.source === 'vip-snes-gameplay');
         const hasCurrentVipAmigaCache = savedVipAmigaGames.some((game) => (
           game.fileName?.toLowerCase().endsWith('.zip')
         ));
@@ -1579,13 +1586,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           && savedVipPcengineGames.length > 0
           && savedVipMastersystemGames.length > 0
           && savedVipNesGames.length > 0
+          && savedVipSnesGames.length > 0
           && hasCurrentVipAmigaCache;
         // IndexedDB is the source of truth for the local shelf. Render it immediately;
         // remote box-art reconciliation must never hold up the game count or navigation.
         setFolders(savedFolders);
         setGames(isVip ? savedGames : localGames);
         setStatus(isVip && hasCompleteVipCache
-          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMastersystemGames.length} Master System, ${savedVipNesGames.length} NES, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`
+          ? `VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMastersystemGames.length} Master System, ${savedVipNesGames.length} NES, ${savedVipSnesGames.length} SNES, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`
           : localGames.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
         let localGamesWithArtwork = await restoreCachedBoxArt(localGames);
         if (forceAmigaBoxArtRepair) {
@@ -1606,6 +1614,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ...savedVipPcengineGames,
             ...savedVipMastersystemGames,
             ...savedVipNesGames,
+            ...savedVipSnesGames,
           ]);
         }
         if (!isVip) setGames(localGamesWithArtwork);
@@ -1629,14 +1638,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 ...savedVipPcengineGames,
                 ...savedVipMastersystemGames,
                 ...savedVipNesGames,
+                ...savedVipSnesGames,
                 ...currentVipAmigaGames,
               ]);
             }
-            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmstradGames, ...savedVipSpectrumGames, ...savedVipMastersystemGames, ...savedVipNesGames, ...savedVipMegadriveGames, ...savedVipPcengineGames, ...currentVipAmigaGames]);
-            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMastersystemGames.length} Master System, ${savedVipNesGames.length} NES, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`);
+            setGames([...localGamesWithArtwork, ...savedVipMameGames, ...savedVipC64Games, ...savedVipAmstradGames, ...savedVipSpectrumGames, ...savedVipMastersystemGames, ...savedVipNesGames, ...savedVipSnesGames, ...savedVipMegadriveGames, ...savedVipPcengineGames, ...currentVipAmigaGames]);
+            setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMastersystemGames.length} Master System, ${savedVipNesGames.length} NES, ${savedVipSnesGames.length} SNES, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`);
           } else {
           setStatus('Loading VIP game libraries for the first time...');
-          const [catalog, c64Catalog, amigaCatalog, amstradCatalog, spectrumCatalog, mastersystemCatalog, nesCatalog, megadriveCatalog, pcengineCatalog] = await Promise.all([
+          const [catalog, c64Catalog, amigaCatalog, amstradCatalog, spectrumCatalog, mastersystemCatalog, nesCatalog, snesCatalog, megadriveCatalog, pcengineCatalog] = await Promise.all([
             apiFetch('/auth/vip/mame/catalog').catch(() => ({ roms: [], samples: [] })),
             apiFetch('/auth/vip/c64/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/amiga/catalog').catch(() => ({ games: [] })),
@@ -1644,6 +1654,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             apiFetch('/auth/vip/spectrum/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/mastersystem/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/nes/catalog').catch(() => ({ games: [] })),
+            apiFetch('/auth/vip/snes/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/megadrive/catalog').catch(() => ({ games: [] })),
             apiFetch('/auth/vip/pcengine/catalog').catch(() => ({ games: [] })),
           ]);
@@ -1880,6 +1891,44 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localNesTitles.has(game.title.toLowerCase()));
           const cachedNesGames = await restoreCachedBoxArt(nesGames);
           const nesGamesWithArtwork = await applyIndexedBoxArt(cachedNesGames, 'nes');
+          const localSnesTitles = new Set(
+            localGamesWithArtwork
+              .filter((game) => game.system === 'snes')
+              .map((game) => canonicalLibraryTitle(game).toLowerCase()),
+          );
+          const snesSortedFiles = (Array.isArray(snesCatalog.games) ? snesCatalog.games : [])
+            .filter((entry) => entry?.file_name)
+            .map((entry) => {
+              const fileName = entry.file_name;
+              return {
+                id: `vip-snes-file:${fileName}`,
+                name: fileName,
+                path: fileName,
+                extension: '7z',
+                size: Number(entry.bytes) || 0,
+                platform: 'snes',
+                ...normaliseFilename(fileName),
+              };
+            });
+          const snesGames = groupReleaseFiles(snesSortedFiles)
+            .flatMap((sortedGame) => sortedGame.releases.map((release) => {
+              const primary = release.media[0];
+              return {
+                id: `vip-snes:${release.id}:${primary.name}`,
+                title: sortedGame.title,
+                fileName: primary.name,
+                path: `VIP SNES Gameplay/${primary.name}`,
+                size: Number(primary.size) || 0,
+                system: 'snes',
+                roomSystem: 'snes',
+                source: 'vip-snes-gameplay',
+                sorterScore: release.score,
+                sorterWarnings: release.warnings,
+              };
+            }))
+            .filter((game) => !localSnesTitles.has(game.title.toLowerCase()));
+          const cachedSnesGames = await restoreCachedBoxArt(snesGames);
+          const snesGamesWithArtwork = await applyIndexedBoxArt(cachedSnesGames, 'snes');
           const localMegadriveTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'megadrive')
@@ -1964,13 +2013,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ...spectrumGamesWithArtwork,
             ...mastersystemGamesWithArtwork,
             ...nesGamesWithArtwork,
+            ...snesGamesWithArtwork,
             ...megadriveGamesWithArtwork,
             ...pcengineGamesWithArtwork,
             ...amigaGamesWithArtwork,
           ];
           setGames(allGames);
           await saveLocalLibraryGames(allGames);
-          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64, ${amstradGames.length} Amstrad, ${spectrumGames.length} ZX Spectrum, ${mastersystemGames.length} Master System, ${nesGames.length} NES, ${megadriveGames.length} Mega Drive, ${pcengineGames.length} PC Engine and ${amigaGames.length} Amiga files.`);
+          setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64, ${amstradGames.length} Amstrad, ${spectrumGames.length} ZX Spectrum, ${mastersystemGames.length} Master System, ${nesGames.length} NES, ${snesGames.length} SNES, ${megadriveGames.length} Mega Drive, ${pcengineGames.length} PC Engine and ${amigaGames.length} Amiga files.`);
           }
         } else {
           setGames(localGamesWithArtwork);

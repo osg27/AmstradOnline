@@ -3,6 +3,11 @@ const DB_VERSION = 1;
 const FOLDERS_STORE = 'folders';
 const GAMES_STORE = 'games';
 const SETTINGS_STORE = 'settings';
+const VIP_GAMES_KEY = 'vip-library-snapshot-v1';
+
+function isVipLibraryGame(game) {
+  return game?.source === 'internet-archive-mame' || String(game?.source || '').startsWith('vip-');
+}
 
 function openLibraryDb() {
   return new Promise((resolve, reject) => {
@@ -107,10 +112,16 @@ export async function getLocalLibraryFolder(id) {
 export async function saveLocalLibraryGames(games) {
   const db = await openLibraryDb();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(GAMES_STORE, 'readwrite');
+    const transaction = db.transaction([GAMES_STORE, SETTINGS_STORE], 'readwrite');
     const store = transaction.objectStore(GAMES_STORE);
+    const settings = transaction.objectStore(SETTINGS_STORE);
+    const localGames = games.filter((game) => !isVipLibraryGame(game));
+    const vipGames = games.filter(isVipLibraryGame);
     store.clear();
-    games.forEach((game) => store.put(game));
+    localGames.forEach((game) => store.put(game));
+    // Immutable VIP catalogues are one structured-clone record rather than thousands
+    // of IndexedDB rows. This makes subsequent library starts dramatically cheaper.
+    if (vipGames.length) settings.put({ key: VIP_GAMES_KEY, value: vipGames });
 
     transaction.oncomplete = () => {
       db.close();
@@ -123,15 +134,30 @@ export async function saveLocalLibraryGames(games) {
   });
 }
 
+export async function migrateLegacyVipLibraryGames(games) {
+  const existing = await getLocalLibrarySetting(VIP_GAMES_KEY, null);
+  if (existing) return false;
+  if (!games.some(isVipLibraryGame)) return false;
+  await saveLocalLibraryGames(games);
+  return true;
+}
+
 export async function getLocalLibraryGames() {
   const db = await openLibraryDb();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(GAMES_STORE, 'readonly');
-    const store = transaction.objectStore(GAMES_STORE);
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(request.error);
-    transaction.oncomplete = () => db.close();
+    const transaction = db.transaction([GAMES_STORE, SETTINGS_STORE], 'readonly');
+    const localRequest = transaction.objectStore(GAMES_STORE).getAll();
+    const vipRequest = transaction.objectStore(SETTINGS_STORE).get(VIP_GAMES_KEY);
+    let localGames = [];
+    let vipGames = [];
+    localRequest.onsuccess = () => { localGames = localRequest.result || []; };
+    vipRequest.onsuccess = () => { vipGames = vipRequest.result?.value || []; };
+    localRequest.onerror = () => reject(localRequest.error);
+    vipRequest.onerror = () => reject(vipRequest.error);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve([...localGames, ...vipGames]);
+    };
     transaction.onerror = () => {
       db.close();
       reject(transaction.error);
@@ -142,8 +168,12 @@ export async function getLocalLibraryGames() {
 export async function getLocalLibraryGame(id) {
   const db = await openLibraryDb();
   try {
-    const transaction = db.transaction(GAMES_STORE, 'readonly');
-    return await requestToPromise(transaction.objectStore(GAMES_STORE).get(id));
+    const transaction = db.transaction([GAMES_STORE, SETTINGS_STORE], 'readonly');
+    const localPromise = requestToPromise(transaction.objectStore(GAMES_STORE).get(id));
+    const snapshotPromise = requestToPromise(transaction.objectStore(SETTINGS_STORE).get(VIP_GAMES_KEY));
+    const [localGame, snapshot] = await Promise.all([localPromise, snapshotPromise]);
+    if (localGame) return localGame;
+    return snapshot?.value?.find((game) => game.id === id);
   } finally {
     db.close();
   }

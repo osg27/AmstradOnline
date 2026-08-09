@@ -6070,6 +6070,35 @@ export default function RoomPage() {
           return;
         }
 
+        if (pendingGame?.id === localGameId && pendingGame.source === 'vip-snes-gameplay') {
+          const hasVipAccess = localStorage.getItem('isVip') === 'true'
+            || localStorage.getItem('isAdmin') === 'true'
+            || localStorage.getItem('isSuperAdmin') === 'true';
+          if (!hasVipAccess) throw new Error('VIP access is required for the SNES archive library.');
+
+          const token = localStorage.getItem('token');
+          const response = await fetch(
+            `${API_BASE_URL}/auth/vip/snes/files/${encodeURIComponent(pendingGame.fileName)}`,
+            { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+          );
+          if (!response.ok) {
+            const errorBody = await response.json().catch(() => null);
+            throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
+          }
+          const archiveBytes = new Uint8Array(await response.arrayBuffer());
+          if (cancelled) return;
+          setStatus('Extracting SNES ROM');
+          const extracted = await extractPrepared7zFile(archiveBytes, ['.sfc', '.smc']);
+          const file = new File([extracted.bytes], extracted.fileName, { type: 'application/octet-stream' });
+          const loaded = await handleDiskSelected({
+            target: { files: [file], dataset: {}, value: '' },
+          });
+          if (!loaded || cancelled) return;
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          if (!hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+          return;
+        }
+
         if (pendingGame?.id === localGameId && pendingGame.source === 'vip-nes-megapack') {
           const hasVipAccess = localStorage.getItem('isVip') === 'true'
             || localStorage.getItem('isAdmin') === 'true'

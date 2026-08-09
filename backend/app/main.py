@@ -20,6 +20,7 @@ from app.api.routes.vip_nes import router as vip_nes_router
 from app.api.routes.vip_megadrive import router as vip_megadrive_router
 from app.api.routes.vip_pcengine import router as vip_pcengine_router
 from app.api.routes.vip_spectrum import router as vip_spectrum_router
+from app.api.routes.vip_snes import router as vip_snes_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.migrations import ensure_runtime_columns
@@ -65,4 +66,5 @@ app.include_router(vip_amstrad_router)
 app.include_router(vip_spectrum_router)
 app.include_router(vip_megadrive_router)
 app.include_router(vip_pcengine_router)
+app.include_router(vip_snes_router)
 app.include_router(signaling_router)
