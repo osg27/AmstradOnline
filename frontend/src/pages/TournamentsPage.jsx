@@ -184,6 +184,7 @@ export default function TournamentsPage() {
         roomSystem: 'arcade',
         source: 'tournament-mame',
         tournamentCode: tournament.code,
+        tournamentName: tournament.name,
       }));
       const room = await apiFetch('/rooms/create', {
         method: 'POST',

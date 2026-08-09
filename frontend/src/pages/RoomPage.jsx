@@ -752,12 +752,39 @@ export default function RoomPage() {
   });
   const [mameLeaderboard, setMameLeaderboard] = useState([]);
   const [mameLeaderboardSupported, setMameLeaderboardSupported] = useState(false);
+  const [tournamentTitle, setTournamentTitle] = useState('');
   const [mameScoreStatus, setMameScoreStatus] = useState('');
   const [mameScoreBusy, setMameScoreBusy] = useState(false);
   const [mameScoreChangeToken, setMameScoreChangeToken] = useState(0);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
+
+  useEffect(() => {
+    if (!tournamentCode) {
+      setTournamentTitle('');
+      return undefined;
+    }
+
+    try {
+      const pendingGame = JSON.parse(sessionStorage.getItem('oldstylegaming:pendingLocalGame') || 'null');
+      if (pendingGame?.tournamentCode === tournamentCode && pendingGame.tournamentName) {
+        setTournamentTitle(pendingGame.tournamentName);
+      }
+    } catch {
+      // The API lookup below remains the authoritative fallback.
+    }
+
+    let cancelled = false;
+    apiFetch(`/auth/tournaments/${encodeURIComponent(tournamentCode)}`)
+      .then((details) => {
+        if (!cancelled) setTournamentTitle(details?.name || tournamentCode);
+      })
+      .catch(() => {
+        if (!cancelled) setTournamentTitle((current) => current || tournamentCode);
+      });
+    return () => { cancelled = true; };
+  }, [tournamentCode]);
 
   const remoteMediaStreamRef = useRef(null);
   const remoteVoiceStreamRef = useRef(null);
@@ -4977,7 +5004,10 @@ export default function RoomPage() {
         <div className="mame-score-panel-header">
           <div>
             <span>{tournamentCode ? 'Tournament standings' : 'MAME leaderboard'}</span>
-            <strong>{tournamentCode || getArcadeLeaderboardKey(loadedDiskName)}</strong>
+            <strong className={tournamentCode ? 'tournament-room-title' : ''}>
+              {tournamentCode ? tournamentTitle || tournamentCode : getArcadeLeaderboardKey(loadedDiskName)}
+            </strong>
+            {tournamentCode ? <small className="tournament-room-code">Code {tournamentCode}</small> : null}
           </div>
           <em>{mameLeaderboardSupported ? 'live' : 'off'}</em>
         </div>

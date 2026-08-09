@@ -3869,6 +3869,19 @@ input:focus {
   text-transform: uppercase;
 }
 
+.mame-score-panel-header .tournament-room-title {
+  line-height: 1.15;
+  text-transform: none;
+}
+
+.tournament-room-code {
+  color: #d6a43a;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .mame-score-panel-header em {
   border: 1px solid rgba(109, 229, 161, 0.45);
   border-radius: 999px;
