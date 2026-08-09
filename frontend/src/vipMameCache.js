@@ -619,7 +619,32 @@ export async function takePreparedVipNesFile(memberPath) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-export function extractPrepared7zFile(bytes, allowedExtensions) {
+function snesArchiveNameKey(value) {
+  return String(value || '')
+    .split(/[\\/]/).pop()
+    .replace(/\.(?:sfc|smc)$/i, '')
+    .replace(/[\[(].*$/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function snesArchiveEntryScore(fileName, preferredFileName = '', preferredTitle = '') {
+  if (preferredFileName && fileName === preferredFileName) return 100000;
+  let score = 0;
+  const entryKey = snesArchiveNameKey(fileName);
+  const titleKey = snesArchiveNameKey(preferredTitle);
+  if (titleKey && entryKey === titleKey) score += 5000;
+  else if (titleKey && entryKey.startsWith(titleKey)) score += 2500;
+  if (/\((europe|eur|e)\)/i.test(fileName)) score += 400;
+  else if (/\((world)\)/i.test(fileName)) score += 350;
+  else if (/\((usa|u)\)/i.test(fileName)) score += 300;
+  else if (/\((japan|j)\)/i.test(fileName)) score += 200;
+  if (/\[!\]/i.test(fileName)) score += 60;
+  if (/\[(?:b|h|t|o|p)[^\]]*\]|\b(?:hack|demo|beta|proto|trainer|translation)\b/i.test(fileName)) score -= 1000;
+  return score;
+}
+
+export function extractPrepared7zFile(bytes, allowedExtensions, options = {}) {
   return new Promise((resolve, reject) => {
     const worker = new Worker('/emulatorjs/data/compression/extract7z.js');
     const matches = [];
@@ -644,9 +669,40 @@ export function extractPrepared7zFile(bytes, allowedExtensions) {
         if (!matches.length) {
           finish(new Error(`Archive does not contain a supported ${allowedExtensions.join(' or ')} ROM`));
         } else {
-          matches.sort((left, right) => left.fileName.localeCompare(right.fileName, undefined, { numeric: true }));
+          matches.sort((left, right) => (
+            snesArchiveEntryScore(right.fileName, options.preferredFileName, options.preferredTitle)
+            - snesArchiveEntryScore(left.fileName, options.preferredFileName, options.preferredTitle)
+            || left.fileName.localeCompare(right.fileName, undefined, { numeric: true })
+          ));
           finish(null, matches[0]);
         }
+      }
+    };
+    worker.postMessage(bytes);
+  });
+}
+
+export async function inspectPrepared7zFiles(bytes, allowedExtensions) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker('/emulatorjs/data/compression/extract7z.js');
+    const fileNames = [];
+    const timeout = window.setTimeout(() => {
+      worker.terminate();
+      reject(new Error('Timed out inspecting the downloaded game archive'));
+    }, 60000);
+    const finish = (error, value) => {
+      window.clearTimeout(timeout);
+      worker.terminate();
+      if (error) reject(error); else resolve(value);
+    };
+    worker.onerror = () => finish(new Error('Could not inspect the downloaded game archive'));
+    worker.onmessage = (event) => {
+      const message = event.data || {};
+      if (message.t === 2) {
+        const fileName = String(message.file || '');
+        if (allowedExtensions.some((extension) => fileName.toLowerCase().endsWith(extension))) fileNames.push(fileName);
+      } else if (message.t === 1) {
+        finish(null, fileNames);
       }
     };
     worker.postMessage(bytes);

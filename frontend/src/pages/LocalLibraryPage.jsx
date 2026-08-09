@@ -25,7 +25,7 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
-import { prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMastersystemFile, prepareVipMegadriveFile, prepareVipNesFile, prepareVipPcengineFile, prepareVipSpectrumFile } from '../vipMameCache';
+import { inspectPrepared7zFiles, prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMastersystemFile, prepareVipMegadriveFile, prepareVipNesFile, prepareVipPcengineFile, prepareVipSpectrumFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
@@ -33,6 +33,34 @@ import { c64CanonicalTitle } from '../features/localLibrary/core/c64Title';
 import { normaliseFilename } from '../features/localLibrary/core/normalise';
 
 const PREFERRED_VARIANTS_KEY = 'localLibraryPreferredVariants';
+const SNES_VARIANT_SEPARATOR = '::snes-entry::';
+
+function snesVariantId(gameId, entryName) {
+  return `${gameId}${SNES_VARIANT_SEPARATOR}${encodeURIComponent(entryName)}`;
+}
+
+function snesEntryFromVariantId(gameId, variantId) {
+  const prefix = `${gameId}${SNES_VARIANT_SEPARATOR}`;
+  if (!variantId?.startsWith(prefix)) return '';
+  try { return decodeURIComponent(variantId.slice(prefix.length)); } catch { return ''; }
+}
+
+function cleanSnesArchiveVersions(game, fileNames) {
+  const titleKey = normalizeSearchText(game.title).replace(/[^a-z0-9]/g, '');
+  const regionPattern = /\((europe|eur|e|world|usa|u|japan|j)\)/i;
+  const unwanted = /\[(?:b|h|t|o|p)[^\]]*\]|\b(?:hack|demo|beta|proto|trainer|translation)\b/i;
+  return fileNames
+    .filter((fileName) => {
+      const nameKey = normalizeSearchText(fileBaseName(fileName)).replace(/[^a-z0-9]/g, '');
+      return nameKey.startsWith(titleKey) && regionPattern.test(fileName) && !unwanted.test(fileName);
+    })
+    .sort((left, right) => {
+      const rank = (name) => (/\((europe|eur|e)\)/i.test(name) ? 0 : /\(world\)/i.test(name) ? 1 : /\((usa|u)\)/i.test(name) ? 2 : 3);
+      return rank(left) - rank(right)
+        || Number(/\[!\]/i.test(right)) - Number(/\[!\]/i.test(left))
+        || left.localeCompare(right, undefined, { numeric: true });
+    });
+}
 
 function readPreferredVariants() {
   try {
@@ -2419,6 +2447,38 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     }
   }
 
+  async function openSnesVersionPicker(game) {
+    setLaunchingId(game.id);
+    setStatus(`Fetching ${game.title} versions...`);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${API_BASE_URL}/auth/vip/snes/files/${encodeURIComponent(game.fileName)}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      if (!response.ok) throw new Error(`Could not download ${game.fileName}`);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const fileNames = await inspectPrepared7zFiles(bytes, ['.sfc', '.smc']);
+      const versions = cleanSnesArchiveVersions(game, fileNames);
+      if (!versions.length) throw new Error('No clean regional versions were found in this archive');
+      setVersionPickerGame({
+        ...game,
+        variantCount: versions.length,
+        variants: versions.map((entryName) => ({
+          ...game,
+          id: snesVariantId(game.id, entryName),
+          archiveEntryName: entryName,
+          versionLabel: entryName.split(/[\\/]/).pop() || entryName,
+        })),
+      });
+      setStatus(`${versions.length} clean regional version${versions.length === 1 ? '' : 's'} found for ${game.title}.`);
+    } catch (err) {
+      setStatus(`Could not inspect SNES versions: ${err.message}`);
+    } finally {
+      setLaunchingId(null);
+    }
+  }
+
   async function launchGame(game) {
     setLaunchingId(game.id);
     setStatus(`Starting ${game.title}...`);
@@ -2777,6 +2837,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         source: game.source || 'local',
         archiveSampleFileName: game.archiveSampleFileName || '',
         archiveMemberPath: game.archiveMemberPath || '',
+        archiveEntryName: game.archiveEntryName || '',
       }));
 
       const room = await apiFetch('/rooms/create', {
@@ -3258,9 +3319,17 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                   const system = SYSTEM_BY_ID[game.system];
                   const favourite = game.variants.some((variant) => favouriteSet.has(variant.id));
                   const hasBoxArt = Boolean(game.boxArtUrl) && !brokenBoxArtIds.has(game.id);
+                  const storedVariantId = selectedVariantIds[game.id];
+                  const storedSnesEntry = game.source === 'vip-snes-gameplay'
+                    ? snesEntryFromVariantId(game.id, storedVariantId)
+                    : '';
                   const selectedVariant = game.variants.find((variant) => (
                     variant.id === selectedVariantIds[game.id]
-                  )) || game;
+                  )) || (storedSnesEntry ? {
+                    ...game,
+                    id: storedVariantId,
+                    archiveEntryName: storedSnesEntry,
+                  } : game);
                   return (
                     <article key={game.id} className={hasBoxArt ? 'local-game-card has-box-art' : 'local-game-card'}>
                       <div className={hasBoxArt ? 'local-game-art has-art' : 'local-game-art'}>
@@ -3292,14 +3361,18 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                       </div>
                       <div className="local-game-card-head">
                         <span>{system?.shortLabel || game.system}</span>
-                        {game.variantCount > 1 ? (
+                        {game.variantCount > 1 || game.source === 'vip-snes-gameplay' ? (
                           <button
                             type="button"
                             className="library-versions-button"
-                            onClick={() => setVersionPickerGame(game)}
+                            onClick={() => (game.source === 'vip-snes-gameplay'
+                              ? openSnesVersionPicker(game)
+                              : setVersionPickerGame(game))}
                             aria-haspopup="dialog"
                           >
-                            {game.variantCount} versions
+                            {game.source === 'vip-snes-gameplay' && game.variantCount <= 1
+                              ? 'Versions'
+                              : `${game.variantCount} versions`}
                           </button>
                         ) : null}
                         <button
@@ -3372,7 +3445,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         </div>
         <div className="library-version-options">
           {versionPickerGame.variants.map((variant, index) => {
-            const preferred = (selectedVariantIds[versionPickerGame.id] || versionPickerGame.id) === variant.id;
+            const preferred = selectedVariantIds[versionPickerGame.id]
+              ? selectedVariantIds[versionPickerGame.id] === variant.id
+              : index === 0;
             return (
               <button
                 type="button"
@@ -3384,7 +3459,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 }}
               >
                 <span className="library-version-number">{index + 1}</span>
-                <span className="library-version-name">{variant.fileName || variant.title}</span>
+                <span className="library-version-name">{variant.versionLabel || variant.fileName || variant.title}</span>
                 <span className="library-version-choice">{preferred ? 'Preferred' : 'Choose'}</span>
               </button>
             );

@@ -6094,7 +6094,10 @@ export default function RoomPage() {
           const archiveBytes = new Uint8Array(await response.arrayBuffer());
           if (cancelled) return;
           setStatus('Extracting SNES ROM');
-          const extracted = await extractPrepared7zFile(archiveBytes, ['.sfc', '.smc']);
+          const extracted = await extractPrepared7zFile(archiveBytes, ['.sfc', '.smc'], {
+            preferredFileName: pendingGame.archiveEntryName || '',
+            preferredTitle: pendingGame.title || '',
+          });
           const file = new File([extracted.bytes], extracted.fileName, { type: 'application/octet-stream' });
           const loaded = await handleDiskSelected({
             target: { files: [file], dataset: {}, value: '' },
