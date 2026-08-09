@@ -21,13 +21,14 @@ const DIRECTIONS = ['up', 'down', 'left', 'right'];
 const TWO_BUTTON = [...DIRECTIONS, 'button1', 'button2', 'start'];
 const THREE_BUTTON = [...DIRECTIONS, 'button1', 'button2', 'button3', 'start'];
 const SIX_BUTTON = [...DIRECTIONS, 'button1', 'button2', 'button3', 'button4', 'select', 'shoulder1', 'shoulder2', 'start'];
+const SNES_PAD = [...DIRECTIONS, 'button1', 'button2', 'button3', 'button4', 'shoulder1', 'shoulder2', 'select', 'start'];
 
 const SYSTEM_ACTIONS = {
   arcade: [...DIRECTIONS, 'button1', 'button2', 'button3', 'button4', 'button5', 'button6', 'button7', 'start', 'coin'],
   mastersystem: TWO_BUTTON,
   megadrive: THREE_BUTTON,
   nes: TWO_BUTTON,
-  snes: THREE_BUTTON,
+  snes: SNES_PAD,
   pcengine: TWO_BUTTON,
   playstation: SIX_BUTTON,
   saturn: SIX_BUTTON,
@@ -52,7 +53,21 @@ export function supportsControllerMapping(system) {
   return getSystemActions(system).length > 0;
 }
 
-export function getActionLabel(_system, action) {
+const SYSTEM_LABELS = {
+  snes: {
+    button1: 'B',
+    button2: 'Y',
+    button3: 'A',
+    button4: 'X',
+    shoulder1: 'L',
+    shoulder2: 'R',
+    select: 'Select',
+    start: 'Start',
+  },
+};
+
+export function getActionLabel(system, action) {
+  if (SYSTEM_LABELS[system]?.[action]) return SYSTEM_LABELS[system][action];
   return CONTROLLER_ACTIONS[action]?.label || action;
 }
 

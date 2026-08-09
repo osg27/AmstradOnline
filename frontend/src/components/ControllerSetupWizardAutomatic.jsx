@@ -30,6 +30,7 @@ export default function ControllerSetupWizardAutomatic({
   const timerRef = useRef(null);
   const successTimerRef = useRef(null);
   const generationRef = useRef(0);
+  const controllerIdRef = useRef(null);
 
   function stopCapture() {
     generationRef.current += 1;
@@ -48,8 +49,8 @@ export default function ControllerSetupWizardAutomatic({
 
   function finishConfiguration() {
     stopCapture();
-    if (!controllerInfo.id) return;
-    setControllerMapping(system, controllerInfo.id, mappingRef.current);
+    if (!controllerIdRef.current) return;
+    setControllerMapping(system, controllerIdRef.current, mappingRef.current);
     setMapping(mappingRef.current);
     setStage('success');
   }
@@ -148,6 +149,7 @@ export default function ControllerSetupWizardAutomatic({
       return undefined;
     }
     const info = getGamepadNameAndId(gamepadIndex);
+    controllerIdRef.current = info.id;
     setControllerInfo(info);
     setControllerFamily(detectControllerFamily(info.id));
     setStage('configuring');

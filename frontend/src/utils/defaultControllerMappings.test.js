@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getActionMask,
   getDefaultMapping,
+  getActionLabel,
   getSystemActions,
   supportsControllerMapping,
 } from './defaultControllerMappings';
@@ -18,6 +19,12 @@ describe('system controller mapping configuration', () => {
     expect(getSystemActions('nes')).toEqual(['up', 'down', 'left', 'right', 'button1', 'button2', 'start']);
     expect(getSystemActions('arcade')).toContain('coin');
     expect(getSystemActions('playstation')).toContain('select');
+    expect(getSystemActions('snes')).toEqual([
+      'up', 'down', 'left', 'right', 'button1', 'button2', 'button3', 'button4',
+      'shoulder1', 'shoulder2', 'select', 'start',
+    ]);
+    expect(getActionLabel('snes', 'button1')).toBe('B');
+    expect(getActionLabel('snes', 'shoulder1')).toBe('L');
   });
 
   it('creates a complete default mapping for every configured action', () => {

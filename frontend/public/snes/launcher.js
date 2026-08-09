@@ -16,6 +16,8 @@
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
   let statusText = 'SNES ready';
+  const ROM_RELOAD_CACHE = 'oldstylegaming-snes-rom-reload-v1';
+  const ROM_RELOAD_REQUEST = `${window.location.origin}/__snes-rom-reload__`;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -38,7 +40,7 @@
   function ensureAudio() {
     if (!OriginalAudioContext) return null;
     if (!sharedAudioContext) {
-      sharedAudioContext = new OriginalAudioContext();
+      sharedAudioContext = new OriginalAudioContext({ latencyHint: 'playback' });
     }
     if (!audioDestination) {
       audioDestination = sharedAudioContext.createMediaStreamDestination();
@@ -57,7 +59,9 @@
   if (OriginalAudioContext) {
     function SharedAudioContext(...args) {
       if (!sharedAudioContext) {
-        sharedAudioContext = new OriginalAudioContext(...args);
+        sharedAudioContext = args.length
+          ? new OriginalAudioContext(...args)
+          : new OriginalAudioContext({ latencyHint: 'playback' });
       }
       ensureAudio();
       return sharedAudioContext;
@@ -124,7 +128,11 @@
     buttons[0] = Boolean(mask & 16); // B
     buttons[1] = Boolean(mask & 32); // Y
     buttons[9] = Boolean(mask & 64); // Start
-    buttons[8] = Boolean(mask & 128); // A
+    buttons[2] = Boolean(mask & 128); // A
+    buttons[3] = Boolean(mask & 256); // X
+    buttons[8] = Boolean(mask & 512); // Select
+    buttons[4] = Boolean(mask & 1024); // L
+    buttons[5] = Boolean(mask & 2048); // R
     return buttons;
   }
 
@@ -168,10 +176,14 @@
       [2, 5],
       [4, 6],
       [8, 7],
-      [16, 0],
-      [32, 1],
+      [16, 8],
+      [32, 0],
       [64, 3],
-      [128, 8],
+      [128, 9],
+      [256, 1],
+      [512, 2],
+      [1024, 10],
+      [2048, 11],
     ];
 
     mappings.forEach(([bit, button]) => {
@@ -225,9 +237,21 @@
         return 32;
       case 'Enter':
         return 64;
+      case 'v':
+      case 'V':
+        return 128;
+      case 's':
+      case 'S':
+        return 256;
       case 'c':
       case 'C':
-        return 128;
+        return 512;
+      case 'r':
+      case 'R':
+        return 1024;
+      case 'e':
+      case 'E':
+        return 2048;
       default:
         return 0;
     }
@@ -296,23 +320,32 @@
     window.EJS_alignStartButton = 'center';
     window.EJS_defaultControls = {
       0: {
-        0: { value: 'x', value2: 'BUTTON_1' },
-        1: { value: 'z', value2: 'BUTTON_2' },
+        0: { value: 'z', value2: 'BUTTON_2' },
+        1: { value: 's', value2: 'BUTTON_4' },
+        2: { value: 'c', value2: 'SELECT' },
         3: { value: 'enter', value2: 'START' },
         4: { value: 'up arrow', value2: 'DPAD_UP' },
         5: { value: 'down arrow', value2: 'DPAD_DOWN' },
         6: { value: 'left arrow', value2: 'DPAD_LEFT' },
         7: { value: 'right arrow', value2: 'DPAD_RIGHT' },
-        8: { value: 'c', value2: 'SELECT' },
+        8: { value: 'x', value2: 'BUTTON_1' },
+        9: { value: 'v', value2: 'BUTTON_3' },
+        10: { value: 'r', value2: 'LEFT_TOP_SHOULDER' },
+        11: { value: 'e', value2: 'RIGHT_TOP_SHOULDER' },
       },
       1: {
-        0: { value: 'f', value2: 'BUTTON_1' },
-        1: { value: 'g', value2: 'BUTTON_2' },
+        0: { value: 'g', value2: 'BUTTON_2' },
+        1: { value: 'j', value2: 'BUTTON_4' },
+        2: { value: 'n', value2: 'SELECT' },
         3: { value: 'enter', value2: 'START' },
         4: { value: 'q', value2: 'DPAD_UP' },
         5: { value: 'a', value2: 'DPAD_DOWN' },
         6: { value: 'o', value2: 'DPAD_LEFT' },
         7: { value: 'p', value2: 'DPAD_RIGHT' },
+        8: { value: 'f', value2: 'BUTTON_1' },
+        9: { value: 'h', value2: 'BUTTON_3' },
+        10: { value: 'y', value2: 'LEFT_TOP_SHOULDER' },
+        11: { value: 'u', value2: 'RIGHT_TOP_SHOULDER' },
       },
     };
     window.EJS_Buttons = {
@@ -373,6 +406,30 @@
     loaderScript.async = true;
     loaderScript.onerror = () => drawStatus('SNES failed to load', 'Could not load EmulatorJS');
     document.body.appendChild(loaderScript);
+  }
+
+  async function saveRomForCleanReload(rom) {
+    if (!('caches' in window)) return false;
+    const cache = await caches.open(ROM_RELOAD_CACHE);
+    await cache.put(ROM_RELOAD_REQUEST, new Response(new Blob([rom.bytes]), {
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-OldStyle-File-Name': encodeURIComponent(rom.fileName),
+      },
+    }));
+    return true;
+  }
+
+  async function takeRomAfterCleanReload() {
+    if (!('caches' in window)) return null;
+    const cache = await caches.open(ROM_RELOAD_CACHE);
+    const response = await cache.match(ROM_RELOAD_REQUEST);
+    if (!response) return null;
+    await cache.delete(ROM_RELOAD_REQUEST);
+    return {
+      fileName: decodeURIComponent(response.headers.get('X-OldStyle-File-Name') || 'game.sfc'),
+      bytes: new Uint8Array(await response.arrayBuffer()),
+    };
   }
 
   async function preflightEmulatorJs() {
@@ -439,11 +496,19 @@
     }
 
     if (message.type === 'snes_autoload') {
-      currentRom = {
+      const nextRom = {
         fileName: message.fileName || 'game.sfc',
         bytes: new Uint8Array(message.bytes || []),
       };
-      loadCurrentRom();
+      if (loaderScript || window.EJS_emulator) {
+        saveRomForCleanReload(nextRom).then((saved) => {
+          if (saved) window.location.reload();
+          else drawStatus('Could not change SNES game', 'Browser cache storage is unavailable');
+        });
+      } else {
+        currentRom = nextRom;
+        loadCurrentRom();
+      }
       return;
     }
 
@@ -483,5 +548,10 @@
   });
 
   drawStatus('SNES ready', 'Load a SNES ROM from the room');
+  takeRomAfterCleanReload().then((savedRom) => {
+    if (!savedRom || currentRom) return;
+    currentRom = savedRom;
+    loadCurrentRom();
+  }).catch((error) => drawStatus('Could not restore SNES game', error.message));
   mirrorEmulatorCanvas();
 })();
