@@ -40,6 +40,7 @@ export default function TournamentsPage() {
   const [tournament, setTournament] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [mine, setMine] = useState([]);
+  const [publicTournaments, setPublicTournaments] = useState([]);
   const [games, setGames] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(isVip);
   const [codeCopied, setCodeCopied] = useState(false);
@@ -47,6 +48,7 @@ export default function TournamentsPage() {
   const [romName, setRomName] = useState('');
   const [gameQuery, setGameQuery] = useState('');
   const [durationHours, setDurationHours] = useState(24);
+  const [isPublic, setIsPublic] = useState(true);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
@@ -75,9 +77,11 @@ export default function TournamentsPage() {
   useEffect(() => {
     Promise.all([
       apiFetch('/auth/tournaments/mine'),
+      apiFetch('/auth/tournaments/public'),
       isVip ? apiFetch('/auth/tournaments/games') : Promise.resolve([]),
-    ]).then(([myTournaments, availableGames]) => {
+    ]).then(([myTournaments, visibleTournaments, availableGames]) => {
       setMine(Array.isArray(myTournaments) ? myTournaments : []);
+      setPublicTournaments(Array.isArray(visibleTournaments) ? visibleTournaments : []);
       setGames(Array.isArray(availableGames) ? availableGames : []);
       if (isVip && !availableGames?.length) setStatus('No score-supported Archive MAME games were found.');
     }).catch((error) => setStatus(`Could not load tournament games: ${error.message}`))
@@ -142,14 +146,16 @@ export default function TournamentsPage() {
     try {
       const created = await apiFetch('/auth/tournaments', {
         method: 'POST',
-        body: JSON.stringify({ name, rom_name: romName, duration_hours: Number(durationHours) }),
+        body: JSON.stringify({ name, rom_name: romName, duration_hours: Number(durationHours), is_public: isPublic }),
       });
       navigate(`/tournaments/${created.code}`);
       setTournament(created);
       setMine((current) => [created, ...current]);
+      if (created.is_public) setPublicTournaments((current) => [created, ...current]);
       setName('');
       setRomName('');
       setGameQuery('');
+      setIsPublic(true);
       setCreateOpen(false);
       setStatus(`Tournament created. Share code ${created.code}.`);
     } catch (error) {
@@ -246,6 +252,7 @@ export default function TournamentsPage() {
     try {
       await apiFetch(`/auth/tournaments/${encodeURIComponent(item.code)}`, { method: 'DELETE' });
       setMine((current) => current.filter((entry) => entry.code !== item.code));
+      setPublicTournaments((current) => current.filter((entry) => entry.code !== item.code));
       if (tournament?.code === item.code) {
         setTournament(null);
         setLeaderboard([]);
@@ -293,7 +300,7 @@ export default function TournamentsPage() {
               <div>
                 <span className={`tournament-state ${tournament.status}`}>{tournament.status}</span>
                 <h2>{tournament.name}</h2>
-                <p>{tournament.display_name}</p>
+                <p>{tournament.display_name} · {tournament.is_public ? 'Public' : 'Private'}</p>
               </div>
               <div className="tournament-code"><small>CODE</small><strong>{tournament.code}</strong><button type="button" className="secondary" onClick={copyTournamentCode}>{codeCopied ? 'Copied' : 'Copy code'}</button></div>
             </div>
@@ -342,6 +349,22 @@ export default function TournamentsPage() {
 
         <section className={`panel tournament-list${tournament ? '' : ' tournament-list-wide'}`}>
           <div className="tournament-list-heading">
+            <div><p className="eyebrow">OPEN TO EVERYONE</p><h2>Public tournaments</h2></div>
+          </div>
+          {publicTournaments.length ? <div className="tournament-list-grid">{publicTournaments.map((item) => (
+            <article className="tournament-list-item" key={item.code}>
+              <Link to={`/tournaments/${item.code}`}>
+                <span className={`tournament-state ${item.status}`}>{item.status}</span>
+                <strong>{item.name}</strong>
+                <span className="tournament-list-game">{item.display_name}</span>
+                <small>{item.entry_count} entrant{item.entry_count === 1 ? '' : 's'} · {remainingText(item)}</small>
+              </Link>
+            </article>
+          ))}</div> : <div className="tournament-empty"><strong>No public tournaments right now</strong><p>New public competitions will appear here automatically.</p></div>}
+        </section>
+
+        <section className={`panel tournament-list${tournament ? '' : ' tournament-list-wide'}`}>
+          <div className="tournament-list-heading">
             <div><p className="eyebrow">YOUR COMPETITIONS</p><h2>My tournaments</h2></div>
             {isVip ? <button type="button" className="secondary" onClick={() => setCreateOpen(true)}>Create new</button> : null}
           </div>
@@ -366,7 +389,7 @@ export default function TournamentsPage() {
               <div><p className="eyebrow">NEW COMPETITION</p><h2 id="create-tournament-title">Create a tournament</h2></div>
               <button type="button" className="secondary tournament-modal-close" aria-label="Close" disabled={busy} onClick={() => setCreateOpen(false)}>×</button>
             </div>
-            <p>Choose a game and time limit. Any registered player can enter using the tournament code.</p>
+            <p>Choose a game and time limit. Public tournaments are listed for everyone; private tournaments require the code.</p>
             <form className="tournament-create-form" onSubmit={create}>
               <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Friday night high score" minLength={3} maxLength={120} required /></label>
               <label>
@@ -392,6 +415,10 @@ export default function TournamentsPage() {
                 <small>{selectedGame ? `Selected system: MAME Arcade · ROM: ${selectedGame.rom_name}` : 'Choose a MAME Arcade game from the search results.'}</small>
               </label>
               <label>Duration<select value={durationHours} onChange={(event) => setDurationHours(Number(event.target.value))}><option value={1}>1 hour</option><option value={6}>6 hours</option><option value={12}>12 hours</option><option value={24}>24 hours</option><option value={72}>3 days</option><option value={168}>1 week</option></select></label>
+              <label className="tournament-visibility-option">
+                <input type="checkbox" checked={!isPublic} onChange={(event) => setIsPublic(!event.target.checked)} />
+                <span><strong>Private tournament</strong><small>Only people with its code can find and join it.</small></span>
+              </label>
               <div className="tournament-modal-actions">
                 <button type="button" className="secondary" disabled={busy} onClick={() => setCreateOpen(false)}>Cancel</button>
                 <button type="submit" disabled={busy || !name.trim() || !selectedGame}>{busy ? 'Creating…' : 'Create tournament'}</button>

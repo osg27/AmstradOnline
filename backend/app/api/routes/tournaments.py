@@ -100,6 +100,7 @@ def serialize_tournament(tournament: Tournament, db: Session, user_id: int) -> d
         "status": tournament_status(tournament),
         "joined": joined,
         "entry_count": entry_count,
+        "is_public": bool(tournament.is_public),
     }
 
 
@@ -177,6 +178,7 @@ def create_tournament(
         creator_user_id=user.id,
         rom_name=rom_name,
         display_name=ready_game["display_name"],
+        is_public=payload.is_public,
         starts_at=starts_at,
         ends_at=starts_at + timedelta(hours=payload.duration_hours),
     )
@@ -195,6 +197,14 @@ def my_tournaments(user: User = Depends(get_current_user), db: Session = Depends
     rows = db.query(Tournament).join(
         TournamentEntry, TournamentEntry.tournament_id == Tournament.id,
     ).filter(TournamentEntry.user_id == user.id).order_by(desc(Tournament.created_at)).limit(50).all()
+    return [serialize_tournament(item, db, user.id) for item in rows]
+
+
+@router.get("/public")
+def public_tournaments(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rows = db.query(Tournament).filter(
+        Tournament.is_public.is_(True),
+    ).order_by(desc(Tournament.created_at)).limit(100).all()
     return [serialize_tournament(item, db, user.id) for item in rows]
 
 

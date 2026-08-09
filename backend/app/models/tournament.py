@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 
 from app.core.database import Base
 
@@ -12,6 +12,7 @@ class Tournament(Base):
     creator_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     rom_name = Column(String(64), nullable=False, index=True)
     display_name = Column(String(255), nullable=False)
+    is_public = Column(Boolean, nullable=False, default=True, server_default="true")
     starts_at = Column(DateTime(timezone=True), nullable=False, index=True)
     ends_at = Column(DateTime(timezone=True), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

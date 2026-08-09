@@ -10,10 +10,10 @@ class TournamentCreate(BaseModel):
     rom_name: str = Field(min_length=1, max_length=64)
     duration_hours: int = Field(ge=1, le=24 * 30)
     starts_at: datetime | None = None
+    is_public: bool = True
 
 
 class TournamentScoreSubmit(BaseModel):
     rom_name: str = Field(min_length=1, max_length=64)
     save_files: list[MameSaveFile] = Field(default_factory=list)
     baseline_save_files: list[MameSaveFile] = Field(default_factory=list)
-

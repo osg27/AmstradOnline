@@ -4690,6 +4690,10 @@ ul {
 .tournament-modal-heading h2 { margin-bottom: 0; font-size: 1.75rem; }
 .tournament-modal-close { min-width: 42px; padding: .45rem .7rem; font-size: 1.4rem; line-height: 1; }
 .tournament-create-form input, .tournament-create-form select { width: 100%; }
+.tournament-create-form .tournament-visibility-option { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid #34433e; border-radius: 8px; cursor: pointer; }
+.tournament-create-form .tournament-visibility-option input { width: auto; margin-top: 4px; }
+.tournament-visibility-option span { display: grid; gap: 3px; }
+.tournament-visibility-option small { color: var(--muted); }
 .tournament-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 
 @media (max-width: 760px) {
