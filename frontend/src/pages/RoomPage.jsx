@@ -28,6 +28,10 @@ import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
 import { getMameTitleDatabase } from '../data/mameTitleLookup';
+import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardAutomatic';
+import { getControllerMapping } from '../utils/controllerMappingStorage';
+import { applyCustomMapping } from '../utils/applyControllerMapping';
+import { supportsControllerMapping } from '../utils/defaultControllerMappings';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
@@ -793,6 +797,8 @@ export default function RoomPage() {
   const mameScoreProcessedTokenRef = useRef(0);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
+  const [controllerSetupOpen, setControllerSetupOpen] = useState(false);
+  const [controllerCapturingInput, setControllerCapturingInput] = useState(false);
   const inputSessionIdRef = useRef(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const inputSequenceRef = useRef(0);
   const localJoystickMaskRef = useRef(0);
@@ -1378,6 +1384,14 @@ export default function RoomPage() {
   }
 
   function gamepadToJoystickMask(pad, system = roomSystem) {
+    if (supportsControllerMapping(system) && pad.id) {
+      const customMapping = getControllerMapping(system, pad.id);
+      if (customMapping) {
+        const customMask = applyCustomMapping(pad, customMapping);
+        if (customMask !== null) return customMask;
+      }
+    }
+
     let mask = 0;
     const deadzone = 0.45;
     const fallback = pad.mapping === 'standard'
@@ -2448,11 +2462,19 @@ export default function RoomPage() {
       const pad = findGamepad(pads);
 
       if (pad) {
-        const mask = gamepadToJoystickMask(pad);
+        // Suppress input while controller configuration is capturing
+        if (controllerCapturingInput) {
+          if (lastMask !== 0) {
+            lastMask = 0;
+            sendLocalJoystickMask(0);
+          }
+        } else {
+          const mask = gamepadToJoystickMask(pad);
 
-        if (mask !== lastMask) {
-          lastMask = mask;
-          sendLocalJoystickMask(mask);
+          if (mask !== lastMask) {
+            lastMask = mask;
+            sendLocalJoystickMask(mask);
+          }
         }
       }
 
@@ -6582,6 +6604,16 @@ export default function RoomPage() {
                   {inputCaptured ? 'Release' : 'Capture'}
                 </button>
 
+                {supportsControllerMapping(roomSystem) && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setControllerSetupOpen(true)}
+                  >
+                    Controller Setup
+                  </button>
+                )}
+
                 <button
                   type="button"
                   className="secondary"
@@ -7493,6 +7525,15 @@ export default function RoomPage() {
           </div>
         )}
       </div>
+
+      <ControllerSetupWizardAutomatic
+        isOpen={controllerSetupOpen}
+        gamepadIndex={gamepadIndexRef.current}
+        system={roomSystem}
+        systemLabel={systemLabel}
+        onClose={() => setControllerSetupOpen(false)}
+        onInputCaptureStateChange={setControllerCapturingInput}
+      />
     </div>
   );
 }
