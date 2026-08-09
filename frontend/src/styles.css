@@ -1852,6 +1852,45 @@ input:focus {
   max-height: 46px;
 }
 
+.vip-library-progress {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(122, 217, 155, 0.28);
+  border-radius: 10px;
+  background: rgba(13, 24, 20, 0.86);
+}
+
+.vip-library-progress > div:first-child {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.vip-library-progress span,
+.vip-library-progress small {
+  color: var(--muted);
+}
+
+.vip-library-progress em {
+  color: var(--gold);
+  font-style: normal;
+  font-weight: 800;
+}
+
+@media (max-width: 680px) {
+  .vip-library-progress > div:first-child {
+    grid-template-columns: 1fr auto;
+  }
+
+  .vip-library-progress > div:first-child span {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 .library-versions-button {
   min-height: 0;
   padding: 0.25rem 0.5rem;

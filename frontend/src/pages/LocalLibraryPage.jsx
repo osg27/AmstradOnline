@@ -1481,6 +1481,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [libraryLoading, setLibraryLoading] = useState(!librarySessionCache);
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
+  const [vipLoadProgress, setVipLoadProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
   const [selectedVariantIds, setSelectedVariantIds] = useState(readPreferredVariants);
   const [versionPickerGame, setVersionPickerGame] = useState(null);
@@ -1646,17 +1647,33 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             setStatus(`VIP libraries ready: ${savedVipMameGames.length} MAME, ${savedVipC64Games.length} C64, ${savedVipAmstradGames.length} Amstrad, ${savedVipSpectrumGames.length} ZX Spectrum, ${savedVipMastersystemGames.length} Master System, ${savedVipNesGames.length} NES, ${savedVipSnesGames.length} SNES, ${savedVipMegadriveGames.length} Mega Drive, ${savedVipPcengineGames.length} PC Engine and ${savedVipAmigaGames.length} Amiga files.`);
           } else {
           setStatus('Loading VIP game libraries for the first time...');
+          const vipProgressTotal = 20;
+          setVipLoadProgress({ completed: 0, total: vipProgressTotal, label: 'Connecting to VIP catalogues...' });
+          const loadVipCatalog = async (label, path, fallback) => {
+            const result = await apiFetch(path).catch(() => fallback);
+            setVipLoadProgress((current) => ({
+              completed: Math.min(vipProgressTotal, (current?.completed || 0) + 1),
+              total: vipProgressTotal,
+              label: `${label} catalogue loaded`,
+            }));
+            return result;
+          };
+          const markVipPrepared = (label) => setVipLoadProgress((current) => ({
+            completed: Math.min(vipProgressTotal, (current?.completed || 0) + 1),
+            total: vipProgressTotal,
+            label: `Preparing ${label} games...`,
+          }));
           const [catalog, c64Catalog, amigaCatalog, amstradCatalog, spectrumCatalog, mastersystemCatalog, nesCatalog, snesCatalog, megadriveCatalog, pcengineCatalog] = await Promise.all([
-            apiFetch('/auth/vip/mame/catalog').catch(() => ({ roms: [], samples: [] })),
-            apiFetch('/auth/vip/c64/catalog').catch(() => ({ games: [] })),
-            apiFetch('/auth/vip/amiga/catalog').catch(() => ({ games: [] })),
-            apiFetch('/auth/vip/amstrad/catalog').catch(() => ({ games: [] })),
-            apiFetch('/auth/vip/spectrum/catalog').catch(() => ({ games: [] })),
-            apiFetch('/auth/vip/mastersystem/catalog').catch(() => ({ games: [] })),
-            apiFetch('/auth/vip/nes/catalog').catch(() => ({ games: [] })),
-            apiFetch('/auth/vip/snes/catalog').catch(() => ({ games: [] })),
-            apiFetch('/auth/vip/megadrive/catalog').catch(() => ({ games: [] })),
-            apiFetch('/auth/vip/pcengine/catalog').catch(() => ({ games: [] })),
+            loadVipCatalog('MAME', '/auth/vip/mame/catalog', { roms: [], samples: [] }),
+            loadVipCatalog('C64', '/auth/vip/c64/catalog', { games: [] }),
+            loadVipCatalog('Amiga', '/auth/vip/amiga/catalog', { games: [] }),
+            loadVipCatalog('Amstrad', '/auth/vip/amstrad/catalog', { games: [] }),
+            loadVipCatalog('ZX Spectrum', '/auth/vip/spectrum/catalog', { games: [] }),
+            loadVipCatalog('Master System', '/auth/vip/mastersystem/catalog', { games: [] }),
+            loadVipCatalog('NES', '/auth/vip/nes/catalog', { games: [] }),
+            loadVipCatalog('SNES', '/auth/vip/snes/catalog', { games: [] }),
+            loadVipCatalog('Mega Drive', '/auth/vip/megadrive/catalog', { games: [] }),
+            loadVipCatalog('PC Engine', '/auth/vip/pcengine/catalog', { games: [] }),
           ]);
           const sampleNames = new Set(Array.isArray(catalog.samples) ? catalog.samples : []);
           const localArcadeKeys = new Set(
@@ -1689,6 +1706,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             });
           const cachedArchiveGames = await restoreCachedBoxArt(archiveGames);
           const archiveGamesWithArtwork = await applyIndexedBoxArt(cachedArchiveGames, 'arcade');
+          markVipPrepared('MAME');
           const localC64Titles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'c64')
@@ -1713,6 +1731,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localC64Titles.has(game.title.toLowerCase()));
           const cachedC64Games = await restoreCachedBoxArt(c64Games);
           const c64GamesWithArtwork = await applyIndexedBoxArt(cachedC64Games, 'c64');
+          markVipPrepared('C64');
           const localAmigaTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'amiga' || game.system === 'amiga_aga')
@@ -1736,6 +1755,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localAmigaTitles.has(game.title.toLowerCase()));
           const cachedAmigaGames = await restoreCachedBoxArt(amigaGames);
           const amigaGamesWithArtwork = await applyIndexedBoxArt(cachedAmigaGames, 'amiga');
+          markVipPrepared('Amiga');
           const localAmstradTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'cpc')
@@ -1776,6 +1796,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localAmstradTitles.has(game.title.toLowerCase()));
           const cachedAmstradGames = await restoreCachedBoxArt(amstradGames);
           const amstradGamesWithArtwork = await applyIndexedBoxArt(cachedAmstradGames, 'cpc');
+          markVipPrepared('Amstrad');
           const localSpectrumTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'spectrum')
@@ -1814,6 +1835,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localSpectrumTitles.has(game.title.toLowerCase()));
           const cachedSpectrumGames = await restoreCachedBoxArt(spectrumGames);
           const spectrumGamesWithArtwork = await applyIndexedBoxArt(cachedSpectrumGames, 'spectrum');
+          markVipPrepared('ZX Spectrum');
           const localMastersystemTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'mastersystem')
@@ -1852,6 +1874,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localMastersystemTitles.has(game.title.toLowerCase()));
           const cachedMastersystemGames = await restoreCachedBoxArt(mastersystemGames);
           const mastersystemGamesWithArtwork = await applyIndexedBoxArt(cachedMastersystemGames, 'mastersystem');
+          markVipPrepared('Master System');
           const localNesTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'nes')
@@ -1891,6 +1914,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localNesTitles.has(game.title.toLowerCase()));
           const cachedNesGames = await restoreCachedBoxArt(nesGames);
           const nesGamesWithArtwork = await applyIndexedBoxArt(cachedNesGames, 'nes');
+          markVipPrepared('NES');
           const localSnesTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'snes')
@@ -1929,6 +1953,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localSnesTitles.has(game.title.toLowerCase()));
           const cachedSnesGames = await restoreCachedBoxArt(snesGames);
           const snesGamesWithArtwork = await applyIndexedBoxArt(cachedSnesGames, 'snes');
+          markVipPrepared('SNES');
           const localMegadriveTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'megadrive')
@@ -1967,6 +1992,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localMegadriveTitles.has(game.title.toLowerCase()));
           const cachedMegadriveGames = await restoreCachedBoxArt(megadriveGames);
           const megadriveGamesWithArtwork = await applyIndexedBoxArt(cachedMegadriveGames, 'megadrive');
+          markVipPrepared('Mega Drive');
           const localPcengineTitles = new Set(
             localGamesWithArtwork
               .filter((game) => game.system === 'pcengine')
@@ -2005,6 +2031,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((game) => !localPcengineTitles.has(game.title.toLowerCase()));
           const cachedPcengineGames = await restoreCachedBoxArt(pcengineGames);
           const pcengineGamesWithArtwork = await applyIndexedBoxArt(cachedPcengineGames, 'pcengine');
+          markVipPrepared('PC Engine');
           const allGames = [
             ...localGamesWithArtwork,
             ...archiveGamesWithArtwork,
@@ -2020,6 +2047,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           ];
           setGames(allGames);
           await saveLocalLibraryGames(allGames);
+          setVipLoadProgress(null);
           setStatus(`VIP libraries ready: ${archiveGames.length} MAME, ${c64Games.length} C64, ${amstradGames.length} Amstrad, ${spectrumGames.length} ZX Spectrum, ${mastersystemGames.length} Master System, ${nesGames.length} NES, ${snesGames.length} SNES, ${megadriveGames.length} Mega Drive, ${pcengineGames.length} PC Engine and ${amigaGames.length} Amiga files.`);
           }
         } else {
@@ -2031,6 +2059,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         setSelectedSystems(availableSavedSystems.length ? availableSavedSystems : availableSystems.map((system) => system.id));
         setFavourites(savedFavourites);
       } catch (err) {
+        setVipLoadProgress(null);
         setStatus(`Could not load local library: ${err.message}`);
       } finally {
         setLibraryLoading(false);
@@ -3197,6 +3226,26 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               <strong>{visibleFilteredCount}</strong>
               <span>shown from {visibleActiveCount} {activeLibraryCountLabel}{libraryLoading && !games.length ? ' - loading saved games...' : ''}{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
+            {vipLoadProgress ? (
+              <div className="vip-library-progress" role="status" aria-live="polite">
+                <div>
+                  <strong>Setting up your VIP library</strong>
+                  <span>{vipLoadProgress.label}</span>
+                  <em>{Math.round((vipLoadProgress.completed / vipLoadProgress.total) * 100)}%</em>
+                </div>
+                <div
+                  className="media-progress-bar"
+                  role="progressbar"
+                  aria-label="VIP library setup progress"
+                  aria-valuemin="0"
+                  aria-valuemax={vipLoadProgress.total}
+                  aria-valuenow={vipLoadProgress.completed}
+                >
+                  <span style={{ width: `${Math.round((vipLoadProgress.completed / vipLoadProgress.total) * 100)}%` }} />
+                </div>
+                <small>This only happens when the VIP catalogue needs rebuilding. Games themselves download when you press Play.</small>
+              </div>
+            ) : null}
             {mediaProgress ? (
               <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
                 <span style={{ width: `${Math.round((mediaProgress.checked / mediaProgress.total) * 100)}%` }} />
