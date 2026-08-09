@@ -889,6 +889,7 @@ export default function RoomPage() {
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
   const canSendPlayerInput = isHost || !isArcadeParty || Boolean(partyPlayerNumber);
   const isDirectJoystickSystem = isAmigaFamily || isSegaConsole || isNes || isSnes || isPcEngine || isX68000 || isDiscConsole || isC64 || isAtari8 || isAtariSt || isArcade;
+  const autoCaptureController = isArcade || isSegaConsole || isNes || isSnes || isPcEngine || isDiscConsole;
   const showFullscreenArcadeLeaderboard = isScreenFullscreen && supportsMameScoreboard && Boolean(loadedDiskName) && !remoteConnected;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isX68000 ? 'Sharp X68000' : isPlayStation ? 'Sony PlayStation' : isBeetleSaturn ? 'Sega Saturn Webretro Core' : isSaturn ? 'Sega Saturn' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
 
@@ -916,10 +917,10 @@ export default function RoomPage() {
     : isSoloMode
       ? isAmigaFamily
         ? 'P1 Amiga controls + keyboard/mouse'
-        : isMasterSystem ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 controller 1 / B Y A / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isDiscConsole ? `P1 ${isSaturn ? 'Saturn' : 'PlayStation'} controller` : isC64 ? 'P1 C64 joystick + keyboard' : isAtari8 ? 'P1 Atari joystick + keyboard' : isAtariSt ? 'P1 Atari ST joystick + keyboard/mouse' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isSharedCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
+        : isMasterSystem ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : isMegaDrive ? 'P1 controller 1 / A B C / Start' : isNes ? 'P1 controller 1 / A B / Start / Select' : isSnes ? 'P1 SNES pad / B Y A X / L R / Select / Start' : isPcEngine ? 'P1 controller 1 / I II / Run / Select' : isDiscConsole ? `P1 ${isSaturn ? 'Saturn' : 'PlayStation'} controller` : isC64 ? 'P1 C64 joystick + keyboard' : isAtari8 ? 'P1 Atari joystick + keyboard' : isAtariSt ? 'P1 Atari ST joystick + keyboard/mouse' : isArcade ? 'P1 arcade controls' : isSpectrum ? 'P1 Sinclair controls' : isSharedCpcParty ? `P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : 'Cursor keys + X / Z'
       : isAmigaFamily
       ? 'P1 port 2 / P2 port 1 + keyboard/mouse'
-      : isMasterSystem ? (isHost ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : 'P2 controller 2 / Button 1 / Button 2') : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? (isHost ? 'P1 controller 1 / B Y A / Start' : 'P2 controller 2 / B Y A / Start') : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isDiscConsole ? `${isHost ? 'P1' : 'P2'} ${isSaturn ? 'Saturn' : 'PlayStation'} controller` : isC64Party ? `P${currentPartyPlayerNumber} C64 joystick` : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isAtari8 ? (isHost ? 'P1 Atari joystick + keyboard' : 'P2 Atari joystick') : isAtariSt ? (isHost ? 'P1 Atari ST joystick + keyboard/mouse' : 'P2 Atari ST joystick') : isArcadeParty ? `P${currentPartyPlayerNumber} arcade controls` : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isSharedCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
+      : isMasterSystem ? (isHost ? 'P1 controller 1 / Button 1 / Button 2 / Pause' : 'P2 controller 2 / Button 1 / Button 2') : isMegaDrive ? (isHost ? 'P1 controller 1 / A B C / Start' : 'P2 controller 2 / A B C / Start') : isNes ? (isHost ? 'P1 controller 1 / A B / Start / Select' : 'P2 controller 2 / A B / Start / Select') : isSnes ? `${isHost ? 'P1' : 'P2'} SNES pad / B Y A X / L R / Select / Start` : isPcEngine ? (isHost ? 'P1 controller 1 / I II / Run / Select' : 'P2 controller 2 / I II / Run / Select') : isDiscConsole ? `${isHost ? 'P1' : 'P2'} ${isSaturn ? 'Saturn' : 'PlayStation'} controller` : isC64Party ? `P${currentPartyPlayerNumber} C64 joystick` : isC64 ? (isHost ? 'P1 C64 joystick' : 'P2 C64 joystick') : isAtari8 ? (isHost ? 'P1 Atari joystick + keyboard' : 'P2 Atari joystick') : isAtariSt ? (isHost ? 'P1 Atari ST joystick + keyboard/mouse' : 'P2 Atari ST joystick') : isArcadeParty ? `P${currentPartyPlayerNumber} arcade controls` : isArcade ? (isHost ? 'P1 arcade controls' : 'P2 arcade controls') : isSpectrum ? 'P1 Sinclair 1 / P2 Sinclair 2' : isSharedCpcParty ? `You: P${currentPartyPlayerNumber} / turn: P${activePartyPlayer}` : isHost ? 'Cursor keys + X / Z' : 'Q A O P / F / G';
   const roleLabel = !room
     ? 'Loading...'
     : isSoloMode ? 'Solo' : isHost ? 'Host' : 'Guest';
@@ -2304,6 +2305,11 @@ export default function RoomPage() {
 
     playRemoteVideo();
   }, [forwardInputToEmulator, isAmigaFamily, isHost, playRemoteVideo]);
+
+  useEffect(() => {
+    if (!room || !autoCaptureController) return;
+    captureInput();
+  }, [autoCaptureController, captureInput, emulatorFrameLoadCount, room?.room_code]);
 
   const forwardAmigaMouse = useCallback((payload) => {
     if (!isMouseComputer) return;
@@ -4592,10 +4598,10 @@ export default function RoomPage() {
       }
 
       const emulatorCanvas = await waitForEmulatorCanvas(iframe);
-      const useDirectCanvasStream = (isArcade || isBeetleSaturn || isSnes) && typeof emulatorCanvas.captureStream === 'function';
+      const useDirectCanvasStream = (isArcade || isBeetleSaturn) && typeof emulatorCanvas.captureStream === 'function';
 
       if (useDirectCanvasStream) {
-        addLog(`Using native ${isBeetleSaturn ? 'webretro Saturn' : isSnes ? 'SNES' : 'arcade'} canvas stream`);
+        addLog(`Using native ${isBeetleSaturn ? 'webretro Saturn' : 'arcade'} canvas stream`);
       } else {
         startMirrorLoop(emulatorCanvas);
       }
@@ -6625,13 +6631,15 @@ export default function RoomPage() {
                   </div>
                 ) : null}
 
-                <button
-                  type="button"
-                  className={inputCaptured ? 'danger' : 'secondary'}
-                  onClick={inputCaptured ? releaseInputCapture : captureInput}
-                >
-                  {inputCaptured ? 'Release' : 'Capture'}
-                </button>
+                {!autoCaptureController ? (
+                  <button
+                    type="button"
+                    className={inputCaptured ? 'danger' : 'secondary'}
+                    onClick={inputCaptured ? releaseInputCapture : captureInput}
+                  >
+                    {inputCaptured ? 'Release' : 'Capture'}
+                  </button>
+                ) : null}
 
                 {supportsControllerMapping(roomSystem) && (
                   <button
@@ -6665,8 +6673,8 @@ export default function RoomPage() {
               {inputCaptured
                 ? `${controlLabel} active`
                 : remotePlaybackBlocked
-                  ? 'Tap Capture to start stream'
-                  : 'Click the screen or press Capture to play'}
+                  ? autoCaptureController ? 'Click the screen to start stream playback' : 'Tap Capture to start stream'
+                  : autoCaptureController ? `${controlLabel} ready` : 'Click the screen or press Capture to play'}
             </div>
 
             {canControlLocalEmulator ? (
