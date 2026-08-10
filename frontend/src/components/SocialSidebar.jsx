@@ -28,6 +28,7 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false, sho
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [invitedFriendIds, setInvitedFriendIds] = useState(() => new Set());
   const notifiedInviteIdsRef = useRef(readNotifiedInviteIds());
 
   function applySocialOverview(overview) {
@@ -87,6 +88,10 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false, sho
     };
   }, []);
 
+  useEffect(() => {
+    setInvitedFriendIds(new Set());
+  }, [roomCode]);
+
   async function runAction(action, successMessage) {
     setBusy(true);
     setError('');
@@ -130,6 +135,16 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false, sho
     } catch (err) {
       setError(err.message);
       setBusy(false);
+    }
+  }
+
+  async function sendRoomInvite(friend) {
+    const sent = await runAction(
+      () => apiFetch(`/auth/social/friends/${friend.id}/invite/${roomCode}`, { method: 'POST' }),
+      `Room invite sent to ${friend.username}.`,
+    );
+    if (sent) {
+      setInvitedFriendIds((current) => new Set(current).add(friend.id));
     }
   }
 
@@ -276,13 +291,10 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false, sho
                 <button
                   className="social-action"
                   type="button"
-                  disabled={busy}
-                  onClick={() => runAction(
-                    () => apiFetch(`/auth/social/friends/${friend.id}/invite/${roomCode}`, { method: 'POST' }),
-                    `Room invite sent to ${friend.username}.`,
-                  )}
+                  disabled={busy || invitedFriendIds.has(friend.id)}
+                  onClick={() => sendRoomInvite(friend)}
                 >
-                  Invite
+                  {invitedFriendIds.has(friend.id) ? 'Invite sent' : 'Invite'}
                 </button>
               ) : null}
             </div>
