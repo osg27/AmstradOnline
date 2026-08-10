@@ -1188,7 +1188,12 @@ export default function RoomPage() {
   }
 
   function buildHostAudioStream(rawAudioStream) {
-    cleanupHostAudioGraph({ stopInput: true });
+    const previousRawAudioStream = hostRawAudioStreamRef.current;
+    // Solo-to-multiplayer recapture reuses the iframe's source stream. Keep
+    // that source alive while replacing only the gain/output graph.
+    cleanupHostAudioGraph({
+      stopInput: Boolean(previousRawAudioStream && previousRawAudioStream !== rawAudioStream),
+    });
     hostRawAudioStreamRef.current = rawAudioStream || null;
 
     if (!rawAudioStream?.getAudioTracks?.().length) {
@@ -1222,6 +1227,9 @@ export default function RoomPage() {
         output: destination.stream,
         input: rawAudioStream,
       };
+      context.resume?.().catch(() => {
+        addLog('Cabinet audio is waiting for browser playback permission');
+      });
       return destination.stream;
     } catch (err) {
       addLog(`Volume control unavailable: ${err.message}`);
@@ -2318,6 +2326,7 @@ export default function RoomPage() {
 
   const captureInput = useCallback((event = null) => {
     setInputCaptured(true);
+    hostAudioGraphRef.current?.context?.resume?.().catch(() => {});
     forwardInputToEmulator({
       type: 'amstrad_audio_unlock',
     });
@@ -2809,6 +2818,7 @@ export default function RoomPage() {
 
       if (parsed.type === 'audio_unlock') {
         addInputDebug('guest requested host audio unlock', null, 'guest remote');
+        hostAudioGraphRef.current?.context?.resume?.().catch(() => {});
         forwardInputToEmulator({
           type: 'amstrad_audio_unlock',
         });
