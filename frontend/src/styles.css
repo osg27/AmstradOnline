@@ -65,14 +65,16 @@ button.secondary,
   border-color: #3b4240;
 }
 
-.mail-button {
+.mail-button,
+.tournament-button {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
 }
 
-.mail-button strong {
+.mail-button strong,
+.tournament-button strong {
   min-width: 1.35rem;
   border-radius: 999px;
   padding: 0.12rem 0.35rem;

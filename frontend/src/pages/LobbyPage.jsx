@@ -349,6 +349,7 @@ export default function LobbyPage() {
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [availableTournamentCount, setAvailableTournamentCount] = useState(0);
   const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
   const [librarySystems, setLibrarySystems] = useState([]);
   const [openingLibrary, setOpeningLibrary] = useState(false);
@@ -462,6 +463,23 @@ export default function LobbyPage() {
 
     loadUnreadMessages();
     const timer = window.setInterval(loadUnreadMessages, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    async function loadAvailableTournaments() {
+      try {
+        const tournaments = await apiFetch('/auth/tournaments/public');
+        setAvailableTournamentCount(Array.isArray(tournaments)
+          ? tournaments.filter((item) => !item.joined && item.status !== 'completed').length
+          : 0);
+      } catch {
+        setAvailableTournamentCount(0);
+      }
+    }
+
+    loadAvailableTournaments();
+    const timer = window.setInterval(loadAvailableTournaments, 30000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -632,7 +650,16 @@ export default function LobbyPage() {
               {openingLibrary ? 'Fetching your games...' : 'My Library'}
             </button>
             <button className="secondary" onClick={() => navigate('/my-local-games')}>My Local Games</button>
-            <button className="secondary" onClick={() => navigate('/tournaments')}>Tournaments</button>
+            <button
+              className="secondary tournament-button"
+              onClick={() => navigate('/tournaments')}
+              aria-label={availableTournamentCount
+                ? `Tournaments, ${availableTournamentCount} public tournament${availableTournamentCount === 1 ? '' : 's'} available`
+                : 'Tournaments'}
+            >
+              <span>Tournaments</span>
+              {availableTournamentCount ? <strong>{availableTournamentCount}</strong> : null}
+            </button>
             {canUsePreviewSystems ? (
               <button className="secondary" onClick={() => navigate('/feedback')}>
                 Feedback{feedbackNotificationCount ? ` (${feedbackNotificationCount})` : ''}
