@@ -682,7 +682,7 @@ export default function RoomPage() {
   const hasVipAccess = localStorage.getItem('isVip') === 'true'
     || localStorage.getItem('isAdmin') === 'true'
     || isSuperAdmin;
-  const isSoloMode = searchParams.get('mode') === 'solo';
+  const legacySoloMode = searchParams.get('mode') === 'solo';
   const localGameId = searchParams.get('localGame');
   const localReleaseId = searchParams.get('localRelease');
   const tournamentCode = searchParams.get('tournament')?.toUpperCase() || '';
@@ -909,14 +909,15 @@ export default function RoomPage() {
   const isAtariSt = roomSystem === 'atarist';
   const isMouseComputer = isAmigaFamily || isAtariSt || isX68000;
   const isArcade = roomSystem === 'arcade';
-  const isLocalLibraryHostRoom = Boolean((localGameId || localReleaseId) && isHost);
-  const supportsMameScoreboard = isArcade && (isSoloMode || isLocalLibraryHostRoom);
+  const isSoloMode = isArcade ? !Boolean(room?.arcade_multiplayer) : legacySoloMode;
+  const supportsMameScoreboard = isArcade;
   const supportsBattleSquadronScoreboard = isPuaeAmiga
     && /battle\s*[-_]?\s*squadron/i.test(loadedDiskName || '');
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : isX68000 ? X68000_FIRMWARE_KEY : '';
-  const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
+  const partyMaxPlayers = Math.min(20, Math.max(2, Number(room?.party_max_players) || 2));
+  const arcadeControlSlots = 2;
   const isC64Party = isC64 && !isSoloMode && partyMaxPlayers > 2;
-  const isArcadeParty = isArcade && !isSoloMode && partyMaxPlayers > 2;
+  const isArcadeParty = isArcade && !isSoloMode;
   const isSharedCpcParty = isCpcParty;
   const isMultiPeerParty = isSharedCpcParty || isC64Party || isArcadeParty;
   const currentPartyPlayerNumber = isHost ? 1 : partyPlayerNumber || 2;
@@ -2960,6 +2961,13 @@ export default function RoomPage() {
       return;
     }
 
+    if (message.type === 'arcade-mode-changed' && message.room) {
+      setRoom(message.room);
+      setStatus(message.room.arcade_multiplayer ? 'Multiplayer cabinet opened' : 'Cabinet switched to single player');
+      setRoomSessionKey((key) => key + 1);
+      return;
+    }
+
     if (message.type === 'party-room-full') {
       setStatus('Party room full');
       setError('This party room has no free live player slots.');
@@ -4160,7 +4168,8 @@ export default function RoomPage() {
         .filter(Boolean),
     );
 
-    for (let playerNumber = 2; playerNumber <= partyMaxPlayers; playerNumber += 1) {
+    const finalPlayerNumber = isArcadeParty ? arcadeControlSlots : partyMaxPlayers;
+    for (let playerNumber = 2; playerNumber <= finalPlayerNumber; playerNumber += 1) {
       if (!usedPlayers.has(playerNumber)) return playerNumber;
     }
 
@@ -4924,6 +4933,30 @@ export default function RoomPage() {
       capturedAt: Date.now(),
     };
     addLog(`MAME score baseline captured for ${romName}: ${files.length} files`);
+  }
+  async function setArcadeCabinetMode(multiplayer) {
+    if (!isArcade || !isHost || switchingSystem || Boolean(room?.arcade_multiplayer) === multiplayer) return;
+
+    setSwitchingSystem(true);
+    try {
+      setError('');
+      const nextRoom = await apiFetch(`/rooms/${roomCode}/arcade-mode`, {
+        method: 'PATCH',
+        body: JSON.stringify({ multiplayer }),
+      });
+      if (signalingOpen) {
+        sendSignal({ type: 'arcade-mode-changed', room: nextRoom, username });
+      }
+      setRoom(nextRoom);
+      setPartyPlayerNumber(null);
+      setArcadeQueueStatus({ queued: false, queuePosition: null, role: 'Spectator' });
+      setRoomSessionKey((key) => key + 1);
+      setStatus(multiplayer ? 'Multiplayer cabinet open — share the room code' : 'Single-player cabinet');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSwitchingSystem(false);
+    }
   }
 
   async function refreshAmigaLeaderboard() {
@@ -6654,14 +6687,14 @@ export default function RoomPage() {
 
   return (
     <div className={`page room-page ${obsCaptureMode ? 'obs-capture-page' : ''}`}>
-      <div className={`page-social-layout room-social-layout ${supportsMameScoreboard ? 'solo-arcade-layout' : ''}`}>
+      <div className={`page-social-layout room-social-layout ${supportsMameScoreboard && isSoloMode ? 'solo-arcade-layout' : ''}`}>
         <div className="card room-card">
         <div className="room-topbar">
           <div className="room-title">
             <BrandMark compact />
             <div className="room-code-row">
-              <h1>{isSoloMode ? '1 Player' : `Room ${roomCode}`}</h1>
-              {!isSoloMode ? (
+              <h1>{isArcade ? 'MAME Cabinet' : isSoloMode ? '1 Player' : `Room ${roomCode}`}</h1>
+              {(!isSoloMode || isArcade) ? (
                 <button className="secondary" type="button" onClick={copyRoomCode}>
                   {roomCodeCopied ? 'Copied' : 'Copy code'}
                 </button>
@@ -6678,7 +6711,7 @@ export default function RoomPage() {
             <Link className="button-like secondary" to={tournamentCode ? `/tournaments/${tournamentCode}` : '/library'}>
               {tournamentCode ? 'Tournament' : 'Library'}
             </Link>
-            {isSoloMode && isHost ? (
+            {isSoloMode && isHost && !isArcade ? (
               <button type="button" className="secondary" onClick={invitePlayerFromSolo} disabled={soloInviteBusy}>
                 {soloInviteBusy ? 'Creating...' : inviteCopied ? 'Invite copied' : 'Invite player'}
               </button>
@@ -6695,6 +6728,37 @@ export default function RoomPage() {
             </button>
           </div>
         </div>
+
+        {isArcade ? (
+          <div className="arcade-mode-strip">
+            <div>
+              <strong>{isSoloMode ? 'Single-player cabinet' : 'Multiplayer cabinet'}</strong>
+              <span>{isSoloMode
+                ? 'Play locally. Switch to multiplayer whenever you want to open the cabinet to friends.'
+                : `P1 belongs to the host. P2 belongs to the first player at the cabinet; everyone else can watch and put a 10p in the queue.`}</span>
+            </div>
+            {isHost ? (
+              <div className="arcade-mode-toggle" role="group" aria-label="Cabinet mode">
+                <button
+                  type="button"
+                  className={isSoloMode ? 'active' : 'secondary'}
+                  onClick={() => setArcadeCabinetMode(false)}
+                  disabled={switchingSystem}
+                >
+                  Single player
+                </button>
+                <button
+                  type="button"
+                  className={!isSoloMode ? 'active' : 'secondary'}
+                  onClick={() => setArcadeCabinetMode(true)}
+                  disabled={switchingSystem}
+                >
+                  Multiplayer
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="room-summary">
           <div className="player-strip" aria-label="Players">
@@ -7387,8 +7451,8 @@ export default function RoomPage() {
                 {isArcadeParty ? (
                   <div className="party-turn-panel arcade-queue-panel">
                     <div className="party-turn-header">
-                      <strong>Arcade cabinet</strong>
-                      <span>Players hold cabinet slots. Everyone else can watch and queue.</span>
+                      <strong>10p queue</strong>
+                      <span>P1 always belongs to the host. P2 plays; everyone else watches until their coin reaches the front.</span>
                     </div>
                     <div className="party-roster" aria-label="Arcade cabinet players">
                       {partyRoster
@@ -7502,7 +7566,7 @@ export default function RoomPage() {
                           onClick={() => sendArcadeQueueAction(arcadeQueueStatus.queued ? 'arcade_leave_queue' : 'arcade_join_queue')}
                           disabled={!guestPrepared}
                         >
-                          {arcadeQueueStatus.queued ? 'Leave queue' : 'Join queue'}
+                          {arcadeQueueStatus.queued ? 'Take back my 10p' : 'Put 10p on the cabinet'}
                         </button>
                       ) : (
                         <button
@@ -7742,7 +7806,7 @@ export default function RoomPage() {
           </>
         ) : null}
         </div>
-        {supportsMameScoreboard ? null : (
+        {supportsMameScoreboard && isSoloMode ? null : (
           <div className="room-side-rail">
             <SocialSidebar roomCode={roomCode} allowInvites={!isSoloMode} showOnline={false} />
             {!isSoloMode ? (

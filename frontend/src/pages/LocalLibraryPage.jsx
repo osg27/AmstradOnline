@@ -2512,7 +2512,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           method: 'POST',
           body: JSON.stringify({
             system: launch.roomSystem,
-            party_max_players: 2,
+            party_max_players: launch.roomSystem === 'arcade' ? 8 : 2,
           }),
         });
         const nextParams = new URLSearchParams({
@@ -2844,7 +2844,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         method: 'POST',
         body: JSON.stringify({
           system: game.roomSystem,
-          party_max_players: 2,
+          party_max_players: game.roomSystem === 'arcade' ? 8 : 2,
         }),
       });
       const nextParams = new URLSearchParams({
@@ -2900,7 +2900,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         method: 'POST',
         body: JSON.stringify({
           system: system.roomSystem,
-          party_max_players: 2,
+          party_max_players: system.roomSystem === 'arcade' ? 8 : 2,
         }),
       });
       const nextParams = new URLSearchParams({

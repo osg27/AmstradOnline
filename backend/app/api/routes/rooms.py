@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.room import (
     RoomCreateRequest,
     RoomCreateResponse,
+    ArcadeModeUpdateRequest,
     RoomHeartbeatRequest,
     RoomJoinRequest,
     RoomResponse,
@@ -37,7 +38,9 @@ def normalize_party_max_players(system: str, requested: int | None) -> int:
 
     requested_players = requested or 2
     if system == "arcade":
-        return min(4, max(2, requested_players))
+        # Room capacity includes spectators. Cabinet control slots are managed
+        # separately by the arcade queue in the client.
+        return min(20, max(8, requested_players))
     return min(8, max(2, requested_players))
 
 
@@ -90,6 +93,7 @@ def serialize_room(room: Room) -> RoomResponse:
         owner_user_id=room.owner_user_id,
         system=room.system or "cpc",
         party_max_players=room.party_max_players or 2,
+        arcade_multiplayer=bool(room.arcade_multiplayer),
     )
 
 
@@ -112,6 +116,7 @@ def create_room(
         status="waiting",
         system=system,
         party_max_players=normalize_party_max_players(system, payload.party_max_players if payload else None),
+        arcade_multiplayer=bool(payload.arcade_multiplayer) if payload and system == "arcade" else False,
     )
     db.add(room)
     db.commit()
@@ -122,6 +127,7 @@ def create_room(
         status=room.status,
         system=room.system,
         party_max_players=room.party_max_players or 2,
+        arcade_multiplayer=bool(room.arcade_multiplayer),
     )
 
 
@@ -135,6 +141,8 @@ def join_room(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
     require_system_access(db, user_id, room.system or "cpc")
+    if room.system == "arcade" and not room.arcade_multiplayer and room.owner_user_id != user_id:
+        raise HTTPException(status_code=409, detail="This MAME cabinet is currently set to single player")
 
     db.query(RoomInvite).filter(
         RoomInvite.room_id == room.id,
@@ -160,10 +168,33 @@ def update_room(
     require_system_access(db, user_id, payload.system, creating=True)
     room.system = payload.system
     room.party_max_players = normalize_party_max_players(payload.system, payload.party_max_players)
+    room.arcade_multiplayer = bool(payload.arcade_multiplayer) if payload.system == "arcade" else False
     room.current_game = None
     db.commit()
     db.refresh(room)
 
+    return serialize_room(room)
+
+
+@router.patch("/{room_code}/arcade-mode", response_model=RoomResponse)
+def update_arcade_mode(
+    room_code: str,
+    payload: ArcadeModeUpdateRequest,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room.owner_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Only the room host can change cabinet mode")
+    if room.system != "arcade":
+        raise HTTPException(status_code=400, detail="Cabinet mode is only available for MAME rooms")
+
+    room.arcade_multiplayer = payload.multiplayer
+    room.party_max_players = normalize_party_max_players("arcade", room.party_max_players)
+    db.commit()
+    db.refresh(room)
     return serialize_room(room)
 
 

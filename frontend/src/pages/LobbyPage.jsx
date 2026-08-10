@@ -563,7 +563,8 @@ export default function LobbyPage() {
     setError('');
     setLoadingCreate(true);
     try {
-      const modeConfig = selectedSystem?.modes[mode];
+      const isArcadeCabinet = selectedSystem?.id === 'arcade';
+      const modeConfig = isArcadeCabinet ? selectedSystem?.modes.solo : selectedSystem?.modes[mode];
       if (!selectedSystem || selectedSystem.locked || !modeConfig?.enabled) {
         throw new Error('That play mode is not ready yet.');
       }
@@ -577,11 +578,12 @@ export default function LobbyPage() {
         method: 'POST',
         body: JSON.stringify({
           system: roomSystem,
-          party_max_players: isPartyRoom ? nextPartyMaxPlayers : 2,
+          party_max_players: isArcadeCabinet ? 8 : isPartyRoom ? nextPartyMaxPlayers : 2,
+          arcade_multiplayer: false,
         }),
       });
 
-      const query = mode === 'solo' ? '?mode=solo' : '';
+      const query = !isArcadeCabinet && mode === 'solo' ? '?mode=solo' : '';
       navigate(`/room/${room.room_code}${query}`);
     } catch (err) {
       setError(err.message);
@@ -806,7 +808,7 @@ export default function LobbyPage() {
               {!selectedSystem ? <p>Pick a shelf with available systems to start a room.</p> : null}
             </div>
 
-            {selectedSystem ? (
+            {selectedSystem && selectedSystem.id !== 'arcade' ? (
               <div className="mode-list">
                 {Object.entries(PLAY_MODES).filter(([modeId]) => (
                   modeId !== 'link' || selectedSystem?.id === 'amiga'
@@ -832,7 +834,7 @@ export default function LobbyPage() {
               </div>
             ) : null}
 
-            {selectedMode === 'party' && ['cpc_party', 'c64', 'arcade'].includes(selectedSystem?.modes.party?.system || selectedSystem?.id) ? (
+            {selectedSystem?.id !== 'arcade' && selectedMode === 'party' && ['cpc_party', 'c64', 'arcade'].includes(selectedSystem?.modes.party?.system || selectedSystem?.id) ? (
               <label className="party-player-select mode-party-select">
                 <span>Party players</span>
                 <select
@@ -853,7 +855,7 @@ export default function LobbyPage() {
               onClick={() => createSession()}
               disabled={loadingCreate || selectedSystem?.locked || !selectedModeConfig?.enabled}
             >
-              {loadingCreate ? 'Starting...' : !selectedSystem ? 'Choose a system' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Not available' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
+              {loadingCreate ? 'Starting...' : !selectedSystem ? 'Choose a system' : selectedSystem?.underConstruction ? 'Under construction' : selectedSystem?.locked ? 'Not available' : selectedSystem.id === 'arcade' ? 'Open MAME cabinet' : selectedMode === 'solo' ? 'Play now' : selectedMode === 'party' ? 'Start Party Mode' : selectedMode === 'link' ? 'Start Link Play' : 'Start online room'}
             </button>
 
             {error ? <p className="error">{error}</p> : null}

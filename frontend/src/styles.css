@@ -3871,6 +3871,44 @@ input:focus {
   text-transform: uppercase;
 }
 
+.arcade-mode-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(232, 179, 57, 0.35);
+  border-radius: 10px;
+  background: rgba(232, 179, 57, 0.06);
+}
+
+.arcade-mode-strip > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.arcade-mode-strip span {
+  color: var(--muted);
+}
+
+.arcade-mode-toggle {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .arcade-mode-strip {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .arcade-mode-toggle button {
+    flex: 1;
+  }
+}
+
 .mame-score-panel-header .tournament-room-title {
   line-height: 1.15;
   text-transform: none;

@@ -46,7 +46,11 @@ export default function MyLocalGamesPage() {
       const launch = prepareLocalGameLaunch(game);
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
-        body: JSON.stringify({ system: launch.roomSystem, party_max_players: 2 }),
+        body: JSON.stringify({
+          system: launch.roomSystem,
+          party_max_players: launch.roomSystem === 'arcade' ? 8 : 2,
+          arcade_multiplayer: false,
+        }),
       });
       const params = new URLSearchParams({ localRelease: launch.launchId, returnTo: '/my-local-games' });
       navigate(`/room/${room.room_code}?${params.toString()}`);

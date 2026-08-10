@@ -12,6 +12,8 @@ def ensure_runtime_columns(engine):
     with engine.begin() as connection:
         dialect = connection.dialect.name
         timestamp_type = "TIMESTAMP WITH TIME ZONE" if dialect == "postgresql" else "DATETIME"
+        false_default = "FALSE" if dialect == "postgresql" else "0"
+        true_default = "TRUE" if dialect == "postgresql" else "1"
 
         if "last_login_at" not in user_columns:
             connection.execute(text(f"ALTER TABLE users ADD COLUMN last_login_at {timestamp_type}"))
@@ -58,6 +60,11 @@ def ensure_runtime_columns(engine):
         if "party_max_players" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN party_max_players INTEGER NOT NULL DEFAULT 2"))
 
+        if "arcade_multiplayer" not in room_columns:
+            connection.execute(text(
+                f"ALTER TABLE rooms ADD COLUMN arcade_multiplayer BOOLEAN NOT NULL DEFAULT {false_default}"
+            ))
+
         if "current_game" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN current_game VARCHAR(512)"))
 
@@ -67,9 +74,6 @@ def ensure_runtime_columns(engine):
             connection.execute(text("UPDATE feedback_items SET status = 'resolved' WHERE status = 'done'"))
 
         bool_type = "BOOLEAN" if dialect == "postgresql" else "BOOLEAN"
-        false_default = "FALSE" if dialect == "postgresql" else "0"
-        true_default = "TRUE" if dialect == "postgresql" else "1"
-
         if "tournaments" in table_names:
             tournament_columns = {column["name"] for column in inspector.get_columns("tournaments")}
             if "is_public" not in tournament_columns:

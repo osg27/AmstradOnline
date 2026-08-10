@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 
 from app.core.database import Base
 
@@ -12,6 +12,7 @@ class Room(Base):
     status = Column(String(32), nullable=False, default="waiting")
     system = Column(String(32), nullable=False, default="cpc", server_default="cpc")
     party_max_players = Column(Integer, nullable=False, default=2, server_default="2")
+    arcade_multiplayer = Column(Boolean, nullable=False, default=False, server_default="false")
     current_game = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

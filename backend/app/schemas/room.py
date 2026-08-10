@@ -7,6 +7,7 @@ VALID_SYSTEMS = {"cpc", "cpc_party", "spectrum", "c64", "atari8", "atarist", "x6
 class RoomCreateRequest(BaseModel):
     system: str = "cpc"
     party_max_players: int = Field(default=2, ge=2, le=20)
+    arcade_multiplayer: bool = False
 
     @field_validator("system")
     @classmethod
@@ -20,6 +21,7 @@ class RoomCreateRequest(BaseModel):
 class RoomUpdateRequest(BaseModel):
     system: str
     party_max_players: int = Field(default=2, ge=2, le=20)
+    arcade_multiplayer: bool = False
 
     @field_validator("system")
     @classmethod
@@ -35,6 +37,11 @@ class RoomCreateResponse(BaseModel):
     status: str
     system: str
     party_max_players: int
+    arcade_multiplayer: bool
+
+
+class ArcadeModeUpdateRequest(BaseModel):
+    multiplayer: bool
 
 
 class RoomJoinRequest(BaseModel):
@@ -51,3 +58,4 @@ class RoomResponse(BaseModel):
     owner_user_id: int
     system: str
     party_max_players: int
+    arcade_multiplayer: bool
