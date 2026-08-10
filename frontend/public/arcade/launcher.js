@@ -672,8 +672,11 @@
   function simulateMask(playerIndex, nextMask) {
     const emulator = window.EJS_emulator;
     const manager = emulator?.gameManager;
+    const simulateInput = manager?.functions?.simulateInput
+      ? manager.functions.simulateInput.bind(manager.functions)
+      : manager?.simulateInput?.bind(manager);
 
-    if (!emulator?.started || !manager?.simulateInput) return;
+    if (!emulator?.started || !simulateInput) return;
 
     const previous = lastSimulatedMasks[playerIndex] || 0;
     const mappings = [
@@ -696,7 +699,11 @@
       const wasPressed = Boolean(previous & bit);
       const isPressed = Boolean(nextMask & bit);
       if (wasPressed !== isPressed) {
-        manager.simulateInput(playerIndex, button, isPressed ? 1 : 0);
+        // Room multiplayer is handled by our own WebRTC input channel. Calling
+        // GameManager.simulateInput here can pass through EmulatorJS netplay,
+        // which replaces the requested player with its local user index and
+        // makes guest movement/fire operate P1. Feed the libretro port directly.
+        simulateInput(playerIndex, button, isPressed ? 1 : 0);
       }
     });
 
@@ -706,10 +713,10 @@
       const fireDown = Boolean(nextMask & 16384);
       const fireLeft = Boolean(nextMask & 32768);
       const fireRight = Boolean(nextMask & 65536);
-      manager.simulateInput(playerIndex, 20, fireRight ? analog : 0);
-      manager.simulateInput(playerIndex, 21, fireLeft ? analog : 0);
-      manager.simulateInput(playerIndex, 22, fireDown ? analog : 0);
-      manager.simulateInput(playerIndex, 23, fireUp ? analog : 0);
+      simulateInput(playerIndex, 20, fireRight ? analog : 0);
+      simulateInput(playerIndex, 21, fireLeft ? analog : 0);
+      simulateInput(playerIndex, 22, fireDown ? analog : 0);
+      simulateInput(playerIndex, 23, fireUp ? analog : 0);
     }
 
     lastSimulatedMasks[playerIndex] = nextMask;
