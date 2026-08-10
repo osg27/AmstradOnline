@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.admin import router as admin_router
+from app.api.routes.amiga_scores import router as amiga_scores_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.feedback import router as feedback_router
 from app.api.routes.library_media import router as library_media_router
@@ -46,6 +47,7 @@ def health_check():
 
 
 app.include_router(auth_router)
+app.include_router(amiga_scores_router)
 app.include_router(rooms_router)
 app.include_router(feedback_router)
 app.include_router(library_media_router)

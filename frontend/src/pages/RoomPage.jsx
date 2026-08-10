@@ -756,6 +756,9 @@ export default function RoomPage() {
   const [mameScoreStatus, setMameScoreStatus] = useState('');
   const [mameScoreBusy, setMameScoreBusy] = useState(false);
   const [mameScoreChangeToken, setMameScoreChangeToken] = useState(0);
+  const [amigaLeaderboard, setAmigaLeaderboard] = useState([]);
+  const [amigaScoreStatus, setAmigaScoreStatus] = useState('');
+  const [amigaScoreBusy, setAmigaScoreBusy] = useState(false);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
@@ -822,6 +825,7 @@ export default function RoomPage() {
   const mameScoreBaselineRef = useRef(null);
   const tournamentScoreArmedAtRef = useRef(0);
   const mameScoreProcessedTokenRef = useRef(0);
+  const amigaScoreBaselineRef = useRef(null);
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
   const [controllerSetupOpen, setControllerSetupOpen] = useState(false);
@@ -907,6 +911,8 @@ export default function RoomPage() {
   const isArcade = roomSystem === 'arcade';
   const isLocalLibraryHostRoom = Boolean((localGameId || localReleaseId) && isHost);
   const supportsMameScoreboard = isArcade && (isSoloMode || isLocalLibraryHostRoom);
+  const supportsBattleSquadronScoreboard = isPuaeAmiga
+    && /battle\s*[-_]?\s*squadron/i.test(loadedDiskName || '');
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : isX68000 ? X68000_FIRMWARE_KEY : '';
   const partyMaxPlayers = Math.min(8, Math.max(2, Number(room?.party_max_players) || 2));
   const isC64Party = isC64 && !isSoloMode && partyMaxPlayers > 2;
@@ -3398,6 +3404,40 @@ export default function RoomPage() {
   }, [addLog, isArcade, isHost, loadedDiskName, supportsMameScoreboard]);
 
   useEffect(() => {
+    amigaScoreBaselineRef.current = null;
+    if (!supportsBattleSquadronScoreboard) {
+      setAmigaLeaderboard([]);
+      setAmigaScoreStatus('');
+      return undefined;
+    }
+
+    refreshAmigaLeaderboard();
+    if (!isHost) return undefined;
+
+    let cancelled = false;
+    const initialise = async () => {
+      try {
+        const captured = await captureAmigaScoreBaseline();
+        if (!cancelled && !captured) setAmigaScoreStatus('Waiting for Battle Squadron score table...');
+      } catch (err) {
+        if (!cancelled) setAmigaScoreStatus('Could not read the Battle Squadron score table yet.');
+        addLog(`Amiga score baseline failed: ${err.message}`);
+      }
+    };
+    const startTimer = window.setTimeout(initialise, 3000);
+    const pollTimer = window.setInterval(() => {
+      if (!cancelled) submitAmigaScoreExtraction('automatic').catch((err) => {
+        addLog(`Automatic Amiga score extraction failed: ${err.message}`);
+      });
+    }, 12000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      window.clearInterval(pollTimer);
+    };
+  }, [addLog, isHost, roomSessionKey, supportsBattleSquadronScoreboard]);
+
+  useEffect(() => {
     if (
       !mameScoreChangeToken
       || mameScoreChangeToken <= mameScoreProcessedTokenRef.current
@@ -4884,6 +4924,124 @@ export default function RoomPage() {
       capturedAt: Date.now(),
     };
     addLog(`MAME score baseline captured for ${romName}: ${files.length} files`);
+  }
+
+  async function refreshAmigaLeaderboard() {
+    try {
+      const scores = await apiFetch('/scores/amiga/leaderboards/battle-squadron');
+      setAmigaLeaderboard(Array.isArray(scores) ? scores : []);
+    } catch (err) {
+      setAmigaLeaderboard([]);
+      setAmigaScoreStatus('Battle Squadron leaderboard could not be loaded.');
+      addLog(`Amiga leaderboard load failed: ${err.message}`);
+    }
+  }
+
+  async function getBattleSquadronScoreFile() {
+    const bundle = await emulatorFrameRef.current?.contentWindow?.getAmigaHighScoreBundle?.();
+    const file = Array.isArray(bundle?.files)
+      ? bundle.files.find((candidate) => candidate?.path?.split('/').pop()?.toUpperCase() === 'LODSCO')
+      : null;
+    if (!file?.bytes?.length) return null;
+    return { path: file.path, bytes: new Uint8Array(file.bytes) };
+  }
+
+  async function captureAmigaScoreBaseline() {
+    if (!supportsBattleSquadronScoreboard || !isHost) return false;
+    const file = await getBattleSquadronScoreFile();
+    if (!file) return false;
+    amigaScoreBaselineRef.current = file;
+    setAmigaScoreStatus('Score table ready. Finish a run and enter your initials.');
+    addLog(`Battle Squadron score baseline captured: ${file.path} (${file.bytes.length} bytes)`);
+    return true;
+  }
+
+  async function submitAmigaScoreExtraction(reason = 'session') {
+    if (!supportsBattleSquadronScoreboard || !isHost || amigaScoreBusy) return null;
+    const current = await getBattleSquadronScoreFile();
+    if (!current) {
+      if (reason === 'manual') setAmigaScoreStatus('LODSCO is not available yet. Let the game finish loading.');
+      return null;
+    }
+    const baseline = amigaScoreBaselineRef.current;
+    if (!baseline) {
+      amigaScoreBaselineRef.current = current;
+      setAmigaScoreStatus('Score table ready. Finish a run and enter your initials.');
+      return null;
+    }
+    if (bytesToBase64(current.bytes) === bytesToBase64(baseline.bytes)) {
+      if (reason === 'manual') setAmigaScoreStatus('No new saved score found yet.');
+      return null;
+    }
+
+    setAmigaScoreBusy(true);
+    setAmigaScoreStatus('Checking saved Battle Squadron score...');
+    try {
+      const result = await apiFetch('/scores/amiga/extract-score', {
+        method: 'POST',
+        body: JSON.stringify({
+          game_key: 'battle-squadron',
+          session_id: `${roomCode}-${roomSessionKey}-battle-squadron`,
+          source_path: current.path,
+          data: bytesToBase64(current.bytes),
+          baseline_data: bytesToBase64(baseline.bytes),
+        }),
+      });
+      amigaScoreBaselineRef.current = current;
+      setAmigaScoreStatus((result.rows_inserted || 0) > 0
+        ? 'Personal best registered.'
+        : 'Score table checked; no new personal best found.');
+      await refreshAmigaLeaderboard();
+      return result;
+    } finally {
+      setAmigaScoreBusy(false);
+    }
+  }
+
+  async function saveAmigaScoreNow() {
+    try {
+      await submitAmigaScoreExtraction('manual');
+    } catch (err) {
+      setAmigaScoreStatus('Battle Squadron score could not be checked.');
+      addLog(`Amiga score save failed: ${err.message}`);
+    }
+  }
+
+  function renderAmigaLeaderboardPanel() {
+    if (!supportsBattleSquadronScoreboard) return null;
+    return (
+      <div className="mame-score-panel amiga-score-panel">
+        <div className="mame-score-panel-header">
+          <div><span>Amiga leaderboard</span><strong>Battle Squadron</strong></div>
+          <em>live</em>
+        </div>
+        <p className="mame-score-status">
+          {amigaScoreStatus || 'Scores are verified from Battle Squadron\'s WHDLoad LODSCO file.'}
+        </p>
+        {isHost ? (
+          <button
+            type="button"
+            className="primary mame-save-score"
+            onClick={saveAmigaScoreNow}
+            disabled={amigaScoreBusy}
+          >
+            {amigaScoreBusy ? 'Checking score...' : 'Save Battle Squadron score now'}
+          </button>
+        ) : null}
+        {amigaLeaderboard.length ? (
+          <div className="mame-score-list">
+            {amigaLeaderboard.map((entry) => (
+              <div key={`${entry.rank}-${entry.username}-${entry.score}`}>
+                <strong>{entry.rank}</strong><span>{entry.username}</span>
+                <small>{entry.initials || '---'}</small><b>{entry.score.toLocaleString()}</b>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mame-score-empty"><strong>No saved runs yet</strong><span>Finish a run and enter initials.</span></div>
+        )}
+      </div>
+    );
   }
 
   async function submitMameScoreExtraction(reason = 'session') {
@@ -6805,6 +6963,8 @@ export default function RoomPage() {
                     />
                   </>
                 )}
+
+                {renderAmigaLeaderboardPanel()}
 
                 <input
                   ref={fileInputRef}

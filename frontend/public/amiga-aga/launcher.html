@@ -402,6 +402,35 @@
       }
 
       window.getAmigaAgaAudioStream = () => audioCaptureStream;
+      window.getAmigaHighScoreBundle = () => {
+        if (!runtimeModule?.FS || !started) return { files: [], ready: false };
+
+        const matches = [];
+        const visit = (path) => {
+          let names;
+          try {
+            names = runtimeModule.FS.readdir(path);
+          } catch {
+            return;
+          }
+          names.filter((name) => name !== "." && name !== "..").forEach((name) => {
+            const child = `${path}/${name}`.replace(/\/+/g, "/");
+            try {
+              const stat = runtimeModule.FS.stat(child);
+              if (runtimeModule.FS.isDir(stat.mode)) {
+                visit(child);
+              } else if (name.toUpperCase() === "LODSCO") {
+                matches.push({ path: child, bytes: Array.from(runtimeModule.FS.readFile(child)) });
+              }
+            } catch {
+              // A file may disappear while PUAE replaces the saved table.
+            }
+          });
+        };
+
+        visit("/whdload-content");
+        return { files: matches, ready: true };
+      };
 
       window.addEventListener("message", (event) => {
         if (event.origin !== window.location.origin) return;
