@@ -4814,6 +4814,36 @@ export default function RoomPage() {
   }, [isAmigaFamily, isArcade, isAtariSt, isHost, isSoloMode, room, signalingOpen]);
 
   useEffect(() => {
+    if (
+      !isArcadeParty
+      || !isHost
+      || !signalingOpen
+      || !loadedDiskName
+      || hostVideoStreamRef.current
+      || hostStartingRef.current
+    ) return undefined;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (cancelled || hostVideoStreamRef.current || hostStartingRef.current) return;
+
+      // Changing a running cabinet from local to multiplayer rebuilds the RTC
+      // layer. The emulator remains alive, so explicitly re-capture its current
+      // canvas/audio instead of waiting for another game load.
+      hostStartedRef.current = false;
+      setHostStarted(false);
+      setStatus('Opening multiplayer stream...');
+      addLog('Multiplayer enabled; re-capturing the running MAME cabinet stream');
+      await startHostSession();
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [addLog, isArcadeParty, isHost, loadedDiskName, roomSessionKey, signalingOpen]);
+
+  useEffect(() => {
     if (!isSoloMode && room && !isHost && !isAmigaLink) {
       connectGuest();
     }
