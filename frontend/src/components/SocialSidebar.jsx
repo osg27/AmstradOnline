@@ -1,6 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import { armNotificationSound, playRoomInviteSound } from '../utils/notificationSound';
+
+const NOTIFIED_ROOM_INVITES_KEY = 'oldstylegaming:notified-room-invites';
+
+function readNotifiedInviteIds() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(NOTIFIED_ROOM_INVITES_KEY) || '[]').map(String));
+  } catch {
+    return new Set();
+  }
+}
 
 const EMPTY_SOCIAL = {
   online_users: [],
@@ -17,29 +28,62 @@ export default function SocialSidebar({ roomCode = '', allowInvites = false, sho
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const notifiedInviteIdsRef = useRef(readNotifiedInviteIds());
+
+  function applySocialOverview(overview) {
+    const inviteIds = (overview?.room_invites || []).map((invite) => String(invite.id));
+    const newInviteIds = inviteIds.filter((id) => !notifiedInviteIdsRef.current.has(id));
+    inviteIds.forEach((id) => notifiedInviteIdsRef.current.add(id));
+    try {
+      sessionStorage.setItem(
+        NOTIFIED_ROOM_INVITES_KEY,
+        JSON.stringify(Array.from(notifiedInviteIdsRef.current).slice(-100)),
+      );
+    } catch {
+      // Storage can be unavailable in private browsing; the in-memory set still prevents repeats.
+    }
+    setSocial(overview);
+    if (newInviteIds.length) {
+      playRoomInviteSound().then((played) => {
+        if (!played) {
+          newInviteIds.forEach((id) => notifiedInviteIdsRef.current.delete(id));
+          try {
+            sessionStorage.setItem(
+              NOTIFIED_ROOM_INVITES_KEY,
+              JSON.stringify(Array.from(notifiedInviteIdsRef.current).slice(-100)),
+            );
+          } catch {
+            // Keep retrying from the in-memory set when storage is unavailable.
+          }
+        }
+      });
+    }
+  }
 
   async function refreshSocial() {
     const overview = await apiFetch('/auth/social');
-    setSocial(overview);
+    applySocialOverview(overview);
   }
 
   useEffect(() => {
     let active = true;
+    const disarm = armNotificationSound();
 
     async function loadSocial() {
       try {
         const overview = await apiFetch('/auth/social');
-        if (active) setSocial(overview);
+        if (active) applySocialOverview(overview);
       } catch (err) {
         if (active) setError(err.message);
       }
     }
 
     loadSocial();
-    const timer = window.setInterval(loadSocial, 20000);
+    const timer = window.setInterval(loadSocial, 8000);
     return () => {
       active = false;
       window.clearInterval(timer);
+      disarm();
     };
   }, []);
 
