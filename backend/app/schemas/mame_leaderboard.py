@@ -50,3 +50,11 @@ class MameLeaderboardEntry(BaseModel):
     score: int
     rank_in_game: int | None
     created_at: datetime
+
+
+class MameRecentScoreEntry(BaseModel):
+    username: str
+    rom_name: str
+    game_name: str
+    score: int
+    created_at: datetime

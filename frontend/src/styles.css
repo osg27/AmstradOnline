@@ -1854,6 +1854,97 @@ input:focus {
   max-height: 46px;
 }
 
+.recent-arcade-scores {
+  padding: 0.9rem;
+  border: 1px solid rgba(243, 198, 107, 0.34);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(24, 26, 24, 0.98), rgba(11, 13, 13, 0.98)),
+    radial-gradient(circle at top right, rgba(243, 198, 107, 0.12), transparent 42%);
+}
+
+.recent-arcade-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.recent-arcade-heading span:first-child {
+  color: #f3c66b;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.recent-arcade-heading h2 {
+  margin: 0.1rem 0 0;
+  color: #fff7dd;
+  font-size: 1.2rem;
+}
+
+.recent-live-badge {
+  padding: 0.2rem 0.42rem;
+  border: 1px solid rgba(122, 217, 155, 0.5);
+  border-radius: 999px;
+  color: #86e6bd;
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.recent-arcade-list {
+  display: grid;
+  gap: 0;
+  max-height: 310px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.recent-arcade-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.15rem 0.5rem;
+  padding: 0.58rem 0.1rem;
+  border-top: 1px solid rgba(91, 105, 100, 0.48);
+}
+
+.recent-arcade-list li:first-child {
+  border-top: 0;
+}
+
+.recent-score-player,
+.recent-arcade-list strong {
+  color: #fff7dd;
+  font-size: 0.88rem;
+}
+
+.recent-arcade-list strong {
+  color: #f3c66b;
+  text-align: right;
+}
+
+.recent-score-game,
+.recent-arcade-list time,
+.recent-arcade-empty {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.recent-arcade-list time {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.recent-arcade-empty {
+  margin: 0;
+  line-height: 1.45;
+}
+
 .vip-library-progress {
   grid-column: 1 / -1;
   display: grid;

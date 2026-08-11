@@ -42,6 +42,18 @@ const PLAY_MODES = {
   },
 };
 
+function formatRecentScoreTime(value) {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return '';
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  if (elapsedMinutes < 1) return 'just now';
+  if (elapsedMinutes < 60) return formatter.format(-elapsedMinutes, 'minute');
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return formatter.format(-elapsedHours, 'hour');
+  return formatter.format(-Math.floor(elapsedHours / 24), 'day');
+}
+
 const PLATFORM_SHELVES = [
   {
     id: 'micros',
@@ -350,6 +362,7 @@ export default function LobbyPage() {
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [availableTournamentCount, setAvailableTournamentCount] = useState(0);
+  const [recentArcadeScores, setRecentArcadeScores] = useState([]);
   const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
   const [librarySystems, setLibrarySystems] = useState([]);
   const [openingLibrary, setOpeningLibrary] = useState(false);
@@ -464,6 +477,26 @@ export default function LobbyPage() {
     loadUnreadMessages();
     const timer = window.setInterval(loadUnreadMessages, 15000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadRecentArcadeScores() {
+      try {
+        const scores = await apiFetch('/scores/mame/recent-scores?limit=10');
+        if (active) setRecentArcadeScores(Array.isArray(scores) ? scores : []);
+      } catch {
+        if (active) setRecentArcadeScores([]);
+      }
+    }
+
+    loadRecentArcadeScores();
+    const timer = window.setInterval(loadRecentArcadeScores, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -863,6 +896,29 @@ export default function LobbyPage() {
         </main>
         </div>
         <div className="lobby-side-rail">
+          <section className="recent-arcade-scores" aria-label="Recent Arcade scores">
+            <div className="recent-arcade-heading">
+              <div>
+                <span>At the arcade</span>
+                <h2>Recent scores</h2>
+              </div>
+              <span className="recent-live-badge">Live</span>
+            </div>
+            {recentArcadeScores.length ? (
+              <ol className="recent-arcade-list">
+                {recentArcadeScores.map((entry) => (
+                  <li key={`${entry.username}-${entry.rom_name}-${entry.created_at}`}>
+                    <span className="recent-score-player">{entry.username}</span>
+                    <strong>{Number(entry.score || 0).toLocaleString()}</strong>
+                    <span className="recent-score-game">{entry.game_name}</span>
+                    <time dateTime={entry.created_at}>{formatRecentScoreTime(entry.created_at)}</time>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="recent-arcade-empty">No Arcade scores yet. Be the first to put your name on a cabinet.</p>
+            )}
+          </section>
           <SocialSidebar onMessagePlayer={(player) => navigate(`/messages?user=${player.id}`)} />
         </div>
       </div>

@@ -10,6 +10,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -1196,6 +1197,7 @@ def extract_mame_scores(
                 existing.session_id = session_id
                 existing.source_path = str(source_path.relative_to(session_path))
                 existing.parser = game.parser
+                existing.created_at = datetime.now(timezone.utc)
                 updated += 1
                 continue
             db.add(MameHighScore(

@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.mame_leaderboard import (
     MameLeaderboardEntry,
     MameLeaderboardGameResponse,
+    MameRecentScoreEntry,
     MameScoreExtractionRequest,
     MameScoreExtractionResponse,
 )
@@ -53,6 +54,36 @@ def list_mame_leaderboards(db: Session = Depends(get_db)):
         .order_by(MameLeaderboardGame.display_name)
         .all()
     )
+
+
+@router.get("/recent-scores", response_model=list[MameRecentScoreEntry])
+def list_recent_mame_scores(
+    limit: int = Query(12, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    seed_default_mame_games(db)
+    rows = (
+        db.query(MameHighScore, User.username, MameLeaderboardGame.display_name)
+        .join(User, MameHighScore.user_id == User.id)
+        .join(MameLeaderboardGame, MameHighScore.rom_name == MameLeaderboardGame.rom_name)
+        .filter(
+            MameLeaderboardGame.leaderboard_supported == True,  # noqa: E712
+            MameLeaderboardGame.enabled == True,  # noqa: E712
+        )
+        .order_by(desc(MameHighScore.created_at), desc(MameHighScore.id))
+        .limit(limit)
+        .all()
+    )
+    return [
+        MameRecentScoreEntry(
+            username=username,
+            rom_name=score.rom_name,
+            game_name=display_name or score.rom_name,
+            score=score.score,
+            created_at=score.created_at,
+        )
+        for score, username, display_name in rows
+    ]
 
 
 @router.get("/leaderboards/{rom_name}", response_model=list[MameLeaderboardEntry])
