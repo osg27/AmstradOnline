@@ -6095,6 +6095,15 @@ export default function RoomPage() {
           setStatus(`Loading local game: ${pendingGame.title || pendingGame.fileName}`);
         }
 
+        if (pendingGame?.id === localGameId && pendingGame.source === 'recent-mame-score') {
+          setLoadedDiskName(pendingGame.fileName);
+          setStatus(`Scoreboard ready for ${pendingGame.title}. Upload ${pendingGame.fileName} to play.`);
+          setError(`You do not have ${pendingGame.fileName} in your library. Its high-score table is ready; choose “Load MAME ROM” and upload ${pendingGame.fileName} to play.`);
+          addLog(`Recent score game selected: waiting for ${pendingGame.fileName}`);
+          sessionStorage.removeItem('oldstylegaming:pendingLocalGame');
+          return;
+        }
+
         if (pendingGame?.id === localGameId && pendingGame.source === 'tournament-mame') {
           const code = pendingGame.tournamentCode || tournamentCode;
           if (!code) throw new Error('This tournament launch is missing its tournament code.');

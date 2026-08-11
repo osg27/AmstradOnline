@@ -4,7 +4,7 @@ import { apiFetch, clearAuthSession } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import PlayerBubble from '../components/PlayerBubble';
 import SocialSidebar from '../components/SocialSidebar';
-import { getLocalLibrarySetting } from '../localLibraryDb';
+import { getLocalLibraryGames, getLocalLibrarySetting } from '../localLibraryDb';
 import LocalLibraryPage, { SUPPORTED_SYSTEMS } from './LocalLibraryPage';
 import amiga500LogoUrl from '../../assets/amiga500.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
@@ -363,6 +363,7 @@ export default function LobbyPage() {
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [availableTournamentCount, setAvailableTournamentCount] = useState(0);
   const [recentArcadeScores, setRecentArcadeScores] = useState([]);
+  const [openingRecentRom, setOpeningRecentRom] = useState('');
   const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
   const [librarySystems, setLibrarySystems] = useState([]);
   const [openingLibrary, setOpeningLibrary] = useState(false);
@@ -647,6 +648,58 @@ export default function LobbyPage() {
     navigate('/login');
   }
 
+  async function openRecentArcadeGame(entry) {
+    const romKey = String(entry?.rom_name || '').replace(/\.(zip|7z)$/i, '').toLowerCase();
+    if (!romKey || openingRecentRom) return;
+    setError('');
+    setOpeningRecentRom(romKey);
+    try {
+      const games = await getLocalLibraryGames().catch(() => []);
+      const matchingGame = games.find((game) => (
+        game.system === 'arcade'
+        && [game.romKey, game.parentRomKey, game.fileName]
+          .filter(Boolean)
+          .some((value) => String(value).replace(/\.(zip|7z)$/i, '').toLowerCase() === romKey)
+      ));
+      const hasVipAccess = localStorage.getItem('isVip') === 'true'
+        || localStorage.getItem('isAdmin') === 'true'
+        || localStorage.getItem('isSuperAdmin') === 'true';
+      const canUseMatchedGame = matchingGame?.handle
+        || (matchingGame?.source === 'internet-archive-mame' && hasVipAccess);
+      const pendingGame = canUseMatchedGame ? matchingGame : {
+        id: `recent-mame:${romKey}`,
+        title: entry.game_name || romKey,
+        fileName: `${romKey}.zip`,
+        system: 'arcade',
+        roomSystem: 'arcade',
+        source: 'recent-mame-score',
+      };
+      sessionStorage.setItem('oldstylegaming:pendingLocalGame', JSON.stringify({
+        id: pendingGame.id,
+        title: pendingGame.title,
+        fileName: pendingGame.fileName || `${romKey}.zip`,
+        system: 'arcade',
+        roomSystem: 'arcade',
+        source: pendingGame.source || 'local',
+        archiveSampleFileName: pendingGame.archiveSampleFileName || '',
+      }));
+      const room = await apiFetch('/rooms/create', {
+        method: 'POST',
+        body: JSON.stringify({ system: 'arcade', party_max_players: 8, arcade_multiplayer: false }),
+      });
+      const params = new URLSearchParams({
+        localGame: pendingGame.id,
+        returnTo: '/',
+        mode: 'solo',
+      });
+      navigate(`/room/${room.room_code}?${params.toString()}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setOpeningRecentRom('');
+    }
+  }
+
   if (librarySetupComplete === false) {
     return (
       <div className="page local-library-page welcome-home-page">
@@ -910,7 +963,17 @@ export default function LobbyPage() {
                   <li key={`${entry.username}-${entry.rom_name}-${entry.created_at}`}>
                     <span className="recent-score-player">{entry.username}</span>
                     <strong>{Number(entry.score || 0).toLocaleString()}</strong>
-                    <span className="recent-score-game">{entry.game_name}</span>
+                    <button
+                      className="recent-score-game"
+                      type="button"
+                      disabled={Boolean(openingRecentRom)}
+                      title={`Play ${entry.game_name}`}
+                      onClick={() => openRecentArcadeGame(entry)}
+                    >
+                      {openingRecentRom === String(entry.rom_name || '').replace(/\.(zip|7z)$/i, '').toLowerCase()
+                        ? 'Opening...'
+                        : entry.game_name}
+                    </button>
                     <time dateTime={entry.created_at}>{formatRecentScoreTime(entry.created_at)}</time>
                   </li>
                 ))}
