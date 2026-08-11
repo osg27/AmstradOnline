@@ -21,7 +21,7 @@ from app.api.routes.vip_mame import (
     stream_archive_response,
 )
 from app.core.database import get_db
-from app.models.tournament import Tournament, TournamentEntry, TournamentScore
+from app.models.tournament import Tournament, TournamentEntry, TournamentNotification, TournamentScore
 from app.models.user import User
 from app.schemas.tournament import TournamentCreate, TournamentScoreSubmit
 from app.services.mame_high_scores import (
@@ -208,6 +208,51 @@ def public_tournaments(user: User = Depends(get_current_user), db: Session = Dep
     return [serialize_tournament(item, db, user.id) for item in rows]
 
 
+@router.get("/notifications")
+def tournament_notifications(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rows = (
+        db.query(TournamentNotification, Tournament, User.username)
+        .join(Tournament, Tournament.id == TournamentNotification.tournament_id)
+        .join(User, User.id == TournamentNotification.actor_user_id)
+        .filter(
+            TournamentNotification.recipient_user_id == user.id,
+            TournamentNotification.is_read.is_(False),
+        )
+        .order_by(TournamentNotification.created_at, TournamentNotification.id)
+        .limit(20)
+        .all()
+    )
+    return [
+        {
+            "id": notification.id,
+            "tournament_code": tournament.code,
+            "tournament_name": tournament.name,
+            "game_name": tournament.display_name,
+            "username": username,
+            "score": notification.actor_score,
+            "created_at": notification.created_at,
+        }
+        for notification, tournament, username in rows
+    ]
+
+
+@router.patch("/notifications/{notification_id}/read")
+def read_tournament_notification(
+    notification_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    notification = db.query(TournamentNotification).filter(
+        TournamentNotification.id == notification_id,
+        TournamentNotification.recipient_user_id == user.id,
+    ).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Tournament notification not found")
+    notification.is_read = True
+    db.commit()
+    return {"read": True}
+
+
 @router.get("/{code}")
 def tournament_details(code: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     tournament = get_tournament(code, db)
@@ -219,6 +264,9 @@ def delete_tournament(code: str, user: User = Depends(get_current_user), db: Ses
     tournament = get_tournament(code, db)
     if not can_manage_tournament(tournament, user):
         raise HTTPException(status_code=403, detail="Only an admin can delete tournaments")
+    db.query(TournamentNotification).filter(TournamentNotification.tournament_id == tournament.id).delete(
+        synchronize_session=False,
+    )
     db.query(TournamentScore).filter(TournamentScore.tournament_id == tournament.id).delete(
         synchronize_session=False,
     )
@@ -276,6 +324,9 @@ def reset_tournament_leaderboard(
     tournament = get_tournament(code, db)
     if tournament.creator_user_id != user.id:
         raise HTTPException(status_code=403, detail="Only the tournament creator can reset its standings")
+    db.query(TournamentNotification).filter(TournamentNotification.tournament_id == tournament.id).delete(
+        synchronize_session=False,
+    )
     deleted = db.query(TournamentScore).filter(TournamentScore.tournament_id == tournament.id).delete(
         synchronize_session=False,
     )
@@ -369,6 +420,7 @@ def extract_tournament_score(
     ).first()
     now = utc_now()
     improved = existing is None or int(best["score"]) > existing.score
+    previous_best = existing.score if existing else -1
     if existing:
         if improved:
             existing.score = int(best["score"])
@@ -386,5 +438,20 @@ def extract_tournament_score(
             achieved_at=now,
             updated_at=now,
         ))
+    if improved:
+        overtaken_scores = db.query(TournamentScore).filter(
+            TournamentScore.tournament_id == tournament.id,
+            TournamentScore.user_id != user.id,
+            TournamentScore.score > previous_best,
+            TournamentScore.score < int(best["score"]),
+        ).all()
+        for overtaken_score in overtaken_scores:
+            db.add(TournamentNotification(
+                tournament_id=tournament.id,
+                recipient_user_id=overtaken_score.user_id,
+                actor_user_id=user.id,
+                actor_score=int(best["score"]),
+                created_at=now,
+            ))
     db.commit()
     return {**result, "rows_inserted": 1 if improved else 0, "tournament_best": int(best["score"]), "improved": improved}

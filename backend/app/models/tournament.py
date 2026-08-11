@@ -41,3 +41,15 @@ class TournamentScore(Base):
     session_id = Column(String(128), nullable=False)
     achieved_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class TournamentNotification(Base):
+    __tablename__ = "tournament_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id"), nullable=False, index=True)
+    recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    actor_score = Column(Integer, nullable=False)
+    is_read = Column(Boolean, nullable=False, default=False, server_default="false", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
