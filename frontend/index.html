@@ -3,7 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Old Style Gaming</title>
+    <script>
+      // If a restored browser tab references a retired fingerprinted bundle,
+      // fetch the current HTML shell once instead of leaving an unstyled page.
+      window.addEventListener('error', function recoverStaleBuild(event) {
+        var target = event.target;
+        var assetUrl = target && (target.href || target.src || '');
+        if (!assetUrl || assetUrl.indexOf('/assets/') === -1) return;
+        var recoveryKey = 'oldstylegaming:asset-recovery';
+        if (sessionStorage.getItem(recoveryKey)) return;
+        sessionStorage.setItem(recoveryKey, '1');
+        var url = new URL(window.location.href);
+        url.searchParams.set('_app', Date.now().toString());
+        window.location.replace(url.toString());
+      }, true);
+      window.addEventListener('load', function clearAssetRecovery() {
+        sessionStorage.removeItem('oldstylegaming:asset-recovery');
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
