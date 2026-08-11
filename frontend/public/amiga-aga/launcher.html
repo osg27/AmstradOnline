@@ -71,6 +71,7 @@
         'puae_floppy_multidrive = "disabled"',
         'puae_use_whdload = "files"',
         'puae_use_whdload_prefs = "splash"',
+        'puae_use_whdload_nowritecache = "enabled"',
         'puae_physical_keyboard_pass_through = "enabled"',
         ].join("\n");
       }
@@ -403,10 +404,16 @@
 
       window.getAmigaAgaAudioStream = () => audioCaptureStream;
       window.getAmigaHighScoreBundle = () => {
-        if (!runtimeModule?.FS || !started) return { files: [], ready: false };
+        if (!runtimeModule?.FS || !started) return { files: [], ready: false, searched: [] };
 
         const matches = [];
+        const searched = [];
+        const seen = new Set();
+        let visitedEntries = 0;
         const visit = (path) => {
+          if (seen.has(path) || visitedEntries >= 10000) return;
+          seen.add(path);
+          searched.push(path);
           let names;
           try {
             names = runtimeModule.FS.readdir(path);
@@ -414,6 +421,7 @@
             return;
           }
           names.filter((name) => name !== "." && name !== "..").forEach((name) => {
+            visitedEntries += 1;
             const child = `${path}/${name}`.replace(/\/+/g, "/");
             try {
               const stat = runtimeModule.FS.stat(child);
@@ -428,8 +436,12 @@
           });
         };
 
+        // WHDLoad writes changed game files beneath the frontend save folder.
+        // Search that before the pristine archive so the live table wins.
+        visit("/home/web_user/retroarch/userdata/saves/WHDSaves");
+        visit("/home/web_user/retroarch/userdata/saves");
         visit("/whdload-content");
-        return { files: matches, ready: true };
+        return { files: matches, ready: true, searched, visitedEntries };
       };
 
       window.addEventListener("message", (event) => {

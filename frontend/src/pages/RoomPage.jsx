@@ -5013,16 +5013,23 @@ export default function RoomPage() {
 
   async function getBattleSquadronScoreFile() {
     const bundle = await emulatorFrameRef.current?.contentWindow?.getAmigaHighScoreBundle?.();
-    const file = Array.isArray(bundle?.files)
-      ? bundle.files.find((candidate) => candidate?.path?.split('/').pop()?.toUpperCase() === 'LODSCO')
-      : null;
-    if (!file?.bytes?.length) return null;
-    return { path: file.path, bytes: new Uint8Array(file.bytes) };
+    const files = Array.isArray(bundle?.files) ? bundle.files : [];
+    const scoreFiles = files.filter(
+      (candidate) => candidate?.path?.split('/').pop()?.toUpperCase() === 'LODSCO',
+    );
+    const file = scoreFiles.find((candidate) => /\/WHDSaves\//i.test(candidate.path || ''))
+      || scoreFiles[0]
+      || null;
+    if (!file?.bytes?.length) return { file: null, bundle };
+    return {
+      file: { path: file.path, bytes: new Uint8Array(file.bytes) },
+      bundle,
+    };
   }
 
   async function captureAmigaScoreBaseline() {
     if (!supportsBattleSquadronScoreboard || !isHost) return false;
-    const file = await getBattleSquadronScoreFile();
+    const { file } = await getBattleSquadronScoreFile();
     if (!file) return false;
     amigaScoreBaselineRef.current = file;
     setAmigaScoreStatus('Score table ready. Finish a run and enter your initials.');
@@ -5032,9 +5039,14 @@ export default function RoomPage() {
 
   async function submitAmigaScoreExtraction(reason = 'session') {
     if (!supportsBattleSquadronScoreboard || !isHost || amigaScoreBusy) return null;
-    const current = await getBattleSquadronScoreFile();
+    const { file: current, bundle } = await getBattleSquadronScoreFile();
     if (!current) {
-      if (reason === 'manual') setAmigaScoreStatus('LODSCO is not available yet. Let the game finish loading.');
+      if (reason === 'manual') {
+        const searched = Array.isArray(bundle?.searched) ? bundle.searched : [];
+        setAmigaScoreStatus(searched.length
+          ? `LODSCO is not available yet. Checked ${searched.length} PUAE folders.`
+          : 'LODSCO is not available yet. Let the game finish loading.');
+      }
       return null;
     }
     const baseline = amigaScoreBaselineRef.current;
