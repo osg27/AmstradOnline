@@ -21,6 +21,39 @@ restart_if_active() {
   return 1
 }
 
+install_html_cache_policy() {
+  local nginx_conf_dir="/etc/nginx/conf.d"
+  local cache_policy="$nginx_conf_dir/oldstylegaming-html-cache.conf"
+
+  if ! command -v nginx >/dev/null 2>&1 || [ ! -d "$nginx_conf_dir" ]; then
+    return 0
+  fi
+
+  if [ ! -w "$nginx_conf_dir" ]; then
+    log "Cannot update nginx HTML cache policy without write access to $nginx_conf_dir"
+    return 0
+  fi
+
+  log "Installing nginx HTML revalidation policy"
+  cat >"$cache_policy" <<'EOF'
+# The Vite HTML shell contains fingerprinted CSS/JS filenames and must never be
+# reused without validation. Other content types retain their existing cache
+# policy, including ROMs, artwork and immutable frontend bundles.
+map $sent_http_content_type $oldstylegaming_html_expires {
+    default     off;
+    ~*text/html epoch;
+}
+
+expires $oldstylegaming_html_expires;
+EOF
+
+  if ! nginx -t; then
+    rm -f "$cache_policy"
+    echo "Invalid nginx cache policy removed; existing nginx configuration was left unchanged."
+    return 1
+  fi
+}
+
 cd "$APP_DIR"
 
 log "Pulling latest code"
@@ -59,6 +92,8 @@ fi
 
 log "Restarting known services"
 restarted=0
+
+install_html_cache_policy
 
 for service in \
   amstrad-backend.service \
