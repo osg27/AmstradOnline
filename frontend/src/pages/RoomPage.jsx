@@ -1755,7 +1755,7 @@ export default function RoomPage() {
 
   const reloadAmigaAgaFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
-    if (!frame || !isPuaeAmiga) return;
+    if (!frame || !isPuaeAmiga) return null;
 
     stopMirrorLoop();
 
@@ -1775,6 +1775,7 @@ export default function RoomPage() {
 
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
     startMirrorLoop(emulatorCanvas);
+    return frame;
   }, [emulatorSrc, isPuaeAmiga, kickstartStorageKey, roomSystem]);
 
   const reloadPcEngineFrame = useCallback(async () => {
@@ -5923,9 +5924,10 @@ export default function RoomPage() {
         setStatus('Preparing a clean C64 runtime');
         await reloadC64Frame({ start: true });
       }
+      let reloadedAmigaFrame = null;
       if (isPuaeAmiga && loadedDiskName) {
         setStatus('Preparing a clean Amiga PUAE runtime');
-        await reloadAmigaAgaFrame();
+        reloadedAmigaFrame = await reloadAmigaAgaFrame();
       }
       if (isPcEngine && loadedDiskName) {
         setStatus('Preparing a clean PC Engine runtime');
@@ -5955,6 +5957,24 @@ export default function RoomPage() {
         await reloadAtariStFrame();
       }
       forwardInputToEmulator(loadMessage);
+
+      if (reloadedAmigaFrame && hostStartedRef.current && !isSwapDisk) {
+        // PUAE creates a fresh WebAudio source when its iframe reloads. Replace
+        // the room's live tracks so connected guests do not remain attached to
+        // the ended audio track from the previous game.
+        await new Promise((resolve) => {
+          setTimeout(resolve, 250);
+        });
+        const emulatorCanvas = await waitForEmulatorCanvas(reloadedAmigaFrame);
+        startMirrorLoop(emulatorCanvas);
+        const nextVideoStream = mirrorCanvasRef.current?.captureStream(60);
+        if (!nextVideoStream) {
+          throw new Error('Amiga mirror stream missing after game change');
+        }
+        const nextAudioStream = await waitForHostAudioStream(reloadedAmigaFrame);
+        await replaceHostMediaStreams(nextVideoStream, nextAudioStream);
+        addLog(`Replaced Amiga room stream with ${nextAudioStream?.getAudioTracks?.().length || 0} audio track(s)`);
+      }
 
       if (isCpcSystem && !isSwapDisk) {
         addLog(cpcAutoloadCommand ? `Amstrad autoload: ${cpcAutoloadCommand}` : 'Amstrad autoload not detected; catalogue only');
