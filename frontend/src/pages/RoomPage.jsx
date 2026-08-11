@@ -5014,32 +5014,32 @@ export default function RoomPage() {
   async function getBattleSquadronScoreFile() {
     const bundle = await emulatorFrameRef.current?.contentWindow?.getAmigaHighScoreBundle?.();
     const files = Array.isArray(bundle?.files) ? bundle.files : [];
-    const scoreFiles = files.filter(
-      (candidate) => candidate?.path?.split('/').pop()?.toUpperCase() === 'LODSCO',
-    );
+    const scoreFiles = files
+      .filter((candidate) => candidate?.path?.split('/').pop()?.toUpperCase() === 'LODSCO')
+      .filter((candidate) => candidate?.bytes?.length)
+      .map((candidate) => ({
+        path: candidate.path,
+        bytes: new Uint8Array(candidate.bytes),
+      }));
     const file = scoreFiles.find((candidate) => /\/WHDSaves\//i.test(candidate.path || ''))
       || scoreFiles[0]
       || null;
-    if (!file?.bytes?.length) return { file: null, bundle };
-    return {
-      file: { path: file.path, bytes: new Uint8Array(file.bytes) },
-      bundle,
-    };
+    return { file, files: scoreFiles, bundle };
   }
 
   async function captureAmigaScoreBaseline() {
     if (!supportsBattleSquadronScoreboard || !isHost) return false;
-    const { file } = await getBattleSquadronScoreFile();
+    const { file, files } = await getBattleSquadronScoreFile();
     if (!file) return false;
-    amigaScoreBaselineRef.current = file;
+    amigaScoreBaselineRef.current = { ...file, files };
     setAmigaScoreStatus('Score table ready. Finish a run and enter your initials.');
-    addLog(`Battle Squadron score baseline captured: ${file.path} (${file.bytes.length} bytes)`);
+    addLog(`Battle Squadron score baseline captured from ${files.length} LODSCO file(s): ${files.map((candidate) => candidate.path).join(', ')}`);
     return true;
   }
 
   async function submitAmigaScoreExtraction(reason = 'session') {
     if (!supportsBattleSquadronScoreboard || !isHost || amigaScoreBusy) return null;
-    const { file: current, bundle } = await getBattleSquadronScoreFile();
+    const { file: current, files: currentFiles, bundle } = await getBattleSquadronScoreFile();
     if (!current) {
       if (reason === 'manual') {
         const searched = Array.isArray(bundle?.searched) ? bundle.searched : [];
@@ -5051,29 +5051,49 @@ export default function RoomPage() {
     }
     const baseline = amigaScoreBaselineRef.current;
     if (!baseline) {
-      amigaScoreBaselineRef.current = current;
+      amigaScoreBaselineRef.current = { ...current, files: currentFiles };
       setAmigaScoreStatus('Score table ready. Finish a run and enter your initials.');
       return null;
     }
-    if (bytesToBase64(current.bytes) === bytesToBase64(baseline.bytes)) {
+    const baselineFiles = Array.isArray(baseline.files) && baseline.files.length
+      ? baseline.files
+      : [baseline];
+    const baselineByPath = new Map(baselineFiles.map((candidate) => [candidate.path, candidate]));
+    const changedFiles = currentFiles.filter((candidate) => {
+      const matchingBaseline = baselineByPath.get(candidate.path) || baseline;
+      return bytesToBase64(candidate.bytes) !== bytesToBase64(matchingBaseline.bytes);
+    });
+    if (!changedFiles.length) {
       if (reason === 'manual') setAmigaScoreStatus('No new saved score found yet.');
+      if (reason === 'manual') {
+        addLog(`Battle Squadron checked ${currentFiles.length} LODSCO file(s); none changed: ${currentFiles.map((candidate) => candidate.path).join(', ')}`);
+      }
       return null;
     }
 
     setAmigaScoreBusy(true);
     setAmigaScoreStatus('Checking saved Battle Squadron score...');
     try {
-      const result = await apiFetch('/scores/amiga/extract-score', {
-        method: 'POST',
-        body: JSON.stringify({
-          game_key: 'battle-squadron',
-          session_id: `${roomCode}-${roomSessionKey}-battle-squadron`,
-          source_path: current.path,
-          data: bytesToBase64(current.bytes),
-          baseline_data: bytesToBase64(baseline.bytes),
-        }),
-      });
-      amigaScoreBaselineRef.current = current;
+      let result = null;
+      for (const candidate of changedFiles) {
+        const matchingBaseline = baselineByPath.get(candidate.path) || baseline;
+        const candidateResult = await apiFetch('/scores/amiga/extract-score', {
+          method: 'POST',
+          body: JSON.stringify({
+            game_key: 'battle-squadron',
+            session_id: `${roomCode}-${roomSessionKey}-battle-squadron`,
+            source_path: candidate.path,
+            data: bytesToBase64(candidate.bytes),
+            baseline_data: bytesToBase64(matchingBaseline.bytes),
+          }),
+        });
+        result = candidateResult;
+        const parserDetail = candidateResult.current_rows === undefined
+          ? ''
+          : ` (parser: ${candidateResult.current_rows}/${candidateResult.baseline_rows} rows, ${candidateResult.current_bytes}/${candidateResult.baseline_bytes} bytes)`;
+        addLog(`Battle Squadron checked ${candidate.path}: ${candidateResult.message || candidateResult.status}${parserDetail}`);
+        if ((candidateResult.rows_inserted || 0) > 0) break;
+      }
       setAmigaScoreStatus((result.rows_inserted || 0) > 0
         ? 'Personal best registered.'
         : 'Score table checked; no new personal best found.');

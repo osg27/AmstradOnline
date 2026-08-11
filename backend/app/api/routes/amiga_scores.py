@@ -14,6 +14,7 @@ from app.services.amiga_high_scores import (
     BATTLE_SQUADRON_GAME_KEY,
     BATTLE_SQUADRON_PARSER,
     find_new_battle_squadron_scores,
+    parse_battle_squadron_lodsco,
 )
 
 
@@ -56,9 +57,21 @@ def extract_amiga_score(
     if payload.source_path.rsplit("/", 1)[-1].upper() != "LODSCO":
         raise HTTPException(status_code=400, detail="Battle Squadron LODSCO file required")
 
-    candidates = find_new_battle_squadron_scores(_decode(payload.data), _decode(payload.baseline_data))
+    current_data = _decode(payload.data)
+    baseline_data = _decode(payload.baseline_data)
+    current_rows = parse_battle_squadron_lodsco(current_data)
+    baseline_rows = parse_battle_squadron_lodsco(baseline_data)
+    candidates = find_new_battle_squadron_scores(current_data, baseline_data)
     if not candidates:
-        return {"status": "no_scores", "message": "No new saved Battle Squadron score found", "rows_inserted": 0}
+        return {
+            "status": "no_scores",
+            "message": "No new saved Battle Squadron score found",
+            "rows_inserted": 0,
+            "current_bytes": len(current_data),
+            "baseline_bytes": len(baseline_data),
+            "current_rows": len(current_rows),
+            "baseline_rows": len(baseline_rows),
+        }
 
     candidate = candidates[0]
     existing = db.query(AmigaHighScore).filter(
