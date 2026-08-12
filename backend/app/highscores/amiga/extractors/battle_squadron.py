@@ -7,17 +7,12 @@ RECORD_COUNT = 12
 _ENTRY = re.compile(rb"^(\s*\d+)\.\s+(.{3})\s+(\d{8})$")
 
 
-class InvalidBattleSquadronScoreData(ValueError):
-    """Raised when a LODSCO file is not the documented Battle Squadron table."""
+def _decrypt_lodsco(data: bytes) -> bytes:
+    """Decrypt the rolling XOR used by Battle Squadron's on-disk LODSCO."""
+    return bytes(value ^ ((0xEF - index) & 0xFF) for index, value in enumerate(data))
 
 
-def extract(data: bytes) -> list[dict]:
-    """Parse Battle Squadron v1.6.1's 12 fixed-size LODSCO records."""
-    if len(data) != EXPECTED_SIZE:
-        raise InvalidBattleSquadronScoreData(
-            f"LODSCO must be exactly {EXPECTED_SIZE} bytes; received {len(data)}"
-        )
-
+def _parse_records(data: bytes) -> list[dict]:
     rows = []
     for index in range(RECORD_COUNT):
         offset = index * RECORD_SIZE
@@ -37,3 +32,23 @@ def extract(data: bytes) -> list[dict]:
         name = match.group(2).decode("ascii").strip().upper() or "---"
         rows.append({"rank": rank, "name": name, "score": int(match.group(3))})
     return rows
+
+
+class InvalidBattleSquadronScoreData(ValueError):
+    """Raised when a LODSCO file is not the documented Battle Squadron table."""
+
+
+def extract(data: bytes) -> list[dict]:
+    """Parse Battle Squadron v1.6.1's 12 fixed-size LODSCO records."""
+    if len(data) != EXPECTED_SIZE:
+        raise InvalidBattleSquadronScoreData(
+            f"LODSCO must be exactly {EXPECTED_SIZE} bytes; received {len(data)}"
+        )
+
+    try:
+        return _parse_records(data)
+    except InvalidBattleSquadronScoreData as plain_error:
+        try:
+            return _parse_records(_decrypt_lodsco(data))
+        except InvalidBattleSquadronScoreData:
+            raise plain_error

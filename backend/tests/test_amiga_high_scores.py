@@ -19,6 +19,11 @@ def table(rows):
     return bytes(payload)
 
 
+def encrypted_table(rows):
+    payload = table(rows)
+    return bytes(value ^ ((0xEF - index) & 0xFF) for index, value in enumerate(payload))
+
+
 class BattleSquadronParserTests(unittest.TestCase):
     def setUp(self):
         self.rows = [("AAA", 1_000_000 - index * 50_000) for index in range(12)]
@@ -27,6 +32,15 @@ class BattleSquadronParserTests(unittest.TestCase):
         parsed = parse_battle_squadron_lodsco(table(self.rows))
         self.assertEqual(12, len(parsed))
         self.assertEqual({"initials": "AAA", "score": 1_000_000}, parsed[0])
+
+    def test_parses_encrypted_whdload_lodsco_rows(self):
+        parsed = extract(encrypted_table(self.rows))
+        self.assertEqual({"rank": 1, "name": "AAA", "score": 1_000_000}, parsed[0])
+
+    def test_decrypts_captured_battle_squadron_record(self):
+        encrypted = bytes.fromhex("ef95ed94cbdbc7c8aaa4b5c4d3d3d1d0efeeedec")
+        decrypted = bytes(value ^ ((0xEF - index) & 0xFF) for index, value in enumerate(encrypted))
+        self.assertEqual(b"\x00\x7b\x00x 1. MBP 01000000", decrypted)
 
     def test_finds_only_new_table_entry(self):
         current = [("YOU", 975_000), *self.rows[:-1]]
