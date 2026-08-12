@@ -993,7 +993,7 @@ export default function RoomPage() {
   }, [atari8Config]);
 
   const emulatorSrc = isPuaeAmiga
-    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-12-2`
+    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-12-3`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
     : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-08-09-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-08-05-6' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
@@ -5199,8 +5199,18 @@ export default function RoomPage() {
 
   async function saveAmigaScoreNow() {
     try {
+      setAmigaScoreBusy(true);
+      setAmigaScoreStatus(`Closing the run and saving ${amigaScoreGame?.title || 'Amiga'} scores...`);
+      const flushResult = await emulatorFrameRef.current?.contentWindow?.flushAmigaWHDLoadSave?.();
+      if (!flushResult?.flushed) {
+        addLog(`${amigaScoreGame?.title || 'Amiga'} WHDLoad save flush was unavailable; checking existing score files.`);
+      } else {
+        addLog(`${amigaScoreGame?.title || 'Amiga'} WHDLoad quit sent; checking the committed WHDSaves score table.`);
+      }
+      setAmigaScoreBusy(false);
       await submitAmigaScoreExtraction('manual');
     } catch (err) {
+      setAmigaScoreBusy(false);
       setAmigaScoreStatus(`${amigaScoreGame?.title || 'Amiga'} score could not be checked.`);
       addLog(`Amiga score save failed: ${err.message}`);
     }

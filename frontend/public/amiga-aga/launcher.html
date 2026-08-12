@@ -330,11 +330,11 @@
         return key?.length === 1 ? key.toUpperCase().charCodeAt(0) : 0;
       }
 
-      function dispatchKeyboardInput(code, key, action) {
+      function dispatchKeyboardInput(code, key, action, modifiers = {}) {
         if (!code) return;
         const type = action === "up" ? "keyup" : "keydown";
         const keyCode = keyCodeFor(code, key);
-        const init = { key: key || code, code, keyCode, which: keyCode, bubbles: true, cancelable: true };
+        const init = { key: key || code, code, keyCode, which: keyCode, bubbles: true, cancelable: true, ...modifiers };
         const canvasEvent = new KeyboardEvent(type, init);
         const documentEvent = new KeyboardEvent(type, init);
         const windowEvent = new KeyboardEvent(type, init);
@@ -403,6 +403,21 @@
       }
 
       window.getAmigaAgaAudioStream = () => audioCaptureStream;
+      window.flushAmigaWHDLoadSave = async () => {
+        if (!runtimeModule?.FS || !started) return { flushed: false, reason: "not-ready" };
+
+        // PUAE hardcodes the WHDLoad QuitKey to AK_NUMBERSIGN. Its documented
+        // physical-keyboard shortcut is Left Ctrl + Backslash. Quitting the
+        // slave is what commits game save data to the writable WHDSaves volume.
+        dispatchKeyboardInput("ControlLeft", "Control", "down");
+        dispatchKeyboardInput("Backslash", "\\", "down", { ctrlKey: true });
+        await new Promise((resolve) => window.setTimeout(resolve, 90));
+        dispatchKeyboardInput("Backslash", "\\", "up", { ctrlKey: true });
+        dispatchKeyboardInput("ControlLeft", "Control", "up");
+        await new Promise((resolve) => window.setTimeout(resolve, 1800));
+        return { flushed: true };
+      };
+
       window.getAmigaHighScoreBundle = (options = {}) => {
         if (!runtimeModule?.FS || !started) return { files: [], ready: false, searched: [] };
 
