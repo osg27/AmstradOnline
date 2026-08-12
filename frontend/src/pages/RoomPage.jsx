@@ -814,6 +814,7 @@ export default function RoomPage() {
   const [amigaLeaderboard, setAmigaLeaderboard] = useState([]);
   const [amigaScoreStatus, setAmigaScoreStatus] = useState('');
   const [amigaScoreBusy, setAmigaScoreBusy] = useState(false);
+  const [amigaScoreGame, setAmigaScoreGame] = useState(null);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
@@ -966,8 +967,7 @@ export default function RoomPage() {
   const isArcade = roomSystem === 'arcade';
   const isSoloMode = isArcade ? !Boolean(room?.arcade_multiplayer) : legacySoloMode;
   const supportsMameScoreboard = isArcade;
-  const supportsBattleSquadronScoreboard = isPuaeAmiga
-    && /battle\s*[-_]?\s*squadron/i.test(loadedDiskName || '');
+  const supportsAmigaScoreboard = isPuaeAmiga && Boolean(amigaScoreGame);
   const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : isX68000 ? X68000_FIRMWARE_KEY : '';
   const partyMaxPlayers = Math.min(20, Math.max(2, Number(room?.party_max_players) || 2));
   const arcadeControlSlots = 2;
@@ -3479,11 +3479,30 @@ export default function RoomPage() {
 
   useEffect(() => {
     amigaScoreBaselineRef.current = null;
-    if (!supportsBattleSquadronScoreboard) {
+    setAmigaScoreGame(null);
+    if (!isPuaeAmiga || !loadedDiskName) {
       setAmigaLeaderboard([]);
       setAmigaScoreStatus('');
       return undefined;
     }
+
+    let cancelled = false;
+    apiFetch(`/scores/amiga/games/resolve?title=${encodeURIComponent(loadedDiskName)}`)
+      .then((metadata) => {
+        if (!cancelled) setAmigaScoreGame(metadata);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAmigaLeaderboard([]);
+          setAmigaScoreStatus('');
+        }
+      });
+    return () => { cancelled = true; };
+  }, [isPuaeAmiga, loadedDiskName]);
+
+  useEffect(() => {
+    amigaScoreBaselineRef.current = null;
+    if (!supportsAmigaScoreboard) return undefined;
 
     refreshAmigaLeaderboard();
     if (!isHost) return undefined;
@@ -3492,9 +3511,9 @@ export default function RoomPage() {
     const initialise = async () => {
       try {
         const captured = await captureAmigaScoreBaseline();
-        if (!cancelled && !captured) setAmigaScoreStatus('Waiting for Battle Squadron score table...');
+        if (!cancelled && !captured) setAmigaScoreStatus(`Waiting for ${amigaScoreGame.title} score table...`);
       } catch (err) {
-        if (!cancelled) setAmigaScoreStatus('Could not read the Battle Squadron score table yet.');
+        if (!cancelled) setAmigaScoreStatus(`Could not read the ${amigaScoreGame.title} score table yet.`);
         addLog(`Amiga score baseline failed: ${err.message}`);
       }
     };
@@ -3509,7 +3528,7 @@ export default function RoomPage() {
       window.clearTimeout(startTimer);
       window.clearInterval(pollTimer);
     };
-  }, [addLog, isHost, roomSessionKey, supportsBattleSquadronScoreboard]);
+  }, [addLog, amigaScoreGame, isHost, roomSessionKey, supportsAmigaScoreboard]);
 
   useEffect(() => {
     if (
@@ -5056,25 +5075,26 @@ export default function RoomPage() {
   }
 
   async function refreshAmigaLeaderboard() {
+    if (!amigaScoreGame) return;
     try {
-      const scores = await apiFetch('/scores/amiga/leaderboards/battle-squadron');
+      const scores = await apiFetch(`/scores/amiga/leaderboards/${encodeURIComponent(amigaScoreGame.game_key)}`);
       setAmigaLeaderboard(Array.isArray(scores) ? scores : []);
     } catch (err) {
       setAmigaLeaderboard([]);
-      setAmigaScoreStatus('Battle Squadron leaderboard could not be loaded.');
+      setAmigaScoreStatus(`${amigaScoreGame.title} leaderboard could not be loaded.`);
       addLog(`Amiga leaderboard load failed: ${err.message}`);
     }
   }
 
-  async function getBattleSquadronScoreFile() {
-    const bundle = await emulatorFrameRef.current?.contentWindow?.getAmigaHighScoreBundle?.();
+  async function getAmigaScoreFiles() {
+    const bundle = await emulatorFrameRef.current?.contentWindow?.getAmigaHighScoreBundle?.({ filenames: [amigaScoreGame.filename] });
     const files = Array.isArray(bundle?.files) ? bundle.files : [];
     const scoreFiles = files
-      .filter((candidate) => candidate?.path?.split('/').pop()?.toUpperCase() === 'LODSCO')
+      .filter((candidate) => candidate?.path?.split('/').pop()?.toUpperCase() === amigaScoreGame.filename.toUpperCase())
       .filter((candidate) => candidate?.bytes?.length)
       .map((candidate) => ({
         path: candidate.path,
-        bytes: new Uint8Array(candidate.bytes),
+        bytes: new Uint8Array(candidate.bytes), source: candidate.source, modifiedAt: candidate.modifiedAt,
       }));
     const file = scoreFiles.find((candidate) => /\/WHDSaves\//i.test(candidate.path || ''))
       || scoreFiles[0]
@@ -5083,24 +5103,24 @@ export default function RoomPage() {
   }
 
   async function captureAmigaScoreBaseline() {
-    if (!supportsBattleSquadronScoreboard || !isHost) return false;
-    const { file, files } = await getBattleSquadronScoreFile();
+    if (!supportsAmigaScoreboard || !isHost) return false;
+    const { file, files } = await getAmigaScoreFiles();
     if (!file) return false;
     amigaScoreBaselineRef.current = { ...file, files };
     setAmigaScoreStatus('Score table ready. Finish a run and enter your initials.');
-    addLog(`Battle Squadron score baseline captured from ${files.length} LODSCO file(s): ${files.map((candidate) => candidate.path).join(', ')}`);
+    addLog(`${amigaScoreGame.title} score baseline captured from ${files.length} ${amigaScoreGame.filename} file(s): ${files.map((candidate) => `${candidate.path} [${candidate.source || 'unknown'}]`).join(', ')}`);
     return true;
   }
 
   async function submitAmigaScoreExtraction(reason = 'session') {
-    if (!supportsBattleSquadronScoreboard || !isHost || amigaScoreBusy) return null;
-    const { file: current, files: currentFiles, bundle } = await getBattleSquadronScoreFile();
+    if (!supportsAmigaScoreboard || !isHost || amigaScoreBusy) return null;
+    const { file: current, files: currentFiles, bundle } = await getAmigaScoreFiles();
     if (!current) {
       if (reason === 'manual') {
         const searched = Array.isArray(bundle?.searched) ? bundle.searched : [];
         setAmigaScoreStatus(searched.length
-          ? `LODSCO is not available yet. Checked ${searched.length} PUAE folders.`
-          : 'LODSCO is not available yet. Let the game finish loading.');
+          ? `${amigaScoreGame.filename} is not available yet. Checked ${searched.length} PUAE folders.`
+          : `${amigaScoreGame.filename} is not available yet. Let the game finish loading.`);
       }
       return null;
     }
@@ -5121,13 +5141,13 @@ export default function RoomPage() {
     if (!changedFiles.length) {
       if (reason === 'manual') setAmigaScoreStatus('No new saved score found yet.');
       if (reason === 'manual') {
-        addLog(`Battle Squadron checked ${currentFiles.length} LODSCO file(s); none changed: ${currentFiles.map((candidate) => candidate.path).join(', ')}`);
+        addLog(`${amigaScoreGame.title} checked ${currentFiles.length} ${amigaScoreGame.filename} file(s); none changed: ${currentFiles.map((candidate) => candidate.path).join(', ')}`);
       }
       return null;
     }
 
     setAmigaScoreBusy(true);
-    setAmigaScoreStatus('Checking saved Battle Squadron score...');
+    setAmigaScoreStatus(`Checking saved ${amigaScoreGame.title} score...`);
     try {
       let result = null;
       for (const candidate of changedFiles) {
@@ -5135,8 +5155,8 @@ export default function RoomPage() {
         const candidateResult = await apiFetch('/scores/amiga/extract-score', {
           method: 'POST',
           body: JSON.stringify({
-            game_key: 'battle-squadron',
-            session_id: `${roomCode}-${roomSessionKey}-battle-squadron`,
+            game_key: amigaScoreGame.game_key,
+            session_id: `${roomCode}-${roomSessionKey}-${amigaScoreGame.game_key}`,
             source_path: candidate.path,
             data: bytesToBase64(candidate.bytes),
             baseline_data: bytesToBase64(matchingBaseline.bytes),
@@ -5146,7 +5166,7 @@ export default function RoomPage() {
         const parserDetail = candidateResult.current_rows === undefined
           ? ''
           : ` (parser: ${candidateResult.current_rows}/${candidateResult.baseline_rows} rows, ${candidateResult.current_bytes}/${candidateResult.baseline_bytes} bytes)`;
-        addLog(`Battle Squadron checked ${candidate.path}: ${candidateResult.message || candidateResult.status}${parserDetail}`);
+        addLog(`${amigaScoreGame.title} checked ${candidate.path}: ${candidateResult.message || candidateResult.status}${parserDetail}`);
         if ((candidateResult.rows_inserted || 0) > 0) break;
       }
       setAmigaScoreStatus((result.rows_inserted || 0) > 0
@@ -5163,21 +5183,21 @@ export default function RoomPage() {
     try {
       await submitAmigaScoreExtraction('manual');
     } catch (err) {
-      setAmigaScoreStatus('Battle Squadron score could not be checked.');
+      setAmigaScoreStatus(`${amigaScoreGame?.title || 'Amiga'} score could not be checked.`);
       addLog(`Amiga score save failed: ${err.message}`);
     }
   }
 
   function renderAmigaLeaderboardPanel() {
-    if (!supportsBattleSquadronScoreboard) return null;
+    if (!supportsAmigaScoreboard) return null;
     return (
       <div className="mame-score-panel amiga-score-panel">
         <div className="mame-score-panel-header">
-          <div><span>Amiga leaderboard</span><strong>Battle Squadron</strong></div>
+          <div><span>Amiga leaderboard</span><strong>{amigaScoreGame.title}</strong></div>
           <em>live</em>
         </div>
         <p className="mame-score-status">
-          {amigaScoreStatus || 'Scores are verified from Battle Squadron\'s WHDLoad LODSCO file.'}
+          {amigaScoreStatus || `Scores are verified from the WHDLoad ${amigaScoreGame.filename} file.`}
         </p>
         {isHost ? (
           <button
@@ -5186,7 +5206,7 @@ export default function RoomPage() {
             onClick={saveAmigaScoreNow}
             disabled={amigaScoreBusy}
           >
-            {amigaScoreBusy ? 'Checking score...' : 'Save Battle Squadron score now'}
+            {amigaScoreBusy ? 'Checking score...' : `Save ${amigaScoreGame.title} score now`}
           </button>
         ) : null}
         {amigaLeaderboard.length ? (
@@ -7138,7 +7158,8 @@ export default function RoomPage() {
                       : null}
                   </div>
                 ) : (
-                  <>
+                  <div className={supportsAmigaScoreboard ? 'amiga-score-layout' : undefined}>
+                    <div className={supportsAmigaScoreboard ? 'amiga-score-screen' : undefined}>
                     <iframe
                       key={`${roomSystem}-${emulatorSessionKey}`}
                       ref={emulatorFrameRef}
@@ -7182,10 +7203,10 @@ export default function RoomPage() {
                       width={768}
                       height={544}
                     />
-                  </>
+                    </div>
+                    {renderAmigaLeaderboardPanel()}
+                  </div>
                 )}
-
-                {renderAmigaLeaderboardPanel()}
 
                 <input
                   ref={fileInputRef}

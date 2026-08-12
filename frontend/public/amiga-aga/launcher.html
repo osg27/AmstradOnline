@@ -403,9 +403,14 @@
       }
 
       window.getAmigaAgaAudioStream = () => audioCaptureStream;
-      window.getAmigaHighScoreBundle = () => {
+      window.getAmigaHighScoreBundle = (options = {}) => {
         if (!runtimeModule?.FS || !started) return { files: [], ready: false, searched: [] };
 
+        const requestedNames = new Set(
+          (Array.isArray(options.filenames) ? options.filenames : ["LODSCO"])
+            .map((name) => String(name || "").trim().toUpperCase())
+            .filter(Boolean)
+        );
         const matches = [];
         const searched = [];
         const seen = new Set();
@@ -427,8 +432,13 @@
               const stat = runtimeModule.FS.stat(child);
               if (runtimeModule.FS.isDir(stat.mode)) {
                 visit(child);
-              } else if (name.toUpperCase() === "LODSCO") {
-                matches.push({ path: child, bytes: Array.from(runtimeModule.FS.readFile(child)) });
+              } else if (requestedNames.has(name.toUpperCase())) {
+                matches.push({
+                  path: child,
+                  bytes: Array.from(runtimeModule.FS.readFile(child)),
+                  modifiedAt: Number(stat?.mtime?.getTime?.() || 0),
+                  source: /\/WHDSaves\//i.test(child) ? "whdload-save" : /\/saves\//i.test(child) ? "save" : "game-content",
+                });
               }
             } catch {
               // A file may disappear while PUAE replaces the saved table.
@@ -441,7 +451,7 @@
         visit("/home/web_user/retroarch/userdata/saves/WHDSaves");
         visit("/home/web_user/retroarch/userdata/saves");
         visit("/whdload-content");
-        return { files: matches, ready: true, searched, visitedEntries };
+        return { files: matches, ready: true, searched, visitedEntries, requestedNames: Array.from(requestedNames) };
       };
 
       window.addEventListener("message", (event) => {

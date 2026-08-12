@@ -4040,6 +4040,34 @@ button.recent-score-game:hover:not(:disabled) {
   text-transform: uppercase;
 }
 
+.amiga-score-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  align-items: start;
+  gap: 1rem;
+  width: 100%;
+}
+
+.amiga-score-screen {
+  position: relative;
+  min-width: 0;
+}
+
+.amiga-score-panel {
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .amiga-score-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .amiga-score-panel {
+    max-width: 640px;
+    justify-self: center;
+  }
+}
+
 .arcade-mode-strip {
   display: flex;
   align-items: center;
