@@ -52,6 +52,12 @@ class BattleSquadronParserTests(unittest.TestCase):
         with self.assertRaisesRegex(InvalidBattleSquadronScoreData, "unexpected rank"):
             extract(bytes(malformed))
 
+    def test_invalid_record_error_contains_safe_binary_preview(self):
+        malformed = bytearray(table(self.rows))
+        malformed[4:20] = b"\x00" * 16
+        with self.assertRaisesRegex(InvalidBattleSquadronScoreData, "hex=007b005b000000"):
+            extract(bytes(malformed))
+
     def test_registry_resolves_key_alias_and_title(self):
         self.assertEqual("LODSCO", get_extractor("battle_squadron").filename)
         self.assertEqual("battle-squadron", resolve_extractor("BattleSquadron_v1.6.1_0941.zip").key)

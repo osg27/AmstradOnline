@@ -23,8 +23,11 @@ def extract(data: bytes) -> list[dict]:
         offset = index * RECORD_SIZE
         match = _ENTRY.fullmatch(data[offset + 4:offset + RECORD_SIZE])
         if not match:
+            record = data[offset:offset + RECORD_SIZE]
+            ascii_preview = "".join(chr(value) if 32 <= value <= 126 else "." for value in record)
             raise InvalidBattleSquadronScoreData(
-                f"LODSCO record {index + 1} has an invalid ASCII score entry"
+                f"LODSCO record {index + 1} has an invalid ASCII score entry "
+                f"(hex={record.hex()}, ascii={ascii_preview!r})"
             )
         rank = int(match.group(1))
         if rank != index + 1:

@@ -882,6 +882,7 @@ export default function RoomPage() {
   const tournamentScoreArmedAtRef = useRef(0);
   const mameScoreProcessedTokenRef = useRef(0);
   const amigaScoreBaselineRef = useRef(null);
+  const amigaInvalidScoreFilesRef = useRef(new Set());
   const guestPreparedRef = useRef(false);
   const gamepadIndexRef = useRef(null);
   const [controllerSetupOpen, setControllerSetupOpen] = useState(false);
@@ -992,7 +993,7 @@ export default function RoomPage() {
   }, [atari8Config]);
 
   const emulatorSrc = isPuaeAmiga
-    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-12-1`
+    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-12-2`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
     : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-08-09-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-08-05-6' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
@@ -3479,6 +3480,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     amigaScoreBaselineRef.current = null;
+    amigaInvalidScoreFilesRef.current.clear();
     setAmigaScoreGame(null);
     if (!isPuaeAmiga || !loadedDiskName) {
       setAmigaLeaderboard([]);
@@ -5150,24 +5152,40 @@ export default function RoomPage() {
     setAmigaScoreStatus(`Checking saved ${amigaScoreGame.title} score...`);
     try {
       let result = null;
+      let rejectedCount = 0;
       for (const candidate of changedFiles) {
         const matchingBaseline = baselineByPath.get(candidate.path) || baseline;
-        const candidateResult = await apiFetch('/scores/amiga/extract-score', {
-          method: 'POST',
-          body: JSON.stringify({
-            game_key: amigaScoreGame.game_key,
-            session_id: `${roomCode}-${roomSessionKey}-${amigaScoreGame.game_key}`,
-            source_path: candidate.path,
-            data: bytesToBase64(candidate.bytes),
-            baseline_data: bytesToBase64(matchingBaseline.bytes),
-          }),
-        });
+        let candidateResult;
+        try {
+          candidateResult = await apiFetch('/scores/amiga/extract-score', {
+            method: 'POST',
+            body: JSON.stringify({
+              game_key: amigaScoreGame.game_key,
+              session_id: `${roomCode}-${roomSessionKey}-${amigaScoreGame.game_key}`,
+              source_path: candidate.path,
+              data: bytesToBase64(candidate.bytes),
+              baseline_data: bytesToBase64(matchingBaseline.bytes),
+            }),
+          });
+        } catch (err) {
+          rejectedCount += 1;
+          const fingerprint = `${candidate.path}:${bytesToBase64(candidate.bytes.slice(0, 20))}`;
+          if (!amigaInvalidScoreFilesRef.current.has(fingerprint)) {
+            amigaInvalidScoreFilesRef.current.add(fingerprint);
+            addLog(`${amigaScoreGame.title} rejected ${candidate.path} (${candidate.bytes.length} bytes, ${candidate.source || 'unknown'}): ${err.message}`);
+          }
+          continue;
+        }
         result = candidateResult;
         const parserDetail = candidateResult.current_rows === undefined
           ? ''
           : ` (parser: ${candidateResult.current_rows}/${candidateResult.baseline_rows} rows, ${candidateResult.current_bytes}/${candidateResult.baseline_bytes} bytes)`;
         addLog(`${amigaScoreGame.title} checked ${candidate.path}: ${candidateResult.message || candidateResult.status}${parserDetail}`);
         if ((candidateResult.rows_inserted || 0) > 0) break;
+      }
+      if (!result && rejectedCount) {
+        setAmigaScoreStatus(`Found ${rejectedCount} changed ${amigaScoreGame.filename} file(s), but none matched the registered format.`);
+        return null;
       }
       setAmigaScoreStatus((result.rows_inserted || 0) > 0
         ? 'Personal best registered.'
