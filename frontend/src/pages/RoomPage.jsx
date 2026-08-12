@@ -43,10 +43,65 @@ const ATARI_ST_TOS_KEY = 'atari-st-tos';
 const X68000_FIRMWARE_KEY = 'x68000-firmware';
 const CONTROL_MATCH_LIMIT = 6;
 const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
+const PREFERRED_LIBRARY_VARIANTS_KEY = 'localLibraryPreferredVariants';
 const BUILTIN_MAME_LEADERBOARD_ROMS = new Set([
   'dkong',
 ]);
 const mame2003PlusTitles = getMameTitleDatabase();
+
+function amigaRoomGameTitle(game) {
+  const fileName = String(game.fileName || game.title || '');
+  const baseName = fileName.replace(/\.[^.]+$/, '');
+  const withoutVersion = baseName.replace(
+    /(?:[_\s-]+v\d+(?:\.\d+)*(?:[a-z])?)(?:[_\s-].*)?$/i,
+    '',
+  );
+  return normaliseFilename(withoutVersion || baseName).cleanedTitle || game.title || baseName;
+}
+
+function amigaRoomGameVersion(game) {
+  return String(game.fileName || '').match(
+    /(?:^|[_\s-])v(\d+(?:\.\d+)*(?:[a-z])?)(?:[_\s-]|$)/i,
+  )?.[1] || '';
+}
+
+function groupAmigaRoomGames(games) {
+  let preferredVariants = {};
+  try {
+    preferredVariants = JSON.parse(localStorage.getItem(PREFERRED_LIBRARY_VARIANTS_KEY)) || {};
+  } catch {
+    preferredVariants = {};
+  }
+
+  const groups = new Map();
+  games.forEach((game) => {
+    const title = amigaRoomGameTitle(game);
+    const key = title.toLocaleLowerCase();
+    groups.set(key, [...(groups.get(key) || []), game]);
+  });
+
+  return [...groups.values()].map((variants) => {
+    const sorted = variants.slice().sort((left, right) => {
+      const leftVersion = amigaRoomGameVersion(left);
+      const rightVersion = amigaRoomGameVersion(right);
+      if (leftVersion && rightVersion && leftVersion !== rightVersion) {
+        return rightVersion.localeCompare(leftVersion, undefined, { numeric: true, sensitivity: 'base' });
+      }
+      return String(left.fileName || '').localeCompare(String(right.fileName || ''), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    });
+    const defaultGame = sorted[0];
+    const selected = sorted.find((game) => game.id === preferredVariants[defaultGame.id]) || defaultGame;
+    return {
+      ...selected,
+      title: amigaRoomGameTitle(defaultGame),
+      variants: sorted,
+      variantCount: sorted.length,
+    };
+  });
+}
 const ROOM_SYSTEM_OPTIONS = [
   ['cpc', 'Amstrad CPC'],
   ['cpc_party', 'Amstrad CPC Party'],
@@ -1096,11 +1151,11 @@ export default function RoomPage() {
       try {
         const games = await getLocalLibraryGames();
         if (cancelled) return;
-        setLocalRoomGames(
-          games
-            .filter((game) => game.roomSystem === roomSystem)
-            .sort((left, right) => left.title.localeCompare(right.title)),
-        );
+        const matchingGames = games.filter((game) => game.roomSystem === roomSystem);
+        const roomGames = roomSystem === 'amiga_aga' || roomSystem === 'amiga'
+          ? groupAmigaRoomGames(matchingGames)
+          : matchingGames;
+        setLocalRoomGames(roomGames.sort((left, right) => left.title.localeCompare(right.title)));
       } catch (err) {
         if (!cancelled) {
           addLog(`Local library list unavailable: ${err.message}`);
@@ -5806,6 +5861,7 @@ export default function RoomPage() {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('mode');
+    nextParams.delete('localRelease');
     nextParams.set('localGame', game.id);
     navigate(`/room/${roomCode}?${nextParams.toString()}`, { replace: true });
     setLocalGameReloadToken((value) => value + 1);
