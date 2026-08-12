@@ -3,9 +3,12 @@ from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Query, Header, HTTPException
 
 from app.core.security import decode_access_token
+from app.highscores.amiga.registry import get_extractor
+from app.models.amiga_leaderboard import AmigaHighScore
+from app.models.mame_leaderboard import MameHighScore, MameLeaderboardGame
 from app.models.score import Score
 from app.models.user import User
-from app.schemas.score import LeaderboardEntry, ScoreResponse, ScoreSubmit
+from app.schemas.score import LeaderboardEntry, RecentScoreEntry, ScoreResponse, ScoreSubmit
 from app.core.database import get_db
 
 
@@ -25,6 +28,61 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
     return user
 
 router = APIRouter(prefix="/scores", tags=["scores"])
+
+
+@router.get("/recent", response_model=list[RecentScoreEntry])
+def get_recent_scores(
+    limit: int = Query(12, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Return one platform-aware activity feed for every supported scoreboard."""
+    fetch_limit = min(50, limit)
+    mame_rows = (
+        db.query(MameHighScore, User.username, MameLeaderboardGame.display_name)
+        .join(User, MameHighScore.user_id == User.id)
+        .join(MameLeaderboardGame, MameHighScore.rom_name == MameLeaderboardGame.rom_name)
+        .filter(
+            MameLeaderboardGame.leaderboard_supported == True,  # noqa: E712
+            MameLeaderboardGame.enabled == True,  # noqa: E712
+        )
+        .order_by(desc(MameHighScore.created_at), desc(MameHighScore.id))
+        .limit(fetch_limit)
+        .all()
+    )
+    amiga_rows = (
+        db.query(AmigaHighScore, User.username)
+        .join(User, AmigaHighScore.user_id == User.id)
+        .order_by(desc(AmigaHighScore.created_at), desc(AmigaHighScore.id))
+        .limit(fetch_limit)
+        .all()
+    )
+
+    entries = [
+        RecentScoreEntry(
+            username=username,
+            system="arcade",
+            system_name="MAME Arcade",
+            game_key=score.rom_name,
+            game_name=display_name or score.rom_name,
+            score=score.score,
+            created_at=score.created_at,
+        )
+        for score, username, display_name in mame_rows
+    ]
+    entries.extend(
+        RecentScoreEntry(
+            username=username,
+            system="amiga",
+            system_name="Amiga",
+            game_key=score.game_key,
+            game_name=(get_extractor(score.game_key).title if get_extractor(score.game_key) else score.game_key),
+            score=score.score,
+            created_at=score.created_at,
+        )
+        for score, username in amiga_rows
+    )
+    entries.sort(key=lambda entry: entry.created_at, reverse=True)
+    return entries[:limit]
 
 
 @router.post("/submit", response_model=ScoreResponse)

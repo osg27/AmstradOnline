@@ -1,6 +1,7 @@
 import base64
 import binascii
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc
@@ -110,6 +111,7 @@ def extract_amiga_score(
         existing.session_id = payload.session_id
         existing.source_path = payload.source_path
         existing.parser = extractor.parser
+        existing.created_at = datetime.now(timezone.utc)
     else:
         db.add(AmigaHighScore(
             user_id=user.id,

@@ -28,3 +28,13 @@ class LeaderboardEntry(BaseModel):
     username: str
     score: int
     created_at: datetime
+
+
+class RecentScoreEntry(BaseModel):
+    username: str
+    system: str
+    system_name: str
+    game_key: str
+    game_name: str
+    score: int
+    created_at: datetime

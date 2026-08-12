@@ -485,7 +485,7 @@ export default function LobbyPage() {
 
     async function loadRecentArcadeScores() {
       try {
-        const scores = await apiFetch('/scores/mame/recent-scores?limit=10');
+        const scores = await apiFetch('/scores/recent?limit=10');
         if (active) setRecentArcadeScores(Array.isArray(scores) ? scores : []);
       } catch {
         if (active) setRecentArcadeScores([]);
@@ -649,43 +649,51 @@ export default function LobbyPage() {
   }
 
   async function openRecentArcadeGame(entry) {
-    const romKey = String(entry?.rom_name || '').replace(/\.(zip|7z)$/i, '').toLowerCase();
+    const entrySystem = entry?.system === 'amiga' ? 'amiga' : 'arcade';
+    const romKey = String(entry?.game_key || entry?.rom_name || '').replace(/\.(zip|7z)$/i, '').toLowerCase();
     if (!romKey || openingRecentRom) return;
     setError('');
     setOpeningRecentRom(romKey);
     try {
       const games = await getLocalLibraryGames().catch(() => []);
       const matchingGame = games.find((game) => (
-        game.system === 'arcade'
-        && [game.romKey, game.parentRomKey, game.fileName]
+        (entrySystem === 'amiga'
+          ? game.system === 'amiga' || game.system === 'amiga_aga'
+          : game.system === 'arcade')
+        && [game.romKey, game.parentRomKey, game.fileName, game.title]
           .filter(Boolean)
-          .some((value) => String(value).replace(/\.(zip|7z)$/i, '').toLowerCase() === romKey)
+          .some((value) => {
+            const normalised = String(value).replace(/\.(zip|7z)$/i, '').toLowerCase();
+            return entrySystem === 'amiga'
+              ? normalised.includes(romKey.replace(/-/g, '')) || normalised.replace(/[^a-z0-9]/g, '').includes(romKey.replace(/[^a-z0-9]/g, ''))
+              : normalised === romKey;
+          })
       ));
       const hasVipAccess = localStorage.getItem('isVip') === 'true'
         || localStorage.getItem('isAdmin') === 'true'
         || localStorage.getItem('isSuperAdmin') === 'true';
       const canUseMatchedGame = matchingGame?.handle
-        || (matchingGame?.source === 'internet-archive-mame' && hasVipAccess);
+        || (['internet-archive-mame', 'vip-amiga-whdload'].includes(matchingGame?.source) && hasVipAccess);
       const pendingGame = canUseMatchedGame ? matchingGame : {
-        id: `recent-mame:${romKey}`,
+        id: `recent-${entrySystem}:${romKey}`,
         title: entry.game_name || romKey,
-        fileName: `${romKey}.zip`,
-        system: 'arcade',
-        roomSystem: 'arcade',
-        source: 'recent-mame-score',
+        fileName: entrySystem === 'amiga' ? '' : `${romKey}.zip`,
+        system: entrySystem,
+        roomSystem: entrySystem === 'amiga' ? 'amiga_aga' : 'arcade',
+        source: `recent-${entrySystem}-score`,
       };
       sessionStorage.setItem('oldstylegaming:pendingLocalGame', JSON.stringify({
         id: pendingGame.id,
         title: pendingGame.title,
-        fileName: pendingGame.fileName || `${romKey}.zip`,
-        system: 'arcade',
-        roomSystem: 'arcade',
+        fileName: pendingGame.fileName || (entrySystem === 'arcade' ? `${romKey}.zip` : ''),
+        system: pendingGame.system || entrySystem,
+        roomSystem: pendingGame.roomSystem || (entrySystem === 'amiga' ? 'amiga_aga' : 'arcade'),
         source: pendingGame.source || 'local',
         archiveSampleFileName: pendingGame.archiveSampleFileName || '',
       }));
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
-        body: JSON.stringify({ system: 'arcade', party_max_players: 8, arcade_multiplayer: false }),
+        body: JSON.stringify({ system: pendingGame.roomSystem || (entrySystem === 'amiga' ? 'amiga_aga' : 'arcade'), party_max_players: 8, arcade_multiplayer: false }),
       });
       const params = new URLSearchParams({
         localGame: pendingGame.id,
@@ -960,7 +968,7 @@ export default function LobbyPage() {
             {recentArcadeScores.length ? (
               <ol className="recent-arcade-list">
                 {recentArcadeScores.map((entry) => (
-                  <li key={`${entry.username}-${entry.rom_name}-${entry.created_at}`}>
+                  <li key={`${entry.username}-${entry.system}-${entry.game_key || entry.rom_name}-${entry.created_at}`}>
                     <span className="recent-score-player">{entry.username}</span>
                     <strong>{Number(entry.score || 0).toLocaleString()}</strong>
                     <button
@@ -970,10 +978,11 @@ export default function LobbyPage() {
                       title={`Play ${entry.game_name}`}
                       onClick={() => openRecentArcadeGame(entry)}
                     >
-                      {openingRecentRom === String(entry.rom_name || '').replace(/\.(zip|7z)$/i, '').toLowerCase()
+                      {openingRecentRom === String(entry.game_key || entry.rom_name || '').replace(/\.(zip|7z)$/i, '').toLowerCase()
                         ? 'Opening...'
                         : entry.game_name}
                     </button>
+                    <span className={`recent-score-system recent-score-system-${entry.system}`}>{entry.system_name}</span>
                     <time dateTime={entry.created_at}>{formatRecentScoreTime(entry.created_at)}</time>
                   </li>
                 ))}

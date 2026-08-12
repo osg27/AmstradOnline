@@ -1929,6 +1929,7 @@ input:focus {
 }
 
 .recent-score-game,
+.recent-score-system,
 .recent-arcade-list time,
 .recent-arcade-empty {
   color: var(--muted);
@@ -1950,6 +1951,23 @@ button.recent-score-game {
 button.recent-score-game:hover:not(:disabled) {
   color: #f3c66b;
   text-decoration-color: currentColor;
+}
+
+.recent-score-system {
+  justify-self: start;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid rgba(122, 217, 155, 0.36);
+  border-radius: 999px;
+  color: #86e6bd;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.recent-score-system-arcade {
+  border-color: rgba(243, 198, 107, 0.4);
+  color: #f3c66b;
 }
 
 .tournament-notification-stack {
