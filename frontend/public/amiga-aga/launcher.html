@@ -446,10 +446,19 @@
           });
         };
 
-        // WHDLoad writes changed game files beneath the frontend save folder.
-        // Search that before the pristine archive so the live table wins.
+        // PUAE obtains its save directory from the compiled EmulatorJS frontend.
+        // Different runtime builds expose that root as /retroarch, /saves, or the
+        // full web_user userdata path. Search save roots before pristine content.
         visit("/home/web_user/retroarch/userdata/saves/WHDSaves");
         visit("/home/web_user/retroarch/userdata/saves");
+        visit("/home/web_user/retroarch/saves/WHDSaves");
+        visit("/home/web_user/retroarch/saves");
+        visit("/retroarch/userdata/saves/WHDSaves");
+        visit("/retroarch/userdata/saves");
+        visit("/retroarch/saves/WHDSaves");
+        visit("/retroarch/saves");
+        visit("/saves/WHDSaves");
+        visit("/saves");
         visit("/whdload-content");
         return { files: matches, ready: true, searched, visitedEntries, requestedNames: Array.from(requestedNames) };
       };
