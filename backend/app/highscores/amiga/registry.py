@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import re
 from typing import Callable
 
-from app.highscores.amiga.extractors import battle_squadron
+from app.highscores.amiga.extractors import battle_squadron, hybris
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,14 @@ EXTRACTORS = {
         title_pattern=re.compile(r"battle\s*[-_]?\s*squadron", re.IGNORECASE),
         extract=battle_squadron.extract,
         aliases=("battle_squadron",),
+    ),
+    "hybris": AmigaHighScoreExtractor(
+        key="hybris",
+        title="Hybris",
+        filename="hybrishigh",
+        parser="hybris-whdload-v1",
+        title_pattern=re.compile(r"(?:^|[^a-z0-9])hybris(?:[^a-z0-9]|$)", re.IGNORECASE),
+        extract=hybris.extract,
     ),
 }
 

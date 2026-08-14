@@ -8,6 +8,10 @@ from app.highscores.amiga.extractors.battle_squadron import (
     InvalidBattleSquadronScoreData,
     extract,
 )
+from app.highscores.amiga.extractors.hybris import (
+    InvalidHybrisScoreData,
+    extract as extract_hybris,
+)
 from app.highscores.amiga.registry import get_extractor, resolve_extractor
 
 
@@ -75,6 +79,36 @@ class BattleSquadronParserTests(unittest.TestCase):
     def test_registry_resolves_key_alias_and_title(self):
         self.assertEqual("LODSCO", get_extractor("battle_squadron").filename)
         self.assertEqual("battle-squadron", resolve_extractor("BattleSquadron_v1.6.1_0941.zip").key)
+
+
+class HybrisParserTests(unittest.TestCase):
+    def setUp(self):
+        self.table = b"".join(
+            f"{rank}.{score:08d}{name:<6.6}".encode("ascii")
+            for rank, score, name in (
+                (1, 50000, "MARTIN"),
+                (2, 45000, "TORBEN"),
+                (3, 40000, "TOM"),
+                (4, 35000, "BILL"),
+                (5, 30000, "MIKE"),
+                (6, 25000, "DAVE"),
+                (7, 20000, "GEORGE"),
+                (8, 15000, "JIM"),
+            )
+        )
+
+    def test_parses_whdload_hybrishigh_table(self):
+        rows = extract_hybris(self.table)
+        self.assertEqual(8, len(rows))
+        self.assertEqual({"rank": 1, "name": "MARTIN", "score": 50000}, rows[0])
+
+    def test_rejects_wrong_file_size(self):
+        with self.assertRaisesRegex(InvalidHybrisScoreData, "exactly 128 bytes"):
+            extract_hybris(b"not a score file")
+
+    def test_registry_resolves_archive_versions_as_hybris(self):
+        self.assertEqual("hybrishigh", get_extractor("hybris").filename)
+        self.assertEqual("hybris", resolve_extractor("Hybris_v2.3_1457.lha").key)
 
 
 if __name__ == "__main__":

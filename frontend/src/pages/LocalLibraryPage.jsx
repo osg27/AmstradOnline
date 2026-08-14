@@ -1395,7 +1395,13 @@ function libraryGroupKey(game, { showArcadeClones = false } = {}) {
   }
 
   const canonicalTitle = canonicalLibraryTitle(game);
-  return `${game.system}:${normalizeBoxArtKey(canonicalTitle) || normalizeExactBoxArtKey(canonicalTitle) || game.id}`;
+  // A WHDLoad release can be classified as either an ordinary Amiga game or
+  // an AGA game depending on the individual archive name. They are still
+  // variants of the same game on the single user-facing Amiga platform.
+  const systemKey = game.system === 'amiga' || game.system === 'amiga_aga'
+    ? 'amiga'
+    : game.system;
+  return `${systemKey}:${normalizeBoxArtKey(canonicalTitle) || normalizeExactBoxArtKey(canonicalTitle) || game.id}`;
 }
 
 function variantPreferenceScore(game) {
