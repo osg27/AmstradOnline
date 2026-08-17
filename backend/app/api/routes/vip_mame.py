@@ -1,6 +1,6 @@
 import re
-import time
-import xml.etree.ElementTree as ET
+import json
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -15,10 +15,8 @@ router = APIRouter(prefix="/auth/vip/mame", tags=["vip-mame"])
 
 ARCHIVE_ITEM = "mame-2003-plus-reference-set"
 ARCHIVE_DOWNLOAD_ROOT = f"https://archive.org/download/{ARCHIVE_ITEM}"
-ARCHIVE_FILES_XML = f"{ARCHIVE_DOWNLOAD_ROOT}/{ARCHIVE_ITEM}_files.xml"
 SAFE_ARCHIVE_NAME = re.compile(r"^[a-zA-Z0-9_.+ -]+\.zip$")
-CATALOG_TTL_SECONDS = 6 * 60 * 60
-_catalog_cache: tuple[float, dict] | None = None
+CATALOG_PATH = Path(__file__).resolve().parents[2] / "data" / "mame_vip_catalog.json"
 
 
 def require_vip(user: User = Depends(get_current_user)) -> User:
@@ -32,28 +30,11 @@ def archive_request(url: str) -> Request:
 
 
 def load_archive_catalog() -> dict:
-    global _catalog_cache
-    now = time.monotonic()
-    if _catalog_cache and now - _catalog_cache[0] < CATALOG_TTL_SECONDS:
-        return _catalog_cache[1]
-
     try:
-        with urlopen(archive_request(ARCHIVE_FILES_XML), timeout=30) as response:
-            root = ET.fromstring(response.read())
-    except (HTTPError, URLError, TimeoutError, ET.ParseError) as exc:
-        raise HTTPException(status_code=502, detail=f"Internet Archive catalogue is unavailable: {exc}") from exc
-
-    result = {"roms": [], "samples": []}
-    for file_element in root.findall("file"):
-        path = str(file_element.attrib.get("name") or "")
-        directory, separator, filename = path.partition("/")
-        if not separator or directory not in result or not SAFE_ARCHIVE_NAME.fullmatch(filename):
-            continue
-        result[directory].append(filename)
-
-    result["roms"].sort()
-    result["samples"].sort()
-    _catalog_cache = (now, result)
+        result = json.loads(CATALOG_PATH.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=503, detail="The bundled MAME catalogue is unavailable") from exc
+    result["catalog_source"] = "bundled"
     return result
 
 
@@ -79,7 +60,7 @@ def get_archive_file(directory: str, filename: str, _user: User = Depends(requir
         raise HTTPException(status_code=404, detail="Archive file not found")
 
     catalog = load_archive_catalog()
-    if filename not in catalog[directory]:
+    if directory == "roms" and filename not in catalog["roms"]:
         raise HTTPException(status_code=404, detail="Archive file not found")
 
     url = f"{ARCHIVE_DOWNLOAD_ROOT}/{directory}/{quote(filename)}"

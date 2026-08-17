@@ -23,6 +23,7 @@ import {
   takePreparedVipNesFile,
   takePreparedVipPcengineFile,
   takePreparedVipSpectrumFile,
+  takePreparedVipSnesFile,
 } from '../vipMameCache';
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
@@ -6508,16 +6509,8 @@ export default function RoomPage() {
             || localStorage.getItem('isSuperAdmin') === 'true';
           if (!hasVipAccess) throw new Error('VIP access is required for the SNES archive library.');
 
-          const token = localStorage.getItem('token');
-          const response = await fetch(
-            `${API_BASE_URL}/auth/vip/snes/files/${encodeURIComponent(pendingGame.fileName)}`,
-            { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-          );
-          if (!response.ok) {
-            const errorBody = await response.json().catch(() => null);
-            throw new Error(errorBody?.detail || `Could not download ${pendingGame.fileName}`);
-          }
-          const archiveBytes = new Uint8Array(await response.arrayBuffer());
+          const archiveBytes = await takePreparedVipSnesFile(pendingGame.fileName);
+          if (!archiveBytes) throw new Error(`SNES file ${pendingGame.fileName} is not prepared.`);
           if (cancelled) return;
           setStatus('Extracting SNES ROM');
           const extracted = await extractPrepared7zFile(archiveBytes, ['.sfc', '.smc'], {

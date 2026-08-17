@@ -27,7 +27,7 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
-import { inspectPrepared7zFiles, prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMastersystemFile, prepareVipMegadriveFile, prepareVipNesFile, prepareVipPcengineFile, prepareVipSpectrumFile } from '../vipMameCache';
+import { inspectPrepared7zFiles, prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMastersystemFile, prepareVipMegadriveFile, prepareVipNesFile, prepareVipPcengineFile, prepareVipSnesFile, prepareVipSpectrumFile, storePreparedVipGameFile, takePreparedVipSnesFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
@@ -36,6 +36,12 @@ import { normaliseFilename } from '../features/localLibrary/core/normalise';
 
 const PREFERRED_VARIANTS_KEY = 'localLibraryPreferredVariants';
 const SNES_VARIANT_SEPARATOR = '::snes-entry::';
+const REMOTE_FALLBACK_SOURCES = new Set([
+  'internet-archive-mame', 'vip-c64-oneload', 'vip-amiga-whdload',
+  'vip-amstrad-ghostware', 'vip-spectrum-z80', 'vip-megadrive-ghostware',
+  'vip-pcengine-nointro', 'vip-mastersystem-nointro', 'vip-nes-megapack',
+  'vip-snes-gameplay',
+]);
 
 function snesVariantId(gameId, entryName) {
   return `${gameId}${SNES_VARIANT_SEPARATOR}${encodeURIComponent(entryName)}`;
@@ -1523,6 +1529,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [versionPickerGame, setVersionPickerGame] = useState(null);
   const [launchingSystemId, setLaunchingSystemId] = useState(null);
   const [vipPreparation, setVipPreparation] = useState(null);
+  const [remoteFallback, setRemoteFallback] = useState(null);
   const [showArcadeClones, setShowArcadeClones] = useState(searchParams.get('clones') === '1');
   const [showBoxArtOnly, setShowBoxArtOnly] = useState(() => (
     searchParams.has('boxArt')
@@ -1535,6 +1542,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [renderLimit, setRenderLimit] = useState(LIBRARY_PAGE_SIZE);
   const [brokenBoxArtIds, setBrokenBoxArtIds] = useState(() => new Set());
   const braveFolderInputRef = useRef(null);
+  const remoteFallbackInputRef = useRef(null);
   const pendingFolderSystemRef = useRef(null);
 
   function buildLibraryReturnPath(overrides = {}) {
@@ -2488,13 +2496,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     setLaunchingId(game.id);
     setStatus(`Fetching ${game.title} versions...`);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(
-        `${API_BASE_URL}/auth/vip/snes/files/${encodeURIComponent(game.fileName)}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-      );
-      if (!response.ok) throw new Error(`Could not download ${game.fileName}`);
-      const bytes = new Uint8Array(await response.arrayBuffer());
+      await prepareVipSnesFile(game.fileName);
+      const bytes = await takePreparedVipSnesFile(game.fileName);
+      if (!bytes) throw new Error(`Could not prepare ${game.fileName}`);
       const fileNames = await inspectPrepared7zFiles(bytes, ['.sfc', '.smc']);
       const versions = cleanSnesArchiveVersions(game, fileNames);
       if (!versions.length) throw new Error('No clean regional versions were found in this archive');
@@ -2588,7 +2592,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
         await prepareFile('roms', game.fileName, 'Downloading ROM');
         if (game.archiveSampleFileName) {
-          await prepareFile('samples', game.archiveSampleFileName, 'Downloading samples');
+          try {
+            await prepareFile('samples', game.archiveSampleFileName, 'Downloading samples');
+          } catch {
+            setStatus('Optional MAME samples are unavailable; starting the game without them.');
+          }
         }
         setVipPreparation({
           badge: 'VIP MAME',
@@ -2865,6 +2873,18 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         });
       }
 
+      if (game.source === 'vip-snes-gameplay') {
+        setVipPreparation({ badge: 'VIP SNES', title: game.title, fileName: game.fileName,
+          label: 'Downloading SNES release', loaded: 0, total: game.size || 0, percent: 0, attempt: 1 });
+        await prepareVipSnesFile(game.fileName, ({ loaded, total, attempt, cached }) => {
+          const expectedTotal = total || game.size || 0;
+          setVipPreparation({ badge: 'VIP SNES', title: game.title, fileName: game.fileName,
+            label: cached ? 'Using saved SNES release' : 'Downloading SNES release', loaded,
+            total: expectedTotal, percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+            attempt: attempt || 1 });
+        });
+      }
+
       sessionStorage.setItem('oldstylegaming:pendingLocalGame', JSON.stringify({
         id: game.id,
         title: game.title,
@@ -2891,9 +2911,27 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       navigate(`/room/${room.room_code}?${nextParams.toString()}`);
     } catch (err) {
       setStatus(`Could not start ${game.title}: ${err.message}`);
+      if (REMOTE_FALLBACK_SOURCES.has(game.source)) {
+        setRemoteFallback({ game, message: err.message });
+      }
     } finally {
       setLaunchingId(null);
       setVipPreparation(null);
+    }
+  }
+
+  async function handleRemoteFallbackFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !remoteFallback?.game) return;
+    const game = remoteFallback.game;
+    try {
+      setStatus(`Using your local ${file.name} for ${game.title}...`);
+      await storePreparedVipGameFile(game, file);
+      setRemoteFallback(null);
+      await launchGame(game);
+    } catch (err) {
+      setStatus(`Could not use ${file.name}: ${err.message}`);
     }
   }
 
@@ -3027,6 +3065,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         multiple
         hidden
         onChange={handleBraveFolderSelection}
+      />
+      <input
+        ref={remoteFallbackInputRef}
+        type="file"
+        hidden
+        onChange={handleRemoteFallbackFile}
       />
       {vipPreparation ? (
         <div className="vip-rom-loading-overlay" role="status" aria-live="polite">
@@ -3517,12 +3561,35 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     document.body,
   ) : null;
 
-  if (embedded) return <>{content}{versionPicker}</>;
+  const remoteFallbackDialog = remoteFallback ? createPortal(
+    <div className="library-version-overlay" role="presentation" onMouseDown={() => setRemoteFallback(null)}>
+      <section className="library-version-dialog archive-fallback-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="library-version-dialog-head">
+          <div>
+            <span>Remote library unavailable</span>
+            <h2>{remoteFallback.game.title}</h2>
+          </div>
+          <button type="button" className="secondary icon-button" onClick={() => setRemoteFallback(null)} aria-label="Close"><i className="bi bi-x-lg" /></button>
+        </div>
+        <p>Internet Archive could not supply this game right now. If you already own the file, choose it below and the room will open normally.</p>
+        <code>{remoteFallback.game.fileName || remoteFallback.game.archiveMemberPath}</code>
+        <div className="library-version-dialog-actions">
+          <button type="button" onClick={() => remoteFallbackInputRef.current?.click()}>Choose local game file</button>
+          <button type="button" className="secondary" onClick={() => setRemoteFallback(null)}>Cancel</button>
+        </div>
+        <small>Once a remote or local copy has loaded successfully, this browser keeps it available for future sessions.</small>
+      </section>
+    </div>,
+    document.body,
+  ) : null;
+
+  if (embedded) return <>{content}{versionPicker}{remoteFallbackDialog}</>;
 
   return (
     <div className="page local-library-page">
       {content}
       {versionPicker}
+      {remoteFallbackDialog}
     </div>
   );
 }

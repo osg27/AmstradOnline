@@ -1,9 +1,8 @@
 import re
-import time
+import json
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
-import xml.etree.ElementTree as ET
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -19,10 +18,8 @@ router = APIRouter(prefix="/auth/vip/amiga", tags=["vip-amiga"])
 
 ARCHIVE_ITEM = "Amiga_WHD_Games"
 ARCHIVE_DOWNLOAD_ROOT = f"https://archive.org/download/{ARCHIVE_ITEM}"
-ARCHIVE_FILES_XML = f"{ARCHIVE_DOWNLOAD_ROOT}/{ARCHIVE_ITEM}_files.xml"
 SAFE_WHDLOAD_NAME = re.compile(r"^[^/\\\x00-\x1f]+\.(?:lha|zip)$", re.IGNORECASE)
-CATALOG_TTL_SECONDS = 6 * 60 * 60
-_catalog_cache: tuple[float, dict] | None = None
+CATALOG_PATH = Path(__file__).resolve().parents[2] / "data" / "amiga_vip_catalog.json"
 FIRMWARE_ARCHIVE_ROOT = "https://archive.org/download/commodore-amiga-firmware"
 KICKSTART_ARCHIVES = {
     "a500": "Kickstart v1.3 r34.005 (1987-12)(Commodore)(A500-A1000-A2000-CDTV)[!].zip",
@@ -55,32 +52,11 @@ def archive_request(url: str) -> Request:
 
 
 def load_archive_catalog() -> dict:
-    global _catalog_cache
-    now = time.monotonic()
-    if _catalog_cache and now - _catalog_cache[0] < CATALOG_TTL_SECONDS:
-        return _catalog_cache[1]
-
     try:
-        with urlopen(archive_request(ARCHIVE_FILES_XML), timeout=30) as response:
-            root = ET.fromstring(response.read())
-    except (HTTPError, URLError, TimeoutError, ET.ParseError) as exc:
-        raise HTTPException(status_code=502, detail=f"Internet Archive Amiga catalogue is unavailable: {exc}") from exc
-
-    games = []
-    for file_element in root.findall("file"):
-        file_name = str(file_element.attrib.get("name") or "")
-        if not SAFE_WHDLOAD_NAME.fullmatch(file_name):
-            continue
-        size_element = file_element.find("size")
-        try:
-            size = int(size_element.text or 0) if size_element is not None else 0
-        except ValueError:
-            size = 0
-        games.append({"file_name": file_name, "bytes": size})
-
-    games.sort(key=lambda game: game["file_name"].casefold())
-    result = {"source": ARCHIVE_ITEM, "games": games}
-    _catalog_cache = (now, result)
+        result = json.loads(CATALOG_PATH.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=503, detail="The bundled Amiga catalogue is unavailable") from exc
+    result["catalog_source"] = "bundled"
     return result
 
 

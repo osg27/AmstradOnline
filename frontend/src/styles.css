@@ -4456,6 +4456,22 @@ button.recent-score-game:hover:not(:disabled) {
   color: #dce9e4;
 }
 
+.archive-fallback-dialog code {
+  display: block;
+  padding: 0.75rem;
+  overflow-wrap: anywhere;
+  color: #ffd76b;
+  border: 1px solid rgba(255, 215, 107, 0.28);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.library-version-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .vip-rom-loading-progress {
   height: 12px;
   margin-top: 12px;

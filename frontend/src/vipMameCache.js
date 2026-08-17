@@ -9,7 +9,29 @@ const VIP_MEGADRIVE_CACHE = 'oldstylegaming-vip-megadrive-v1';
 const VIP_PCENGINE_CACHE = 'oldstylegaming-vip-pcengine-v1';
 const VIP_MASTERSYSTEM_CACHE = 'oldstylegaming-vip-mastersystem-v1';
 const VIP_NES_CACHE = 'oldstylegaming-vip-nes-v1';
+const VIP_SNES_CACHE = 'oldstylegaming-vip-snes-v1';
 const TOURNAMENT_MAME_CACHE = 'oldstylegaming-tournament-mame-v1';
+
+async function useCachedDownload(cacheName, request, onProgress) {
+  if (!('caches' in window)) return 0;
+  const cache = await caches.open(cacheName);
+  const response = await cache.match(request);
+  if (!response) return 0;
+  const size = Number(response.headers.get('Content-Length')) || (await response.clone().blob()).size;
+  onProgress({ loaded: size, total: size, attempt: 0, cached: true });
+  return size;
+}
+
+async function storeLocalDownload(cacheName, request, file) {
+  const cache = await caches.open(cacheName);
+  await cache.put(request, new Response(file, {
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'Content-Length': String(file.size),
+      'X-OldStyleGaming-Source': 'local-fallback',
+    },
+  }));
+}
 
 function cacheRequest(directory, fileName) {
   return new Request(
@@ -26,6 +48,8 @@ async function authenticatedArchiveResponse(directory, fileName) {
 }
 
 export async function prepareVipMameFile(directory, fileName, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_MAME_CACHE, cacheRequest(directory, fileName), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -83,7 +107,6 @@ export async function takePreparedVipMameFile(directory, fileName) {
   const request = cacheRequest(directory, fileName);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -102,6 +125,8 @@ async function authenticatedC64Response(fileName) {
 }
 
 export async function prepareVipC64File(fileName, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_C64_CACHE, c64CacheRequest(fileName), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -154,7 +179,6 @@ export async function takePreparedVipC64File(fileName) {
   const request = c64CacheRequest(fileName);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -173,6 +197,8 @@ async function authenticatedAmigaResponse(fileName) {
 }
 
 export async function prepareVipAmigaFile(fileName, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_AMIGA_CACHE, amigaCacheRequest(fileName), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -225,7 +251,6 @@ export async function takePreparedVipAmigaFile(fileName) {
   const request = amigaCacheRequest(fileName);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -244,6 +269,8 @@ async function authenticatedAmstradResponse(fileName) {
 }
 
 export async function prepareVipAmstradFile(fileName, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_AMSTRAD_CACHE, amstradCacheRequest(fileName), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -291,7 +318,6 @@ export async function takePreparedVipAmstradFile(fileName) {
   const request = amstradCacheRequest(fileName);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -310,6 +336,8 @@ async function authenticatedSpectrumResponse(fileName) {
 }
 
 export async function prepareVipSpectrumFile(fileName, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_SPECTRUM_CACHE, spectrumCacheRequest(fileName), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -357,7 +385,6 @@ export async function takePreparedVipSpectrumFile(fileName) {
   const request = spectrumCacheRequest(fileName);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -376,6 +403,8 @@ async function authenticatedMegadriveResponse(fileName) {
 }
 
 export async function prepareVipMegadriveFile(fileName, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_MEGADRIVE_CACHE, megadriveCacheRequest(fileName), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -423,7 +452,6 @@ export async function takePreparedVipMegadriveFile(fileName) {
   const request = megadriveCacheRequest(fileName);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -442,6 +470,8 @@ async function authenticatedPcengineResponse(fileName) {
 }
 
 export async function prepareVipPcengineFile(fileName, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_PCENGINE_CACHE, pcengineCacheRequest(fileName), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -489,7 +519,6 @@ export async function takePreparedVipPcengineFile(fileName) {
   const request = pcengineCacheRequest(fileName);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -505,6 +534,8 @@ async function authenticatedMastersystemResponse(fileName) {
 }
 
 export async function prepareVipMastersystemFile(fileName, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_MASTERSYSTEM_CACHE, mastersystemCacheRequest(fileName), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -552,7 +583,6 @@ export async function takePreparedVipMastersystemFile(fileName) {
   const request = mastersystemCacheRequest(fileName);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -568,6 +598,8 @@ async function authenticatedNesResponse(memberPath) {
 }
 
 export async function prepareVipNesFile(memberPath, onProgress = () => {}) {
+  const cached = await useCachedDownload(VIP_NES_CACHE, nesCacheRequest(memberPath), onProgress);
+  if (cached) return cached;
   let lastError = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -615,8 +647,56 @@ export async function takePreparedVipNesFile(memberPath) {
   const request = nesCacheRequest(memberPath);
   const response = await cache.match(request);
   if (!response) return null;
-  await cache.delete(request);
   return new Uint8Array(await response.arrayBuffer());
+}
+
+function snesCacheRequest(fileName) {
+  return new Request(`${window.location.origin}/__vip-snes-cache__/${encodeURIComponent(fileName)}`);
+}
+
+export async function prepareVipSnesFile(fileName, onProgress = () => {}) {
+  const request = snesCacheRequest(fileName);
+  const cached = await useCachedDownload(VIP_SNES_CACHE, request, onProgress);
+  if (cached) return cached;
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${API_BASE_URL}/auth/vip/snes/files/${encodeURIComponent(fileName)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail || `Could not download ${fileName}`);
+  }
+  const blob = await response.blob();
+  await storeLocalDownload(VIP_SNES_CACHE, request, blob);
+  onProgress({ loaded: blob.size, total: blob.size, attempt: 1 });
+  return blob.size;
+}
+
+export async function takePreparedVipSnesFile(fileName) {
+  const cache = await caches.open(VIP_SNES_CACHE);
+  const response = await cache.match(snesCacheRequest(fileName));
+  return response ? new Uint8Array(await response.arrayBuffer()) : null;
+}
+
+export async function storePreparedVipGameFile(game, file) {
+  const source = String(game?.source || '');
+  if (source === 'internet-archive-mame') {
+    return storeLocalDownload(VIP_MAME_CACHE, cacheRequest('roms', game.fileName), file);
+  }
+  const targets = {
+    'vip-c64-oneload': [VIP_C64_CACHE, c64CacheRequest(game.fileName)],
+    'vip-amiga-whdload': [VIP_AMIGA_CACHE, amigaCacheRequest(game.fileName)],
+    'vip-amstrad-ghostware': [VIP_AMSTRAD_CACHE, amstradCacheRequest(game.fileName)],
+    'vip-spectrum-z80': [VIP_SPECTRUM_CACHE, spectrumCacheRequest(game.fileName)],
+    'vip-megadrive-ghostware': [VIP_MEGADRIVE_CACHE, megadriveCacheRequest(game.fileName)],
+    'vip-pcengine-nointro': [VIP_PCENGINE_CACHE, pcengineCacheRequest(game.fileName)],
+    'vip-mastersystem-nointro': [VIP_MASTERSYSTEM_CACHE, mastersystemCacheRequest(game.fileName)],
+    'vip-nes-megapack': [VIP_NES_CACHE, nesCacheRequest(game.archiveMemberPath)],
+    'vip-snes-gameplay': [VIP_SNES_CACHE, snesCacheRequest(game.fileName)],
+  };
+  const target = targets[source];
+  if (!target) throw new Error('This game does not support a local fallback file yet.');
+  return storeLocalDownload(target[0], target[1], file);
 }
 
 function snesArchiveNameKey(value) {
