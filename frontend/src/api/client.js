@@ -76,7 +76,7 @@ export async function apiFetch(path, options = {}, hasRetried = false) {
   const token = localStorage.getItem('token');
 
   const headers = {
-    'Content-Type': 'application/json',
+    ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers || {}),
   };
 

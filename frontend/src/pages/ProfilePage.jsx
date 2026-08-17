@@ -55,6 +55,7 @@ export default function ProfilePage() {
         <BrandMark />
         <div>
           <button type="button" className="secondary" onClick={() => navigate('/lobby')}>Lobby</button>
+          <button type="button" className="secondary" onClick={() => navigate('/tournaments')}>Tournaments</button>
         </div>
       </header>
 

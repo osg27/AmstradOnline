@@ -45,6 +45,7 @@ export default function TournamentsPage() {
   const [codeCopied, setCodeCopied] = useState(false);
   const [name, setName] = useState('');
   const [romName, setRomName] = useState('');
+  const [romFile, setRomFile] = useState(null);
   const [gameQuery, setGameQuery] = useState('');
   const [durationHours, setDurationHours] = useState(24);
   const [isPublic, setIsPublic] = useState(true);
@@ -143,9 +144,15 @@ export default function TournamentsPage() {
     setBusy(true);
     setStatus('Creating tournament…');
     try {
+      const form = new FormData();
+      form.append('name', name);
+      form.append('rom_name', romName);
+      form.append('duration_hours', String(Number(durationHours)));
+      form.append('is_public', String(isPublic));
+      form.append('rom_file', romFile);
       const created = await apiFetch('/auth/tournaments', {
         method: 'POST',
-        body: JSON.stringify({ name, rom_name: romName, duration_hours: Number(durationHours), is_public: isPublic }),
+        body: form,
       });
       navigate(`/tournaments/${created.code}`);
       setTournament(created);
@@ -153,6 +160,7 @@ export default function TournamentsPage() {
       if (created.is_public) setPublicTournaments((current) => [created, ...current]);
       setName('');
       setRomName('');
+      setRomFile(null);
       setGameQuery('');
       setIsPublic(true);
       setCreateOpen(false);
@@ -414,6 +422,11 @@ export default function TournamentsPage() {
                 </datalist>
                 <small>{selectedGame ? `Selected system: MAME Arcade · ROM: ${selectedGame.rom_name}` : 'Choose a MAME Arcade game from the search results.'}</small>
               </label>
+              <label>
+                Tournament ROM
+                <input type="file" accept=".zip,application/zip" onChange={(event) => setRomFile(event.target.files?.[0] || null)} required />
+                <small>{selectedGame ? `Upload the exact ${selectedGame.rom_name}.zip that every entrant will play.` : 'Choose the game first, then upload its MAME ROM ZIP.'}</small>
+              </label>
               <label>Duration<select value={durationHours} onChange={(event) => setDurationHours(Number(event.target.value))}><option value={1}>1 hour</option><option value={6}>6 hours</option><option value={12}>12 hours</option><option value={24}>24 hours</option><option value={72}>3 days</option><option value={168}>1 week</option></select></label>
               <label className="tournament-visibility-option">
                 <input type="checkbox" checked={!isPublic} onChange={(event) => setIsPublic(!event.target.checked)} />
@@ -421,7 +434,7 @@ export default function TournamentsPage() {
               </label>
               <div className="tournament-modal-actions">
                 <button type="button" className="secondary" disabled={busy} onClick={() => setCreateOpen(false)}>Cancel</button>
-                <button type="submit" disabled={busy || !name.trim() || !selectedGame}>{busy ? 'Creating…' : 'Create tournament'}</button>
+                <button type="submit" disabled={busy || !name.trim() || !selectedGame || !romFile}>{busy ? 'Creating…' : 'Create tournament'}</button>
               </div>
             </form>
           </section>

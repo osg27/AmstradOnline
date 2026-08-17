@@ -1,34 +1,26 @@
 import base64
 import json
+import os
 import random
 import string
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote
-from urllib.request import urlopen
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import get_current_user, is_admin_user
-from app.api.routes.vip_mame import (
-    ARCHIVE_DOWNLOAD_ROOT,
-    archive_request,
-    stream_archive_response,
-)
 from app.core.database import get_db
 from app.models.tournament import Tournament, TournamentEntry, TournamentNotification, TournamentScore
 from app.models.user import User
-from app.schemas.tournament import TournamentCreate, TournamentScoreSubmit
+from app.schemas.tournament import TournamentScoreSubmit
 from app.services.mame_high_scores import (
     extract_mame_scores,
     load_supported_mame_games,
     load_tournament_mame_hi_sizes,
-    load_tournament_mame_roms,
     normalise_rom_name,
 )
 
@@ -37,6 +29,8 @@ router = APIRouter(prefix="/tournaments", tags=["tournaments"])
 CODE_CHARS = string.ascii_uppercase + string.digits
 TOURNAMENT_HI_TEMPLATES_PATH = Path(__file__).resolve().parents[2] / "data" / "mame_tournament_hi_templates.json"
 TOURNAMENT_NAMES_PATH = Path(__file__).resolve().parents[2] / "data" / "mame_tournament_names.json"
+TOURNAMENT_ROM_DIR = Path(os.getenv("TOURNAMENT_ROM_DIR", Path(__file__).resolve().parents[2] / "storage" / "tournaments"))
+MAX_TOURNAMENT_ROM_BYTES = 256 * 1024 * 1024
 
 
 def load_tournament_hi_templates() -> dict[str, dict]:
@@ -128,21 +122,14 @@ def tournament_ready_games() -> list[dict]:
     hi_sizes = load_tournament_mame_hi_sizes()
     hi_templates = load_tournament_hi_templates()
     canonical_names = load_tournament_names()
-    archive_files = load_tournament_mame_roms()
-    archive_by_rom = {
-        normalise_rom_name(filename): filename
-        for filename in archive_files
-        if filename.lower().endswith(".zip")
-    }
     games = []
     for rom_name, display_name, _parser in load_supported_mame_games():
-        filename = archive_by_rom.get(rom_name)
-        if filename and rom_name in hi_sizes and rom_name in hi_templates:
+        if rom_name in hi_sizes and rom_name in hi_templates:
             games.append({
                 "rom_name": rom_name,
                 "display_name": canonical_names.get(rom_name) or display_name or rom_name,
                 "system": "MAME Arcade",
-                "file_name": filename,
+                "file_name": f"{rom_name}.zip",
                 "hi_size": hi_sizes[rom_name],
             })
     return sorted(games, key=lambda game: (game["display_name"].casefold(), game["rom_name"]))
@@ -157,37 +144,63 @@ def tournament_games(_user: User = Depends(get_current_user)):
 
 @router.post("")
 def create_tournament(
-    payload: TournamentCreate,
+    name: str = Form(..., min_length=3, max_length=120),
+    rom_name: str = Form(..., min_length=1, max_length=64),
+    duration_hours: int = Form(..., ge=1, le=24 * 30),
+    is_public: bool = Form(True),
+    rom_file: UploadFile = File(...),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if not is_admin_user(user):
         raise HTTPException(status_code=403, detail="Admin access required")
-    rom_name = normalise_rom_name(payload.rom_name)
+    rom_name = normalise_rom_name(rom_name)
     ready_game = next((item for item in tournament_ready_games() if item["rom_name"] == rom_name), None)
     if not ready_game:
         raise HTTPException(status_code=400, detail="That MAME game is not tournament-ready")
 
-    starts_at = payload.starts_at or utc_now()
-    starts_at = aware(starts_at).astimezone(timezone.utc)
-    if starts_at < utc_now() - timedelta(minutes=2):
-        raise HTTPException(status_code=400, detail="Start time cannot be in the past")
+    uploaded_name = Path(rom_file.filename or "").name
+    if not uploaded_name.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Tournament ROM must be a ZIP file")
+    if normalise_rom_name(uploaded_name) != rom_name:
+        raise HTTPException(status_code=400, detail=f"Upload {rom_name}.zip for the selected game")
+    starts_at = utc_now()
     tournament = Tournament(
         code="".join(random.choice(CODE_CHARS) for _ in range(8)),
-        name=payload.name.strip(),
+        name=name.strip(),
         creator_user_id=user.id,
         rom_name=rom_name,
         display_name=ready_game["display_name"],
-        is_public=payload.is_public,
+        rom_file_name=uploaded_name,
+        is_public=is_public,
         starts_at=starts_at,
-        ends_at=starts_at + timedelta(hours=payload.duration_hours),
+        ends_at=starts_at + timedelta(hours=duration_hours),
     )
     while db.query(Tournament).filter(Tournament.code == tournament.code).first():
         tournament.code = "".join(random.choice(CODE_CHARS) for _ in range(8))
-    db.add(tournament)
-    db.flush()
-    db.add(TournamentEntry(tournament_id=tournament.id, user_id=user.id))
-    db.commit()
+    TOURNAMENT_ROM_DIR.mkdir(parents=True, exist_ok=True)
+    target = TOURNAMENT_ROM_DIR / f"{tournament.code}.zip"
+    temporary = target.with_suffix(".upload")
+    written = 0
+    try:
+        with temporary.open("wb") as output:
+            while chunk := rom_file.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > MAX_TOURNAMENT_ROM_BYTES:
+                    raise HTTPException(status_code=413, detail="Tournament ROM exceeds the 256 MB limit")
+                output.write(chunk)
+        if written == 0:
+            raise HTTPException(status_code=400, detail="Tournament ROM is empty")
+        temporary.replace(target)
+        db.add(tournament)
+        db.flush()
+        db.add(TournamentEntry(tournament_id=tournament.id, user_id=user.id))
+        db.commit()
+    except Exception:
+        db.rollback()
+        temporary.unlink(missing_ok=True)
+        target.unlink(missing_ok=True)
+        raise
     db.refresh(tournament)
     return serialize_tournament(tournament, db, user.id)
 
@@ -275,6 +288,7 @@ def delete_tournament(code: str, user: User = Depends(get_current_user), db: Ses
     )
     db.delete(tournament)
     db.commit()
+    (TOURNAMENT_ROM_DIR / f"{tournament.code}.zip").unlink(missing_ok=True)
     return {"deleted": True, "code": tournament.code}
 
 
@@ -340,14 +354,10 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
     require_entry(tournament, user, db)
     if tournament_status(tournament) != "active":
         raise HTTPException(status_code=409, detail="Tournament play is not currently active")
-    archive_by_rom = {
-        normalise_rom_name(filename): filename
-        for filename in load_tournament_mame_roms()
-    }
-    filename = archive_by_rom.get(tournament.rom_name)
+    filename = tournament.rom_file_name
     hi_config = load_tournament_hi_templates().get(tournament.rom_name)
     hi_template = hi_config.get("template") if hi_config else None
-    if not filename or not hi_template:
+    if not filename or not hi_template or not (TOURNAMENT_ROM_DIR / f"{tournament.code}.zip").is_file():
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
     try:
         hi_size = len(base64.b64decode(hi_template, validate=True))
@@ -368,20 +378,17 @@ def tournament_game(code: str, user: User = Depends(get_current_user), db: Sessi
 def tournament_file(code: str, filename: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     tournament = get_tournament(code, db)
     require_entry(tournament, user, db)
-    if tournament_status(tournament) != "active" or normalise_rom_name(filename) != tournament.rom_name:
+    if tournament_status(tournament) != "active" or filename != tournament.rom_file_name:
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
-    if filename not in load_tournament_mame_roms():
+    target = TOURNAMENT_ROM_DIR / f"{tournament.code}.zip"
+    if not target.is_file():
         raise HTTPException(status_code=404, detail="Tournament ROM is unavailable")
-    try:
-        response = urlopen(archive_request(f"{ARCHIVE_DOWNLOAD_ROOT}/roms/{quote(filename)}"), timeout=60)
-    except HTTPError as exc:
-        raise HTTPException(status_code=502, detail="Tournament ROM download failed") from exc
-    except (URLError, TimeoutError) as exc:
-        raise HTTPException(status_code=502, detail=f"Tournament ROM download failed: {exc}") from exc
-    headers = {"Cache-Control": "private, max-age=3600"}
-    if response.headers.get("Content-Length"):
-        headers["Content-Length"] = response.headers["Content-Length"]
-    return StreamingResponse(stream_archive_response(response), media_type="application/zip", headers=headers)
+    return FileResponse(
+        target,
+        media_type="application/zip",
+        filename=filename,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.post("/{code}/sessions/{session_id}/extract-score")
