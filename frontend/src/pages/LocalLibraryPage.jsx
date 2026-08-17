@@ -2168,9 +2168,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const activeSystemDetails = activeSystem === 'all' || activeSystem === 'favourites'
     ? null
     : SYSTEM_BY_ID[activeSystem];
-  const activeSystemFolder = activeSystemDetails
-    ? folders.find((folder) => folder.system === activeSystemDetails.id)
-    : null;
+  const activeSystemFolders = activeSystemDetails
+    ? folders.filter((folder) => folder.system === activeSystemDetails.id)
+    : [];
   const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
   const activeLibraryGames = useMemo(() => {
     return groupedGames
@@ -2341,13 +2341,35 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     await scanSystemEntries(targetSystem, folderName, entries, null);
   }
 
-  async function scanSystemFolder(targetSystem, directoryHandle) {
-    await scanSystemEntries(targetSystem, directoryHandle.name, walkDirectory(directoryHandle), directoryHandle);
+  async function scanSystemFolder(targetSystem, directoryHandle, existingFolder = null) {
+    let matchingFolder = existingFolder;
+    if (!matchingFolder && typeof directoryHandle.isSameEntry === 'function') {
+      const storedFolders = await getLocalLibraryFolders();
+      for (const folder of storedFolders.filter((item) => item.system === targetSystem.id && item.handle)) {
+        try {
+          if (await directoryHandle.isSameEntry(folder.handle)) {
+            matchingFolder = folder;
+            break;
+          }
+        } catch {
+          // A stale handle should not prevent another folder being connected.
+        }
+      }
+    }
+    await scanSystemEntries(
+      targetSystem,
+      directoryHandle.name,
+      walkDirectory(directoryHandle),
+      directoryHandle,
+      matchingFolder?.id,
+    );
   }
 
-  async function scanSystemEntries(targetSystem, folderName, entries, directoryHandle) {
+  async function scanSystemEntries(targetSystem, folderName, entries, directoryHandle, existingFolderId = null) {
     try {
-      const folderId = `system:${targetSystem.id}`;
+      const uniqueFolderId = globalThis.crypto?.randomUUID?.()
+        || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      const folderId = existingFolderId || `folder:${targetSystem.id}:${uniqueFolderId}`;
       const nextGames = [];
       const sampleHandles = [];
       let scanned = 0;
@@ -2458,21 +2480,38 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     }
   }
 
-  async function clearSystemFolder(systemId) {
-    const system = SYSTEM_BY_ID[systemId];
-    if (!system) return;
+  async function rescanLibraryFolder(folder) {
+    const system = SYSTEM_BY_ID[folder.system];
+    if (!system || !folder.handle) {
+      setStatus('This browser needs you to choose that folder again before it can be rescanned.');
+      return;
+    }
+    try {
+      let permission = typeof folder.handle.queryPermission === 'function'
+        ? await folder.handle.queryPermission({ mode: 'read' })
+        : 'granted';
+      if (permission !== 'granted' && typeof folder.handle.requestPermission === 'function') {
+        permission = await folder.handle.requestPermission({ mode: 'read' });
+      }
+      if (permission !== 'granted') throw new Error('Folder permission was not granted');
+      await scanSystemFolder(system, folder.handle, folder);
+    } catch (err) {
+      setStatus(`Could not rescan ${folder.name}: ${err.message}`);
+    }
+  }
+
+  async function clearLibraryFolder(folderId) {
+    const folder = folders.find((item) => item.id === folderId);
+    if (!folder) return;
+    const system = SYSTEM_BY_ID[folder.system];
 
     const removedGameIds = new Set(
       games
-        .filter((game) => game.system === systemId || game.folderSystem === systemId || game.folderId === `system:${systemId}`)
+        .filter((game) => game.folderId === folderId)
         .map((game) => game.id),
     );
-    const nextFolders = folders.filter((folder) => folder.system !== systemId && folder.id !== `system:${systemId}`);
-    const nextGames = games.filter((game) => (
-      game.system !== systemId
-      && game.folderSystem !== systemId
-      && game.folderId !== `system:${systemId}`
-    ));
+    const nextFolders = folders.filter((item) => item.id !== folderId);
+    const nextGames = games.filter((game) => game.folderId !== folderId);
     const nextFavourites = favourites.filter((id) => !removedGameIds.has(id));
 
     try {
@@ -2484,9 +2523,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       setFolders(nextFolders);
       setGames(nextGames);
       setFavourites(nextFavourites);
-      setStatus(`${system.label} folder cleared. Your ROM files were not changed.`);
+      setStatus(`${folder.name} removed from ${system?.label || folder.systemLabel || 'your library'}. Your ROM files were not changed.`);
     } catch (err) {
-      setStatus(`Could not clear ${system.label}: ${err.message}`);
+      setStatus(`Could not remove ${folder.name}: ${err.message}`);
     }
   }
 
@@ -3106,10 +3145,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           <div>
             <p className="lobby-eyebrow">{onboarding ? 'Welcome to Old Style Gaming' : 'Your ROMs, your machine'}</p>
             <h1>{onboarding ? 'Set up your game shelves' : 'Local Game Library'}</h1>
-            <p>{onboarding ? (games.length ? 'Your browser already has a scanned library. Pick a platform and keep playing.' : 'Choose each system folder once and your games become a console-style library.') : 'Pick a platform, browse the wall, and launch straight into a room.'}</p>
+            <p>{onboarding ? (games.length ? 'Your browser already has a scanned library. Pick a platform and keep playing.' : 'Connect one or more folders for each system and your games become a console-style library.') : 'Pick a platform, browse the wall, and launch straight into a room.'}</p>
           </div>
           <div className="local-library-actions">
-            <span>Choose a system below, then add its ROM folder.</span>
+            <span>Choose a system below, then connect as many ROM folders as you need.</span>
             <span>{visibleFolderCount ? `${visibleFolderCount} folder${visibleFolderCount === 1 ? '' : 's'} connected` : libraryLoading ? 'Loading saved folders...' : 'No folders connected yet'}</span>
             {!onboarding ? (
               <form className="quick-join library-quick-join" onSubmit={handleJoinRoom}>
@@ -3252,15 +3291,28 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                         <small>{folder.gameCount || 0} game{folder.gameCount === 1 ? '' : 's'}{folder.sampleCount ? `, ${folder.sampleCount} samples` : ''}</small>
                       </div>
                       {folder.system ? (
-                        <button
-                          type="button"
-                          className="secondary folder-clear-button"
-                          onClick={() => clearSystemFolder(folder.system)}
-                          title={`Clear ${folder.systemLabel || folder.system} folder`}
-                          aria-label={`Clear ${folder.systemLabel || folder.system} folder`}
-                        >
-                          <i className="bi bi-trash3" aria-hidden="true" />
-                        </button>
+                        <div className="library-folder-actions">
+                          {folder.handle ? (
+                            <button
+                              type="button"
+                              className="secondary folder-action-button"
+                              onClick={() => rescanLibraryFolder(folder)}
+                              title={`Rescan ${folder.name}`}
+                              aria-label={`Rescan ${folder.name}`}
+                            >
+                              <i className="bi bi-arrow-clockwise" aria-hidden="true" />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="secondary folder-clear-button"
+                            onClick={() => clearLibraryFolder(folder.id)}
+                            title={`Remove ${folder.name}`}
+                            aria-label={`Remove ${folder.name}`}
+                          >
+                            <i className="bi bi-trash3" aria-hidden="true" />
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   ))}
@@ -3283,8 +3335,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 <div className="local-library-title-actions">
                   <div className="platform-manage-card">
                     <strong>Manage platform</strong>
-                    <span>{activeSystemFolder ? activeSystemFolder.name : 'No folder connected'}</span>
-                    <small>{activeSystemFolder ? `${activeSystemFolder.gameCount || 0} indexed file${activeSystemFolder.gameCount === 1 ? '' : 's'}` : 'Open a room or add a folder.'}</small>
+                    <span>{activeSystemFolders.length ? `${activeSystemFolders.length} folder${activeSystemFolders.length === 1 ? '' : 's'} connected` : 'No folder connected'}</span>
+                    <small>{activeSystemFolders.length ? `${activeSystemFolders.reduce((total, folder) => total + (folder.gameCount || 0), 0)} indexed files` : 'Open a room or add a folder.'}</small>
                   </div>
                   <button
                     type="button"
@@ -3295,17 +3347,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                     {launchingSystemId === activeSystemDetails.id ? 'Opening...' : 'Open room'}
                   </button>
                   <button type="button" onClick={() => pickSystemFolder(activeSystemDetails.id)}>
-                    {activeSystemFolder ? 'Change folder' : 'Add folder'}
+                    Add another folder
                   </button>
-                  {activeSystemFolder ? (
-                    <button
-                      type="button"
-                      className="secondary danger-soft-button"
-                      onClick={() => clearSystemFolder(activeSystemDetails.id)}
-                    >
-                      Clear folder
-                    </button>
-                  ) : null}
                 </div>
               ) : null}
             </div>

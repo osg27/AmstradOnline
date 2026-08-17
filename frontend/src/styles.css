@@ -1854,6 +1854,21 @@ input:focus {
   max-height: 46px;
 }
 
+.library-folder-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.folder-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  min-height: 2.3rem;
+  padding: 0;
+}
+
 .recent-arcade-scores {
   padding: 0.9rem;
   border: 1px solid rgba(243, 198, 107, 0.34);
