@@ -352,8 +352,6 @@ export default function LobbyPage() {
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
   const [isSuperAdmin, setIsSuperAdmin] = useState(localStorage.getItem('isSuperAdmin') === 'true');
   const [isTester, setIsTester] = useState(localStorage.getItem('isTester') === 'true');
-  const [isVip, setIsVip] = useState(localStorage.getItem('isVip') === 'true');
-  const [isXyphoe, setIsXyphoe] = useState(localStorage.getItem('isXyphoe') === 'true');
   const [selectedPlatformId, setSelectedPlatformId] = useState('micros');
   const [selectedEra, setSelectedEra] = useState('8bit');
   const [selectedSystemId, setSelectedSystemId] = useState('cpc');
@@ -361,13 +359,12 @@ export default function LobbyPage() {
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
-  const [availableTournamentCount, setAvailableTournamentCount] = useState(0);
   const [recentArcadeScores, setRecentArcadeScores] = useState([]);
   const [openingRecentRom, setOpeningRecentRom] = useState('');
   const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
   const [librarySystems, setLibrarySystems] = useState([]);
   const [openingLibrary, setOpeningLibrary] = useState(false);
-  const canUsePreviewSystems = isAdmin || isTester || isVip || isSuperAdmin;
+  const canUsePreviewSystems = isAdmin || isTester || isSuperAdmin;
   const allLibrarySystemIds = useMemo(
     () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin).map((system) => system.id),
     [isSuperAdmin],
@@ -427,20 +424,16 @@ export default function LobbyPage() {
         const nextIsAdmin = Boolean(session.is_admin);
         const nextIsSuperAdmin = Boolean(session.is_super_admin);
         const nextIsTester = Boolean(session.is_tester);
-        const nextIsVip = Boolean(session.is_vip || session.is_admin || session.is_super_admin);
-        const nextIsXyphoe = Boolean(session.is_xyphoe);
 
         setIsAdmin(nextIsAdmin);
         setIsSuperAdmin(nextIsSuperAdmin);
         setIsTester(nextIsTester);
-        setIsVip(nextIsVip);
-        setIsXyphoe(nextIsXyphoe);
         localStorage.setItem('isAdmin', nextIsAdmin ? 'true' : 'false');
         localStorage.setItem('isSuperAdmin', nextIsSuperAdmin ? 'true' : 'false');
         localStorage.setItem('isTester', nextIsTester ? 'true' : 'false');
-        localStorage.setItem('isVip', nextIsVip ? 'true' : 'false');
-        localStorage.setItem('isXyphoe', nextIsXyphoe ? 'true' : 'false');
-        if (nextIsAdmin || nextIsTester || nextIsVip) {
+        localStorage.removeItem('isVip');
+        localStorage.removeItem('isXyphoe');
+        if (nextIsAdmin || nextIsTester) {
           const notifications = await apiFetch('/auth/feedback/notifications');
           setFeedbackNotificationCount(notifications.filter((notification) => !notification.is_read).length);
         }
@@ -450,8 +443,6 @@ export default function LobbyPage() {
         setIsAdmin(false);
         setIsSuperAdmin(false);
         setIsTester(false);
-        setIsVip(false);
-        setIsXyphoe(false);
         setFeedbackNotificationCount(0);
         setMessageUnreadCount(0);
         localStorage.removeItem('isAdmin');
@@ -498,23 +489,6 @@ export default function LobbyPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, []);
-
-  useEffect(() => {
-    async function loadAvailableTournaments() {
-      try {
-        const tournaments = await apiFetch('/auth/tournaments/public');
-        setAvailableTournamentCount(Array.isArray(tournaments)
-          ? tournaments.filter((item) => !item.joined && item.status !== 'completed').length
-          : 0);
-      } catch {
-        setAvailableTournamentCount(0);
-      }
-    }
-
-    loadAvailableTournaments();
-    const timer = window.setInterval(loadAvailableTournaments, 30000);
-    return () => window.clearInterval(timer);
   }, []);
 
   function pickFirstSystem(era) {
@@ -669,11 +643,7 @@ export default function LobbyPage() {
               : normalised === romKey;
           })
       ));
-      const hasVipAccess = localStorage.getItem('isVip') === 'true'
-        || localStorage.getItem('isAdmin') === 'true'
-        || localStorage.getItem('isSuperAdmin') === 'true';
-      const canUseMatchedGame = matchingGame?.handle
-        || (['internet-archive-mame', 'vip-amiga-whdload'].includes(matchingGame?.source) && hasVipAccess);
+      const canUseMatchedGame = matchingGame?.handle || matchingGame?.runtimeFileKey;
       const pendingGame = canUseMatchedGame ? matchingGame : {
         id: `recent-${entrySystem}:${romKey}`,
         title: entry.game_name || romKey,
@@ -743,19 +713,9 @@ export default function LobbyPage() {
           <div className="account-strip">
             <PlayerBubble />
             <button className="secondary" onClick={() => openLibrary()} disabled={openingLibrary}>
-              {openingLibrary ? 'Fetching your games...' : 'My Library'}
+              {openingLibrary ? 'Opening your games...' : 'Game Shelf'}
             </button>
-            <button className="secondary" onClick={() => navigate('/my-local-games')}>My Local Games</button>
-            <button
-              className="secondary tournament-button"
-              onClick={() => navigate('/tournaments')}
-              aria-label={availableTournamentCount
-                ? `Tournaments, ${availableTournamentCount} public tournament${availableTournamentCount === 1 ? '' : 's'} available`
-                : 'Tournaments'}
-            >
-              <span>Tournaments</span>
-              {availableTournamentCount ? <strong>{availableTournamentCount}</strong> : null}
-            </button>
+            <button className="secondary" onClick={() => navigate('/my-local-games')}>Manage ROMs</button>
             {canUsePreviewSystems ? (
               <button className="secondary" onClick={() => navigate('/feedback')}>
                 Feedback{feedbackNotificationCount ? ` (${feedbackNotificationCount})` : ''}

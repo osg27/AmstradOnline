@@ -1499,9 +1499,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSuperAdmin = localStorage.getItem('isSuperAdmin') === 'true';
-  const isVip = localStorage.getItem('isVip') === 'true'
-    || localStorage.getItem('isAdmin') === 'true'
-    || isSuperAdmin;
+  const isVip = false;
   const availableSystems = useMemo(
     () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin),
     [isSuperAdmin],

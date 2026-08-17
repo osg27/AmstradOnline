@@ -47,6 +47,10 @@ def ensure_runtime_columns(engine):
             text("UPDATE users SET role = 'admin' WHERE LOWER(username) = LOWER(:username)"),
             {"username": settings.SUPER_ADMIN_USERNAME},
         )
+        # Retire legacy access labels. VIP previously implied tester access;
+        # the one-off personal Xyphoe role returns to the standard user role.
+        connection.execute(text("UPDATE users SET role = 'tester' WHERE role = 'vip'"))
+        connection.execute(text("UPDATE users SET role = 'user' WHERE role = 'xyphoe'"))
 
         if "last_seen_at" not in user_columns:
             connection.execute(text(f"ALTER TABLE users ADD COLUMN last_seen_at {timestamp_type}"))

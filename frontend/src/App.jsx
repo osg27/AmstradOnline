@@ -14,9 +14,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ResendVerificationPage from './pages/ResendVerificationPage';
-import TournamentsPage from './pages/TournamentsPage';
 import ProfilePage from './pages/ProfilePage';
-import TournamentNotifications from './components/TournamentNotifications';
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token');
@@ -46,7 +44,6 @@ function PrivateRoute({ children }) {
   return token ? (
     <>
       {children}
-      <TournamentNotifications />
     </>
   ) : <Navigate to="/login" replace />;
 }
@@ -90,22 +87,6 @@ export default function App() {
         element={(
           <PrivateRoute>
             <ProfilePage />
-          </PrivateRoute>
-        )}
-      />
-      <Route
-        path="/tournaments"
-        element={(
-          <PrivateRoute>
-            <TournamentsPage />
-          </PrivateRoute>
-        )}
-      />
-      <Route
-        path="/tournaments/:code"
-        element={(
-          <PrivateRoute>
-            <TournamentsPage />
           </PrivateRoute>
         )}
       />

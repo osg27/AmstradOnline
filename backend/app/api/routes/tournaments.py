@@ -14,7 +14,7 @@ from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user, is_admin_user, is_vip_user
+from app.api.routes.auth import get_current_user, is_admin_user
 from app.api.routes.vip_mame import (
     ARCHIVE_DOWNLOAD_ROOT,
     archive_request,
@@ -150,8 +150,8 @@ def tournament_ready_games() -> list[dict]:
 
 @router.get("/games")
 def tournament_games(_user: User = Depends(get_current_user)):
-    if not is_vip_user(_user):
-        raise HTTPException(status_code=403, detail="Only VIPs and admins can create tournaments")
+    if not is_admin_user(_user):
+        raise HTTPException(status_code=403, detail="Admin access required")
     return tournament_ready_games()
 
 
@@ -161,8 +161,8 @@ def create_tournament(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not is_vip_user(user):
-        raise HTTPException(status_code=403, detail="Only VIPs and admins can create tournaments")
+    if not is_admin_user(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
     rom_name = normalise_rom_name(payload.rom_name)
     ready_game = next((item for item in tournament_ready_games() if item["rom_name"] == rom_name), None)
     if not ready_game:

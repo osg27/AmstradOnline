@@ -41,15 +41,7 @@ def is_admin_user(user: User) -> bool:
 
 
 def is_tester_user(user: User) -> bool:
-    return user.role in {"tester", "vip"}
-
-
-def is_vip_user(user: User) -> bool:
-    return user.role == "vip" or is_admin_user(user)
-
-
-def is_xyphoe_user(user: User) -> bool:
-    return user.role == "xyphoe"
+    return user.role == "tester"
 
 
 def initial_role_for_username(username: str) -> str:
@@ -95,8 +87,6 @@ def auth_response(user: User) -> AuthResponse:
         is_admin=is_admin_user(user),
         is_super_admin=is_super_admin_user(user),
         is_tester=is_tester_user(user),
-        is_vip=is_vip_user(user),
-        is_xyphoe=is_xyphoe_user(user),
     )
 
 
@@ -350,6 +340,4 @@ def get_me(user: User = Depends(get_current_user)):
         "is_admin": is_admin_user(user),
         "is_super_admin": is_super_admin_user(user),
         "is_tester": is_tester_user(user),
-        "is_vip": is_vip_user(user),
-        "is_xyphoe": is_xyphoe_user(user),
     }

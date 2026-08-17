@@ -14,7 +14,6 @@ function memberSince(value) {
 }
 
 function roleLabel(role) {
-  if (role === 'vip') return 'VIP PLAYER';
   if (role === 'admin') return 'ADMIN PLAYER';
   return 'PLAYER ONE';
 }
@@ -56,7 +55,6 @@ export default function ProfilePage() {
         <BrandMark />
         <div>
           <button type="button" className="secondary" onClick={() => navigate('/lobby')}>Lobby</button>
-          <button type="button" className="secondary" onClick={() => navigate('/tournaments')}>Tournaments</button>
         </div>
       </header>
 

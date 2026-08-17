@@ -41,11 +41,6 @@ library-media/
 backend/library_media/
 backend/library-media/
 
-# Ship the canonical OneLoad CRT set, not its duplicate/support format trees.
-OneLoad64-Games-Collection-v5/*/
-OneLoad64-Games-Collection-v5/*
-!OneLoad64-Games-Collection-v5/*.crt
-
 # Large generated emulator assets
 *.wasm
 *.data
@@ -60,3 +55,9 @@ OneLoad64-Games-Collection-v5/*
 
 # Accidental/temp folder
 $temp/
+$tmp/
+
+# Local databases and scratch exports
+*.sqlite
+*.sqlite3
+Files.sqlite

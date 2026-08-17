@@ -31,8 +31,7 @@ function tournamentMedal(rank) {
 export default function TournamentsPage() {
   const { code: routeCode } = useParams();
   const navigate = useNavigate();
-  const isVip = localStorage.getItem('isVip') === 'true'
-    || localStorage.getItem('isAdmin') === 'true'
+  const canCreateTournaments = localStorage.getItem('isAdmin') === 'true'
     || localStorage.getItem('isSuperAdmin') === 'true';
   const canDeleteTournaments = localStorage.getItem('isAdmin') === 'true'
     || localStorage.getItem('isSuperAdmin') === 'true';
@@ -42,7 +41,7 @@ export default function TournamentsPage() {
   const [mine, setMine] = useState([]);
   const [publicTournaments, setPublicTournaments] = useState([]);
   const [games, setGames] = useState([]);
-  const [gamesLoading, setGamesLoading] = useState(isVip);
+  const [gamesLoading, setGamesLoading] = useState(canCreateTournaments);
   const [codeCopied, setCodeCopied] = useState(false);
   const [name, setName] = useState('');
   const [romName, setRomName] = useState('');
@@ -78,15 +77,15 @@ export default function TournamentsPage() {
     Promise.all([
       apiFetch('/auth/tournaments/mine'),
       apiFetch('/auth/tournaments/public'),
-      isVip ? apiFetch('/auth/tournaments/games') : Promise.resolve([]),
+      canCreateTournaments ? apiFetch('/auth/tournaments/games') : Promise.resolve([]),
     ]).then(([myTournaments, visibleTournaments, availableGames]) => {
       setMine(Array.isArray(myTournaments) ? myTournaments : []);
       setPublicTournaments(Array.isArray(visibleTournaments) ? visibleTournaments : []);
       setGames(Array.isArray(availableGames) ? availableGames : []);
-      if (isVip && !availableGames?.length) setStatus('No score-supported Archive MAME games were found.');
+      if (canCreateTournaments && !availableGames?.length) setStatus('No tournament-ready MAME games were found.');
     }).catch((error) => setStatus(`Could not load tournament games: ${error.message}`))
       .finally(() => setGamesLoading(false));
-  }, [isVip]);
+  }, [canCreateTournaments]);
 
   useEffect(() => {
     if (!routeCode) return;
@@ -290,7 +289,7 @@ export default function TournamentsPage() {
               <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Enter tournament code" maxLength={12} />
               <button type="submit" disabled={busy || !joinCode.trim()}>Join</button>
             </form>
-            {isVip ? <button type="button" onClick={() => setCreateOpen(true)}>Create tournament</button> : null}
+            {canCreateTournaments ? <button type="button" onClick={() => setCreateOpen(true)}>Create tournament</button> : null}
           </div>
           {status ? <p className="status-message">{status}</p> : null}
         </section>
@@ -367,7 +366,7 @@ export default function TournamentsPage() {
         <section className={`panel tournament-list${tournament ? '' : ' tournament-list-wide'}`}>
           <div className="tournament-list-heading">
             <div><p className="eyebrow">YOUR COMPETITIONS</p><h2>My tournaments</h2></div>
-            {isVip ? <button type="button" className="secondary" onClick={() => setCreateOpen(true)}>Create new</button> : null}
+            {canCreateTournaments ? <button type="button" className="secondary" onClick={() => setCreateOpen(true)}>Create new</button> : null}
           </div>
           {mine.length ? <div className="tournament-list-grid">{mine.map((item) => (
             <article className="tournament-list-item" key={item.code}>
@@ -379,11 +378,11 @@ export default function TournamentsPage() {
               </Link>
               {canDeleteTournaments ? <button type="button" className="danger tournament-list-delete" disabled={busy} onClick={() => deleteTournament(item)} aria-label={`Delete ${item.name}`} title="Delete tournament"><i className="bi bi-trash3" aria-hidden="true" /></button> : null}
             </article>
-          ))}</div> : <div className="tournament-empty"><strong>No tournaments yet</strong><p>Enter a code above to join one{isVip ? ', or create your own.' : '.'}</p></div>}
+          ))}</div> : <div className="tournament-empty"><strong>No tournaments yet</strong><p>Enter a code above to join one{canCreateTournaments ? ', or create your own.' : '.'}</p></div>}
         </section>
       </main>
 
-      {isVip && createOpen ? (
+      {canCreateTournaments && createOpen ? (
         <div className="tournament-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCreateOpen(false); }}>
           <section className="tournament-modal" role="dialog" aria-modal="true" aria-labelledby="create-tournament-title">
             <div className="tournament-modal-heading">
