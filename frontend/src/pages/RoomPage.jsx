@@ -5,7 +5,7 @@ import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
-import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames } from '../localLibraryDb';
+import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames, readLocalLibraryFile } from '../localLibraryDb';
 import { registerRuntimeRelease, takeRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
 import { normaliseFilename } from '../features/localLibrary/core/normalise';
 import { scanFiles as scanLocalReleaseFiles } from '../features/localLibrary/core/scanner';
@@ -5552,17 +5552,17 @@ export default function RoomPage() {
   }
 
   async function loadArcadeRomEntry(entry) {
-    if (!entry?.handle) return;
+    if (!entry?.handle && !entry?.runtimeFileKey) return;
 
     try {
       setStatus(`Loading MAME ROM: ${entry.name}`);
-      const file = await entry.handle.getFile();
+      const file = await readLocalLibraryFile(entry);
       const sampleKeys = [entry.romKey, entry.parent].filter(Boolean);
       const sampleFiles = [];
       for (const sampleKey of sampleKeys) {
         const sample = arcadeSampleHandlesRef.current.get(sampleKey);
         if (!sample) continue;
-        const sampleFile = await sample.handle.getFile();
+        const sampleFile = await readLocalLibraryFile(sample);
         sampleFiles.push({
           fileName: sampleFile.name,
           bytes: new Uint8Array(await sampleFile.arrayBuffer()),
@@ -6604,7 +6604,7 @@ export default function RoomPage() {
         }
 
         const game = await getLocalLibraryGame(localGameId);
-        if (!game?.handle) {
+        if (!game?.handle && !game?.runtimeFileKey) {
           throw new Error('That local library game is no longer available. Re-scan your ROM folder.');
         }
 
@@ -6613,19 +6613,19 @@ export default function RoomPage() {
           const storedGames = await getLocalLibraryGames();
           const siblingGames = storedGames.filter((candidate) => (
             (candidate.system === 'amiga' || candidate.system === 'amiga_aga')
-            && candidate.handle
+            && (candidate.handle || candidate.runtimeFileKey)
             && normaliseFilename(candidate.fileName || candidate.title || '').cleanedTitle.toLowerCase() === selectedTitle
           ));
           const siblingFiles = [];
           for (const sibling of siblingGames) {
-            if (typeof sibling.handle.queryPermission === 'function') {
+            if (sibling.handle && typeof sibling.handle.queryPermission === 'function') {
               let permission = await sibling.handle.queryPermission({ mode: 'read' });
               if (permission !== 'granted' && typeof sibling.handle.requestPermission === 'function') {
                 permission = await sibling.handle.requestPermission({ mode: 'read' });
               }
               if (permission !== 'granted') continue;
             }
-            siblingFiles.push(await sibling.handle.getFile());
+            siblingFiles.push(await readLocalLibraryFile(sibling));
           }
           if (siblingFiles.length) {
             const scannedFiles = await scanLocalReleaseFiles(siblingFiles, { platform: 'amiga' });
@@ -6683,7 +6683,7 @@ export default function RoomPage() {
           }
         }
 
-        if (typeof game.handle.queryPermission === 'function') {
+        if (game.handle && typeof game.handle.queryPermission === 'function') {
           let permission = await game.handle.queryPermission({ mode: 'read' });
           if (permission !== 'granted' && typeof game.handle.requestPermission === 'function') {
             permission = await game.handle.requestPermission({ mode: 'read' });
@@ -6693,7 +6693,7 @@ export default function RoomPage() {
           }
         }
 
-        const file = await game.handle.getFile();
+        const file = await readLocalLibraryFile(game);
         if (cancelled) return;
 
         setLoadedDiskName(file.name);
@@ -6709,8 +6709,8 @@ export default function RoomPage() {
 
           for (const sampleKey of sampleKeys) {
             const sample = samples.find((item) => item.key === sampleKey);
-            if (!sample?.handle) continue;
-            const sampleFile = await sample.handle.getFile();
+            if (!sample?.handle && !sample?.runtimeFileKey) continue;
+            const sampleFile = await readLocalLibraryFile(sample);
             sampleFiles.push({
               fileName: sampleFile.name,
               bytes: new Uint8Array(await sampleFile.arrayBuffer()),

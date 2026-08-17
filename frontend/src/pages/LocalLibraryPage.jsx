@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
@@ -21,6 +21,8 @@ import {
   getLocalLibraryGames,
   getLocalLibrarySetting,
   migrateLegacyVipLibraryGames,
+  readLocalLibraryFile,
+  registerRuntimeLocalFile,
   saveLocalLibraryFolders,
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
@@ -1205,7 +1207,7 @@ async function isUnsupportedAmigaIpf(entry, extension) {
   if (extension === 'ipf') return true;
   if (extension !== 'zip') return false;
   try {
-    const file = await entry.handle.getFile();
+    const file = await readLocalLibraryFile(entry);
     const lowerNames = (await readZipEntryNames(file)).map((name) => name.toLowerCase());
     const containsIpf = lowerNames.some((name) => name.endsWith('.ipf'));
     const containsBrowserMedia = lowerNames.some((name) => (
@@ -1532,6 +1534,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [loadingJoin, setLoadingJoin] = useState(false);
   const [renderLimit, setRenderLimit] = useState(LIBRARY_PAGE_SIZE);
   const [brokenBoxArtIds, setBrokenBoxArtIds] = useState(() => new Set());
+  const braveFolderInputRef = useRef(null);
+  const pendingFolderSystemRef = useRef(null);
 
   function buildLibraryReturnPath(overrides = {}) {
     const params = new URLSearchParams();
@@ -2277,18 +2281,19 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }
 
   async function pickSystemFolder(targetSystemId) {
-    if (!canUseDirectoryPicker()) {
-      setStatus('Folder scanning needs Chrome, Edge, Brave, or another Chromium browser.');
-      return;
-    }
-    if (window.isSecureContext === false) {
-      setStatus('Folder scanning needs localhost or HTTPS before the browser will allow folder access.');
-      return;
-    }
-
     const targetSystem = targetSystemId ? SYSTEM_BY_ID[targetSystemId] : null;
     if (!targetSystem) {
       setStatus('Choose a system first, then add that system folder.');
+      return;
+    }
+
+    if (navigator.brave || !canUseDirectoryPicker() || window.isSecureContext === false) {
+      pendingFolderSystemRef.current = targetSystem;
+      if (braveFolderInputRef.current) {
+        braveFolderInputRef.current.value = '';
+        braveFolderInputRef.current.click();
+        setStatus(`Choose your ${targetSystem.label} folder in the browser window...`);
+      }
       return;
     }
 
@@ -2310,7 +2315,31 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     await scanSystemFolder(targetSystem, directoryHandle);
   }
 
+  async function handleBraveFolderSelection(event) {
+    const targetSystem = pendingFolderSystemRef.current;
+    const files = Array.from(event.target.files || []);
+    pendingFolderSystemRef.current = null;
+    if (!targetSystem || !files.length) {
+      setStatus('Folder selection cancelled.');
+      return;
+    }
+
+    const firstPath = files[0].webkitRelativePath || files[0].name;
+    const folderName = firstPath.split('/')[0] || 'Selected folder';
+    const entries = files.map((file, index) => {
+      const path = file.webkitRelativePath || file.name;
+      const runtimeFileKey = `brave:${targetSystem.id}:${path}:${file.lastModified}:${index}`;
+      registerRuntimeLocalFile(runtimeFileKey, file);
+      return { name: file.name, path, runtimeFileKey };
+    });
+    await scanSystemEntries(targetSystem, folderName, entries, null);
+  }
+
   async function scanSystemFolder(targetSystem, directoryHandle) {
+    await scanSystemEntries(targetSystem, directoryHandle.name, walkDirectory(directoryHandle), directoryHandle);
+  }
+
+  async function scanSystemEntries(targetSystem, folderName, entries, directoryHandle) {
     try {
       const folderId = `system:${targetSystem.id}`;
       const nextGames = [];
@@ -2319,9 +2348,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       let skippedSupport = 0;
       let skippedUnsupported = 0;
       setScanProgress({ scanned: 0, matched: 0 });
-      setStatus(`Scanning ${directoryHandle.name} for ${targetSystem.label}...`);
+      setStatus(`Scanning ${folderName} for ${targetSystem.label}...`);
 
-      for await (const entry of walkDirectory(directoryHandle)) {
+      for await (const entry of entries) {
         scanned += 1;
         const extension = getFileExtension(entry.name);
         const pathParts = entry.path.split(/[\\/]+/).map((part) => part.toLowerCase());
@@ -2333,6 +2362,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             name: entry.name,
             path: entry.path,
             handle: entry.handle,
+            runtimeFileKey: entry.runtimeFileKey,
           });
           continue;
         }
@@ -2359,7 +2389,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           nextGames.push({
             id: `${folderId}:${entry.path}`,
             folderId,
-            folderName: directoryHandle.name,
+            folderName,
             folderSystem: targetSystem.id,
             title: arcadeTitle || titleFromFileName(entry.name),
             fileName: entry.name,
@@ -2370,6 +2400,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             romKey,
             parentRomKey,
             handle: entry.handle,
+            runtimeFileKey: entry.runtimeFileKey,
             indexedAt: new Date().toISOString(),
           });
         }
@@ -2381,10 +2412,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
       const folder = {
         id: folderId,
-        name: directoryHandle.name,
+        name: folderName,
         system: targetSystem.id,
         systemLabel: targetSystem.label,
-        handle: directoryHandle,
+        handle: directoryHandle || null,
         scannedAt: new Date().toISOString(),
         gameCount: nextGames.length,
         sampleCount: sampleHandles.length,
@@ -2414,7 +2445,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       setFolders(mergedFolders);
       setGames(mergedGames);
       setScanProgress(null);
-      setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${directoryHandle.name}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}${skippedSupport ? `, skipped ${skippedSupport} support file${skippedSupport === 1 ? '' : 's'}` : ''}${skippedUnsupported ? `, hid ${skippedUnsupported} IPF-only release${skippedUnsupported === 1 ? '' : 's'}` : ''}.`);
+      setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${folderName}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}${skippedSupport ? `, skipped ${skippedSupport} support file${skippedSupport === 1 ? '' : 's'}` : ''}${skippedUnsupported ? `, hid ${skippedUnsupported} IPF-only release${skippedUnsupported === 1 ? '' : 's'}` : ''}.${navigator.brave ? ' Brave will ask for this folder again after the browser is restarted.' : ''}`);
     } catch (err) {
       setStatus(`Scan failed: ${err?.message || 'Could not read that folder.'}`);
       setScanProgress(null);
@@ -2496,15 +2527,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const variants = game.variants || [game];
         const files = [];
         for (const variant of variants) {
-          if (!variant.handle) continue;
-          if (typeof variant.handle.queryPermission === 'function') {
+          if (!variant.handle && !variant.runtimeFileKey) continue;
+          if (variant.handle && typeof variant.handle.queryPermission === 'function') {
             let permission = await variant.handle.queryPermission({ mode: 'read' });
             if (permission !== 'granted' && typeof variant.handle.requestPermission === 'function') {
               permission = await variant.handle.requestPermission({ mode: 'read' });
             }
             if (permission !== 'granted') throw new Error('Browser permission is needed to read this Amiga release.');
           }
-          files.push(await variant.handle.getFile());
+          files.push(await readLocalLibraryFile(variant));
         }
         if (!files.length) throw new Error('No readable files remain for this Amiga release. Re-scan the folder.');
 
@@ -2988,6 +3019,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   const content = (
     <div className="local-library-shell">
+      <input
+        ref={braveFolderInputRef}
+        type="file"
+        webkitdirectory=""
+        directory=""
+        multiple
+        hidden
+        onChange={handleBraveFolderSelection}
+      />
       {vipPreparation ? (
         <div className="vip-rom-loading-overlay" role="status" aria-live="polite">
           <div className="vip-rom-loading-scene">

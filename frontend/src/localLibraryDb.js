@@ -4,6 +4,18 @@ const FOLDERS_STORE = 'folders';
 const GAMES_STORE = 'games';
 const SETTINGS_STORE = 'settings';
 const VIP_GAMES_KEY = 'vip-library-snapshot-v1';
+const runtimeLocalFiles = new Map();
+
+export function registerRuntimeLocalFile(key, file) {
+  if (key && file) runtimeLocalFiles.set(key, file);
+}
+
+export async function readLocalLibraryFile(entry) {
+  if (entry?.handle?.getFile) return entry.handle.getFile();
+  const file = runtimeLocalFiles.get(entry?.runtimeFileKey);
+  if (file) return file;
+  throw new Error('This browser needs you to select the ROM folder again before playing.');
+}
 
 function isVipLibraryGame(game) {
   return game?.source === 'internet-archive-mame' || String(game?.source || '').startsWith('vip-');
