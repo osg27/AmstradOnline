@@ -3033,9 +3033,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }
 
   async function downloadBoxArt() {
+    const hasServerArtwork = (game) => (
+      Boolean(game.boxArtUrl)
+      && String(game.boxArtUrl).includes('/library/media/files/')
+    );
     const needsArtwork = (game) => (
       !game.boxArtUrl
-      || !game.boxArtCached
+      || !hasServerArtwork(game)
       || brokenBoxArtIds.has(game.id)
     );
     const skippedArcadeClones = filteredGames.filter((game) => (
