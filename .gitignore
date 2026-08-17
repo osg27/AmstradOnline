@@ -8,6 +8,10 @@ __pycache__/
 
 puae-wasm-build/
 
+# Local upstream checkout used to refresh/test hi2txt definitions. The
+# runtime copy consumed by the backend is backend/app/data/hi2txt-xml/.
+hi2txt-xml/
+
 # Local/temp emulator build folders
 .tmp-*/
 .tmp-*
@@ -24,6 +28,11 @@ beetle-pce-fast-libretro/
 fceumm-verify/
 fceumm-wasm-patched.data
 amstrad_controls/
+
+# Mutable X68000 emulator state. Firmware files in keropi/ remain tracked.
+keropi/config
+keropi/sram.dat
+keropi/.keep
 
 # Build outputs
 frontend/dist/
