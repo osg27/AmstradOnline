@@ -1042,7 +1042,6 @@ async function restoreCachedBoxArt(games) {
   await Promise.all([...gamesBySystem.entries()].map(async ([system, systemGames]) => {
     const romNames = [...new Set(
       systemGames
-        .filter((game) => game.system !== 'amiga' && game.system !== 'amiga_aga')
         .map(boxArtLookupKey)
         .filter(Boolean),
     )];
@@ -1114,6 +1113,12 @@ async function buildBoxArtMedia(game, sourceUrl) {
 }
 
 async function findBoxArtForGame(game) {
+  const savedSourceUrl = game.boxArtSource
+    || (game.boxArtUrl && !game.boxArtUrl.includes('/library/media/files/') ? game.boxArtUrl : '');
+  if (savedSourceUrl) {
+    return buildBoxArtMedia(game, savedSourceUrl);
+  }
+
   const knownUrl = knownBoxArtUrl(game);
   if (knownUrl) {
     const imageUrl = await probeImageUrl(knownUrl);
@@ -2458,9 +2463,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         ...storedFolders.filter((existingFolder) => existingFolder.id !== folderId),
         folder,
       ].sort((left, right) => (left.systemLabel || left.name).localeCompare(right.systemLabel || right.name));
+      const nextGamesWithArtwork = await restoreCachedBoxArt(nextGames);
       const mergedGames = [
         ...storedGames.filter((game) => game.folderId !== folderId),
-        ...nextGames,
+        ...nextGamesWithArtwork,
       ];
 
       await saveLocalLibraryFolders(mergedFolders);
@@ -3027,7 +3033,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }
 
   async function downloadBoxArt() {
-    const needsArtwork = (game) => !game.boxArtUrl || brokenBoxArtIds.has(game.id);
+    const needsArtwork = (game) => (
+      !game.boxArtUrl
+      || !game.boxArtCached
+      || brokenBoxArtIds.has(game.id)
+    );
     const skippedArcadeClones = filteredGames.filter((game) => (
       game.system === 'arcade'
       && !isArcadeParentRom(game)
