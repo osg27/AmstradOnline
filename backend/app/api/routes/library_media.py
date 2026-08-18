@@ -46,7 +46,12 @@ def _slug(value: str | None) -> str:
 
 
 def _response_url(path: Path) -> str:
-    return f"/library/media/files/{path.relative_to(MEDIA_ROOT).as_posix()}"
+    # Artwork is served with long-lived cache headers in production. Include a
+    # value derived from the current file so replacing an indexed image changes
+    # its URL without disabling caching for unchanged media.
+    stat = path.stat()
+    version = f"{stat.st_mtime_ns:x}-{stat.st_size:x}"
+    return f"/library/media/files/{path.relative_to(MEDIA_ROOT).as_posix()}?v={version}"
 
 
 def _extension_for_response(content_type: str | None, url_path: str) -> str:
