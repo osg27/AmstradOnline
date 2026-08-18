@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { copyFile, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import mameTitles from '../frontend/src/data/mame2003PlusTitles.js';
@@ -18,7 +18,10 @@ const valueAfter = (flag) => {
 };
 const sourceRoot = valueAfter('--source');
 const outputRoot = valueAfter('--output');
+const missingTitlesFile = valueAfter('--missing-titles');
+const mameXmlFile = valueAfter('--mame-xml');
 const shouldCopy = args.includes('--copy');
+const additionalOnly = args.includes('--additional-only');
 
 if (!sourceRoot || !outputRoot) {
   console.error('Usage: node scripts/import-mame-boxart.mjs --source <folder> --output <folder> [--copy]');
@@ -59,6 +62,46 @@ function normalized(title) {
     .replace(/[^a-z0-9]+/gu, ' ')
     .trim()
     .replace(/\s+/gu, ' ');
+}
+
+function compact(title) {
+  return normalized(title).replaceAll(' ', '');
+}
+
+function acronymKeys(title) {
+  const tokens = normalized(title).split(' ').filter(Boolean);
+  const keys = new Set();
+  for (let length = 2; length <= tokens.length; length += 1) {
+    const key = tokens.slice(0, length).map((token) => token[0]).join('');
+    if (key.length >= 3) keys.add(key);
+  }
+  return keys;
+}
+
+function titleAliases(title) {
+  const cleaned = cleanMameTitle(title);
+  return new Set([
+    cleaned,
+    ...cleaned.split(/\s+\/\s+/u).map((part) => part.trim()),
+  ].filter(Boolean));
+}
+
+async function readMameXml(filename) {
+  if (!filename) return new Map();
+  const xml = await readFile(path.resolve(filename), 'utf8');
+  const machines = new Map();
+  const pattern = /<(?:machine|game)\s+([^>]*\bname="([^"]+)"[^>]*)>[\s\S]*?<description>([\s\S]*?)<\/description>[\s\S]*?<\/(?:machine|game)>/gu;
+  for (const match of xml.matchAll(pattern)) {
+    const clone = match[1].match(/\bcloneof="([^"]+)"/u)?.[1] ?? '';
+    const description = match[3]
+      .replaceAll('&amp;', '&')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&apos;', "'")
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>');
+    machines.set(match[2].toLowerCase(), { description, parent: clone.toLowerCase() });
+  }
+  return machines;
 }
 
 async function collectPngs(root) {
@@ -152,10 +195,77 @@ await writeFile(
   ['region,title,source', ...unused.map((item) => [item.region, cleanArtworkTitle(item.name), item.source].map(csv).join(','))].join('\n'),
 );
 
-if (shouldCopy) {
+if (shouldCopy && !additionalOnly) {
   const imageRoot = path.join(reportRoot, 'by-rom');
   await mkdir(imageRoot, { recursive: true });
   await Promise.all(matches.map((item) => copyFile(item.source, path.join(imageRoot, `${item.parent}.png`))));
+}
+
+let additionalSummary = null;
+if (missingTitlesFile) {
+  const xmlMachines = await readMameXml(mameXmlFile);
+  const missingTitles = (await readFile(path.resolve(missingTitlesFile), 'utf8'))
+    .split(/\r?\n/u)
+    .map((title) => title.trim())
+    .filter(Boolean);
+  const additionalMatches = [];
+  const additionalAmbiguous = [];
+  for (const missingTitle of missingTitles) {
+    const rom = compact(missingTitle);
+    const machine = xmlMachines.get(rom);
+    const canonicalRom = machine?.parent || rom;
+    const canonicalMachine = xmlMachines.get(canonicalRom) || machine;
+    const aliases = canonicalMachine ? titleAliases(canonicalMachine.description) : new Set([missingTitle]);
+    const aliasKeys = new Set([...aliases].map(normalized));
+    const exact = artwork.filter((item) => aliasKeys.has(normalized(cleanArtworkTitle(item.name))));
+    const acronymTargets = new Set([...aliases].flatMap((alias) => [...acronymKeys(alias), compact(alias)]));
+    const acronym = exact.length ? [] : artwork.filter((item) => (
+      acronymTargets.has(compact(cleanArtworkTitle(item.name)))
+      || acronymKeys(cleanArtworkTitle(item.name)).has(compact([...aliases][0]))
+    ));
+    const candidates = exact.length ? exact : acronym;
+    const uniqueTitles = new Set(candidates.map((item) => normalized(cleanArtworkTitle(item.name))));
+    if (!candidates.length) continue;
+    if (uniqueTitles.size > 1) {
+      additionalAmbiguous.push({ rom, missingTitle, candidates: candidates.map((item) => item.source).join(' | ') });
+      continue;
+    }
+    candidates.sort((a, b) => (
+      REGION_PRIORITY.indexOf(a.region) - REGION_PRIORITY.indexOf(b.region)
+      || artworkVariant(a.name) - artworkVariant(b.name)
+      || a.name.localeCompare(b.name)
+    ));
+    additionalMatches.push({
+      rom,
+      canonicalRom,
+      missingTitle,
+      canonicalTitle: canonicalMachine?.description || missingTitle,
+      method: exact.length ? 'exact-xml' : 'acronym',
+      ...candidates[0],
+    });
+  }
+  await writeFile(
+    path.join(reportRoot, 'additional-matched.csv'),
+    ['rom,parent_rom,missing_title,canonical_title,artwork_title,method,source,destination', ...additionalMatches.map((item) => [
+      item.rom, item.canonicalRom, item.missingTitle, item.canonicalTitle, cleanArtworkTitle(item.name), item.method, item.source, `${item.rom}.png`,
+    ].map(csv).join(','))].join('\n'),
+  );
+  await writeFile(
+    path.join(reportRoot, 'additional-ambiguous.csv'),
+    ['rom,missing_title,candidates', ...additionalAmbiguous.map((item) => [
+      item.rom, item.missingTitle, item.candidates,
+    ].map(csv).join(','))].join('\n'),
+  );
+  if (shouldCopy) {
+    const additionalRoot = path.join(reportRoot, 'additional-by-rom');
+    await mkdir(additionalRoot, { recursive: true });
+    await Promise.all(additionalMatches.map((item) => copyFile(item.source, path.join(additionalRoot, `${item.rom}.png`))));
+  }
+  additionalSummary = {
+    missingTitles: missingTitles.length,
+    matched: additionalMatches.length,
+    ambiguous: additionalAmbiguous.length,
+  };
 }
 
 console.log(JSON.stringify({
@@ -165,5 +275,6 @@ console.log(JSON.stringify({
   ambiguousParents: ambiguous.length,
   unusedArtworkFiles: unused.length,
   copied: shouldCopy,
+  additional: additionalSummary,
   output: reportRoot,
 }, null, 2));
