@@ -1,5 +1,6 @@
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { unzipSync } from 'fflate';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
@@ -42,6 +43,18 @@ const REMOTE_FALLBACK_SOURCES = new Set([
   'vip-pcengine-nointro', 'vip-mastersystem-nointro', 'vip-nes-megapack',
   'vip-snes-gameplay',
 ]);
+
+async function markWhdLoadArchives(files) {
+  await Promise.all(files.map(async (file) => {
+    if (!/\.zip$/i.test(file.name || '')) return;
+    try {
+      const archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
+      file.whdLoadArchive = Object.keys(archive).some((entryName) => /\.slave$/i.test(entryName));
+    } catch {
+      // The room loader will report malformed archives through its normal path.
+    }
+  }));
+}
 
 function snesVariantId(gameId, entryName) {
   return `${gameId}${SNES_VARIANT_SEPARATOR}${encodeURIComponent(entryName)}`;
@@ -2586,6 +2599,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         }
         if (!files.length) throw new Error('No readable files remain for this Amiga release. Re-scan the folder.');
 
+        await markWhdLoadArchives(files);
         const scanned = await scanReleaseFiles(files, { platform: 'amiga' });
         const releaseGame = groupReleaseFiles(scanned)
           .find((candidate) => candidate.title.toLowerCase() === game.title.toLowerCase())

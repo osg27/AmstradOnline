@@ -78,4 +78,22 @@ describe('local game launch adapter', () => {
     };
     expect(prepareLocalGameLaunch(game, storage).roomSystem).toBe('amiga_aga');
   });
+
+  it('routes a ZIP containing a WHDLoad slave through the A1200 PUAE room', () => {
+    const storage = { getItem: () => null, removeItem: () => {} };
+    const game = {
+      id: 'amiga-apidya', platform: 'amiga', defaultReleaseId: 'release',
+      releases: [{
+        id: 'release',
+        isComplete: true,
+        metadata: { machine: [] },
+        media: [{
+          name: 'Apidya_v1.4_2465.zip',
+          file: { name: 'Apidya_v1.4_2465.zip' },
+          whdLoadArchive: true,
+        }],
+      }],
+    };
+    expect(prepareLocalGameLaunch(game, storage).roomSystem).toBe('amiga_aga');
+  });
 });

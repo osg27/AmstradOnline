@@ -25,6 +25,7 @@ export async function scanFiles(inputFiles, options = {}) {
       size: file.size,
       type: file.type,
       lastModified: file.lastModified,
+      whdLoadArchive: Boolean(file.whdLoadArchive),
       sha256: hash,
       platform: detectPlatform(extension, platform),
       ...parsed,
@@ -34,4 +35,3 @@ export async function scanFiles(inputFiles, options = {}) {
   options.onProgress?.(candidates.length, candidates.length, 'Complete');
   return scanned;
 }
-
