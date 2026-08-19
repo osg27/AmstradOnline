@@ -38,6 +38,13 @@ const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
 const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart';
 const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
+const AMIGA_KICKSTART_SET_KEY = 'amiga-kickstart-set';
+const AMIGA_KICKSTART_NAMES = {
+  A500: 'kick34005.A500',
+  A500PLUS: 'kick37175.A500',
+  A600: 'kick40063.A600',
+  A1200: 'kick40068.A1200',
+};
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 const SATURN_BIOS_KEY = 'saturn-bios';
 const ATARI_ST_TOS_KEY = 'atari-st-tos';
@@ -681,12 +688,13 @@ function clearAtari8SessionStorage() {
   }
 }
 
-function buildAmigaKickstartPayload(system, fileName, bytes) {
+function buildAmigaKickstartPayload(system, fileName, bytes, kickstarts = []) {
   if (system !== 'amiga_link') {
     return {
       type: 'amiga_kickstart',
       fileName,
       bytes,
+      kickstarts,
     };
   }
 
@@ -696,6 +704,54 @@ function buildAmigaKickstartPayload(system, fileName, bytes) {
     bytes,
     kickstart_rom: bytes,
   };
+}
+
+function canonicalKickstartName(file) {
+  const name = String(file.name || '');
+  const lower = name.toLowerCase();
+  if (lower === 'rom.key') return 'rom.key';
+  if (/kick34005\.a500/i.test(name) || (/1[._ -]?3|34[._ -]?0?05/i.test(name) && file.size === 256 * 1024)) {
+    return AMIGA_KICKSTART_NAMES.A500;
+  }
+  if (/kick37175\.a500/i.test(name) || (/2[._ -]?0?4|37[._ -]?175/i.test(name) && file.size === 512 * 1024)) {
+    return AMIGA_KICKSTART_NAMES.A500PLUS;
+  }
+  if (/kick40063\.a600/i.test(name) || (/40[._ -]?0?63|a600/i.test(name) && file.size === 512 * 1024)) {
+    return AMIGA_KICKSTART_NAMES.A600;
+  }
+  if (/kick40068\.a1200/i.test(name) || (/40[._ -]?0?68|a1200/i.test(name) && file.size === 512 * 1024)) {
+    return AMIGA_KICKSTART_NAMES.A1200;
+  }
+  return '';
+}
+
+function kickstartForModel(kickstarts, model) {
+  const expectedName = AMIGA_KICKSTART_NAMES[String(model || '').replace('+', 'PLUS')];
+  return kickstarts.find((entry) => entry.fileName.toLowerCase() === expectedName?.toLowerCase()) || null;
+}
+
+async function saveStoredKickstartSet(kickstarts) {
+  const db = await openKickstartDb();
+  try {
+    const transaction = db.transaction(KICKSTART_STORE_NAME, 'readwrite');
+    await requestToPromise(transaction.objectStore(KICKSTART_STORE_NAME).put({ kickstarts }, AMIGA_KICKSTART_SET_KEY));
+  } finally {
+    db.close();
+  }
+}
+
+async function loadStoredKickstartSet() {
+  const db = await openKickstartDb();
+  try {
+    const transaction = db.transaction(KICKSTART_STORE_NAME, 'readonly');
+    const stored = await requestToPromise(transaction.objectStore(KICKSTART_STORE_NAME).get(AMIGA_KICKSTART_SET_KEY));
+    return (stored?.kickstarts || []).map((entry) => ({
+      fileName: entry.fileName,
+      bytes: new Uint8Array(entry.bytes),
+    }));
+  } finally {
+    db.close();
+  }
 }
 
 async function saveStoredKickstart(key, fileName, bytes) {
@@ -772,6 +828,8 @@ export default function RoomPage() {
   const [localReleaseFiles, setLocalReleaseFiles] = useState([]);
   const [currentLocalReleaseIndex, setCurrentLocalReleaseIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
+  const [kickstartSetCount, setKickstartSetCount] = useState(0);
+  const [kickstartFolderBusy, setKickstartFolderBusy] = useState(false);
   const [amigaRequiredModel, setAmigaRequiredModel] = useState('');
   const [x68000FirmwareName, setX68000FirmwareName] = useState('');
   const [vipKickstartBusy, setVipKickstartBusy] = useState(false);
@@ -1834,10 +1892,12 @@ export default function RoomPage() {
       frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
     });
 
-    const storedKickstart = await loadStoredKickstart(kickstartStorageKey);
+    const kickstartSet = await loadStoredKickstartSet();
+    const folderKickstart = kickstartForModel(kickstartSet, amigaRequiredModel);
+    const storedKickstart = folderKickstart || await loadStoredKickstart(kickstartStorageKey);
     if (storedKickstart) {
       frame.contentWindow?.postMessage(
-        buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes),
+        buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes, kickstartSet),
         window.location.origin,
       );
     }
@@ -1845,7 +1905,7 @@ export default function RoomPage() {
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
     startMirrorLoop(emulatorCanvas);
     return frame;
-  }, [emulatorSrc, isPuaeAmiga, kickstartStorageKey, roomSystem]);
+  }, [amigaRequiredModel, emulatorSrc, isPuaeAmiga, kickstartStorageKey, roomSystem]);
 
   const reloadPcEngineFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
@@ -2171,7 +2231,10 @@ export default function RoomPage() {
     sentStoredKickstartFrameRef.current = emulatorFrameLoadCount;
     const timer = window.setTimeout(async () => {
       try {
+        const kickstartSet = isPuaeAmiga ? await loadStoredKickstartSet() : [];
+        const folderKickstart = isPuaeAmiga ? kickstartForModel(kickstartSet, amigaRequiredModel) : null;
         let storedKickstart = savedSystemMediaRef.current.get(kickstartStorageKey);
+        if (folderKickstart) storedKickstart = folderKickstart;
         if (!storedKickstart) {
           storedKickstart = await loadStoredKickstart(kickstartStorageKey);
           if (storedKickstart) {
@@ -2212,7 +2275,7 @@ export default function RoomPage() {
               fileName: storedKickstart.fileName,
               bytes: storedKickstart.bytes,
             }
-            : buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes);
+            : buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes, kickstartSet);
 
         [0, 350, 900, 1600].forEach((delay) => {
           const retryTimer = window.setTimeout(() => {
@@ -2233,8 +2296,13 @@ export default function RoomPage() {
           setAtariTosName(`${storedKickstart.fileName} (saved locally)`);
           addLog(`Loaded saved Atari TOS: ${storedKickstart.fileName}`);
         } else {
-          setKickstartRomName(`${storedKickstart.fileName} (saved)`);
-          addLog(`Loaded saved Kickstart ROM: ${storedKickstart.fileName}`);
+          setKickstartSetCount(kickstartSet.filter((entry) => entry.fileName !== 'rom.key').length);
+          setKickstartRomName(folderKickstart
+            ? `${storedKickstart.fileName} (${kickstartSet.filter((entry) => entry.fileName !== 'rom.key').length} ROM folder)`
+            : `${storedKickstart.fileName} (saved)`);
+          addLog(folderKickstart
+            ? `Loaded saved Kickstarts folder with ${kickstartSet.length} files; booting ${storedKickstart.fileName}`
+            : `Loaded saved Kickstart ROM: ${storedKickstart.fileName}`);
         }
       } catch (err) {
         if (!cancelled) {
@@ -2248,7 +2316,7 @@ export default function RoomPage() {
       window.clearTimeout(timer);
       timers.forEach((retryTimer) => window.clearTimeout(retryTimer));
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAtariSt, isDiscConsole, isHost, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
+  }, [addLog, amigaRequiredModel, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAtariSt, isDiscConsole, isHost, isPuaeAmiga, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -5597,6 +5665,66 @@ export default function RoomPage() {
     kickstartInputRef.current?.click();
   }
 
+  async function collectKickstartFolderFiles(directoryHandle, depth = 0) {
+    const files = [];
+    for await (const [, handle] of directoryHandle.entries()) {
+      if (handle.kind === 'file') {
+        const file = await handle.getFile();
+        const canonicalName = canonicalKickstartName(file);
+        if (canonicalName) {
+          files.push({
+            fileName: canonicalName,
+            bytes: new Uint8Array(await file.arrayBuffer()),
+          });
+        }
+      } else if (handle.kind === 'directory' && depth < 4) {
+        files.push(...await collectKickstartFolderFiles(handle, depth + 1));
+      }
+    }
+    return files;
+  }
+
+  async function openKickstartFolder() {
+    if (!canControlLocalEmulator || !isPuaeAmiga) return;
+    if (!window.showDirectoryPicker) {
+      setError('Your browser does not support choosing a Kickstarts folder. Use Chrome or Edge.');
+      return;
+    }
+
+    try {
+      setError('');
+      setKickstartFolderBusy(true);
+      const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+      const discovered = await collectKickstartFolderFiles(directoryHandle);
+      const unique = [...new Map(discovered.map((entry) => [entry.fileName.toLowerCase(), entry])).values()];
+      const roms = unique.filter((entry) => entry.fileName !== 'rom.key');
+      if (!roms.length) {
+        throw new Error('No recognised Amiga Kickstart ROMs found. Expected Kickstart 1.3/34.005 or 3.1/40.068 ROMs.');
+      }
+
+      await saveStoredKickstartSet(unique);
+      setKickstartSetCount(roms.length);
+      const bootRom = kickstartForModel(unique, amigaRequiredModel);
+      if (bootRom) {
+        forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, bootRom.fileName, bootRom.bytes, unique));
+        setKickstartRomName(`${bootRom.fileName} (${roms.length} ROM folder)`);
+        setStatus(`Kickstarts folder ready: using ${bootRom.fileName}`);
+      } else {
+        const requiredName = AMIGA_KICKSTART_NAMES[String(amigaRequiredModel || '').replace('+', 'PLUS')];
+        setKickstartRomName(`Kickstarts folder (${roms.length} ROMs)`);
+        setStatus(`Kickstarts folder saved, but ${requiredName || 'the required boot ROM'} is missing`);
+      }
+      addLog(`Saved Kickstarts folder: ${unique.map((entry) => entry.fileName).join(', ')}`);
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setError(err.message);
+        addLog(`Kickstarts folder error: ${err.message}`);
+      }
+    } finally {
+      setKickstartFolderBusy(false);
+    }
+  }
+
   function openX68000FirmwarePicker() {
     if (!canControlLocalEmulator || !isX68000) return;
     x68000FirmwareInputRef.current?.click();
@@ -7052,8 +7180,8 @@ export default function RoomPage() {
             </div>
             <div className="room-getting-started-steps">
               {isPuaeAmiga && loadedDiskName ? (
-                <button type="button" onClick={openKickstartPicker}>
-                  <span>2</span>{`Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
+                <button type="button" onClick={openKickstartFolder} disabled={kickstartFolderBusy}>
+                  <span>2</span>{kickstartFolderBusy ? 'Scanning Kickstarts...' : 'Choose Kickstarts folder'}
                 </button>
               ) : null}
               {!loadedDiskName && localRoomGames.length ? (
@@ -7066,7 +7194,7 @@ export default function RoomPage() {
                   <span>1</span>Choose game file
                 </button>
               ) : null}
-              <small>{loadedDiskName ? 'Once the correct Kickstart is ready, the game can boot.' : 'We check the game type before asking for a Kickstart ROM.'}</small>
+              <small>{loadedDiskName ? 'Choose the folder once; the correct boot and WHDLoad ROMs are saved locally and selected automatically.' : 'We check the game type before asking for Kickstarts.'}</small>
             </div>
           </section>
         ) : null}
@@ -7589,6 +7717,16 @@ export default function RoomPage() {
                   {isAmigaFamily ? (
                     <button type="button" className="secondary" onClick={openKickstartPicker} disabled={(isPuaeAmiga && !amigaRequiredModel) || (hostStarted && !isPuaeAmiga)}>
                       {kickstartRomName ? 'Change Kickstart ROM' : isPuaeAmiga && !amigaRequiredModel ? 'Choose game before Kickstart' : `Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
+                    </button>
+                  ) : null}
+
+                  {isPuaeAmiga ? (
+                    <button type="button" className="secondary" onClick={openKickstartFolder} disabled={kickstartFolderBusy}>
+                      {kickstartFolderBusy
+                        ? 'Scanning Kickstarts...'
+                        : kickstartSetCount
+                          ? `Change Kickstarts folder (${kickstartSetCount} ROMs)`
+                          : 'Choose Kickstarts folder'}
                     </button>
                   ) : null}
 

@@ -81,6 +81,7 @@
       let pendingDisks = [];
       let pendingWhdLoadFiles = [];
       let pendingKickstart = null;
+      let pendingKickstarts = [];
       let started = false;
       let runtimeModule = null;
       let getDiskCount = null;
@@ -154,7 +155,11 @@
       }
 
       function installRuntimeFiles() {
+        const kickstarts = pendingKickstarts.length ? pendingKickstarts : [pendingKickstart];
         PUAE_SYSTEM_DIRS.forEach((dir) => {
+          kickstarts.forEach((entry) => writeRuntimeFile(`${dir}/${entry.fileName}`, entry.bytes));
+          // Preserve support for a manually selected, non-canonical filename by
+          // also installing the selected boot ROM under the model's expected name.
           writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes);
         });
 
@@ -514,6 +519,12 @@
             fileName: data.fileName || "kick.rom",
             bytes: new Uint8Array(data.bytes || []),
           };
+          pendingKickstarts = (Array.isArray(data.kickstarts) ? data.kickstarts : [])
+            .map((entry) => ({
+              fileName: String(entry.fileName || "").split(/[\\/]/).pop(),
+              bytes: new Uint8Array(entry.bytes || []),
+            }))
+            .filter((entry) => entry.fileName && entry.bytes.length);
           setStatus(`Kickstart ready: ${pendingKickstart.fileName}`);
           if (pendingGame && !started) startEmulator();
         }
