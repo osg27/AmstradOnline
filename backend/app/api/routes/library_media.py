@@ -3,6 +3,7 @@ import mimetypes
 import os
 import re
 import shutil
+from functools import lru_cache
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -71,6 +72,31 @@ def _rom_key(value: str | None) -> str:
     return _slug(re.sub(r"\.(?:zip|7z)$", "", value or "", flags=re.IGNORECASE))
 
 
+@lru_cache(maxsize=16)
+def _title_artwork_files(title_dir: str, directory_mtime_ns: int) -> tuple[tuple[str, Path], ...]:
+    del directory_mtime_ns  # Its value invalidates the cache when files are added or removed.
+    root = Path(title_dir)
+    return tuple(
+        (candidate.stem, candidate)
+        for candidate in root.iterdir()
+        if candidate.is_file() and candidate.suffix.lower() in URL_EXTENSIONS
+    )
+
+
+def _unique_longer_title_match(title_dir: Path, title_key: str) -> Path | None:
+    # WHDLoad/library titles are often shorter than packaging artwork titles
+    # (for example "Allo Allo" versus "Allo Allo! Cartoon Fun!"). Only use
+    # this fallback when there is one unambiguous longer title.
+    if len(title_key) < 5 or "-" not in title_key or not title_dir.is_dir():
+        return None
+    candidates = [
+        path
+        for stem, path in _title_artwork_files(str(title_dir), title_dir.stat().st_mtime_ns)
+        if stem.startswith(f"{title_key}-")
+    ]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _indexed_box_art(system: str, rom_name: str, title: str | None = None) -> Path | None:
     index_dir = MEDIA_ROOT / "boxart" / _slug(system) / "by-rom"
     key = _rom_key(rom_name)
@@ -85,6 +111,9 @@ def _indexed_box_art(system: str, rom_name: str, title: str | None = None) -> Pa
             candidate = title_dir / f"{title_key}{extension}"
             if candidate.is_file():
                 return candidate
+        longer_title = _unique_longer_title_match(title_dir, title_key)
+        if longer_title:
+            return longer_title
     return None
 
 
