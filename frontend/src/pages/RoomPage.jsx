@@ -5,7 +5,7 @@ import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
-import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames, readLocalLibraryFile } from '../localLibraryDb';
+import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames, getLocalLibraryGamesForRoomSystem, readLocalLibraryFile } from '../localLibraryDb';
 import { registerRuntimeRelease, takeRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
 import { normaliseFilename } from '../features/localLibrary/core/normalise';
 import { scanFiles as scanLocalReleaseFiles } from '../features/localLibrary/core/scanner';
@@ -1151,9 +1151,9 @@ export default function RoomPage() {
 
     async function loadLocalRoomGames() {
       try {
-        const games = await getLocalLibraryGames();
+        const games = await getLocalLibraryGamesForRoomSystem(roomSystem);
         if (cancelled) return;
-        const matchingGames = games.filter((game) => game.roomSystem === roomSystem);
+        const matchingGames = games;
         const roomGames = roomSystem === 'amiga_aga' || roomSystem === 'amiga'
           ? groupAmigaRoomGames(matchingGames)
           : matchingGames;
@@ -7003,6 +7003,40 @@ export default function RoomPage() {
               {inviteCopied ? 'Copied' : 'Copy invite'}
             </button>
           </div>
+        ) : null}
+
+        {isHost && canControlLocalEmulator && !loadedDiskName ? (
+          <section className="room-getting-started" aria-labelledby="room-getting-started-title">
+            <div className="room-getting-started-copy">
+              <span>Start here</span>
+              <strong id="room-getting-started-title">
+                {isPuaeAmiga ? 'Amiga needs a Kickstart ROM and a game' : `Choose a ${systemLabel} game`}
+              </strong>
+              <small>
+                {isPuaeAmiga
+                  ? `${isAmigaAga ? 'A1200 and WHDLoad games normally need Kickstart 3.1.' : 'A500 games normally need Kickstart 1.3.'} It is stored only in this browser for next time.`
+                  : localRoomGames.length
+                    ? 'Pick a game from your connected library, or choose a file from this device.'
+                    : 'Choose a game file from this device. You can connect a whole folder from the Library later.'}
+              </small>
+            </div>
+            <div className="room-getting-started-steps">
+              {isPuaeAmiga ? (
+                <button type="button" className={kickstartRomName ? 'secondary complete' : ''} onClick={openKickstartPicker}>
+                  <span>1</span>{kickstartRomName ? 'Kickstart ready' : `Load ${isAmigaAga ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
+                </button>
+              ) : null}
+              {localRoomGames.length ? (
+                <button type="button" onClick={() => setLocalGamePickerOpen(true)}>
+                  <span>{isPuaeAmiga ? '2' : '1'}</span>Choose from library
+                </button>
+              ) : null}
+              <button type="button" className="secondary" onClick={openDiskPicker}>
+                <span>{isPuaeAmiga ? '2' : '1'}</span>Choose game file
+              </button>
+              <small>{isSoloMode ? 'Then press Start emulator.' : 'Then start the host session and share the room code.'}</small>
+            </div>
+          </section>
         ) : null}
 
         {(loadedDiskName || isAmigaFamily || isDiscConsole || isAtariSt) ? (

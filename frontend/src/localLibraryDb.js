@@ -1,5 +1,5 @@
 const DB_NAME = 'oldstylegaming-local-library';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const FOLDERS_STORE = 'folders';
 const GAMES_STORE = 'games';
 const SETTINGS_STORE = 'settings';
@@ -33,7 +33,13 @@ function openLibraryDb() {
       if (!db.objectStoreNames.contains(GAMES_STORE)) {
         const games = db.createObjectStore(GAMES_STORE, { keyPath: 'id' });
         games.createIndex('system', 'system', { unique: false });
+        games.createIndex('roomSystem', 'roomSystem', { unique: false });
         games.createIndex('name', 'name', { unique: false });
+      } else {
+        const games = request.transaction.objectStore(GAMES_STORE);
+        if (!games.indexNames.contains('roomSystem')) {
+          games.createIndex('roomSystem', 'roomSystem', { unique: false });
+        }
       }
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
@@ -152,16 +158,30 @@ export async function migrateLegacyVipLibraryGames(games) {
 export async function getLocalLibraryGames() {
   const db = await openLibraryDb();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([GAMES_STORE, SETTINGS_STORE], 'readwrite');
+    const transaction = db.transaction(GAMES_STORE, 'readonly');
     const localRequest = transaction.objectStore(GAMES_STORE).getAll();
     let localGames = [];
     localRequest.onsuccess = () => { localGames = localRequest.result || []; };
     localRequest.onerror = () => reject(localRequest.error);
-    transaction.objectStore(SETTINGS_STORE).delete(LEGACY_REMOTE_GAMES_KEY);
     transaction.oncomplete = () => {
       db.close();
       resolve(localGames.filter((game) => !isLegacyRemoteGame(game)));
     };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+export async function getLocalLibraryGamesForRoomSystem(roomSystem) {
+  const db = await openLibraryDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(GAMES_STORE, 'readonly');
+    const request = transaction.objectStore(GAMES_STORE).index('roomSystem').getAll(roomSystem);
+    request.onsuccess = () => resolve((request.result || []).filter((game) => !isLegacyRemoteGame(game)));
+    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => db.close();
     transaction.onerror = () => {
       db.close();
       reject(transaction.error);

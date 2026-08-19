@@ -242,7 +242,7 @@ const LIBRETRO_BOXART_REPOS = {
 const boxArtIndexCache = new Map();
 const arcadeParentKeyCache = new Map();
 const BOX_ART_NOISE_WORDS = new Set(['disney', 'disneys', 's', 'taito', 'sega', 'nintendo']);
-const LIBRARY_PAGE_SIZE = 96;
+const LIBRARY_PAGE_SIZE = 48;
 const LIBRARY_SNAPSHOT_KEY = 'oldstylegaming:librarySnapshot';
 const BOX_ART_ONLY_KEY = 'oldstylegaming:libraryBoxArtOnly';
 const AMIGA_BOX_ART_REPAIR_KEY = 'oldstylegaming:amigaBoxArtRepair';
@@ -1613,6 +1613,30 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         if (mismatchedAlienIds.size) await saveLocalLibraryGames(savedGames);
         if (forceAmigaBoxArtRepair) {
           localStorage.setItem(AMIGA_BOX_ART_REPAIR_KEY, AMIGA_BOX_ART_REPAIR_VERSION);
+        }
+        if (!isVip) {
+          const localGames = savedGames.filter((game) => (
+            game.source !== 'internet-archive-mame'
+            && !String(game.source || '').startsWith('vip-')
+          ));
+          let localGamesWithArtwork = await restoreCachedBoxArt(localGames);
+          if (forceAmigaBoxArtRepair) {
+            const repairedAmigaGames = await applyIndexedBoxArt(
+              localGamesWithArtwork.filter((game) => game.system === 'amiga' || game.system === 'amiga_aga'),
+              'amiga',
+            );
+            const repairedById = new Map(repairedAmigaGames.map((game) => [game.id, game]));
+            localGamesWithArtwork = localGamesWithArtwork.map((game) => repairedById.get(game.id) || game);
+            await saveLocalLibraryGames(localGamesWithArtwork);
+          }
+          const availableSystemIds = new Set(availableSystems.map((system) => system.id));
+          const availableSavedSystems = savedSystems.filter((systemId) => availableSystemIds.has(systemId));
+          setFolders(savedFolders);
+          setGames(localGamesWithArtwork);
+          setStatus(localGamesWithArtwork.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
+          setSelectedSystems(availableSavedSystems.length ? availableSavedSystems : availableSystems.map((system) => system.id));
+          setFavourites(savedFavourites);
+          return;
         }
         const savedArtwork = savedBoxArtByGame(savedGames);
         const localGames = savedGames.filter((game) => (
