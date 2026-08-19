@@ -1058,6 +1058,10 @@ async function restoreCachedBoxArt(games) {
         .map(boxArtLookupKey)
         .filter(Boolean),
     )];
+    const titleByRomName = Object.fromEntries(systemGames.map((game) => [
+      boxArtLookupKey(game),
+      canonicalLibraryTitle(game),
+    ]).filter(([romName, title]) => romName && title));
     if (!romNames.length) return;
     const matches = {};
     const batchSize = 250;
@@ -1069,6 +1073,10 @@ async function restoreCachedBoxArt(games) {
           body: JSON.stringify({
             system,
             rom_names: romNames.slice(offset, offset + batchSize),
+            titles: Object.fromEntries(romNames.slice(offset, offset + batchSize).map((romName) => [
+              romName,
+              titleByRomName[romName] || '',
+            ])),
           }),
         });
       } catch {

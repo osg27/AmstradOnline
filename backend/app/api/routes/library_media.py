@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 router = APIRouter(prefix="/library/media", tags=["library-media"])
@@ -38,6 +38,7 @@ class BoxArtCacheRequest(BaseModel):
 class BoxArtLookupRequest(BaseModel):
     system: str
     rom_names: list[str]
+    titles: dict[str, str] = Field(default_factory=dict)
 
 
 def _slug(value: str | None) -> str:
@@ -70,13 +71,20 @@ def _rom_key(value: str | None) -> str:
     return _slug(re.sub(r"\.(?:zip|7z)$", "", value or "", flags=re.IGNORECASE))
 
 
-def _indexed_box_art(system: str, rom_name: str) -> Path | None:
+def _indexed_box_art(system: str, rom_name: str, title: str | None = None) -> Path | None:
     index_dir = MEDIA_ROOT / "boxart" / _slug(system) / "by-rom"
     key = _rom_key(rom_name)
     for extension in CONTENT_TYPE_EXTENSIONS.values():
         candidate = index_dir / f"{key}{extension}"
         if candidate.is_file():
             return candidate
+    if title:
+        title_dir = MEDIA_ROOT / "boxart" / _slug(system) / "by-title"
+        title_key = _slug(title)
+        for extension in CONTENT_TYPE_EXTENSIONS.values():
+            candidate = title_dir / f"{title_key}{extension}"
+            if candidate.is_file():
+                return candidate
     return None
 
 
@@ -150,7 +158,7 @@ def lookup_box_art(payload: BoxArtLookupRequest):
 
     matches = {}
     for rom_name in dict.fromkeys(payload.rom_names):
-        target = _indexed_box_art(payload.system, rom_name)
+        target = _indexed_box_art(payload.system, rom_name, payload.titles.get(rom_name))
         if target:
             matches[rom_name] = _response_url(target)
     return {"matches": matches}
