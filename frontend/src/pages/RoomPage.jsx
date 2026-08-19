@@ -772,6 +772,7 @@ export default function RoomPage() {
   const [localReleaseFiles, setLocalReleaseFiles] = useState([]);
   const [currentLocalReleaseIndex, setCurrentLocalReleaseIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
+  const [amigaRequiredModel, setAmigaRequiredModel] = useState('');
   const [x68000FirmwareName, setX68000FirmwareName] = useState('');
   const [vipKickstartBusy, setVipKickstartBusy] = useState(false);
   const [playstationBiosName, setPlaystationBiosName] = useState('');
@@ -970,7 +971,13 @@ export default function RoomPage() {
   const isSoloMode = isArcade ? !Boolean(room?.arcade_multiplayer) : legacySoloMode;
   const supportsMameScoreboard = isArcade;
   const supportsAmigaScoreboard = isPuaeAmiga && Boolean(amigaScoreGame);
-  const kickstartStorageKey = isAmiga || isAmigaLink ? AMIGA_KICKSTART_KEY : isAmigaAga ? AMIGA_AGA_KICKSTART_KEY : isPlayStation ? PLAYSTATION_BIOS_KEY : isAtariSt ? ATARI_ST_TOS_KEY : isX68000 ? X68000_FIRMWARE_KEY : '';
+  const kickstartStorageKey = isPuaeAmiga
+    ? amigaRequiredModel === 'A1200' ? AMIGA_AGA_KICKSTART_KEY : amigaRequiredModel === 'A500' ? AMIGA_KICKSTART_KEY : ''
+    : isAmigaLink ? AMIGA_KICKSTART_KEY
+    : isPlayStation ? PLAYSTATION_BIOS_KEY
+    : isAtariSt ? ATARI_ST_TOS_KEY
+    : isX68000 ? X68000_FIRMWARE_KEY
+    : '';
   const partyMaxPlayers = Math.min(20, Math.max(2, Number(room?.party_max_players) || 2));
   const arcadeControlSlots = 2;
   const isC64Party = isC64 && !isSoloMode && partyMaxPlayers > 2;
@@ -6032,6 +6039,16 @@ export default function RoomPage() {
         );
       }
       const bytes = loadedFiles[0].bytes;
+      const amigaModel = isPuaeAmiga
+        ? (loadedFiles[0]?.whdLoadArchive
+          || loadedFiles.some((loadedFile) => /\.(lha|slave)$/i.test(loadedFile.fileName))
+          ? 'A1200'
+          : isAmigaAga ? 'A1200' : 'A500')
+        : '';
+      if (amigaModel && amigaModel !== amigaRequiredModel) {
+        setAmigaRequiredModel(amigaModel);
+        setKickstartRomName('');
+      }
       const cpcAutoloadCommand = isCpcSystem && !isSwapDisk
         ? detectCpcAutoloadCommand(bytes, loadedFiles[0].fileName)
         : null;
@@ -6052,7 +6069,7 @@ export default function RoomPage() {
         files: isDiscConsole || isX68000 ? loadedFiles : undefined,
         disks: isPuaeAmiga && !isSwapDisk && !loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
         whdLoadFiles: isPuaeAmiga && loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
-        profile: isPuaeAmiga ? { model: isAmigaAga ? 'A1200' : 'A500' } : undefined,
+        profile: isPuaeAmiga ? { model: amigaModel } : undefined,
         media: isC64 || isAtariSt ? loadedFiles : undefined,
         autoloadCommand: cpcAutoloadCommand || undefined,
       };
@@ -6766,6 +6783,10 @@ export default function RoomPage() {
 
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
+      const expectedKickstartSize = amigaRequiredModel === 'A1200' ? 512 * 1024 : amigaRequiredModel === 'A500' ? 256 * 1024 : 0;
+      if (expectedKickstartSize && bytes.length !== expectedKickstartSize) {
+        throw new Error(`${amigaRequiredModel} needs a ${expectedKickstartSize / 1024} KB Kickstart ROM (${amigaRequiredModel === 'A1200' ? '3.1 / 40.68' : '1.3 / 34.5'}). The selected file is ${Math.round(bytes.length / 1024)} KB.`);
+      }
       if (kickstartStorageKey) {
         savedSystemMediaRef.current.set(kickstartStorageKey, { fileName: file.name, bytes });
       }
@@ -7005,36 +7026,42 @@ export default function RoomPage() {
           </div>
         ) : null}
 
-        {isHost && canControlLocalEmulator && !loadedDiskName ? (
+        {isHost && canControlLocalEmulator && (!loadedDiskName || (isPuaeAmiga && !kickstartRomName)) ? (
           <section className="room-getting-started" aria-labelledby="room-getting-started-title">
             <div className="room-getting-started-copy">
               <span>Start here</span>
               <strong id="room-getting-started-title">
-                {isPuaeAmiga ? 'Amiga needs a Kickstart ROM and a game' : `Choose a ${systemLabel} game`}
+                {isPuaeAmiga && loadedDiskName
+                  ? `Now load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`
+                  : `Choose a ${systemLabel} game`}
               </strong>
               <small>
                 {isPuaeAmiga
-                  ? `${isAmigaAga ? 'A1200 and WHDLoad games normally need Kickstart 3.1.' : 'A500 games normally need Kickstart 1.3.'} It is stored only in this browser for next time.`
+                  ? loadedDiskName
+                    ? `${amigaRequiredModel === 'A1200' ? 'This WHDLoad/A1200 game needs Kickstart 3.1.' : 'This A500/floppy game needs Kickstart 1.3.'} It is stored only in this browser for next time.`
+                    : 'Choose the game first. We will identify whether it needs Kickstart 1.3 or 3.1.'
                   : localRoomGames.length
                     ? 'Pick a game from your connected library, or choose a file from this device.'
                     : 'Choose a game file from this device. You can connect a whole folder from the Library later.'}
               </small>
             </div>
             <div className="room-getting-started-steps">
-              {isPuaeAmiga ? (
-                <button type="button" className={kickstartRomName ? 'secondary complete' : ''} onClick={openKickstartPicker}>
-                  <span>1</span>{kickstartRomName ? 'Kickstart ready' : `Load ${isAmigaAga ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
+              {isPuaeAmiga && loadedDiskName ? (
+                <button type="button" onClick={openKickstartPicker}>
+                  <span>2</span>{`Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
                 </button>
               ) : null}
-              {localRoomGames.length ? (
+              {!loadedDiskName && localRoomGames.length ? (
                 <button type="button" onClick={() => setLocalGamePickerOpen(true)}>
-                  <span>{isPuaeAmiga ? '2' : '1'}</span>Choose from library
+                  <span>1</span>Choose from library
                 </button>
               ) : null}
-              <button type="button" className="secondary" onClick={openDiskPicker}>
-                <span>{isPuaeAmiga ? '2' : '1'}</span>Choose game file
-              </button>
-              <small>{isSoloMode ? 'Then press Start emulator.' : 'Then start the host session and share the room code.'}</small>
+              {!loadedDiskName ? (
+                <button type="button" className="secondary" onClick={openDiskPicker}>
+                  <span>1</span>Choose game file
+                </button>
+              ) : null}
+              <small>{loadedDiskName ? 'Once the correct Kickstart is ready, the game can boot.' : 'We check the game type before asking for a Kickstart ROM.'}</small>
             </div>
           </section>
         ) : null}
@@ -7052,7 +7079,7 @@ export default function RoomPage() {
                 Choose instructions ({controlProfileMatches.length})
               </button>
             ) : null}
-            {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? `ROM: ${isAmigaAga ? 'A1200 Kickstart 3.1' : 'A500 Kickstart 1.3'} required` : 'ROM: AROS'}</span> : null}
+            {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? loadedDiskName ? `ROM: ${amigaRequiredModel === 'A1200' ? 'A1200 Kickstart 3.1' : 'A500 Kickstart 1.3'} required` : 'ROM: chosen after game' : 'ROM: AROS'}</span> : null}
             {isDiscConsole ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : isSaturn ? 'BIOS: load saturn_bios.bin locally' : 'BIOS: HLE fallback / load your own locally'}</span> : null}
             {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
             {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
@@ -7555,8 +7582,8 @@ export default function RoomPage() {
                   ) : null}
 
                   {isAmigaFamily ? (
-                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={hostStarted && !isPuaeAmiga}>
-                      {kickstartRomName ? 'Change Kickstart ROM' : 'Load Kickstart ROM'}
+                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={(isPuaeAmiga && !amigaRequiredModel) || (hostStarted && !isPuaeAmiga)}>
+                      {kickstartRomName ? 'Change Kickstart ROM' : isPuaeAmiga && !amigaRequiredModel ? 'Choose game before Kickstart' : `Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
                     </button>
                   ) : null}
 
