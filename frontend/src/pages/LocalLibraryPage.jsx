@@ -1430,6 +1430,35 @@ function libraryGroupKey(game, { showArcadeClones = false } = {}) {
   return `${systemKey}:${normalizeBoxArtKey(canonicalTitle) || normalizeExactBoxArtKey(canonicalTitle) || game.id}`;
 }
 
+function genreTitleKey(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s*[\[(](?:aga|cd32|amiga|whdload|tosec|adf).*?[\])]/gi, ' ')
+    .replace(/\s*\([^)]*(?:europe|usa|us|japan|world|rev|set|disk|disc)[^)]*\)/gi, ' ')
+    .replace(/^the\s+/i, '')
+    .replace(/\bthe$/i, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function genresForGame(game, genreIndex) {
+  if (!genreIndex) return [];
+  if (game.system === 'arcade') {
+    const romKey = String(game.parentRomKey || game.romKey || arcadeRomKey(game.fileName)).toLowerCase();
+    const direct = genreIndex.mame?.[romKey];
+    if (direct?.length) return direct;
+  }
+  for (const title of [canonicalLibraryTitle(game), game.title, game.fileName]) {
+    const match = genreIndex.titles?.[genreTitleKey(title)];
+    if (match?.length) return match;
+  }
+  return [];
+}
+
 function variantPreferenceScore(game) {
   const haystack = `${game.fileName} ${game.path}`.toLowerCase();
   let score = 0;
@@ -1533,6 +1562,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [selectedSystems, setSelectedSystems] = useState(() => librarySessionCache?.selectedSystems || []);
   const [activeSystem, setActiveSystem] = useState(requestedSystemExists ? requestedSystem : 'all');
   const [query, setQuery] = useState(searchParams.get('q') || '');
+  const [genreFilter, setGenreFilter] = useState(searchParams.get('genre') || 'all');
+  const [genreIndex, setGenreIndex] = useState(null);
   const deferredQuery = useDeferredValue(query);
   const [favourites, setFavourites] = useState(() => librarySessionCache?.favourites || []);
   const [status, setStatus] = useState(librarySessionCache ? 'Library ready' : 'Fetching your games...');
@@ -1568,16 +1599,27 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const nextLetter = overrides.letter ?? letterFilter;
     const nextShowArcadeClones = overrides.showArcadeClones ?? showArcadeClones;
     const nextShowBoxArtOnly = overrides.showBoxArtOnly ?? showBoxArtOnly;
+    const nextGenre = overrides.genre ?? genreFilter;
 
     if (nextSystem && nextSystem !== 'all') params.set('system', nextSystem);
     if (nextQuery.trim()) params.set('q', nextQuery.trim());
     if (nextLetter && nextLetter !== 'all') params.set('letter', nextLetter);
     if (nextShowArcadeClones) params.set('clones', '1');
     if (nextShowBoxArtOnly) params.set('boxArt', '1');
+    if (nextGenre && nextGenre !== 'all') params.set('genre', nextGenre);
 
     const queryString = params.toString();
     return queryString ? `/library?${queryString}` : '/library';
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/data/genre-index.json', { cache: 'force-cache' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((index) => { if (!cancelled) setGenreIndex(index); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     // Navigating within the SPA retains the authoritative records and their derived
@@ -2227,12 +2269,21 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     : activeSystem === 'favourites'
       ? 'favourites'
       : `${activeSystemDetails?.label || 'platform'} games`;
+  const genreCounts = useMemo(() => {
+    const counts = new Map();
+    activeLibraryGames.forEach((game) => {
+      genresForGame(game, genreIndex).forEach((genre) => counts.set(genre, (counts.get(genre) || 0) + 1));
+    });
+    return [...counts.entries()].sort(([left], [right]) => left.localeCompare(right));
+  }, [activeLibraryGames, genreIndex]);
   const letterSourceGames = useMemo(() => {
     return activeLibraryGames
       .filter((game) => !showBoxArtOnly || (Boolean(game.boxArtUrl) && !brokenBoxArtIds.has(game.id)))
-      .filter((game) => matchesLibraryQuery(game, deferredQuery))
+      .filter((game) => genreFilter === 'all' || genresForGame(game, genreIndex).includes(genreFilter))
+      .filter((game) => matchesLibraryQuery(game, deferredQuery)
+        || genresForGame(game, genreIndex).some((genre) => genre.toLowerCase().includes(deferredQuery.trim().toLowerCase())))
       .sort((a, b) => a.title.localeCompare(b.title));
-  }, [activeLibraryGames, brokenBoxArtIds, deferredQuery, showBoxArtOnly]);
+  }, [activeLibraryGames, brokenBoxArtIds, deferredQuery, genreFilter, genreIndex, showBoxArtOnly]);
   const alphabetCounts = useMemo(() => {
     const counts = Object.fromEntries(LIBRARY_ALPHABET.map((letter) => [letter, 0]));
     letterSourceGames.forEach((game) => {
@@ -2286,7 +2337,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   useEffect(() => {
     setRenderLimit(LIBRARY_PAGE_SIZE);
-  }, [activeSystem, letterFilter, query, showArcadeClones, showBoxArtOnly]);
+  }, [activeSystem, genreFilter, letterFilter, query, showArcadeClones, showBoxArtOnly]);
 
   useEffect(() => {
     if (letterFilter !== 'all' && !alphabetCounts[letterFilter]) {
@@ -3419,6 +3470,17 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search your games"
               />
+              <select
+                value={genreFilter}
+                onChange={(event) => setGenreFilter(event.target.value)}
+                aria-label="Filter by genre"
+                title="Filter by genre"
+              >
+                <option value="all">All genres</option>
+                {genreCounts.map(([genre, count]) => (
+                  <option key={genre} value={genre}>{genre} ({count})</option>
+                ))}
+              </select>
               {selectedSystems.includes('arcade') && hiddenArcadeCloneCount > 0 ? (
                 <label className="library-clone-toggle">
                   <input
