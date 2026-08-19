@@ -1425,7 +1425,15 @@ function libraryGroupKey(game, { showArcadeClones = false } = {}) {
   if (game.system === 'arcade') {
     if (showArcadeClones) return `arcade:${game.id}`;
     const romKey = game.romKey || arcadeRomKey(game.fileName);
-    return `arcade:${canonicalArcadeParentKey(romKey)}`;
+    const parentKey = game.parentRomKey || canonicalArcadeParentKey(romKey);
+    const parentTitle = cleanArcadeDisplayTitle(
+      mame2003PlusTitles[parentKey]?.title || mame2003PlusTitles[romKey]?.title || '',
+    );
+    // Some MAME sets contain multiple independently-labelled parent ROMs for
+    // what users recognise as the same cabinet. Prefer the canonical display
+    // title so those parents become selectable versions on one card.
+    const titleKey = normalizeExactBoxArtKey(parentTitle);
+    return `arcade:${titleKey ? `title:${titleKey}` : `rom:${parentKey}`}`;
   }
 
   const canonicalTitle = canonicalLibraryTitle(game);

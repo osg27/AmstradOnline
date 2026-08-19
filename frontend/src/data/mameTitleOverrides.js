@@ -1,5 +1,14 @@
 // Curated fixes for common MAME 2003-Plus names missing from the generated list.
 const mameTitleOverrides = {
+  defender: { title: 'Defender', parent: '' },
+  defenderg: { title: 'Defender (Green label)', parent: 'defender' },
+  defenderb: { title: 'Defender (Blue label)', parent: 'defender' },
+  defenderw: { title: 'Defender (White label)', parent: 'defender' },
+  defenderj: { title: 'Defender (Japan)', parent: 'defender' },
+  defndjeu: { title: 'Defender (bootleg)', parent: 'defender' },
+  tornado1: { title: 'Defender (Tornado set 1)', parent: 'defender' },
+  tornado2: { title: 'Defender (Tornado set 2)', parent: 'defender' },
+
   ddragon: { title: 'Double Dragon', parent: '' },
   ddragonu: { title: 'Double Dragon (US)', parent: 'ddragon' },
   ddragonua: { title: 'Double Dragon (US set 2)', parent: 'ddragon' },
