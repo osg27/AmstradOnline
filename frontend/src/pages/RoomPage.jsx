@@ -1491,15 +1491,15 @@ export default function RoomPage() {
   }
 
   function gamepadToJoystickMask(pad, system = roomSystem) {
+    let customMask = null;
     if (supportsControllerMapping(system) && pad.id) {
       const customMapping = getControllerMapping(system, pad.id);
       if (customMapping) {
-        const customMask = applyCustomMapping(pad, customMapping);
-        if (customMask !== null) return customMask;
+        customMask = applyCustomMapping(pad, customMapping);
       }
     }
 
-    let mask = 0;
+    let mask = customMask ?? 0;
     const deadzone = 0.45;
     const fallback = pad.mapping === 'standard'
       ? { left: false, right: false, up: false, down: false }
@@ -1521,10 +1521,15 @@ export default function RoomPage() {
       ? pad.buttons[9]?.pressed
       : [7, 9].some((index) => pad.buttons[index]?.pressed);
 
+    // Always retain native directions. This is important for DirectInput
+    // arcade sticks whose POV hat is not represented by buttons 12-15. A
+    // saved button mapping must not suppress a stick that the browser exposes
+    // through axis 9 or another non-standard axis pair.
     if (up) mask |= 1;
     if (down) mask |= 2;
     if (left) mask |= 4;
     if (right) mask |= 8;
+    if (customMask !== null) return mask;
     if (fire) mask |= 16;
     if (extra) mask |= 32;
     if (start) mask |= 64;

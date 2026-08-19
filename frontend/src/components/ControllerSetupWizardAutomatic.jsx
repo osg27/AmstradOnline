@@ -31,6 +31,18 @@ export default function ControllerSetupWizardAutomatic({
   const successTimerRef = useRef(null);
   const generationRef = useRef(0);
   const controllerIdRef = useRef(null);
+  const activeGamepadIndexRef = useRef(gamepadIndex);
+
+  function getActiveGamepad() {
+    const pads = navigator.getGamepads?.() || [];
+    if (activeGamepadIndexRef.current !== null && activeGamepadIndexRef.current !== undefined) {
+      const selected = pads[activeGamepadIndexRef.current];
+      if (selected) return selected;
+    }
+    const firstConnected = Array.from(pads).find(Boolean) || null;
+    if (firstConnected) activeGamepadIndexRef.current = firstConnected.index;
+    return firstConnected;
+  }
 
   function stopCapture() {
     generationRef.current += 1;
@@ -58,7 +70,7 @@ export default function ControllerSetupWizardAutomatic({
   function beginCapture(nextStepIndex) {
     stopCapture();
     const generation = generationRef.current;
-    const initialPad = navigator.getGamepads?.()[gamepadIndex];
+    const initialPad = getActiveGamepad();
     if (!initialPad) {
       setError('Controller disconnected');
       return;
@@ -74,7 +86,7 @@ export default function ControllerSetupWizardAutomatic({
 
     const waitUntilReleased = (input) => {
       if (generation !== generationRef.current) return;
-      const pad = navigator.getGamepads?.()[gamepadIndex];
+      const pad = getActiveGamepad();
       if (!pad) {
         setError('Controller disconnected');
         stopCapture();
@@ -108,7 +120,7 @@ export default function ControllerSetupWizardAutomatic({
 
     const poll = (now) => {
       if (generation !== generationRef.current) return;
-      const pad = navigator.getGamepads?.()[gamepadIndex];
+      const pad = getActiveGamepad();
       if (!pad) {
         setError('Controller disconnected');
         stopCapture();
@@ -148,7 +160,8 @@ export default function ControllerSetupWizardAutomatic({
       stopCapture();
       return undefined;
     }
-    const info = getGamepadNameAndId(gamepadIndex);
+    const detectedPad = getActiveGamepad();
+    const info = getGamepadNameAndId(detectedPad?.index);
     controllerIdRef.current = info.id;
     setControllerInfo(info);
     setControllerFamily(detectControllerFamily(info.id));

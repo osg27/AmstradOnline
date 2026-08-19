@@ -169,6 +169,18 @@ describe('apply controller mapping', () => {
     expect(result).toBe(expected);
   });
 
+  it('allows a saved button mapping to omit directions', () => {
+    const pad = createMockGamepad({ 0: true });
+    const mapping = {
+      button1: { type: 'button', index: 0 },
+    };
+
+    const result = applyCustomMapping(pad, mapping);
+
+    expect(result).toBe(getMaskBitValue('button1'));
+    expect(result & 0b1111).toBe(0);
+  });
+
   it('getMaskBitValue returns correct values', () => {
     expect(getMaskBitValue('up')).toBe(1);
     expect(getMaskBitValue('down')).toBe(2);
