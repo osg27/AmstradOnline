@@ -83,7 +83,6 @@
       let pendingKickstart = null;
       let pendingKickstarts = [];
       let started = false;
-      let startupFailed = false;
       let runtimeModule = null;
       let getDiskCount = null;
       let getCurrentDisk = null;
@@ -355,7 +354,7 @@
       }
 
       async function startEmulator() {
-        if (started || startupFailed) return;
+        if (started) return;
         if (!pendingGame) {
           setStatus("Choose an Amiga file first");
           return;
@@ -407,7 +406,6 @@
           }, window.location.origin);
         } catch (error) {
           started = false;
-          startupFailed = true;
           console.error(error);
           setStatus(`PUAE failed to start: ${error.message}`);
           window.parent.postMessage({
@@ -536,7 +534,7 @@
             }))
             .filter((entry) => entry.fileName && entry.bytes.length);
           setStatus(`Kickstart ready: ${pendingKickstart.fileName}`);
-          if (pendingGame && !started && !startupFailed) startEmulator();
+          if (pendingGame && !started) startEmulator();
         }
 
         if (data.type === "amiga_aga_select_disk" || data.type === "amiga_select_disk") selectDisk(data.index);
