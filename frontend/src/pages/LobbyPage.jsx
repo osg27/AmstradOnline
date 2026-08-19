@@ -647,18 +647,22 @@ export default function LobbyPage() {
     setOpeningRecentRom(romKey);
     try {
       const games = await getLocalLibraryGames().catch(() => []);
-      const matchingGame = games.find((game) => (
-        (entrySystem === 'amiga'
-          ? game.system === 'amiga' || game.system === 'amiga_aga'
-          : game.system === 'arcade')
-        && [game.romKey, game.parentRomKey, game.fileName, game.title]
-          .filter(Boolean)
-          .some((value) => {
-            const normalised = String(value).replace(/\.(zip|7z)$/i, '').toLowerCase();
-            return entrySystem === 'amiga'
-              ? normalised.includes(romKey.replace(/-/g, '')) || normalised.replace(/[^a-z0-9]/g, '').includes(romKey.replace(/[^a-z0-9]/g, ''))
-              : normalised === romKey;
-          })
+      const systemGames = games.filter((game) => entrySystem === 'amiga'
+        ? game.system === 'amiga' || game.system === 'amiga_aga'
+        : game.system === 'arcade');
+      const valueMatches = (value) => {
+        const normalised = String(value || '').replace(/\.(zip|7z)$/i, '').toLowerCase();
+        return entrySystem === 'amiga'
+          ? normalised.includes(romKey.replace(/-/g, '')) || normalised.replace(/[^a-z0-9]/g, '').includes(romKey.replace(/[^a-z0-9]/g, ''))
+          : normalised === romKey;
+      };
+      // An exact ROM archive must win over a parent/clone fallback. Without
+      // this two-pass lookup, stale or broad parent metadata can launch a
+      // different game from the recent-score link.
+      const matchingGame = systemGames.find((game) => (
+        [game.romKey, game.fileName].some(valueMatches)
+      )) || systemGames.find((game) => (
+        [game.parentRomKey, game.title].some(valueMatches)
       ));
       const canUseMatchedGame = matchingGame?.handle || matchingGame?.runtimeFileKey;
       const pendingGame = canUseMatchedGame ? matchingGame : {
