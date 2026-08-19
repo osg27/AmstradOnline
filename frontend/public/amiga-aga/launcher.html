@@ -400,10 +400,18 @@
           gameElement.focus();
           statusElement.style.display = "none";
           postDiskStatus();
+          window.parent.postMessage({
+            type: "amiga_aga_runtime_status",
+            message: `PUAE started with ${pendingKickstarts.length || 1} Kickstart file${(pendingKickstarts.length || 1) === 1 ? "" : "s"}`,
+          }, window.location.origin);
         } catch (error) {
           started = false;
           console.error(error);
           setStatus(`PUAE failed to start: ${error.message}`);
+          window.parent.postMessage({
+            type: "amiga_aga_runtime_status",
+            error: `PUAE failed to start: ${error.message}`,
+          }, window.location.origin);
         }
       }
 
