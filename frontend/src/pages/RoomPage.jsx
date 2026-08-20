@@ -1509,9 +1509,9 @@ export default function RoomPage() {
 
     let mask = customMask ?? 0;
     const deadzone = 0.45;
-    // Some arcade sticks claim a standard mapping while still exposing their
-    // lever through a DirectInput POV axis. Always merge the axis fallback.
-    const fallback = nonStandardGamepadDirections(pad, deadzone);
+    const fallback = pad.mapping === 'standard'
+      ? { left: false, right: false, up: false, down: false }
+      : nonStandardGamepadDirections(pad, deadzone);
 
     const left = pad.buttons[14]?.pressed || (pad.axes[0] ?? 0) < -deadzone || fallback.left;
     const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone || fallback.right;
