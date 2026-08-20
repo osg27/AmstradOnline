@@ -36,8 +36,9 @@ import { supportsControllerMapping } from '../utils/defaultControllerMappings';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
-const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart';
-const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
+// Fresh slots prevent ROMs selected during the abandoned folder experiment being restored.
+const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart-clean';
+const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart-clean';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 const SATURN_BIOS_KEY = 'saturn-bios';
 const ATARI_ST_TOS_KEY = 'atari-st-tos';
