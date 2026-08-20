@@ -36,13 +36,8 @@ import { supportsControllerMapping } from '../utils/defaultControllerMappings';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
-// Versioned keys deliberately ignore ROMs saved while multi-ROM folder support was being tested.
-const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart-v2';
-const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart-v2';
-const AMIGA_KICKSTART_SHA1 = {
-  A500: '891e9a547772fe0c6c19b610baf8bc4ea7fcb785',
-  A1200: 'e21545723fe8374e91342617604f1b3d703094f1',
-};
+const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart';
+const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart';
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 const SATURN_BIOS_KEY = 'saturn-bios';
 const ATARI_ST_TOS_KEY = 'atari-st-tos';
@@ -732,29 +727,6 @@ async function loadStoredKickstart(key) {
   } finally {
     db.close();
   }
-}
-
-async function isCorrectAmigaKickstart(model, fileName, bytes) {
-  const expectedSize = model === 'A1200' ? 512 * 1024 : 256 * 1024;
-  if (bytes.length !== expectedSize) return false;
-
-  const lowerName = String(fileName || '').toLowerCase();
-  const explicitlyWrong = model === 'A1200'
-    ? /(?:a500|a600|a1000|a3000|a4000|1[._ -]?2|1[._ -]?3|34[._ -]?(?:005|5)|40[._ -]?70)/i.test(lowerName)
-    : /(?:a1200|a3000|a4000|1[._ -]?2|3[._ -]?1|40[._ -]?(?:63|68|70))/i.test(lowerName);
-  if (explicitlyWrong) return false;
-
-  const explicitlyCorrect = model === 'A1200'
-    ? /(?:a1200|3[._ -]?1|40[._ -]?0?68)/i.test(lowerName)
-    : /(?:a500|1[._ -]?3|34[._ -]?(?:0?05|5))/i.test(lowerName);
-  if (explicitlyCorrect) return true;
-
-  if (!window.crypto?.subtle) return false;
-  const digest = await window.crypto.subtle.digest('SHA-1', bytes);
-  const sha1 = [...new Uint8Array(digest)]
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('');
-  return sha1 === AMIGA_KICKSTART_SHA1[model];
 }
 
 export default function RoomPage() {
@@ -6827,9 +6799,6 @@ export default function RoomPage() {
       const expectedKickstartSize = amigaRequiredModel === 'A1200' ? 512 * 1024 : amigaRequiredModel === 'A500' ? 256 * 1024 : 0;
       if (expectedKickstartSize && bytes.length !== expectedKickstartSize) {
         throw new Error(`${amigaRequiredModel} needs a ${expectedKickstartSize / 1024} KB Kickstart ROM (${amigaRequiredModel === 'A1200' ? '3.1 / 40.68' : '1.3 / 34.5'}). The selected file is ${Math.round(bytes.length / 1024)} KB.`);
-      }
-      if (amigaRequiredModel && !await isCorrectAmigaKickstart(amigaRequiredModel, file.name, bytes)) {
-        throw new Error(`${file.name} is not the required ${amigaRequiredModel === 'A1200' ? 'A1200 Kickstart 3.1 revision 40.068' : 'A500 Kickstart 1.3 revision 34.005'} ROM.`);
       }
       if (kickstartStorageKey) {
         savedSystemMediaRef.current.set(kickstartStorageKey, { fileName: file.name, bytes });
