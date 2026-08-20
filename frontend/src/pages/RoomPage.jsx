@@ -740,13 +740,13 @@ async function isCorrectAmigaKickstart(model, fileName, bytes) {
 
   const lowerName = String(fileName || '').toLowerCase();
   const explicitlyWrong = model === 'A1200'
-    ? /(?:a500|a600|a1000|a3000|a4000|(?:^|\D)1[._ -]?[23](?:\D|$)|(?:^|\D)34[._ -]?(?:005|5)(?:\D|$)|(?:^|\D)40[._ -]?70(?:\D|$))/i.test(lowerName)
-    : /(?:a1200|a3000|a4000|(?:^|\D)1[._ -]?2(?:\D|$)|(?:^|\D)3[._ -]?1(?:\D|$)|(?:^|\D)40[._ -]?(?:63|68|70)(?:\D|$))/i.test(lowerName);
+    ? /(?:a500|a600|a1000|a3000|a4000|1[._ -]?2|1[._ -]?3|34[._ -]?(?:005|5)|40[._ -]?70)/i.test(lowerName)
+    : /(?:a1200|a3000|a4000|1[._ -]?2|3[._ -]?1|40[._ -]?(?:63|68|70))/i.test(lowerName);
   if (explicitlyWrong) return false;
 
   const explicitlyCorrect = model === 'A1200'
-    ? /(?:a1200|(?:^|\D)3[._ -]?1(?:\D|$)|(?:^|\D)40[._ -]?0?68(?:\D|$))/i.test(lowerName)
-    : /(?:a500|(?:^|\D)1[._ -]?3(?:\D|$)|(?:^|\D)34[._ -]?(?:0?05|5)(?:\D|$))/i.test(lowerName);
+    ? /(?:a1200|3[._ -]?1|40[._ -]?0?68)/i.test(lowerName)
+    : /(?:a500|1[._ -]?3|34[._ -]?(?:0?05|5))/i.test(lowerName);
   if (explicitlyCorrect) return true;
 
   if (!window.crypto?.subtle) return false;
