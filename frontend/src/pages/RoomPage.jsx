@@ -6044,11 +6044,19 @@ export default function RoomPage() {
         );
       }
       const bytes = loadedFiles[0].bytes;
+      const isWhdLoadGame = Boolean(
+        loadedFiles[0]?.whdLoadArchive
+        || loadedFiles.some((loadedFile) => /\.(lha|slave)$/i.test(loadedFile.fileName)),
+      );
+      const isExplicitAgaWhdLoad = isWhdLoadGame && loadedFiles.some((loadedFile) => (
+        /(?:^|[_\s(.-])(?:aga|cd32)(?:[_\s).-]|$)/i.test(
+          `${loadedFile.fileName || ''} ${loadedFile.archiveEntryName || ''}`,
+        )
+      ));
       const amigaModel = isPuaeAmiga
-        ? (loadedFiles[0]?.whdLoadArchive
-          || loadedFiles.some((loadedFile) => /\.(lha|slave)$/i.test(loadedFile.fileName))
-          ? 'A1200'
-          : isAmigaAga ? 'A1200' : 'A500')
+        ? isWhdLoadGame
+          ? isExplicitAgaWhdLoad ? 'A1200' : 'A500'
+          : isAmigaAga ? 'A1200' : 'A500'
         : '';
       if (amigaModel && amigaModel !== amigaRequiredModel) {
         setAmigaRequiredModel(amigaModel);
