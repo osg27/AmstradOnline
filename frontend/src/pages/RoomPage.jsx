@@ -729,33 +729,6 @@ async function loadStoredKickstart(key) {
   }
 }
 
-async function deleteStoredKickstart(key) {
-  const db = await openKickstartDb();
-
-  try {
-    const transaction = db.transaction(KICKSTART_STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(KICKSTART_STORE_NAME);
-    await requestToPromise(store.delete(key));
-  } finally {
-    db.close();
-  }
-}
-
-function storedKickstartMatchesSlot(key, storedKickstart) {
-  if (!storedKickstart?.bytes?.length) return false;
-
-  const fileName = String(storedKickstart.fileName || '');
-  if (key === AMIGA_KICKSTART_KEY) {
-    return storedKickstart.bytes.length === 256 * 1024
-      && !/(?:a1200|a3000|a4000|40[._-]?(?:63|68|70))/i.test(fileName);
-  }
-  if (key === AMIGA_AGA_KICKSTART_KEY) {
-    return storedKickstart.bytes.length === 512 * 1024
-      && !/(?:a3000|a4000|40[._-]?70)/i.test(fileName);
-  }
-  return true;
-}
-
 export default function RoomPage() {
   const navigate = useNavigate();
   const { roomCode } = useParams();
@@ -1861,12 +1834,7 @@ export default function RoomPage() {
       frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
     });
 
-    let storedKickstart = await loadStoredKickstart(kickstartStorageKey);
-    if (storedKickstart && !storedKickstartMatchesSlot(kickstartStorageKey, storedKickstart)) {
-      await deleteStoredKickstart(kickstartStorageKey);
-      savedSystemMediaRef.current.delete(kickstartStorageKey);
-      storedKickstart = null;
-    }
+    const storedKickstart = await loadStoredKickstart(kickstartStorageKey);
     if (storedKickstart) {
       frame.contentWindow?.postMessage(
         buildAmigaKickstartPayload(roomSystem, storedKickstart.fileName, storedKickstart.bytes),
@@ -2208,17 +2176,6 @@ export default function RoomPage() {
           storedKickstart = await loadStoredKickstart(kickstartStorageKey);
           if (storedKickstart) {
             savedSystemMediaRef.current.set(kickstartStorageKey, storedKickstart);
-          }
-        }
-
-        if (storedKickstart && !storedKickstartMatchesSlot(kickstartStorageKey, storedKickstart)) {
-          savedSystemMediaRef.current.delete(kickstartStorageKey);
-          await deleteStoredKickstart(kickstartStorageKey);
-          storedKickstart = null;
-          if (kickstartStorageKey === AMIGA_KICKSTART_KEY) {
-            setKickstartRomName('');
-            setStatus('This A500 game needs your 256 KB Kickstart 1.3 ROM');
-            addLog('Removed an incompatible saved ROM from the A500 Kickstart slot');
           }
         }
 
@@ -6842,9 +6799,6 @@ export default function RoomPage() {
       const expectedKickstartSize = amigaRequiredModel === 'A1200' ? 512 * 1024 : amigaRequiredModel === 'A500' ? 256 * 1024 : 0;
       if (expectedKickstartSize && bytes.length !== expectedKickstartSize) {
         throw new Error(`${amigaRequiredModel} needs a ${expectedKickstartSize / 1024} KB Kickstart ROM (${amigaRequiredModel === 'A1200' ? '3.1 / 40.68' : '1.3 / 34.5'}). The selected file is ${Math.round(bytes.length / 1024)} KB.`);
-      }
-      if (!storedKickstartMatchesSlot(kickstartStorageKey, { fileName: file.name, bytes })) {
-        throw new Error(`${file.name} is not the correct ROM for ${amigaRequiredModel}. Choose ${amigaRequiredModel === 'A1200' ? 'the A1200 Kickstart 3.1 / 40.68 ROM' : 'the 256 KB A500 Kickstart 1.3 / 34.5 ROM'}.`);
       }
       if (kickstartStorageKey) {
         savedSystemMediaRef.current.set(kickstartStorageKey, { fileName: file.name, bytes });
