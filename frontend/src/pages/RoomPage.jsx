@@ -1008,7 +1008,7 @@ export default function RoomPage() {
   }, [atari8Config]);
 
   const emulatorSrc = isPuaeAmiga
-    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-20-1`
+    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-20-2`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
     : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-07-18-1` : isNes ? '/nes/launcher.html?v=2026-07-07-1' : isSnes ? '/snes/launcher.html?v=2026-08-09-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-08-05-6' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-07-07-1' : '/emulator/index.html?v=2026-06-01-1';
@@ -6801,6 +6801,15 @@ export default function RoomPage() {
 
       const arrayBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
+      if (amigaRequiredModel === 'A1200' && bytes.length === 256 * 1024) {
+        savedSystemMediaRef.current.set(AMIGA_KICKSTART_KEY, { fileName: file.name, bytes });
+        await saveStoredKickstart(AMIGA_KICKSTART_KEY, file.name, bytes);
+        addLog(`Saved A500 Kickstart 1.3 for WHDLoad: ${file.name}`);
+        setStatus('A500 Kickstart 1.3 added for WHDLoad; restarting with A1200 Kickstart 3.1');
+        event.target.value = '';
+        await reloadAmigaAgaFrame();
+        return;
+      }
       const expectedKickstartSize = amigaRequiredModel === 'A1200' ? 512 * 1024 : amigaRequiredModel === 'A500' ? 256 * 1024 : 0;
       if (expectedKickstartSize && bytes.length !== expectedKickstartSize) {
         throw new Error(`${amigaRequiredModel} needs a ${expectedKickstartSize / 1024} KB Kickstart ROM (${amigaRequiredModel === 'A1200' ? '3.1 / 40.68' : '1.3 / 34.5'}). The selected file is ${Math.round(bytes.length / 1024)} KB.`);

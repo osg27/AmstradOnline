@@ -159,6 +159,7 @@
           writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes);
           pendingSupportKickstarts.forEach((entry) => {
             writeRuntimeFile(`${dir}/${entry.fileName}`, entry.bytes);
+            writeRuntimeFile(`${dir}/${entry.fileName.toLowerCase()}`, entry.bytes);
           });
         });
 
