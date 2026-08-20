@@ -4150,6 +4150,41 @@ button.recent-score-game:hover:not(:disabled) {
   text-transform: uppercase;
 }
 
+.compact-media-select,
+.amiga-room-options {
+  border: 1px solid rgba(134, 230, 189, 0.22);
+  border-radius: 8px;
+  background: rgba(9, 17, 14, 0.72);
+}
+
+.compact-media-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.compact-media-select select {
+  min-width: 92px;
+}
+
+.amiga-room-options {
+  padding: 8px 10px;
+}
+
+.amiga-room-options summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: #86e6bd;
+}
+
+.amiga-room-options > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .amiga-score-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);

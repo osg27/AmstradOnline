@@ -210,8 +210,10 @@
       }
 
       function postDiskStatus(message = "") {
-        const count = getDiskCount?.() || pendingDisks.length || 0;
-        const current = count ? (getCurrentDisk?.() || 0) : 0;
+        // PUAE exposes a fixed bank of internal drive slots. Only report the
+        // actual game media or the room renders a row of phantom disk buttons.
+        const count = pendingWhdLoadFiles.length ? 0 : pendingDisks.length;
+        const current = count ? Math.min(count - 1, getCurrentDisk?.() || 0) : 0;
         window.parent.postMessage({
           type: "amiga_aga_disk_status",
           count,
@@ -363,6 +365,19 @@
           setStatus(`Waiting for your ${activeProfile.model} Kickstart ROM...`);
           return;
         }
+        if (
+          pendingWhdLoadFiles.length
+          && activeProfile.model === "A1200"
+          && !pendingSupportKickstarts.some((entry) => entry.fileName.toLowerCase() === "kick34005.a500")
+        ) {
+          setStatus("WHDLoad also needs your A500 Kickstart 1.3 ROM");
+          window.parent.postMessage({
+            type: "amiga_aga_requirement_status",
+            requirement: "a500-whdload",
+            ready: false,
+          }, window.location.origin);
+          return;
+        }
         if (typeof window.EJS_Runtime !== "function") {
           setStatus("Dedicated PUAE runtime did not load");
           return;
@@ -399,6 +414,11 @@
           runtimeModule.resumeMainLoop?.();
           gameElement.focus();
           statusElement.style.display = "none";
+          window.parent.postMessage({
+            type: "amiga_aga_requirement_status",
+            requirement: "ready",
+            ready: true,
+          }, window.location.origin);
           postDiskStatus();
         } catch (error) {
           started = false;

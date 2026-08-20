@@ -776,6 +776,7 @@ export default function RoomPage() {
   const [arcadeRomScanning, setArcadeRomScanning] = useState(false);
   const [loadedAgaDiskCount, setLoadedAgaDiskCount] = useState(0);
   const [currentAgaDiskIndex, setCurrentAgaDiskIndex] = useState(0);
+  const [whdLoadSupportReady, setWhdLoadSupportReady] = useState(false);
   const [localReleaseFiles, setLocalReleaseFiles] = useState([]);
   const [currentLocalReleaseIndex, setCurrentLocalReleaseIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
@@ -1508,9 +1509,9 @@ export default function RoomPage() {
 
     let mask = customMask ?? 0;
     const deadzone = 0.45;
-    const fallback = pad.mapping === 'standard'
-      ? { left: false, right: false, up: false, down: false }
-      : nonStandardGamepadDirections(pad, deadzone);
+    // Some arcade sticks claim a standard mapping while still exposing their
+    // lever through a DirectInput POV axis. Always merge the axis fallback.
+    const fallback = nonStandardGamepadDirections(pad, deadzone);
 
     const left = pad.buttons[14]?.pressed || (pad.axes[0] ?? 0) < -deadzone || fallback.left;
     const right = pad.buttons[15]?.pressed || (pad.axes[0] ?? 0) > deadzone || fallback.right;
@@ -1854,8 +1855,18 @@ export default function RoomPage() {
 
     const emulatorCanvas = await waitForEmulatorCanvas(frame);
     startMirrorLoop(emulatorCanvas);
+
+    const previousAudioTrack = hostAudioStreamRef.current?.getAudioTracks?.()[0] || null;
+    const rawAudioStream = await waitForHostAudioStream(frame);
+    const nextAudioStream = buildHostAudioStream(rawAudioStream);
+    const nextAudioTrack = nextAudioStream?.getAudioTracks?.()[0] || null;
+    if (!isSoloMode && previousAudioTrack && nextAudioTrack) {
+      const audioSender = pcRef.current?.getSenders?.().find((sender) => sender.track === previousAudioTrack);
+      await audioSender?.replaceTrack(nextAudioTrack);
+    }
+    hostAudioStreamRef.current = nextAudioStream || null;
     return frame;
-  }, [emulatorSrc, isPuaeAmiga, kickstartStorageKey, roomSystem]);
+  }, [emulatorSrc, isPuaeAmiga, isSoloMode, kickstartStorageKey, roomSystem]);
 
   const reloadPcEngineFrame = useCallback(async () => {
     const frame = emulatorFrameRef.current;
@@ -2158,13 +2169,20 @@ export default function RoomPage() {
       if (event.source !== emulatorFrameRef.current?.contentWindow) return;
 
       const message = event.data || {};
-      if (message.type !== 'amiga_aga_disk_status') return;
-
-      setLoadedAgaDiskCount(Number(message.count) || 0);
-      setCurrentAgaDiskIndex(Number(message.current) || 0);
-      if (message.message) {
-        addLog(message.message);
-        setStatus(message.message);
+      if (message.type === 'amiga_aga_requirement_status') {
+        setWhdLoadSupportReady(Boolean(message.ready));
+        if (message.requirement === 'a500-whdload') {
+          setStatus('WHDLoad needs your A500 Kickstart 1.3 ROM as well as the A1200 3.1 boot ROM');
+        }
+        return;
+      }
+      if (message.type === 'amiga_aga_disk_status') {
+        setLoadedAgaDiskCount(Number(message.count) || 0);
+        setCurrentAgaDiskIndex(Number(message.current) || 0);
+        if (message.message) {
+          addLog(message.message);
+          setStatus(message.message);
+        }
       }
     }
 
@@ -2211,6 +2229,9 @@ export default function RoomPage() {
         const amigaSupportKickstarts = kickstartStorageKey === AMIGA_AGA_KICKSTART_KEY
           ? await loadA500WHDLoadKickstart()
           : [];
+        if (kickstartStorageKey === AMIGA_AGA_KICKSTART_KEY) {
+          setWhdLoadSupportReady(amigaSupportKickstarts.length > 0);
+        }
         const payload = isX68000
           ? buildX68000FirmwarePayload(storedKickstart.fileName, storedKickstart.bytes)
           : isDiscConsole
@@ -6063,6 +6084,15 @@ export default function RoomPage() {
           ? 'A1200'
           : isAmigaAga ? 'A1200' : 'A500')
         : '';
+      if (isPuaeAmiga && !isSwapDisk) {
+        setLoadedAgaDiskCount(0);
+        setCurrentAgaDiskIndex(0);
+        if (amigaModel === 'A1200') {
+          setWhdLoadSupportReady(Boolean(await loadStoredKickstart(AMIGA_KICKSTART_KEY)));
+        } else {
+          setWhdLoadSupportReady(true);
+        }
+      }
       if (amigaModel && amigaModel !== amigaRequiredModel) {
         setAmigaRequiredModel(amigaModel);
         setKickstartRomName('');
@@ -6804,6 +6834,7 @@ export default function RoomPage() {
       if (amigaRequiredModel === 'A1200' && bytes.length === 256 * 1024) {
         savedSystemMediaRef.current.set(AMIGA_KICKSTART_KEY, { fileName: file.name, bytes });
         await saveStoredKickstart(AMIGA_KICKSTART_KEY, file.name, bytes);
+        setWhdLoadSupportReady(true);
         addLog(`Saved A500 Kickstart 1.3 for WHDLoad: ${file.name}`);
         setStatus('A500 Kickstart 1.3 added for WHDLoad; restarting with A1200 Kickstart 3.1');
         event.target.value = '';
@@ -7530,21 +7561,39 @@ export default function RoomPage() {
 
                   {isPuaeAmiga && loadedAgaDiskCount > 0
                     && localReleaseFiles.length === 0
-                    ? Array.from({ length: loadedAgaDiskCount }, (_, index) => (
-                      <button
-                        key={`aga-disk-${index + 1}`}
-                        type="button"
-                        className={currentAgaDiskIndex === index ? 'active' : 'secondary'}
-                        onClick={() => selectAgaDisk(index)}
-                        disabled={!hostStarted}
-                      >
-                        Disk {index + 1}
-                      </button>
-                    ))
+                    ? loadedAgaDiskCount > 1 ? (
+                      <label className="compact-media-select">
+                        <span>Disk</span>
+                        <select
+                          value={currentAgaDiskIndex}
+                          onChange={(event) => selectAgaDisk(Number(event.target.value))}
+                          disabled={!hostStarted}
+                        >
+                          {Array.from({ length: loadedAgaDiskCount }, (_, index) => (
+                            <option key={`aga-disk-${index + 1}`} value={index}>Disk {index + 1}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null
                     : null}
 
                   {localReleaseFiles.length > 1
-                    ? localReleaseFiles.map((file, index) => (
+                    ? isPuaeAmiga ? (
+                      <label className="compact-media-select">
+                        <span>Disk</span>
+                        <select
+                          value={currentLocalReleaseIndex}
+                          onChange={(event) => selectLocalReleaseDisk(Number(event.target.value))}
+                          disabled={!hostStarted}
+                        >
+                          {localReleaseFiles.map((file, index) => (
+                            <option key={`local-release-disk-${index + 1}-${file.name}`} value={index}>
+                              Disk {index + 1}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : localReleaseFiles.map((file, index) => (
                       <button
                         key={`local-release-disk-${index + 1}-${file.name}`}
                         type="button"
@@ -7558,13 +7607,13 @@ export default function RoomPage() {
                     ))
                     : null}
 
-                  {isMouseComputer ? (
+                  {isMouseComputer && !isPuaeAmiga ? (
                     <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>
                       Left click
                     </button>
                   ) : null}
 
-                  {isMouseComputer ? (
+                  {isMouseComputer && !isPuaeAmiga ? (
                     <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>
                       Right click
                     </button>
@@ -7584,7 +7633,7 @@ export default function RoomPage() {
                     </label>
                   ) : null}
 
-                  {canControlLocalEmulator ? (
+                  {canControlLocalEmulator && !isPuaeAmiga ? (
                     <button
                       type="button"
                       className={emulatorPaused ? 'active' : 'secondary'}
@@ -7595,9 +7644,11 @@ export default function RoomPage() {
                     </button>
                   ) : null}
 
-                  <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>
-                    Reset emulator
-                  </button>
+                  {!isPuaeAmiga ? (
+                    <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>
+                      Reset emulator
+                    </button>
+                  ) : null}
 
                   {isC64 ? (
                     <button type="button" className="secondary" onClick={swapC64JoystickPorts} disabled={!hostStarted}>
@@ -7611,18 +7662,38 @@ export default function RoomPage() {
                     </button>
                   ) : null}
 
-                  {isAmigaFamily ? (
+                  {isAmigaFamily && !isPuaeAmiga ? (
                     <button type="button" className="secondary" onClick={openKickstartPicker} disabled={(isPuaeAmiga && !amigaRequiredModel) || (hostStarted && !isPuaeAmiga)}>
                       {kickstartRomName ? 'Change Kickstart ROM' : isPuaeAmiga && !amigaRequiredModel ? 'Choose game before Kickstart' : `Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
                     </button>
                   ) : null}
 
-                  {isPuaeAmiga && hasVipAccess ? (
-                    <button type="button" className="secondary" onClick={loadVipKickstart} disabled={vipKickstartBusy}>
-                      {vipKickstartBusy
-                        ? 'Downloading Kickstart...'
-                        : `Use VIP ${isAmigaAga ? 'A1200 3.1' : 'A500 1.3'} ROM`}
+                  {isPuaeAmiga && amigaRequiredModel === 'A1200' && !whdLoadSupportReady ? (
+                    <button type="button" onClick={openKickstartPicker}>
+                      Add WHDLoad Kickstart 1.3
                     </button>
+                  ) : null}
+
+                  {isPuaeAmiga ? (
+                    <details className="amiga-room-options">
+                      <summary>Amiga options</summary>
+                      <div>
+                        <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>Left click</button>
+                        <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>Right click</button>
+                        <button type="button" className={emulatorPaused ? 'active' : 'secondary'} onClick={toggleEmulatorPause} disabled={!hostStarted}>
+                          {emulatorPaused ? 'Resume' : 'Pause'}
+                        </button>
+                        <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>Reset</button>
+                        <button type="button" className="secondary" onClick={openKickstartPicker} disabled={!amigaRequiredModel}>
+                          Change Kickstart ROM
+                        </button>
+                        {hasVipAccess ? (
+                          <button type="button" className="secondary" onClick={loadVipKickstart} disabled={vipKickstartBusy}>
+                            {vipKickstartBusy ? 'Downloading...' : `Use saved ${amigaRequiredModel === 'A1200' ? 'A1200 3.1' : 'A500 1.3'} ROM`}
+                          </button>
+                        ) : null}
+                      </div>
+                    </details>
                   ) : null}
 
                   {isDiscConsole ? (
