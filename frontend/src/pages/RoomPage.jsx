@@ -4304,9 +4304,38 @@ export default function RoomPage() {
     if (!hostStartedRef.current) throw new Error('Start the local emulator before recording.');
     const iframe = emulatorFrameRef.current;
     if (!iframe) throw new Error('The emulator frame is not available.');
-    const canvas = await waitForEmulatorCanvas(iframe);
-    if (typeof canvas.captureStream !== 'function') throw new Error('Canvas recording is not supported by this browser.');
-    const videoStream = canvas.captureStream(recordingAdapter.fps);
+    const sourceCanvas = await waitForEmulatorCanvas(iframe);
+    const recordingCanvas = document.createElement('canvas');
+    recordingCanvas.width = sourceCanvas.width || sourceCanvas.clientWidth;
+    recordingCanvas.height = sourceCanvas.height || sourceCanvas.clientHeight;
+    const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
+    if (!recordingContext || typeof recordingCanvas.captureStream !== 'function') {
+      throw new Error('Canvas recording is not supported by this browser.');
+    }
+    recordingContext.imageSmoothingEnabled = false;
+    const videoStream = recordingCanvas.captureStream(0);
+    const videoTrack = videoStream.getVideoTracks?.()[0];
+    let recordingFrameId = 0;
+    let recordingKeepaliveTimer = 0;
+    let lastRecordedFrameAt = 0;
+    let recordingStopped = false;
+    const frameInterval = 1000 / recordingAdapter.fps;
+    const renderRecordingFrame = (timestamp = performance.now()) => {
+      if (recordingStopped) return;
+      if (timestamp - lastRecordedFrameAt >= frameInterval) {
+        recordingContext.drawImage(sourceCanvas, 0, 0, recordingCanvas.width, recordingCanvas.height);
+        videoTrack?.requestFrame?.();
+        lastRecordedFrameAt = timestamp;
+      }
+    };
+    const drawRecordingFrame = (timestamp) => {
+      renderRecordingFrame(timestamp);
+      recordingFrameId = requestAnimationFrame(drawRecordingFrame);
+    };
+    recordingFrameId = requestAnimationFrame(drawRecordingFrame);
+    recordingKeepaliveTimer = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') renderRecordingFrame(performance.now());
+    }, 250);
     const audioStartedAt = Date.now();
     let audioStream = hostAudioStreamRef.current;
     if (!audioStream?.getAudioTracks?.().some((track) => track.readyState !== 'ended')) {
@@ -4324,7 +4353,12 @@ export default function RoomPage() {
     return {
       videoStream,
       audioStream,
-      cleanup: () => videoStream.getTracks?.().forEach((track) => track.stop()),
+      cleanup: () => {
+        recordingStopped = true;
+        cancelAnimationFrame(recordingFrameId);
+        window.clearInterval(recordingKeepaliveTimer);
+        videoStream.getTracks?.().forEach((track) => track.stop());
+      },
     };
   }, [recordingAdapter]);
 

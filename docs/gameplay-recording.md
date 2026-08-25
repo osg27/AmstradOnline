@@ -4,7 +4,7 @@
 
 `GameRecorder` is the shared browser-native recording state machine. It owns countdown and wall-clock timers, MIME selection, `MediaRecorder`, one-second chunks, Blob creation, filenames, download URLs, and cleanup. `useGameRecorder` provides its state to the compact React control.
 
-`emulatorRecordingAdapters.js` is the only system-to-capture mapping. Each adapter supplies a display name, native-oriented frame rate, and the runtime's audio-stream getter. RoomPage supplies the same-origin emulator canvas and creates its `captureStream()` only when recording begins. It combines that video track with the adapter's game-audio track; it never requests a microphone, camera, display, or browser-tab stream.
+`emulatorRecordingAdapters.js` is the only system-to-capture mapping. Each adapter supplies a display name, native-oriented frame rate, and the runtime's audio-stream getter. RoomPage copies the same-origin emulator canvas into a dedicated native-size recording canvas and explicitly requests each captured frame. It combines that video with cloned recording-only audio/video tracks; it never requests a microphone, camera, display, or browser-tab stream. Ending a recording stops those clones so WebM timing cannot continue with a frozen final frame while the room's long-lived audio stream remains active.
 
 Most launchers already branch game audio to a `MediaStreamDestination` for multiplayer. Atari 8-bit and Webretro Saturn load `shared/recording-audio-bridge.js` before their emulator code. The bridge preserves the normal speaker connection and adds a recording-only branch whenever a WebAudio node connects to the context destination.
 

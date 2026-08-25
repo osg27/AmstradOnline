@@ -72,6 +72,11 @@ export class GameRecorder {
     if (this.state.downloadUrl) this.URLApi?.revokeObjectURL?.(this.state.downloadUrl);
   }
 
+  stopCombinedTracks() {
+    this.combinedStream?.getTracks?.().forEach((track) => track.stop?.());
+    this.combinedStream = null;
+  }
+
   async start({ durationSeconds = 30, countdownSeconds = 3, quality = 'standard', gameTitle, system } = {}) {
     if (!this.MediaRecorderClass) {
       this.setState({ status: 'error', error: 'MediaRecorder is not supported by this browser.' });
@@ -110,7 +115,9 @@ export class GameRecorder {
     const audioTracks = source?.audioStream?.getAudioTracks?.() || [];
     if (!videoTracks.length || !audioTracks.length) throw new Error('Recording requires both emulator video and game audio.');
     this.source = source;
-    this.combinedStream = new this.MediaStreamClass([...videoTracks, ...audioTracks]);
+    const recordingVideoTracks = videoTracks.map((track) => track.clone?.() || track);
+    const recordingAudioTracks = audioTracks.map((track) => track.clone?.() || track);
+    this.combinedStream = new this.MediaStreamClass([...recordingVideoTracks, ...recordingAudioTracks]);
     const quality = RECORDING_QUALITIES[options.quality] || RECORDING_QUALITIES.standard;
     this.chunks = [];
     this.recorder = new this.MediaRecorderClass(this.combinedStream, { mimeType: options.mimeType, ...quality });
@@ -149,6 +156,7 @@ export class GameRecorder {
 
   finish() {
     this.clearTimers();
+    this.stopCombinedTracks();
     this.source?.cleanup?.();
     this.source = null;
     if (this.destroyed) return;
@@ -161,6 +169,7 @@ export class GameRecorder {
 
   fail(error) {
     this.clearTimers();
+    this.stopCombinedTracks();
     this.source?.cleanup?.();
     this.source = null;
     this.setState({ status: 'error', error: error?.message || String(error || 'Recording failed.') });
@@ -169,6 +178,7 @@ export class GameRecorder {
   reset() {
     this.clearTimers();
     if (this.recorder?.state === 'recording') this.recorder.stop();
+    this.stopCombinedTracks();
     this.source?.cleanup?.();
     this.source = null;
     this.releaseResult();
@@ -179,6 +189,7 @@ export class GameRecorder {
     this.destroyed = true;
     this.clearTimers();
     if (this.recorder?.state === 'recording') this.recorder.stop();
+    this.stopCombinedTracks();
     this.source?.cleanup?.();
     this.source = null;
     this.releaseResult();

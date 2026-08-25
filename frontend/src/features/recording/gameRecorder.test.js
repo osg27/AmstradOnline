@@ -4,6 +4,7 @@ import { getAdapterAudioStream, getEmulatorRecordingAdapter } from './emulatorRe
 
 class FakeMediaStream {
   constructor(tracks = []) { this.tracks = tracks; }
+  getTracks() { return this.tracks; }
   getVideoTracks() { return this.tracks.filter((track) => track.kind === 'video'); }
   getAudioTracks() { return this.tracks.filter((track) => track.kind === 'audio'); }
 }
@@ -16,8 +17,9 @@ class FakeMediaRecorder {
 }
 
 function makeRecorder(options = {}) {
-  const videoTrack = { kind: 'video' };
-  const audioTrack = { kind: 'audio' };
+  const makeTrack = (kind) => ({ kind, stop: vi.fn(), clone() { return makeTrack(kind); } });
+  const videoTrack = makeTrack('video');
+  const audioTrack = makeTrack('audio');
   return new GameRecorder({
     sourceFactory: vi.fn(async () => ({ videoStream: new FakeMediaStream([videoTrack]), audioStream: new FakeMediaStream([audioTrack]), cleanup: vi.fn() })),
     MediaRecorderClass: FakeMediaRecorder,
@@ -67,8 +69,11 @@ describe('GameRecorder state machine', () => {
     const recorder = makeRecorder({ now: () => Date.now() });
     await recorder.start({ durationSeconds: 30, countdownSeconds: 0, gameTitle: 'Game', system: 'NES' });
     expect(recorder.state.status).toBe('recording');
+    const recordingTracks = recorder.combinedStream.getTracks();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(recorder.state).toMatchObject({ status: 'ready', elapsedSeconds: 30, downloadUrl: 'blob:recording' });
+    expect(recorder.combinedStream).toBeNull();
+    expect(recordingTracks.every((track) => track.stop.mock.calls.length === 1)).toBe(true);
   });
 
   it('supports manual stop and cleans timers', async () => {
