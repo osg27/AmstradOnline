@@ -40,6 +40,9 @@ The implementation column describes code-path availability, not a compatibility 
 - Standard: 4 Mbps video and 160 kbps audio.
 - High: 8 Mbps video and 192 kbps audio.
 - Format preference: VP9/Opus WebM, then VP8/Opus WebM, then browser-default WebM, selected with `MediaRecorder.isTypeSupported()`.
+- Optional controller shortcut: assign a connected gamepad button in the recording settings. The browser stores it locally and starts a recording with the currently selected duration, countdown, and quality.
+
+The recorder reuses RoomPage's established game-audio stream. It does not reconnect or alter the emulator's speaker gain when recording starts; a runtime audio getter is used only if that established stream is unavailable.
 
 ## Manual verification procedure
 

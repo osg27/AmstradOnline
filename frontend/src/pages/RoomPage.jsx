@@ -4308,10 +4308,13 @@ export default function RoomPage() {
     if (typeof canvas.captureStream !== 'function') throw new Error('Canvas recording is not supported by this browser.');
     const videoStream = canvas.captureStream(recordingAdapter.fps);
     const audioStartedAt = Date.now();
-    let audioStream = getAdapterAudioStream(recordingAdapter, iframe.contentWindow);
+    let audioStream = hostAudioStreamRef.current;
+    if (!audioStream?.getAudioTracks?.().some((track) => track.readyState !== 'ended')) {
+      audioStream = getAdapterAudioStream(recordingAdapter, iframe.contentWindow);
+    }
     while ((!audioStream?.getAudioTracks?.().length) && Date.now() - audioStartedAt < 3000) {
       await new Promise((resolve) => setTimeout(resolve, 100));
-      audioStream = getAdapterAudioStream(recordingAdapter, iframe.contentWindow);
+      audioStream = hostAudioStreamRef.current || getAdapterAudioStream(recordingAdapter, iframe.contentWindow);
     }
     if (!videoStream?.getVideoTracks?.().length) throw new Error('The emulator did not provide a video track.');
     if (!audioStream?.getAudioTracks?.().length) {
