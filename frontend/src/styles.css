@@ -5229,3 +5229,73 @@ ul {
   .account-strip .player-bubble > span:not(.player-avatar) { display: none; }
   .player-bubble { padding-right: .35rem; }
 }
+.game-recorder {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.65rem 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #29415f;
+  border-radius: 8px;
+  background: #0b1421;
+  color: #e8eef6;
+}
+
+details.game-recorder {
+  display: block;
+}
+
+.game-recorder summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.game-recorder-settings {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.game-recorder fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.game-recorder legend,
+.game-recorder small,
+.game-recorder.unavailable span,
+.game-recorder.ready span {
+  color: #9db0c7;
+}
+
+.game-recorder fieldset > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.game-recorder button,
+.game-recorder .button-like {
+  min-height: 34px;
+  padding: 0.4rem 0.65rem;
+}
+
+.game-recorder.ready > div,
+.game-recorder.unavailable {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.recording-live {
+  color: #ff6666;
+  font-variant-numeric: tabular-nums;
+}
+
+.recording-live span {
+  animation: recording-pulse 1s steps(2, end) infinite;
+}
+
+@keyframes recording-pulse {
+  50% { opacity: 0.35; }
+}

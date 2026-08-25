@@ -33,6 +33,8 @@ import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardA
 import { getControllerMapping } from '../utils/controllerMappingStorage';
 import { applyCustomMapping } from '../utils/applyControllerMapping';
 import { supportsControllerMapping } from '../utils/defaultControllerMappings';
+import GameRecorderControls from '../features/recording/GameRecorderControls';
+import { getAdapterAudioStream, getEmulatorRecordingAdapter } from '../features/recording/emulatorRecordingAdapters';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
@@ -46,6 +48,7 @@ const X68000_FIRMWARE_KEY = 'x68000-firmware';
 const CONTROL_MATCH_LIMIT = 6;
 const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
 const PREFERRED_LIBRARY_VARIANTS_KEY = 'localLibraryPreferredVariants';
+const GAME_RECORDING_ENABLED = String(import.meta.env.VITE_GAME_RECORDING_ENABLED || '').toLowerCase() === 'true';
 const BUILTIN_MAME_LEADERBOARD_ROMS = new Set([
   'dkong',
 ]);
@@ -998,6 +1001,7 @@ export default function RoomPage() {
   const autoCaptureController = isArcade || isSegaConsole || isNes || isSnes || isPcEngine || isDiscConsole;
   const showFullscreenArcadeLeaderboard = isScreenFullscreen && supportsMameScoreboard && Boolean(loadedDiskName) && !remoteConnected;
   const systemLabel = isCpcParty ? 'Amstrad CPC Party' : isAmigaAga ? 'Amiga AGA' : isAmigaLink ? 'Amiga Link Play' : isAmiga ? 'Amiga' : isMasterSystem ? 'Sega Master System' : isMegaDrive ? 'Mega Drive' : isNes ? 'NES' : isSnes ? 'SNES' : isPcEngine ? 'PC Engine / TurboGrafx-16' : isX68000 ? 'Sharp X68000' : isPlayStation ? 'Sony PlayStation' : isBeetleSaturn ? 'Sega Saturn Webretro Core' : isSaturn ? 'Sega Saturn' : isC64 ? 'Commodore 64' : isAtari8 ? 'Atari 400/800 XL' : isAtariSt ? 'Atari ST' : isArcade ? 'MAME Arcade' : isSpectrum ? 'ZX Spectrum' : 'Amstrad CPC';
+  const recordingAdapter = useMemo(() => getEmulatorRecordingAdapter(roomSystem), [roomSystem]);
 
   useEffect(() => {
     setSelectedRoomSystem(roomSystem);
@@ -4295,6 +4299,32 @@ export default function RoomPage() {
     return getHostAudioStream(iframe);
   }
 
+  const createGameRecordingSource = useCallback(async () => {
+    if (!recordingAdapter.supported) throw new Error(recordingAdapter.reason);
+    if (!hostStartedRef.current) throw new Error('Start the local emulator before recording.');
+    const iframe = emulatorFrameRef.current;
+    if (!iframe) throw new Error('The emulator frame is not available.');
+    const canvas = await waitForEmulatorCanvas(iframe);
+    if (typeof canvas.captureStream !== 'function') throw new Error('Canvas recording is not supported by this browser.');
+    const videoStream = canvas.captureStream(recordingAdapter.fps);
+    const audioStartedAt = Date.now();
+    let audioStream = getAdapterAudioStream(recordingAdapter, iframe.contentWindow);
+    while ((!audioStream?.getAudioTracks?.().length) && Date.now() - audioStartedAt < 3000) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      audioStream = getAdapterAudioStream(recordingAdapter, iframe.contentWindow);
+    }
+    if (!videoStream?.getVideoTracks?.().length) throw new Error('The emulator did not provide a video track.');
+    if (!audioStream?.getAudioTracks?.().length) {
+      videoStream.getTracks?.().forEach((track) => track.stop());
+      throw new Error('The emulator did not provide a game-audio track.');
+    }
+    return {
+      videoStream,
+      audioStream,
+      cleanup: () => videoStream.getTracks?.().forEach((track) => track.stop()),
+    };
+  }, [recordingAdapter]);
+
   function getNextPartyPlayerNumber() {
     const usedPlayers = new Set(
       Array.from(partyHostPeersRef.current.values())
@@ -7251,6 +7281,19 @@ export default function RoomPage() {
                   ? autoCaptureController ? 'Click the screen to start stream playback' : 'Tap Capture to start stream'
                   : autoCaptureController ? `${controlLabel} ready` : 'Click the screen or press Capture to play'}
             </div>
+
+            {GAME_RECORDING_ENABLED && canControlLocalEmulator ? (
+              <GameRecorderControls
+                key={`${roomSystem}:${emulatorSessionKey}:${loadedDiskName}`}
+                available={Boolean(recordingAdapter.supported && hostStarted && loadedDiskName && typeof window.MediaRecorder === 'function')}
+                unavailableReason={recordingAdapter.supported
+                  ? !loadedDiskName ? 'Load a game before recording.' : !hostStarted ? 'Start the local emulator before recording.' : 'MediaRecorder is unavailable in this browser.'
+                  : recordingAdapter.reason}
+                sourceFactory={createGameRecordingSource}
+                gameTitle={loadedDiskName || room?.current_game || 'Gameplay'}
+                systemLabel={recordingAdapter.label || systemLabel}
+              />
+            ) : null}
 
             {canControlLocalEmulator ? (
               <>
