@@ -103,6 +103,10 @@ export default function GameRecorderControls({ available, unavailableReason, sou
     );
   }
 
+  if (recorder.status === 'finalizing') {
+    return <div className="game-recorder active" role="status"><strong>Finalizing recording...</strong></div>;
+  }
+
   if (recorder.status === 'ready') {
     return (
       <div className="game-recorder ready" role="status">

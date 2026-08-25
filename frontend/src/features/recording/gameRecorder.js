@@ -1,3 +1,5 @@
+import fixWebmDuration from 'fix-webm-duration';
+
 export const RECORDING_DURATIONS = [15, 30, 60, 120, 300, null];
 export const RECORDING_COUNTDOWNS = [0, 3, 5];
 export const RECORDING_QUALITIES = {
@@ -37,15 +39,17 @@ const INITIAL_STATE = {
 };
 
 export class GameRecorder {
-  constructor({ sourceFactory, MediaRecorderClass = globalThis.MediaRecorder, MediaStreamClass = globalThis.MediaStream, URLApi = globalThis.URL, now = () => Date.now() } = {}) {
+  constructor({ sourceFactory, MediaRecorderClass = globalThis.MediaRecorder, MediaStreamClass = globalThis.MediaStream, URLApi = globalThis.URL, now = () => Date.now(), durationFixer = fixWebmDuration } = {}) {
     this.sourceFactory = sourceFactory;
     this.MediaRecorderClass = MediaRecorderClass;
     this.MediaStreamClass = MediaStreamClass;
     this.URLApi = URLApi;
     this.now = now;
+    this.durationFixer = durationFixer;
     this.state = { ...INITIAL_STATE };
     this.listeners = new Set();
     this.destroyed = false;
+    this.generation = 0;
   }
 
   subscribe(listener) {
@@ -127,6 +131,7 @@ export class GameRecorder {
     this.recorder.onerror = (event) => this.fail(event.error || new Error('MediaRecorder failed.'));
     this.recorder.onstop = () => this.finish();
     this.startedAt = this.now();
+    this.recordingDurationMs = 0;
     this.setState({ status: 'recording', countdownRemaining: 0, elapsedSeconds: 0, remainingSeconds: options.durationSeconds, error: '' });
     this.recorder.start(1000);
     this.elapsedTimer = setInterval(() => this.updateElapsed(), 250);
@@ -149,25 +154,38 @@ export class GameRecorder {
     }
     if (this.recorder?.state === 'recording' || this.recorder?.state === 'paused') {
       this.updateElapsed();
+      this.recordingDurationMs = Math.max(1, this.now() - this.startedAt);
       this.clearTimers();
+      this.setState({ status: 'finalizing', remainingSeconds: 0 });
       this.recorder.stop();
     }
   }
 
-  finish() {
+  async finish() {
+    const generation = this.generation;
     this.clearTimers();
     this.stopCombinedTracks();
     this.source?.cleanup?.();
     this.source = null;
     if (this.destroyed) return;
     const mimeType = this.recorder?.mimeType || this.pendingOptions?.mimeType || 'video/webm';
-    const blob = new Blob(this.chunks || [], { type: mimeType });
+    const rawBlob = new Blob(this.chunks || [], { type: mimeType });
+    let blob = rawBlob;
+    if (mimeType.startsWith('video/webm') && this.recordingDurationMs > 0) {
+      try {
+        blob = await this.durationFixer(rawBlob, this.recordingDurationMs, { logger: false });
+      } catch {
+        blob = rawBlob;
+      }
+    }
+    if (this.destroyed || generation !== this.generation) return;
     const downloadUrl = this.URLApi?.createObjectURL?.(blob) || '';
     const filename = createRecordingFilename({ gameTitle: this.pendingOptions?.gameTitle, system: this.pendingOptions?.system });
     this.setState({ status: 'ready', blob, downloadUrl, filename, mimeType, remainingSeconds: 0 });
   }
 
   fail(error) {
+    this.generation += 1;
     this.clearTimers();
     this.stopCombinedTracks();
     this.source?.cleanup?.();
@@ -176,6 +194,7 @@ export class GameRecorder {
   }
 
   reset() {
+    this.generation += 1;
     this.clearTimers();
     if (this.recorder?.state === 'recording') this.recorder.stop();
     this.stopCombinedTracks();
@@ -187,6 +206,7 @@ export class GameRecorder {
 
   destroy() {
     this.destroyed = true;
+    this.generation += 1;
     this.clearTimers();
     if (this.recorder?.state === 'recording') this.recorder.stop();
     this.stopCombinedTracks();

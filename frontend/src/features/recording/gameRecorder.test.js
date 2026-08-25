@@ -25,6 +25,7 @@ function makeRecorder(options = {}) {
     MediaRecorderClass: FakeMediaRecorder,
     MediaStreamClass: FakeMediaStream,
     URLApi: { createObjectURL: vi.fn(() => 'blob:recording'), revokeObjectURL: vi.fn() },
+    durationFixer: vi.fn(async (blob) => blob),
     ...options,
   });
 }
@@ -74,6 +75,7 @@ describe('GameRecorder state machine', () => {
     expect(recorder.state).toMatchObject({ status: 'ready', elapsedSeconds: 30, downloadUrl: 'blob:recording' });
     expect(recorder.combinedStream).toBeNull();
     expect(recordingTracks.every((track) => track.stop.mock.calls.length === 1)).toBe(true);
+    expect(recorder.durationFixer).toHaveBeenCalledWith(expect.any(Blob), 30_000, { logger: false });
   });
 
   it('supports manual stop and cleans timers', async () => {
@@ -82,6 +84,7 @@ describe('GameRecorder state machine', () => {
     await recorder.start({ durationSeconds: null, countdownSeconds: 0 });
     await vi.advanceTimersByTimeAsync(1_500);
     recorder.stop();
+    await vi.runAllTimersAsync();
     expect(recorder.state.status).toBe('ready');
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -91,6 +94,7 @@ describe('GameRecorder state machine', () => {
     const recorder = makeRecorder({ URLApi });
     await recorder.start({ countdownSeconds: 0 });
     recorder.stop();
+    await Promise.resolve();
     recorder.reset();
     expect(URLApi.revokeObjectURL).toHaveBeenCalledWith('blob:one');
     recorder.destroy();
