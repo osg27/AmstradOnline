@@ -980,7 +980,7 @@ export default function RoomPage() {
   const isMouseComputer = isAmigaFamily || isAtariSt || isX68000;
   const isArcade = roomSystem === 'arcade';
   const isSoloMode = isArcade ? !Boolean(room?.arcade_multiplayer) : legacySoloMode;
-  const supportsMameScoreboard = isArcade;
+  const supportsMameScoreboard = isArcade && isSoloMode;
   const supportsAmigaScoreboard = isPuaeAmiga && Boolean(amigaScoreGame);
   const kickstartStorageKey = isPuaeAmiga
     ? amigaRequiredModel === 'A1200' ? AMIGA_AGA_KICKSTART_KEY : amigaRequiredModel === 'A500' ? AMIGA_KICKSTART_KEY : ''
@@ -1244,12 +1244,12 @@ export default function RoomPage() {
     hostAudioGraphRef.current = null;
 
     graph?.output?.getTracks?.().forEach((track) => track.stop());
-    if (stopInput) {
-      graph?.input?.getTracks?.().forEach((track) => track.stop());
-    }
     graph?.context?.close?.().catch(() => {});
 
     if (stopInput) {
+      // Emulator audio streams are owned by their iframe. Stopping one here
+      // permanently ends MAME's MediaStreamDestination track, so a later
+      // solo-to-multiplayer recapture would send silence to every guest.
       hostRawAudioStreamRef.current = null;
     }
   }
