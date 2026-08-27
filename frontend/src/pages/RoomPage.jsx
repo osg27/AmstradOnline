@@ -7233,6 +7233,47 @@ export default function RoomPage() {
                 Back to room
               </button>
             ) : null}
+            {isScreenFullscreen ? (
+              <aside className="fullscreen-control-rail" aria-label="Fullscreen controls">
+                <strong>Game controls</strong>
+                <button type="button" className="secondary" onClick={() => setIsScreenFullscreen(false)}>Back to room</button>
+                {!autoCaptureController ? (
+                  <button type="button" className={inputCaptured ? 'danger' : 'secondary'} onClick={inputCaptured ? releaseInputCapture : captureInput}>
+                    {inputCaptured ? 'Release input' : 'Capture input'}
+                  </button>
+                ) : null}
+                {supportsControllerMapping(roomSystem) ? (
+                  <button type="button" className="secondary" onClick={() => setControllerSetupOpen(true)}>Controller setup</button>
+                ) : null}
+                {!isSharedCpcParty && !isSoloMode ? (
+                  <button type="button" className={micEnabled && !micMuted ? 'active' : 'secondary'} onClick={toggleMicrophone}>
+                    {micEnabled ? (micMuted ? 'Mic muted' : 'Mic on') : 'Mic off'}
+                  </button>
+                ) : null}
+                {!canControlLocalEmulator && !guestPrepared ? (
+                  <button type="button" onClick={connectGuest}>Prepare guest</button>
+                ) : null}
+                {canControlLocalEmulator ? (
+                  <>
+                    <button type="button" onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isPuaeAmiga && !isAtariSt}>{mediaLabel}</button>
+                    {isHost && localRoomGames.length > 0 ? (
+                      <button type="button" className="secondary" onClick={() => setLocalGamePickerOpen((value) => !value)}>{localGamePickerOpen ? 'Hide games' : 'Change game'}</button>
+                    ) : null}
+                    <label className="host-volume-control">
+                      <span>Volume {Math.round(hostVolume * 100)}%</span>
+                      <input type="range" min="0" max="100" step="1" value={Math.round(hostVolume * 100)} onChange={handleHostVolumeChange} />
+                    </label>
+                    {!isPuaeAmiga ? (
+                      <button type="button" className={emulatorPaused ? 'active' : 'secondary'} onClick={toggleEmulatorPause} disabled={!hostStarted}>
+                        {emulatorPaused ? 'Resume' : 'Pause'}
+                      </button>
+                    ) : null}
+                    {!isPuaeAmiga ? <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>Reset</button> : null}
+                  </>
+                ) : null}
+                <button type="button" className="secondary" onClick={() => setObsCaptureMode(true)}>OBS view</button>
+              </aside>
+            ) : null}
             <div className="play-header">
               <h2>{isSoloMode || isAmigaLink ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
 
@@ -7386,6 +7427,7 @@ export default function RoomPage() {
                     <iframe
                       key={`${roomSystem}-${emulatorSessionKey}`}
                       ref={emulatorFrameRef}
+                      className={isBeetleSaturn ? 'video emulator-frame' : 'emulator-frame'}
                       title={emulatorTitle}
                       src={emulatorSrc}
                       onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
@@ -7990,7 +8032,7 @@ export default function RoomPage() {
                   }}
                 />
 
-                <button onClick={connectGuest} disabled={guestPrepared}>
+                <button className="guest-connect-button" onClick={connectGuest} disabled={guestPrepared}>
                   {guestPrepared ? 'Guest connection ready' : 'Prepare guest connection'}
                 </button>
                 {isArcadeParty ? (
