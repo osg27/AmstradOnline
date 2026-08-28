@@ -295,6 +295,13 @@ const COMPACT_TITLE_ALIASES = [
   ['teenagemutantninjaturtles', 'Teenage Mutant Ninja Turtles'],
 ];
 
+const BOX_ART_TITLE_ALIASES = {
+  cpc: {
+    '720': ['720 Degrees'],
+    'a question of scruples': ['Scruples'],
+  },
+};
+
 const SUPPORT_ROM_PATTERN = /\b(?:sound(?:s|track)?|music|bgm|sample(?:s)?|speech|voice(?:s)?|audio|ost|sound\s*test|music\s*test)\b/i;
 
 function slugify(value) {
@@ -900,8 +907,13 @@ function buildBoxArtNameCandidates(game) {
   const cleanedTitle = titleCaseSmallWords(withoutBracketMeta || game.title);
   const articleFixed = moveTrailingArticle(withoutBracketMeta);
   const articleFixedTitle = titleCaseSmallWords(articleFixed);
+  const canonicalTitle = canonicalLibraryTitle(game);
+  const systemTitleAliases = BOX_ART_TITLE_ALIASES[game.system]?.[
+    normalizeExactBoxArtKey(canonicalTitle)
+  ] || [];
   const titleVariants = uniq([
-    canonicalLibraryTitle(game),
+    canonicalTitle,
+    ...systemTitleAliases,
     ...((game.system === 'amiga' || game.system === 'amiga_aga')
       ? amigaWhdLoadBoxArtAliases(game.fileName || game.title || '')
       : []),
