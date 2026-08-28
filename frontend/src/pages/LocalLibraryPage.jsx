@@ -600,7 +600,8 @@ function normalizeCompactBoxArtKey(value) {
 }
 
 function normalizeAliasBoxArtKey(value) {
-  let tokens = normalizeExactBoxArtKey(stripRegionAndMeta(String(value || '')))
+  const title = moveTrailingArticle(stripRegionAndMeta(String(value || '')));
+  let tokens = normalizeExactBoxArtKey(title)
     .split(' ')
     .filter(Boolean)
     .map((token) => (
@@ -691,10 +692,9 @@ function addBoxArtEntry(collection, repo, fileName, url) {
     collection.compactMap.set(entry.compactKey, entry);
   }
   if (entry.aliasKey) {
-    // A fuzzy alias is safe only when it identifies one artwork title. Keep a
-    // collision marker so near-identical sequels/editions never win by order.
+    // Metadata-labelled and plain files frequently represent alternative scans
+    // of the same game. They intentionally share an alias; retain the first.
     if (!collection.aliasMap.has(entry.aliasKey)) collection.aliasMap.set(entry.aliasKey, entry);
-    else collection.aliasMap.set(entry.aliasKey, null);
   }
 }
 
@@ -778,6 +778,23 @@ function findIndexedBoxArt(game, index) {
     if (match) return match;
   }
 
+  // Packaging databases commonly omit a descriptive suffix used by a ROM
+  // catalogue ("Acro Jet the Advanced Flight Simulator" versus "Acro Jet").
+  // Accept that relationship only for multi-word/numeric titles and only when
+  // all matching files collapse to one canonical artwork title.
+  for (const key of aliasKeys) {
+    const keyTokenCount = key.split(' ').filter(Boolean).length;
+    if (keyTokenCount < 2 && !/^\d{3,5}$/.test(key)) continue;
+    const matches = index.entries.filter((entry) => {
+      if (!entry.aliasKey) return false;
+      const entryTokenCount = entry.aliasKey.split(' ').filter(Boolean).length;
+      if (entryTokenCount < 2 && !/^\d{3,5}$/.test(entry.aliasKey)) return false;
+      return entry.aliasKey.startsWith(`${key} `) || key.startsWith(`${entry.aliasKey} `);
+    });
+    const matchingTitles = new Set(matches.map((entry) => entry.aliasKey));
+    if (matchingTitles.size === 1) return matches[0];
+  }
+
   if (game.system === 'arcade') {
     return findArcadeIndexedBoxArtByTitle(candidates, index);
   }
@@ -800,7 +817,7 @@ function findIndexedBoxArt(game, index) {
     const startsWithMatch = index.entries.find((entry) => {
       if (entry.looseKey === baseKey) return true;
       const entryTokenCount = entry.looseKey.split(' ').filter(Boolean).length;
-      if (Math.min(baseTokenCount, entryTokenCount) < 2) return false;
+      if (Math.min(baseTokenCount, entryTokenCount) < 2 && !/^\d{3,5}$/.test(baseKey)) return false;
       if (entry.looseKey.startsWith(`${baseKey} `)) return true;
       if (game.system === 'amiga' || game.system === 'amiga_aga') return false;
       return baseKey.startsWith(`${entry.looseKey} `);
