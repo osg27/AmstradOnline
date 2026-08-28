@@ -592,6 +592,27 @@ function normalizeCompactBoxArtKey(value) {
   return normalizeBoxArtKey(value).replace(/\s+/g, '');
 }
 
+function normalizeAliasBoxArtKey(value) {
+  let tokens = normalizeExactBoxArtKey(stripRegionAndMeta(String(value || '')))
+    .split(' ')
+    .filter(Boolean)
+    .map((token) => (
+      token.length > 3 && token.endsWith('s') && !token.endsWith('ss')
+        ? token.slice(0, -1)
+        : token
+    ));
+
+  // Some ROM sets prefix an expanded title with its acronym (for example
+  // "APB - All Points Bulletin"), while artwork sets store only the expanded
+  // title. Drop it only when it is demonstrably the initials of that title.
+  if (tokens.length >= 3 && /^[a-z0-9]{2,5}$/.test(tokens[0])) {
+    const initials = tokens.slice(1).map((token) => token[0]).join('');
+    if (initials.startsWith(tokens[0])) tokens = tokens.slice(1);
+  }
+
+  return tokens.join(' ');
+}
+
 function rawCompactKey(value) {
   return String(value || '')
     .toLowerCase()
@@ -643,6 +664,7 @@ function makeBoxArtEntry(repo, fileName, url) {
     exactKey: normalizeExactBoxArtKey(fileName),
     looseKey: normalizeBoxArtKey(fileName),
     compactKey: normalizeCompactBoxArtKey(fileName),
+    aliasKey: normalizeAliasBoxArtKey(fileName),
   };
 }
 
@@ -661,6 +683,12 @@ function addBoxArtEntry(collection, repo, fileName, url) {
   if (entry.compactKey && !collection.compactMap.has(entry.compactKey)) {
     collection.compactMap.set(entry.compactKey, entry);
   }
+  if (entry.aliasKey) {
+    // A fuzzy alias is safe only when it identifies one artwork title. Keep a
+    // collision marker so near-identical sequels/editions never win by order.
+    if (!collection.aliasMap.has(entry.aliasKey)) collection.aliasMap.set(entry.aliasKey, entry);
+    else collection.aliasMap.set(entry.aliasKey, null);
+  }
 }
 
 async function getBoxArtIndex(systemId) {
@@ -673,6 +701,7 @@ async function getBoxArtIndex(systemId) {
       exactMap: new Map(),
       looseMap: new Map(),
       compactMap: new Map(),
+      aliasMap: new Map(),
       seenTitles: new Set(),
     };
     for (const repo of repos) {
@@ -733,6 +762,12 @@ function findIndexedBoxArt(game, index) {
 
   for (const key of compactKeys) {
     const match = index.compactMap.get(key);
+    if (match) return match;
+  }
+
+  const aliasKeys = uniq(candidates.map(normalizeAliasBoxArtKey));
+  for (const key of aliasKeys) {
+    const match = index.aliasMap.get(key);
     if (match) return match;
   }
 
