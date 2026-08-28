@@ -28,7 +28,7 @@ import {
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
-import { getMameTitleDatabase } from '../data/mameTitleLookup';
+import { getMameDisplayName, getMameTitleDatabase } from '../data/mameTitleLookup';
 import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardAutomatic';
 import { getControllerMapping } from '../utils/controllerMappingStorage';
 import { applyCustomMapping } from '../utils/applyControllerMapping';
@@ -5486,7 +5486,7 @@ export default function RoomPage() {
           <div>
             <span>{tournamentCode ? 'Tournament standings' : 'MAME leaderboard'}</span>
             <strong className={tournamentCode ? 'tournament-room-title' : ''}>
-              {tournamentCode ? tournamentTitle || tournamentCode : getArcadeLeaderboardKey(loadedDiskName)}
+              {tournamentCode ? tournamentTitle || tournamentCode : getMameDisplayName(getArcadeLeaderboardKey(loadedDiskName))}
             </strong>
             {tournamentCode ? <small className="tournament-room-code">Code {tournamentCode}</small> : null}
           </div>

@@ -5,6 +5,7 @@ import BrandMark from '../components/BrandMark';
 import PlayerBubble from '../components/PlayerBubble';
 import SocialSidebar from '../components/SocialSidebar';
 import { getLocalLibraryGames, getLocalLibrarySetting } from '../localLibraryDb';
+import { getMameDisplayName } from '../data/mameTitleLookup';
 import LocalLibraryPage, { SUPPORTED_SYSTEMS } from './LocalLibraryPage';
 import amiga500LogoUrl from '../../assets/amiga500.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
@@ -52,6 +53,11 @@ function formatRecentScoreTime(value) {
   const elapsedHours = Math.floor(elapsedMinutes / 60);
   if (elapsedHours < 24) return formatter.format(-elapsedHours, 'hour');
   return formatter.format(-Math.floor(elapsedHours / 24), 'day');
+}
+
+function recentScoreGameName(entry) {
+  if (entry?.system !== 'arcade') return entry?.game_name || entry?.game_key || 'Unknown game';
+  return getMameDisplayName(entry.game_key || entry.rom_name, entry.game_name);
 }
 
 const PLATFORM_SHELVES = [
@@ -964,12 +970,12 @@ export default function LobbyPage() {
                       className="recent-score-game"
                       type="button"
                       disabled={Boolean(openingRecentRom)}
-                      title={`Play ${entry.game_name}`}
+                      title={`Play ${recentScoreGameName(entry)}`}
                       onClick={() => openRecentArcadeGame(entry)}
                     >
                       {openingRecentRom === String(entry.game_key || entry.rom_name || '').replace(/\.(zip|7z)$/i, '').toLowerCase()
                         ? 'Opening...'
-                        : entry.game_name}
+                        : recentScoreGameName(entry)}
                     </button>
                     <span className={`recent-score-system recent-score-system-${entry.system}`}>{entry.system_name}</span>
                     <time dateTime={entry.created_at}>{formatRecentScoreTime(entry.created_at)}</time>
