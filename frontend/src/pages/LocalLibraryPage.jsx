@@ -640,8 +640,12 @@ function rawGitHubBoxArtUrl(repo, path, branch = 'master') {
 }
 
 function libretroBoxArtUrl(repo, fileName) {
+  return libretroArtworkUrl(repo, 'Named_Boxarts', fileName);
+}
+
+function libretroArtworkUrl(repo, folder, fileName) {
   const setName = repo.replace(/_/g, ' ');
-  return `https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/${encodeURIComponent(fileName)}.png`;
+  return `https://thumbnails.libretro.com/${encodeURIComponent(setName)}/${folder}/${encodeURIComponent(fileName)}.png`;
 }
 
 function knownBoxArtUrl(game) {
@@ -712,36 +716,43 @@ async function getBoxArtIndex(systemId) {
       seenTitles: new Set(),
     };
     for (const repo of repos) {
+      const artworkFolders = systemId === 'cpc'
+        ? ['Named_Boxarts', 'Named_Titles']
+        : ['Named_Boxarts'];
       for (const branch of ['master', 'main']) {
         try {
           const response = await fetch(`https://api.github.com/repos/libretro-thumbnails/${repo}/git/trees/${branch}?recursive=1`, { cache: 'force-cache' });
           if (!response.ok) continue;
           const payload = await response.json();
           const tree = Array.isArray(payload.tree) ? payload.tree : [];
-          tree
-            .filter((item) => item.type === 'blob' && /^Named_Boxarts\/.+\.png$/i.test(item.path))
-            .forEach((item) => {
+          artworkFolders.forEach((folder) => {
+            tree
+              .filter((item) => item.type === 'blob' && item.path.startsWith(`${folder}/`) && /\.png$/i.test(item.path))
+              .forEach((item) => {
               const fileName = item.path.split('/').pop().replace(/\.png$/i, '');
               addBoxArtEntry(collection, repo, fileName, rawGitHubBoxArtUrl(repo, item.path, branch));
-            });
+              });
+          });
           if (tree.length) break;
         } catch {
           // Try the next branch/repo; external metadata sources are best-effort.
         }
       }
 
-      try {
-        const setName = repo.replace(/_/g, ' ');
-        const response = await fetch(`https://thumbnails.libretro.com/${encodeURIComponent(setName)}/Named_Boxarts/`, { cache: 'force-cache' });
-        if (!response.ok) continue;
-        const html = await response.text();
-        const matches = [...html.matchAll(/href="([^"]+\.png)"/gi)];
-        matches.forEach((match) => {
-          const fileName = decodeURIComponent(match[1].split('/').pop().replace(/\.png$/i, '').replace(/\+/g, ' '));
-          addBoxArtEntry(collection, repo, fileName, libretroBoxArtUrl(repo, fileName));
-        });
-      } catch {
-        // Directory listings are a fallback for when the GitHub tree is stale or blocked.
+      for (const folder of artworkFolders) {
+        try {
+          const setName = repo.replace(/_/g, ' ');
+          const response = await fetch(`https://thumbnails.libretro.com/${encodeURIComponent(setName)}/${folder}/`, { cache: 'force-cache' });
+          if (!response.ok) continue;
+          const html = await response.text();
+          const matches = [...html.matchAll(/href="([^"]+\.png)"/gi)];
+          matches.forEach((match) => {
+            const fileName = decodeURIComponent(match[1].split('/').pop().replace(/\.png$/i, '').replace(/\+/g, ' '));
+            addBoxArtEntry(collection, repo, fileName, libretroArtworkUrl(repo, folder, fileName));
+          });
+        } catch {
+          // Directory listings are a fallback for when the GitHub tree is stale or blocked.
+        }
       }
     }
     return collection;
