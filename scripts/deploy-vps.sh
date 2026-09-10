@@ -54,6 +54,33 @@ EOF
   fi
 }
 
+install_upload_policy() {
+  local nginx_conf_dir="/etc/nginx/conf.d"
+  local upload_policy="$nginx_conf_dir/oldstylegaming-upload-limits.conf"
+
+  if ! command -v nginx >/dev/null 2>&1 || [ ! -d "$nginx_conf_dir" ]; then
+    return 0
+  fi
+
+  if [ ! -w "$nginx_conf_dir" ]; then
+    log "Cannot update nginx upload policy without write access to $nginx_conf_dir"
+    return 0
+  fi
+
+  log "Installing nginx tournament upload policy"
+  cat >"$upload_policy" <<'EOF'
+# Tournament ROM uploads are validated and capped at 256 MiB by FastAPI.
+# Allow a little extra space here for multipart form boundaries and fields.
+client_max_body_size 260m;
+EOF
+
+  if ! nginx -t; then
+    rm -f "$upload_policy"
+    echo "Invalid nginx upload policy removed; existing nginx configuration was left unchanged."
+    return 1
+  fi
+}
+
 cd "$APP_DIR"
 
 log "Pulling latest code"
@@ -94,6 +121,7 @@ log "Restarting known services"
 restarted=0
 
 install_html_cache_policy
+install_upload_policy
 
 for service in \
   amstrad-backend.service \
