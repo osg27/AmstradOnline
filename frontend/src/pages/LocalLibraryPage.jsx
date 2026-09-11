@@ -613,6 +613,12 @@ function snesCatalogTitle(fileName) {
   };
 }
 
+function normalizeSnesLibraryGame(game) {
+  if (game?.system !== 'snes' || !game.fileName) return game;
+  const cleaned = snesCatalogTitle(game.fileName).title;
+  return cleaned && cleaned !== game.title ? { ...game, title: cleaned } : game;
+}
+
 function normalizeAliasBoxArtKey(value) {
   const title = moveTrailingArticle(stripRegionAndMeta(String(value || '')));
   let tokens = normalizeExactBoxArtKey(title)
@@ -1394,7 +1400,8 @@ function canonicalLibraryTitle(game) {
   const c64Title = game.system === 'c64' ? c64CanonicalTitle(game.fileName || storedTitle) : '';
   const fileTitle = titleFromFileName(game.fileName || storedTitle);
   const knownTitle = knownCompactTitle(game.fileName || storedTitle);
-  const rawTitle = knownTitle || (
+  const snesTitle = game.system === 'snes' ? snesCatalogTitle(game.fileName || storedTitle).title : '';
+  const rawTitle = knownTitle || snesTitle || (
     !storedTitle.includes(' ') && fileTitle.includes(' ')
       ? fileTitle
       : storedTitle
@@ -1740,12 +1747,15 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
     async function loadLibrary() {
       try {
-        const [savedFolders, loadedGames, savedSystems, savedFavourites] = await Promise.all([
+        const [savedFolders, storedGameRows, savedSystems, savedFavourites] = await Promise.all([
           getLocalLibraryFolders(),
           getLocalLibraryGames(),
           getLocalLibrarySetting('selectedSystems', []),
           getLocalLibrarySetting('favourites', []),
         ]);
+        const loadedGames = storedGameRows.map(normalizeSnesLibraryGame);
+        const migratedSnesTitles = loadedGames.some((game, index) => game !== storedGameRows[index]);
+        if (migratedSnesTitles) await saveLocalLibraryGames(loadedGames);
         const forceAmigaBoxArtRepair = localStorage.getItem(AMIGA_BOX_ART_REPAIR_KEY)
           !== AMIGA_BOX_ART_REPAIR_VERSION;
         const mismatchedAlienIds = new Set(loadedGames
@@ -2624,7 +2634,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             folderId,
             folderName,
             folderSystem: targetSystem.id,
-            title: arcadeTitle || titleFromFileName(entry.name),
+            title: arcadeTitle || (system.id === 'snes'
+              ? snesCatalogTitle(entry.name).title
+              : titleFromFileName(entry.name)),
             fileName: entry.name,
             path: entry.path,
             extension,
