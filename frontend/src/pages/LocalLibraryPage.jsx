@@ -462,7 +462,9 @@ function stripCompactRegionSuffix(value, force = false) {
   const trimmed = value.trim();
   // Legacy ROM sets append an uppercase one-letter region code. Treating this
   // case-insensitively corrupts ordinary titles such as BatmanTheMovie and BattleIsle.
-  const match = /^(.{3,})([UEJW])$/.exec(trimmed);
+  // The SNES catalogue is known to contain both upper- and lowercase codes,
+  // so its explicitly forced path may safely accept either case.
+  const match = (force ? /^(.{3,})([UEJW])$/i : /^(.{3,})([UEJW])$/).exec(trimmed);
   if (!match) return { title: trimmed, region: null };
   const looksLikeCompactRomName = !/\s/.test(trimmed)
     && (/^[0-9]/.test(trimmed) || /[a-z][A-Z0-9]/.test(trimmed) || /[A-Z][a-z]+[A-Z]$/.test(trimmed));
