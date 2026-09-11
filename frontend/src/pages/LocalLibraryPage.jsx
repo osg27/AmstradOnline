@@ -280,6 +280,7 @@ const COMPACT_TITLE_ALIASES = [
   ['aaahhrealmonsters', 'Aaahh!!! Real Monsters'],
   ['abcmondaynightfootball', 'ABC Monday Night Football'],
   ['acmeanimationfactory', 'ACME Animation Factory'],
+  ['addeyeofthebeholder', 'Add Eye of the Beholder'],
   ['adventuresofbatmanandrobin', 'Adventures of Batman and Robin'],
   ['adventuresoftintin', 'Adventures of Tintin'],
   ['battletoadsdoubledragon', 'Battletoads Double Dragon'],
@@ -457,7 +458,7 @@ function moveTrailingArticle(value) {
     });
 }
 
-function stripCompactRegionSuffix(value) {
+function stripCompactRegionSuffix(value, force = false) {
   const trimmed = value.trim();
   // Legacy ROM sets append an uppercase one-letter region code. Treating this
   // case-insensitively corrupts ordinary titles such as BatmanTheMovie and BattleIsle.
@@ -465,7 +466,7 @@ function stripCompactRegionSuffix(value) {
   if (!match) return { title: trimmed, region: null };
   const looksLikeCompactRomName = !/\s/.test(trimmed)
     && (/^[0-9]/.test(trimmed) || /[a-z][A-Z0-9]/.test(trimmed) || /[A-Z][a-z]+[A-Z]$/.test(trimmed));
-  if (!looksLikeCompactRomName) return { title: trimmed, region: null };
+  if (!force && !looksLikeCompactRomName) return { title: trimmed, region: null };
 
   const title = match[1].trim();
   const region = COMPACT_REGION_SUFFIXES[match[2].toUpperCase()] || null;
@@ -597,6 +598,17 @@ function normalizeExactBoxArtKey(value) {
 
 function normalizeCompactBoxArtKey(value) {
   return normalizeBoxArtKey(value).replace(/\s+/g, '');
+}
+
+function snesCatalogTitle(fileName) {
+  const base = fileBaseName(fileName || '').replace(/_/g, ' ').trim();
+  const regionless = stripCompactRegionSuffix(base, true);
+  const knownTitle = knownCompactTitle(regionless.title);
+  const title = knownTitle || splitCompactTitle(regionless.title);
+  return {
+    title: titleCaseSmallWords(moveTrailingArticle(title)),
+    region: regionless.region,
+  };
 }
 
 function normalizeAliasBoxArtKey(value) {
@@ -923,7 +935,10 @@ function buildBoxArtNameCandidates(game) {
     return buildArcadeBoxArtNameCandidates(game);
   }
 
-  const base = fileBaseName(game.fileName).replace(/_/g, ' ').trim();
+  const rawBase = fileBaseName(game.fileName).replace(/_/g, ' ').trim();
+  const base = game.system === 'snes'
+    ? stripCompactRegionSuffix(rawBase, true).title
+    : rawBase;
   const compactBaseVariants = compactTitleVariants(base);
   const compactStoredTitleVariants = compactTitleVariants(game.title);
   const expandedBase = regionExpandedName(base);
@@ -2143,6 +2158,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             .filter((entry) => entry?.file_name)
             .map((entry) => {
               const fileName = entry.file_name;
+              const normalized = normaliseFilename(fileName);
+              const catalogTitle = snesCatalogTitle(fileName);
               return {
                 id: `vip-snes-file:${fileName}`,
                 name: fileName,
@@ -2150,7 +2167,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 extension: '7z',
                 size: Number(entry.bytes) || 0,
                 platform: 'snes',
-                ...normaliseFilename(fileName),
+                ...normalized,
+                cleanedTitle: catalogTitle.title || normalized.cleanedTitle,
+                region: catalogTitle.region || normalized.region,
               };
             });
           const snesGames = groupReleaseFiles(snesSortedFiles)
