@@ -51,7 +51,7 @@
   function ensureAudio() {
     if (!OriginalAudioContext) return null;
     if (!sharedAudioContext) {
-      sharedAudioContext = new OriginalAudioContext();
+      sharedAudioContext = new OriginalAudioContext({ latencyHint: 'playback' });
     }
     if (!audioDestination) {
       audioDestination = sharedAudioContext.createMediaStreamDestination();
@@ -108,6 +108,14 @@
   };
   window.getPlayStationAudioStream = getSystemAudioStream;
   window.getSaturnAudioStream = getSystemAudioStream;
+
+  function resumeSystemAudio() {
+    if (document.visibilityState === 'hidden') return;
+    ensureAudio()?.resume?.().catch(() => {});
+  }
+
+  window.addEventListener('focus', resumeSystemAudio);
+  document.addEventListener('visibilitychange', resumeSystemAudio);
 
   function setEmulatorVolume(volume) {
     emulatorVolume = Math.min(1, Math.max(0, Number(volume) || 0));
@@ -327,7 +335,13 @@
       ? [
         { name: 'system_directory', default: '/', isString: true },
       ]
-      : undefined;
+      : [{
+        title: 'Audio Latency',
+        name: 'audio_latency',
+        options: { 128: '128 ms' },
+        default: '128',
+        isString: false,
+      }];
     window.EJS_pathtodata = '/emulatorjs/data/';
     window.EJS_paths = {
       'emulator.js': `/emulatorjs/data/src/emulator.js?v=${isBeetleSaturn ? '2026-07-28-6' : '2026-07-27-1'}`,
@@ -400,7 +414,20 @@
         yabause_frameskip: 'disabled',
         yabause_numthreads: '1',
       }
-      : undefined;
+      : {
+        // Keep native PS1 resolution and the dynamic recompiler. Enhanced
+        // rendering costs considerably more in WebAssembly and can starve
+        // streamed CD audio in demanding games such as Crash Team Racing.
+        pcsx_rearmed_drc: 'enabled',
+        pcsx_rearmed_neon_enhancement_enable: 'disabled',
+        pcsx_rearmed_neon_enhancement_no_main: 'disabled',
+        // Skip video automatically only when the audio buffer is in danger of
+        // underrunning. This favours full-speed gameplay over slow-motion A/V.
+        pcsx_rearmed_frameskip: 'auto',
+        pcsx_rearmed_frameskip_threshold: '33',
+        pcsx_rearmed_duping_enable: 'enabled',
+        pcsx_rearmed_spu_interpolation: 'simple',
+      };
     window.EJS_Buttons = {
       playPause: false,
       restart: false,
