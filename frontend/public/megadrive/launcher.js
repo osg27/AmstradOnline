@@ -6,8 +6,9 @@
   const GAMEPAD_API_INDEX = 64;
   const GAMEPAD_API_STRIDE = 32;
   const NTSC_FPS = 60;
-  const SOUND_DELAY_FRAME = 3;
-  const MAX_AUDIO_QUEUE_TIME = 0.12;
+  const SOUND_DELAY_FRAME = 6;
+  const MAX_AUDIO_QUEUE_TIME = 0.25;
+  const MAX_CATCH_UP_FRAMES = 4;
   const isMasterSystem = new URLSearchParams(window.location.search).get('system') === 'mastersystem';
   const systemName = isMasterSystem ? 'Master System' : 'Mega Drive';
 
@@ -73,7 +74,7 @@
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return;
 
-    audioContext = new AudioCtor({ sampleRate: SOUND_FREQUENCY });
+    audioContext = new AudioCtor({ sampleRate: SOUND_FREQUENCY, latencyHint: 'playback' });
     audioDestination = audioContext.createMediaStreamDestination();
     audioMasterGain = audioContext.createGain();
     audioMasterGain.gain.value = emulatorVolume;
@@ -102,9 +103,13 @@
     const currentSoundTime = audioContext.currentTime;
     const minimumStartTime = currentSoundTime + soundDelayTime;
 
-    if (soundShedTime < minimumStartTime || soundShedTime > currentSoundTime + MAX_AUDIO_QUEUE_TIME) {
+    if (soundShedTime < minimumStartTime) {
       soundShedTime = minimumStartTime;
     }
+
+    // Do not reset the clock on top of sources that Web Audio has already queued.
+    // That creates overlapping buffers and sounds like record-player crackle.
+    if (soundShedTime > currentSoundTime + MAX_AUDIO_QUEUE_TIME) return;
 
     source.start(soundShedTime);
     soundShedTime += audioBuffer.duration;
@@ -264,8 +269,26 @@
     if (delta <= interval) return;
 
     updateInput();
-    gens._tick();
-    then = now - (delta % interval);
+    const elapsedFrames = Math.max(1, Math.floor(delta / interval));
+    const framesToRun = Math.min(elapsedFrames, MAX_CATCH_UP_FRAMES);
+
+    for (let catchUpFrame = 0; catchUpFrame < framesToRun; catchUpFrame += 1) {
+      gens._tick();
+
+      const sampleCount = gens._sound();
+      if (audioContext && sampleCount > 0) {
+        const audioBuffer = audioContext.createBuffer(2, Math.min(sampleCount, SAMPLING_PER_FPS), SOUND_FREQUENCY);
+        audioBuffer.getChannelData(0).set(audioL.subarray(0, audioBuffer.length));
+        audioBuffer.getChannelData(1).set(audioR.subarray(0, audioBuffer.length));
+        playAudioBuffer(audioBuffer);
+      }
+    }
+
+    // Preserve normal cadence after small stalls. After a long suspended tab,
+    // discard the old wall-clock debt instead of trying to emulate it all.
+    then = elapsedFrames > MAX_CATCH_UP_FRAMES
+      ? now
+      : then + framesToRun * interval;
 
     imageData.data.set(vram);
     for (let index = 3; index < imageData.data.length; index += 4) {
@@ -281,13 +304,6 @@
       fpsStartedAt = Date.now();
     }
 
-    const sampleCount = gens._sound();
-    if (!audioContext || sampleCount <= 0) return;
-
-    const audioBuffer = audioContext.createBuffer(2, Math.min(sampleCount, SAMPLING_PER_FPS), SOUND_FREQUENCY);
-    audioBuffer.getChannelData(0).set(audioL.slice(0, audioBuffer.length));
-    audioBuffer.getChannelData(1).set(audioR.slice(0, audioBuffer.length));
-    playAudioBuffer(audioBuffer);
   }
 
   function removeScanlines(pixels) {

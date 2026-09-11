@@ -315,6 +315,13 @@
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
     window.EJS_volume = 1;
+    window.EJS_retroarchOpts = [{
+      title: 'Audio Latency',
+      name: 'audio_latency',
+      options: { 128: '128 ms' },
+      default: '128',
+      isString: false,
+    }];
     window.EJS_backgroundColor = '#000';
     window.EJS_color = '#2f8f76';
     window.EJS_alignStartButton = 'center';
