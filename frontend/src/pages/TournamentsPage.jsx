@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import BrandMark from '../components/BrandMark';
 import { apiFetch } from '../api/client';
+import { getLocalLibraryGames, readLocalLibraryFile } from '../localLibraryDb';
 import { prepareTournamentMameFile } from '../vipMameCache';
 
 function formatDate(value) {
@@ -28,6 +29,19 @@ function tournamentMedal(rank) {
   return ({ 1: '🥇', 2: '🥈', 3: '🥉' })[rank] || '';
 }
 
+function tournamentRomKey(value) {
+  return String(value || '').split(/[\\/]/).pop().replace(/\.(?:zip|7z)$/i, '').toLowerCase();
+}
+
+async function readTournamentLibraryFile(game) {
+  if (game?.handle?.queryPermission && game.handle.requestPermission) {
+    let permission = await game.handle.queryPermission({ mode: 'read' });
+    if (permission !== 'granted') permission = await game.handle.requestPermission({ mode: 'read' });
+    if (permission !== 'granted') throw new Error('Allow access to the connected MAME folder to create this tournament.');
+  }
+  return readLocalLibraryFile(game);
+}
+
 export default function TournamentsPage() {
   const { code: routeCode } = useParams();
   const navigate = useNavigate();
@@ -41,11 +55,11 @@ export default function TournamentsPage() {
   const [mine, setMine] = useState([]);
   const [publicTournaments, setPublicTournaments] = useState([]);
   const [games, setGames] = useState([]);
+  const [libraryGames, setLibraryGames] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(canCreateTournaments);
   const [codeCopied, setCodeCopied] = useState(false);
   const [name, setName] = useState('');
   const [romName, setRomName] = useState('');
-  const [romFile, setRomFile] = useState(null);
   const [gameQuery, setGameQuery] = useState('');
   const [durationHours, setDurationHours] = useState(24);
   const [isPublic, setIsPublic] = useState(true);
@@ -58,6 +72,10 @@ export default function TournamentsPage() {
   const selectedGame = useMemo(
     () => games.find((game) => game.rom_name === romName),
     [games, romName],
+  );
+  const selectedLibraryGame = useMemo(
+    () => libraryGames.find((game) => tournamentRomKey(game.fileName || game.path) === romName),
+    [libraryGames, romName],
   );
 
   async function loadTournament(code) {
@@ -79,11 +97,20 @@ export default function TournamentsPage() {
       apiFetch('/auth/tournaments/mine'),
       apiFetch('/auth/tournaments/public'),
       canCreateTournaments ? apiFetch('/auth/tournaments/games') : Promise.resolve([]),
-    ]).then(([myTournaments, visibleTournaments, availableGames]) => {
+      canCreateTournaments ? getLocalLibraryGames() : Promise.resolve([]),
+    ]).then(([myTournaments, visibleTournaments, availableGames, localGames]) => {
       setMine(Array.isArray(myTournaments) ? myTournaments : []);
       setPublicTournaments(Array.isArray(visibleTournaments) ? visibleTournaments : []);
-      setGames(Array.isArray(availableGames) ? availableGames : []);
-      if (canCreateTournaments && !availableGames?.length) setStatus('No tournament-ready MAME games were found.');
+      const localMameGames = (Array.isArray(localGames) ? localGames : [])
+        .filter((game) => game.system === 'arcade' && /\.zip$/i.test(game.fileName || game.path || ''));
+      const localRomNames = new Set(localMameGames.map((game) => tournamentRomKey(game.fileName || game.path)));
+      const tournamentGames = (Array.isArray(availableGames) ? availableGames : [])
+        .filter((game) => localRomNames.has(game.rom_name));
+      setLibraryGames(localMameGames);
+      setGames(tournamentGames);
+      if (canCreateTournaments && !tournamentGames.length) {
+        setStatus('No tournament-ready games were found in your connected MAME library.');
+      }
     }).catch((error) => setStatus(`Could not load tournament games: ${error.message}`))
       .finally(() => setGamesLoading(false));
   }, [canCreateTournaments]);
@@ -142,14 +169,17 @@ export default function TournamentsPage() {
   async function create(event) {
     event.preventDefault();
     setBusy(true);
-    setStatus('Creating tournament…');
+    setStatus('Reading the tournament ROM from your MAME library…');
     try {
+      if (!selectedLibraryGame) throw new Error(`Add ${selectedGame?.file_name || 'the selected ROM'} to your connected MAME library first.`);
+      const tournamentRom = await readTournamentLibraryFile(selectedLibraryGame);
+      setStatus('Creating tournament…');
       const form = new FormData();
       form.append('name', name);
       form.append('rom_name', romName);
       form.append('duration_hours', String(Number(durationHours)));
       form.append('is_public', String(isPublic));
-      form.append('rom_file', romFile);
+      form.append('rom_file', tournamentRom, selectedGame.file_name);
       const created = await apiFetch('/auth/tournaments', {
         method: 'POST',
         body: form,
@@ -160,7 +190,6 @@ export default function TournamentsPage() {
       if (created.is_public) setPublicTournaments((current) => [created, ...current]);
       setName('');
       setRomName('');
-      setRomFile(null);
       setGameQuery('');
       setIsPublic(true);
       setCreateOpen(false);
@@ -420,12 +449,7 @@ export default function TournamentsPage() {
                 <datalist id="tournament-mame-games">
                   {games.map((game) => <option key={game.rom_name} value={gameOptionLabel(game)} />)}
                 </datalist>
-                <small>{selectedGame ? `Selected system: MAME Arcade · ROM: ${selectedGame.rom_name}` : 'Choose a MAME Arcade game from the search results.'}</small>
-              </label>
-              <label>
-                Tournament ROM
-                <input type="file" accept=".zip,application/zip" onChange={(event) => setRomFile(event.target.files?.[0] || null)} required />
-                <small>{selectedGame ? `Upload the exact ${selectedGame.rom_name}.zip that every entrant will play.` : 'Choose the game first, then upload its MAME ROM ZIP.'}</small>
+                <small>{selectedGame ? `Selected from your MAME library: ${selectedGame.file_name}` : 'Choose a tournament-ready game from your connected MAME library.'}</small>
               </label>
               <label>Duration<select value={durationHours} onChange={(event) => setDurationHours(Number(event.target.value))}><option value={1}>1 hour</option><option value={6}>6 hours</option><option value={12}>12 hours</option><option value={24}>24 hours</option><option value={72}>3 days</option><option value={168}>1 week</option></select></label>
               <label className="tournament-visibility-option">
@@ -434,7 +458,7 @@ export default function TournamentsPage() {
               </label>
               <div className="tournament-modal-actions">
                 <button type="button" className="secondary" disabled={busy} onClick={() => setCreateOpen(false)}>Cancel</button>
-                <button type="submit" disabled={busy || !name.trim() || !selectedGame || !romFile}>{busy ? 'Creating…' : 'Create tournament'}</button>
+                <button type="submit" disabled={busy || !name.trim() || !selectedGame || !selectedLibraryGame}>{busy ? 'Creating…' : 'Create tournament'}</button>
               </div>
             </form>
           </section>
