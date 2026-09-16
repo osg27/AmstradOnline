@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import BrandMark from '../components/BrandMark';
+import SupporterLockModal from '../components/SupporterLockModal';
+import useEntitlement from '../hooks/useEntitlement';
 import { apiFetch } from '../api/client';
 import { getLocalLibraryGames, readLocalLibraryFile } from '../localLibraryDb';
 import { prepareTournamentMameFile } from '../vipMameCache';
@@ -45,10 +47,7 @@ async function readTournamentLibraryFile(game) {
 export default function TournamentsPage() {
   const { code: routeCode } = useParams();
   const navigate = useNavigate();
-  const canCreateTournaments = localStorage.getItem('isAdmin') === 'true'
-    || localStorage.getItem('isSuperAdmin') === 'true';
-  const canDeleteTournaments = localStorage.getItem('isAdmin') === 'true'
-    || localStorage.getItem('isSuperAdmin') === 'true';
+  const canCreateTournaments = useEntitlement('create_tournaments');
   const [joinCode, setJoinCode] = useState(routeCode || '');
   const [tournament, setTournament] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
@@ -67,6 +66,7 @@ export default function TournamentsPage() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [supporterLock, setSupporterLock] = useState('');
   const [, setClock] = useState(0);
 
   const selectedGame = useMemo(
@@ -224,7 +224,7 @@ export default function TournamentsPage() {
       }));
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
-        body: JSON.stringify({ system: 'arcade', party_max_players: 2 }),
+        body: JSON.stringify({ system: 'arcade', hosting_mode: 'solo', party_max_players: 8 }),
       });
       const params = new URLSearchParams({
         localGame: game.id,
@@ -267,7 +267,7 @@ export default function TournamentsPage() {
   }
 
   async function resetStandings() {
-    if (!tournament?.is_creator || !window.confirm('Clear every submitted score from this tournament?')) return;
+    if (!tournament?.can_delete || !window.confirm('Clear every submitted score from this tournament?')) return;
     setBusy(true);
     setStatus('Resetting tournament standings…');
     try {
@@ -282,7 +282,7 @@ export default function TournamentsPage() {
   }
 
   async function deleteTournament(item) {
-    if (!canDeleteTournaments || !item) return;
+    if (!item?.can_delete) return;
     if (!window.confirm(`Permanently delete "${item.name}"? Its entries, scores and profile medals will also be removed.`)) return;
     setBusy(true);
     setStatus(`Deleting ${item.name}â€¦`);
@@ -326,7 +326,9 @@ export default function TournamentsPage() {
               <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Enter tournament code" maxLength={12} />
               <button type="submit" disabled={busy || !joinCode.trim()}>Join</button>
             </form>
-            {canCreateTournaments ? <button type="button" onClick={() => setCreateOpen(true)}>Create tournament</button> : null}
+            <button type="button" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>
+              {canCreateTournaments ? 'Create tournament' : '🔒 Create tournament'}
+            </button>
           </div>
           {status ? <p className="status-message">{status}</p> : null}
         </section>
@@ -358,8 +360,8 @@ export default function TournamentsPage() {
                 <div className="tournament-scoreboard-heading">
                   <h3>{tournament.status === 'completed' ? 'Final standings' : 'Live standings'}</h3>
                   <div className="tournament-manage-actions">
-                    {tournament.is_creator ? <button className="secondary" type="button" disabled={busy || !leaderboard.length} onClick={resetStandings}>Reset standings</button> : null}
-                    {canDeleteTournaments ? <button className="danger" type="button" disabled={busy} onClick={() => deleteTournament(tournament)}>Delete tournament</button> : null}
+                    {tournament.can_delete ? <button className="secondary" type="button" disabled={busy || !leaderboard.length} onClick={resetStandings}>Reset standings</button> : null}
+                    {tournament.can_delete ? <button className="danger" type="button" disabled={busy} onClick={() => deleteTournament(tournament)}>Delete tournament</button> : null}
                   </div>
                 </div>
                 {leaderboard.length ? (
@@ -403,7 +405,7 @@ export default function TournamentsPage() {
         <section className={`panel tournament-list${tournament ? '' : ' tournament-list-wide'}`}>
           <div className="tournament-list-heading">
             <div><p className="eyebrow">YOUR COMPETITIONS</p><h2>My tournaments</h2></div>
-            {canCreateTournaments ? <button type="button" className="secondary" onClick={() => setCreateOpen(true)}>Create new</button> : null}
+            <button type="button" className="secondary" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>Create new</button>
           </div>
           {mine.length ? <div className="tournament-list-grid">{mine.map((item) => (
             <article className="tournament-list-item" key={item.code}>
@@ -413,12 +415,13 @@ export default function TournamentsPage() {
                 <span className="tournament-list-game">{item.display_name}</span>
                 <small>{item.code}</small>
               </Link>
-              {canDeleteTournaments ? <button type="button" className="danger tournament-list-delete" disabled={busy} onClick={() => deleteTournament(item)} aria-label={`Delete ${item.name}`} title="Delete tournament"><i className="bi bi-trash3" aria-hidden="true" /></button> : null}
+              {item.can_delete ? <button type="button" className="danger tournament-list-delete" disabled={busy} onClick={() => deleteTournament(item)} aria-label={`Delete ${item.name}`} title="Delete tournament"><i className="bi bi-trash3" aria-hidden="true" /></button> : null}
             </article>
           ))}</div> : <div className="tournament-empty"><strong>No tournaments yet</strong><p>Enter a code above to join one{canCreateTournaments ? ', or create your own.' : '.'}</p></div>}
         </section>
       </main>
 
+      <SupporterLockModal feature={supporterLock} onClose={() => setSupporterLock('')} />
       {canCreateTournaments && createOpen ? (
         <div className="tournament-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCreateOpen(false); }}>
           <section className="tournament-modal" role="dialog" aria-modal="true" aria-labelledby="create-tournament-title">

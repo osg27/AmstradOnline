@@ -6,6 +6,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import get_current_user
+from app.core.entitlements import has_entitlement, require_entitlement
 from app.core.database import get_db
 from app.models.room import Room, RoomActivity
 from app.models.tournament import Tournament, TournamentEntry, TournamentScore
@@ -17,6 +18,7 @@ AVATARS = {
     "arcade-green", "space-purple", "racer-red", "wizard-blue",
     "robot-gold", "ghost-mint", "ninja-pink", "knight-silver",
 }
+AVATAR_ENTITLEMENTS: dict[str, str] = {}
 
 
 class AvatarUpdate(BaseModel):
@@ -107,12 +109,20 @@ def serialize_profile(user: User, db: Session) -> dict:
         "podiums": medals[:12],
         "achievements": achievements,
         "available_avatars": sorted(AVATARS),
+        "avatar_options": [
+            {
+                "id": avatar_id,
+                "required_entitlement": AVATAR_ENTITLEMENTS.get(avatar_id),
+                "available": not AVATAR_ENTITLEMENTS.get(avatar_id) or has_entitlement(user, db, AVATAR_ENTITLEMENTS[avatar_id]),
+            }
+            for avatar_id in sorted(AVATARS)
+        ],
     }
 
 
 @router.get("")
 def get_profile(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return serialize_profile(user, db)
+    return {**serialize_profile(user, db), "supporter_badge": has_entitlement(user, db, "supporter_profile")}
 
 
 @router.patch("/avatar")
@@ -123,6 +133,9 @@ def update_avatar(
 ):
     if payload.avatar_id not in AVATARS:
         raise HTTPException(status_code=400, detail="Unknown avatar")
+    required = AVATAR_ENTITLEMENTS.get(payload.avatar_id)
+    if required:
+        require_entitlement(user, db, required)
     user.avatar_id = payload.avatar_id
     db.commit()
     return {"avatar_id": user.avatar_id}

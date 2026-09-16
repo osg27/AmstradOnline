@@ -10,8 +10,9 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotification
 from app.models.friendship import DirectMessage, Friendship, LobbyMessage, RoomInvite
-from app.models.room import Room, RoomActivity
-from app.models.user import AccountToken, User
+from app.models.room import Room, RoomActivity, RoomAccess
+from app.models.user import AccountToken, User, UserEntitlement
+from app.core.entitlements import PLAN_ENTITLEMENTS, SUPPORTER_ENTITLEMENTS, entitlements_for
 
 router = APIRouter(prefix="/auth/admin", tags=["admin"])
 VALID_ROLES = {"user", "tester", "admin"}
@@ -27,6 +28,29 @@ class UserRoleRequest(BaseModel):
         if normalized not in VALID_ROLES:
             raise ValueError("Unsupported role")
         return normalized
+
+
+class UserPlanRequest(BaseModel):
+    plan: str
+
+    @field_validator("plan")
+    @classmethod
+    def validate_plan(cls, value):
+        normalized = value.upper().strip()
+        if normalized not in PLAN_ENTITLEMENTS:
+            raise ValueError("Unsupported plan")
+        return normalized
+
+
+class UserGrantRequest(BaseModel):
+    entitlement: str
+
+    @field_validator("entitlement")
+    @classmethod
+    def validate_entitlement(cls, value):
+        if value not in SUPPORTER_ENTITLEMENTS:
+            raise ValueError("Unsupported entitlement")
+        return value
 
 
 def get_current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
@@ -119,6 +143,7 @@ def get_admin_stats(
                 "last_login_at": user.last_login_at,
                 "login_count": user.login_count or 0,
                 "role": user.role,
+                "plan": user.plan or "FREE",
                 "is_super_admin": is_super_admin_user(user),
             }
             for user in recent_users
@@ -145,6 +170,42 @@ def update_user_role(
     user.role = payload.role
     db.commit()
     return {"id": user.id, "username": user.username, "role": user.role}
+
+
+@router.patch("/users/{user_id}/plan")
+def update_user_plan(user_id: int, payload: UserPlanRequest, db: Session = Depends(get_db),
+                     admin_user: User = Depends(require_admin)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.plan = payload.plan
+    db.commit()
+    return {"id": user.id, "plan": user.plan, "entitlements": sorted(entitlements_for(user, db))}
+
+
+@router.post("/users/{user_id}/entitlements")
+def grant_user_entitlement(user_id: int, payload: UserGrantRequest, db: Session = Depends(get_db),
+                           admin_user: User = Depends(require_admin)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not db.query(UserEntitlement).filter(UserEntitlement.user_id == user_id,
+                                           UserEntitlement.entitlement == payload.entitlement).first():
+        db.add(UserEntitlement(user_id=user_id, entitlement=payload.entitlement))
+        db.commit()
+    return {"id": user.id, "entitlements": sorted(entitlements_for(user, db))}
+
+
+@router.delete("/users/{user_id}/entitlements/{entitlement}")
+def revoke_user_entitlement(user_id: int, entitlement: str, db: Session = Depends(get_db),
+                            admin_user: User = Depends(require_admin)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.query(UserEntitlement).filter(UserEntitlement.user_id == user_id,
+                                     UserEntitlement.entitlement == entitlement).delete(synchronize_session=False)
+    db.commit()
+    return {"id": user.id, "entitlements": sorted(entitlements_for(user, db))}
 
 
 @router.delete("/users/{user_id}", status_code=204)
@@ -188,11 +249,15 @@ def delete_user(
     db.query(RoomActivity).filter(
         (RoomActivity.user_id == user.id) | RoomActivity.room_id.in_(owned_room_ids)
     ).delete(synchronize_session=False)
+    db.query(RoomAccess).filter(
+        (RoomAccess.user_id == user.id) | RoomAccess.room_id.in_(owned_room_ids)
+    ).delete(synchronize_session=False)
     db.query(LobbyMessage).filter(LobbyMessage.sender_id == user.id).delete(synchronize_session=False)
     db.query(DirectMessage).filter(
         (DirectMessage.sender_id == user.id) | (DirectMessage.recipient_id == user.id)
     ).delete(synchronize_session=False)
     db.query(Room).filter(Room.owner_user_id == user.id).delete(synchronize_session=False)
     db.query(AccountToken).filter(AccountToken.user_id == user.id).delete(synchronize_session=False)
+    db.query(UserEntitlement).filter(UserEntitlement.user_id == user.id).delete(synchronize_session=False)
     db.delete(user)
     db.commit()

@@ -6,8 +6,11 @@ VALID_SYSTEMS = {"cpc", "cpc_party", "spectrum", "c64", "atari8", "atarist", "x6
 
 class RoomCreateRequest(BaseModel):
     system: str = "cpc"
+    hosting_mode: str = "multiplayer"
     party_max_players: int = Field(default=2, ge=2, le=20)
     arcade_multiplayer: bool = False
+    is_private: bool = False
+    password: str | None = Field(default=None, min_length=4, max_length=100)
 
     @field_validator("system")
     @classmethod
@@ -16,6 +19,13 @@ class RoomCreateRequest(BaseModel):
         if normalized not in VALID_SYSTEMS:
             raise ValueError("Unsupported system")
         return normalized
+
+    @field_validator("hosting_mode")
+    @classmethod
+    def validate_hosting_mode(cls, value):
+        if value not in {"solo", "multiplayer"}:
+            raise ValueError("Unsupported hosting mode")
+        return value
 
 
 class RoomUpdateRequest(BaseModel):
@@ -36,8 +46,11 @@ class RoomCreateResponse(BaseModel):
     room_code: str
     status: str
     system: str
+    hosting_mode: str
     party_max_players: int
     arcade_multiplayer: bool
+    is_private: bool = False
+    has_password: bool = False
 
 
 class ArcadeModeUpdateRequest(BaseModel):
@@ -46,6 +59,7 @@ class ArcadeModeUpdateRequest(BaseModel):
 
 class RoomJoinRequest(BaseModel):
     room_code: str
+    password: str | None = Field(default=None, max_length=100)
 
 
 class RoomHeartbeatRequest(BaseModel):
@@ -57,5 +71,8 @@ class RoomResponse(BaseModel):
     status: str
     owner_user_id: int
     system: str
+    hosting_mode: str
     party_max_players: int
     arcade_multiplayer: bool
+    is_private: bool = False
+    has_password: bool = False

@@ -39,7 +39,7 @@ export default function useSignaling(roomCode, onMessage, requestedClientId = nu
       return undefined;
     }
 
-    const ws = new WebSocket(getSignalingUrl(roomCode));
+    const ws = new WebSocket(getSignalingUrl(roomCode), ['osg', localStorage.getItem('token') || 'missing']);
     wsRef.current = ws;
     setIsOpen(false);
 

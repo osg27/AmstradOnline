@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import PlayerAvatar, { PLAYER_AVATARS } from '../components/PlayerAvatar';
+import SupporterLockModal from '../components/SupporterLockModal';
 
 const achievementIcons = {
   coin: '●', joystick: '🕹️', systems: '▦', flag: '⚑', bronze: '🥉', gold: '🏆', clock: '◷',
@@ -23,6 +24,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [status, setStatus] = useState('Loading player card…');
   const [savingAvatar, setSavingAvatar] = useState('');
+  const [supporterLock, setSupporterLock] = useState('');
 
   useEffect(() => {
     apiFetch('/auth/profile')
@@ -32,6 +34,11 @@ export default function ProfilePage() {
 
   async function chooseAvatar(avatarId) {
     if (!profile || savingAvatar) return;
+    const option = profile.avatar_options?.find((item) => item.id === avatarId);
+    if (option && !option.available) {
+      setSupporterLock('Selected avatars');
+      return;
+    }
     setSavingAvatar(avatarId);
     try {
       await apiFetch('/auth/profile/avatar', {
@@ -68,6 +75,7 @@ export default function ProfilePage() {
             <div className="profile-identity-copy">
               <span>{roleLabel(profile.role)}</span>
               <h1>{profile.username}</h1>
+              {profile.supporter_badge ? <strong className="profile-supporter-badge">★ OldStyleGaming Supporter</strong> : null}
               <p>Member since {memberSince(profile.member_since)}</p>
             </div>
             <div className="profile-level-chip"><small>ACHIEVEMENTS</small><strong>{profile.stats.achievements_unlocked}/{profile.achievements.length}</strong></div>
@@ -113,8 +121,9 @@ export default function ProfilePage() {
                 <div className="profile-section-heading"><div><p>PLAYER LOOK</p><h2>Avatar locker</h2></div></div>
                 <div className="avatar-options">
                   {profile.available_avatars.map((avatarId) => (
-                    <button key={avatarId} type="button" className={profile.avatar_id === avatarId ? 'selected' : ''} onClick={() => chooseAvatar(avatarId)} disabled={Boolean(savingAvatar)} title={PLAYER_AVATARS[avatarId]?.label}>
+                    <button key={avatarId} type="button" className={profile.avatar_id === avatarId ? 'selected' : ''} onClick={() => chooseAvatar(avatarId)} disabled={Boolean(savingAvatar)} title={`${PLAYER_AVATARS[avatarId]?.label}${profile.avatar_options?.find((item) => item.id === avatarId)?.available === false ? ' — Supporter' : ''}`}>
                       <PlayerAvatar avatarId={avatarId} size="small" />
+                      {profile.avatar_options?.find((item) => item.id === avatarId)?.available === false ? <span aria-label="Supporter avatar">🔒</span> : null}
                     </button>
                   ))}
                 </div>
@@ -124,6 +133,7 @@ export default function ProfilePage() {
           </div>
         </main>
       ) : null}
+      <SupporterLockModal feature={supporterLock} onClose={() => setSupporterLock('')} />
     </div>
   );
 }

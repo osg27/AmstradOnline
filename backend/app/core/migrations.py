@@ -43,6 +43,9 @@ def ensure_runtime_columns(engine):
                     {"username": username},
                 )
 
+        if "plan" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN plan VARCHAR(20) NOT NULL DEFAULT 'FREE'"))
+
         connection.execute(
             text("UPDATE users SET role = 'admin' WHERE LOWER(username) = LOWER(:username)"),
             {"username": settings.SUPER_ADMIN_USERNAME},
@@ -61,6 +64,18 @@ def ensure_runtime_columns(engine):
         if "system" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN system VARCHAR(32) NOT NULL DEFAULT 'cpc'"))
 
+        if "hosting_mode" not in room_columns:
+            connection.execute(text("ALTER TABLE rooms ADD COLUMN hosting_mode VARCHAR(16) NOT NULL DEFAULT 'multiplayer'"))
+        if "hosting_started_at" not in room_columns:
+            connection.execute(text(f"ALTER TABLE rooms ADD COLUMN hosting_started_at {timestamp_type}"))
+            # Existing rooms predate the solo/hosted distinction. Keep them joinable,
+            # but do not charge unknown historical launches to the new daily allowance.
+
+        connection.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_rooms_owner_mode_created "
+            "ON rooms (owner_user_id, hosting_mode, created_at)"
+        ))
+
         if "party_max_players" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN party_max_players INTEGER NOT NULL DEFAULT 2"))
 
@@ -71,6 +86,11 @@ def ensure_runtime_columns(engine):
 
         if "current_game" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN current_game VARCHAR(512)"))
+
+        if "is_private" not in room_columns:
+            connection.execute(text(f"ALTER TABLE rooms ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT {false_default}"))
+        if "password_hash" not in room_columns:
+            connection.execute(text("ALTER TABLE rooms ADD COLUMN password_hash VARCHAR(255)"))
 
         if "feedback_items" in table_names:
             connection.execute(text("UPDATE feedback_items SET status = 'unstarted' WHERE status = 'open'"))

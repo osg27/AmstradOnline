@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import get_current_user, is_admin_user
 from app.core.database import get_db
+from app.core.entitlements import require_entitlement
 from app.models.tournament import Tournament, TournamentEntry, TournamentNotification, TournamentScore
 from app.models.user import User
 from app.schemas.tournament import TournamentScoreSubmit
@@ -99,7 +100,7 @@ def serialize_tournament(tournament: Tournament, db: Session, user_id: int) -> d
 
 
 def can_manage_tournament(tournament: Tournament, user: User) -> bool:
-    return is_admin_user(user)
+    return is_admin_user(user) or tournament.creator_user_id == user.id
 
 
 def get_tournament(code: str, db: Session) -> Tournament:
@@ -136,9 +137,8 @@ def tournament_ready_games() -> list[dict]:
 
 
 @router.get("/games")
-def tournament_games(_user: User = Depends(get_current_user)):
-    if not is_admin_user(_user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+def tournament_games(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_entitlement(_user, db, "create_tournaments")
     return tournament_ready_games()
 
 
@@ -152,8 +152,7 @@ def create_tournament(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not is_admin_user(user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    require_entitlement(user, db, "create_tournaments")
     rom_name = normalise_rom_name(rom_name)
     ready_game = next((item for item in tournament_ready_games() if item["rom_name"] == rom_name), None)
     if not ready_game:
@@ -202,7 +201,7 @@ def create_tournament(
         target.unlink(missing_ok=True)
         raise
     db.refresh(tournament)
-    return serialize_tournament(tournament, db, user.id)
+    return {**serialize_tournament(tournament, db, user.id), "can_delete": True}
 
 
 @router.get("/mine")
@@ -210,7 +209,10 @@ def my_tournaments(user: User = Depends(get_current_user), db: Session = Depends
     rows = db.query(Tournament).join(
         TournamentEntry, TournamentEntry.tournament_id == Tournament.id,
     ).filter(TournamentEntry.user_id == user.id).order_by(desc(Tournament.created_at)).limit(50).all()
-    return [serialize_tournament(item, db, user.id) for item in rows]
+    return [
+        {**serialize_tournament(item, db, user.id), "can_delete": can_manage_tournament(item, user)}
+        for item in rows
+    ]
 
 
 @router.get("/public")
@@ -218,7 +220,10 @@ def public_tournaments(user: User = Depends(get_current_user), db: Session = Dep
     rows = db.query(Tournament).filter(
         Tournament.is_public.is_(True),
     ).order_by(desc(Tournament.created_at)).limit(100).all()
-    return [serialize_tournament(item, db, user.id) for item in rows]
+    return [
+        {**serialize_tournament(item, db, user.id), "can_delete": can_manage_tournament(item, user)}
+        for item in rows
+    ]
 
 
 @router.get("/notifications")
@@ -276,7 +281,7 @@ def tournament_details(code: str, user: User = Depends(get_current_user), db: Se
 def delete_tournament(code: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     tournament = get_tournament(code, db)
     if not can_manage_tournament(tournament, user):
-        raise HTTPException(status_code=403, detail="Only an admin can delete tournaments")
+        raise HTTPException(status_code=403, detail="Only the creator or an admin can delete tournaments")
     db.query(TournamentNotification).filter(TournamentNotification.tournament_id == tournament.id).delete(
         synchronize_session=False,
     )
@@ -336,8 +341,8 @@ def reset_tournament_leaderboard(
     db: Session = Depends(get_db),
 ):
     tournament = get_tournament(code, db)
-    if tournament.creator_user_id != user.id:
-        raise HTTPException(status_code=403, detail="Only the tournament creator can reset its standings")
+    if not can_manage_tournament(tournament, user):
+        raise HTTPException(status_code=403, detail="Only the creator or an admin can reset tournament standings")
     db.query(TournamentNotification).filter(TournamentNotification.tournament_id == tournament.id).delete(
         synchronize_session=False,
     )

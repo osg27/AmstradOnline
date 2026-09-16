@@ -472,6 +472,11 @@ def invite_friend_to_room(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
+    if room.hosting_mode == "solo":
+        raise HTTPException(status_code=403, detail="Solo rooms do not accept invites")
+    if room.is_private and room.owner_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the host can invite players to a private room")
+
     existing = db.query(RoomInvite).filter(
         RoomInvite.room_id == room.id,
         RoomInvite.recipient_id == user_id,

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { RECORDING_COUNTDOWNS, RECORDING_DURATIONS, RECORDING_QUALITIES } from './gameRecorder';
 import { useGameRecorder } from './useGameRecorder';
 import { detectNextControllerInput, getDetectionLabel } from '../../utils/controllerInputDetection';
+import useEntitlement from '../../hooks/useEntitlement';
+import SupporterLockModal from '../../components/SupporterLockModal';
 
 const RECORD_BUTTON_STORAGE_KEY = 'gameRecordingButtonBinding';
 
@@ -26,6 +28,8 @@ function durationLabel(value) {
 }
 
 export default function GameRecorderControls({ available, unavailableReason, sourceFactory, gameTitle, systemLabel, onActiveChange }) {
+  const canRecord = useEntitlement('full_recording');
+  const [supporterLock, setSupporterLock] = useState(false);
   const [durationSeconds, setDurationSeconds] = useState(30);
   const [countdownSeconds, setCountdownSeconds] = useState(3);
   const [quality, setQuality] = useState('standard');
@@ -36,13 +40,16 @@ export default function GameRecorderControls({ available, unavailableReason, sou
   React.useEffect(() => onActiveChange?.(active), [active, onActiveChange]);
 
   const startWithCurrentSettings = React.useCallback(() => {
-    if (!available || active) return;
+    if (!available || active || !canRecord) {
+      if (available && !canRecord) setSupporterLock(true);
+      return;
+    }
     if (recorder.status === 'ready') recorder.resetRecording();
     recorder.startRecording({ durationSeconds, countdownSeconds, quality, gameTitle, system: systemLabel });
-  }, [active, available, countdownSeconds, durationSeconds, gameTitle, quality, recorder, systemLabel]);
+  }, [active, available, canRecord, countdownSeconds, durationSeconds, gameTitle, quality, recorder, systemLabel]);
 
   React.useEffect(() => {
-    if (!recordButton || !available || active || assigningButton) return undefined;
+    if (!recordButton || !available || !canRecord || active || assigningButton) return undefined;
     let frameId = 0;
     let wasPressed = false;
     const poll = () => {
@@ -56,7 +63,7 @@ export default function GameRecorderControls({ available, unavailableReason, sou
     };
     frameId = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(frameId);
-  }, [active, assigningButton, available, recordButton, startWithCurrentSettings]);
+  }, [active, assigningButton, available, canRecord, recordButton, startWithCurrentSettings]);
 
   async function assignRecordButton() {
     const pads = Array.from(navigator.getGamepads?.() || []);
@@ -83,6 +90,10 @@ export default function GameRecorderControls({ available, unavailableReason, sou
 
   if (!available) {
     return <div className="game-recorder unavailable"><strong>Recording unavailable</strong><span>{unavailableReason}</span></div>;
+  }
+
+  if (!canRecord) {
+    return <div className="game-recorder"><button type="button" onClick={() => setSupporterLock(true)}>🔒 Record gameplay</button><SupporterLockModal feature={supporterLock ? 'Full game recording' : ''} onClose={() => setSupporterLock(false)} /></div>;
   }
 
   if (recorder.status === 'countdown') {

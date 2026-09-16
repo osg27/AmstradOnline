@@ -48,6 +48,7 @@ export default function MyLocalGamesPage() {
         method: 'POST',
         body: JSON.stringify({
           system: launch.roomSystem,
+          hosting_mode: 'solo',
           party_max_players: launch.roomSystem === 'arcade' ? 8 : 2,
           arcade_multiplayer: false,
         }),

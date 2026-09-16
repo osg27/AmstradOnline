@@ -4,6 +4,8 @@ import { apiFetch, clearAuthSession } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import PlayerBubble from '../components/PlayerBubble';
 import SocialSidebar from '../components/SocialSidebar';
+import SupporterLockModal from '../components/SupporterLockModal';
+import useEntitlement from '../hooks/useEntitlement';
 import { getLocalLibraryGames, getLocalLibrarySetting } from '../localLibraryDb';
 import { getMameDisplayName } from '../data/mameTitleLookup';
 import LocalLibraryPage, { SUPPORTED_SYSTEMS } from './LocalLibraryPage';
@@ -350,6 +352,12 @@ const EMPTY_ERA_COPY = {
 
 export default function LobbyPage() {
   const navigate = useNavigate();
+  const canCreatePrivateRooms = useEntitlement('private_rooms');
+  const canHostLargeSessions = useEntitlement('larger_multiplayer_sessions');
+  const [supporterLock, setSupporterLock] = useState('');
+  const [privateRoom, setPrivateRoom] = useState(false);
+  const [roomPassword, setRoomPassword] = useState('');
+  const [joinPassword, setJoinPassword] = useState('');
   const username = localStorage.getItem('username');
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
@@ -363,6 +371,7 @@ export default function LobbyPage() {
   const [selectedSystemId, setSelectedSystemId] = useState('cpc');
   const [selectedMode, setSelectedMode] = useState('hosted');
   const [partyMaxPlayers, setPartyMaxPlayers] = useState(4);
+  const [arcadeMaxPlayers, setArcadeMaxPlayers] = useState(8);
   const [feedbackNotificationCount, setFeedbackNotificationCount] = useState(0);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [availableTournamentCount, setAvailableTournamentCount] = useState(0);
@@ -591,6 +600,22 @@ export default function LobbyPage() {
   }
 
   async function createSession(mode = selectedMode) {
+    if (privateRoom && (mode === 'solo' || selectedSystem?.id === 'arcade')) {
+      setError('Choose a multiplayer mode to create a private room.');
+      return;
+    }
+    if (privateRoom && !canCreatePrivateRooms) {
+      setSupporterLock('Private rooms');
+      return;
+    }
+    if (partyMaxPlayers > 4 && mode === 'party' && !canHostLargeSessions) {
+      setSupporterLock('Larger multiplayer sessions');
+      return;
+    }
+    if (selectedSystem?.id === 'arcade' && arcadeMaxPlayers > 8 && !canHostLargeSessions) {
+      setSupporterLock('Larger multiplayer sessions');
+      return;
+    }
     setError('');
     setLoadingCreate(true);
     try {
@@ -609,8 +634,11 @@ export default function LobbyPage() {
         method: 'POST',
         body: JSON.stringify({
           system: roomSystem,
-          party_max_players: isArcadeCabinet ? 8 : isPartyRoom ? nextPartyMaxPlayers : 2,
+          hosting_mode: isArcadeCabinet || mode === 'solo' ? 'solo' : 'multiplayer',
+          party_max_players: isArcadeCabinet ? arcadeMaxPlayers : isPartyRoom ? nextPartyMaxPlayers : 2,
           arcade_multiplayer: false,
+          is_private: privateRoom,
+          password: privateRoom && roomPassword ? roomPassword : undefined,
         }),
       });
 
@@ -629,7 +657,7 @@ export default function LobbyPage() {
     try {
       const room = await apiFetch('/rooms/join', {
         method: 'POST',
-        body: JSON.stringify({ room_code: joinCode.trim().toUpperCase() }),
+        body: JSON.stringify({ room_code: joinCode.trim().toUpperCase(), password: joinPassword || undefined }),
       });
       navigate(`/room/${room.room_code}`);
     } catch (err) {
@@ -690,7 +718,7 @@ export default function LobbyPage() {
       }));
       const room = await apiFetch('/rooms/create', {
         method: 'POST',
-        body: JSON.stringify({ system: pendingGame.roomSystem || (entrySystem === 'amiga' ? 'amiga_aga' : 'arcade'), party_max_players: 8, arcade_multiplayer: false }),
+        body: JSON.stringify({ system: pendingGame.roomSystem || (entrySystem === 'amiga' ? 'amiga_aga' : 'arcade'), hosting_mode: 'solo', party_max_players: 8, arcade_multiplayer: false }),
       });
       const params = new URLSearchParams({
         localGame: pendingGame.id,
@@ -792,6 +820,7 @@ export default function LobbyPage() {
                 onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
                 maxLength={8}
               />
+              <input type="password" placeholder="Room password (if needed)" value={joinPassword} onChange={(event) => setJoinPassword(event.target.value)} />
             </label>
             <button type="submit" disabled={!joinCode || loadingJoin}>
               {loadingJoin ? 'Joining...' : 'Join'}
@@ -933,11 +962,29 @@ export default function LobbyPage() {
                   {(selectedSystem?.modes.party?.system === 'arcade'
                     ? [3, 4]
                     : [2, 3, 4, 5, 6, 7, 8]).map((count) => (
-                    <option key={count} value={count}>{count}</option>
+                    <option key={count} value={count}>{count > 4 && !canHostLargeSessions ? `🔒 ${count} players` : count}</option>
                   ))}
                 </select>
               </label>
             ) : null}
+
+            {selectedSystem?.id === 'arcade' ? (
+              <label className="party-player-select mode-party-select">
+                <span>Cabinet connections</span>
+                <select value={arcadeMaxPlayers} onChange={(event) => setArcadeMaxPlayers(Number(event.target.value))}>
+                  {[8, 12, 16, 20].map((count) => <option key={count} value={count}>{count > 8 && !canHostLargeSessions ? `🔒 ${count}` : count}</option>)}
+                </select>
+              </label>
+            ) : null}
+
+            <label className="party-player-select mode-party-select">
+              <input type="checkbox" checked={privateRoom} onChange={(event) => {
+                if (event.target.checked && !canCreatePrivateRooms) setSupporterLock('Private rooms');
+                else setPrivateRoom(event.target.checked);
+              }} />
+              Create private room {!canCreatePrivateRooms ? '🔒' : ''}
+            </label>
+            {privateRoom ? <input type="password" placeholder="Optional room password" minLength={4} value={roomPassword} onChange={(event) => setRoomPassword(event.target.value)} /> : null}
 
             <button
               className="launch-button"
@@ -950,6 +997,7 @@ export default function LobbyPage() {
             {error ? <p className="error">{error}</p> : null}
           </aside>
         </main>
+        <SupporterLockModal feature={supporterLock} onClose={() => setSupporterLock('')} />
         </div>
         <div className="lobby-side-rail">
           <section className="recent-arcade-scores" aria-label="Recent Arcade scores">

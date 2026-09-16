@@ -15,6 +15,7 @@ class User(Base):
     login_count = Column(Integer, nullable=False, server_default="0")
     email_verified = Column(Boolean, nullable=False, default=False, server_default="false")
     role = Column(String(20), nullable=False, default="user", server_default="user")
+    plan = Column(String(20), nullable=False, default="FREE", server_default="FREE")
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     avatar_id = Column(String(32), nullable=False, default="arcade-green", server_default="arcade-green")
 
@@ -28,4 +29,12 @@ class AccountToken(Base):
     purpose = Column(String(32), nullable=False, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UserEntitlement(Base):
+    __tablename__ = "user_entitlements"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    entitlement = Column(String(64), primary_key=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

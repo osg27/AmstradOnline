@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.entitlements import entitlements_for
 from app.core.email import send_email
 from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
 from app.models.user import AccountToken, User
@@ -80,13 +81,15 @@ def create_account_token(db: Session, user: User, purpose: str, expires_minutes:
     return token
 
 
-def auth_response(user: User) -> AuthResponse:
+def auth_response(user: User, db: Session) -> AuthResponse:
     return AuthResponse(
         access_token=create_access_token(str(user.id)),
         username=user.username,
         is_admin=is_admin_user(user),
         is_super_admin=is_super_admin_user(user),
         is_tester=is_tester_user(user),
+        plan=user.plan or "FREE",
+        entitlements=sorted(entitlements_for(user, db)),
     )
 
 
@@ -227,7 +230,7 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
 
     issue_refresh_session(db, user, response, request)
     db.commit()
-    return auth_response(user)
+    return auth_response(user, db)
 
 
 @router.post("/refresh", response_model=AuthResponse)
@@ -267,7 +270,7 @@ def refresh_session(
     issue_refresh_session(db, user, response, request)
     user.last_seen_at = datetime.now(timezone.utc)
     db.commit()
-    return auth_response(user)
+    return auth_response(user, db)
 
 
 @router.post("/logout", status_code=204)
@@ -333,11 +336,13 @@ def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db))
 
 
 @router.get("/me")
-def get_me(user: User = Depends(get_current_user)):
+def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return {
         "id": user.id,
         "username": user.username,
         "is_admin": is_admin_user(user),
         "is_super_admin": is_super_admin_user(user),
         "is_tester": is_tester_user(user),
+        "plan": user.plan or "FREE",
+        "entitlements": sorted(entitlements_for(user, db)),
     }

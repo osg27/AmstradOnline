@@ -31,3 +31,5 @@ class AuthResponse(BaseModel):
     is_admin: bool = False
     is_super_admin: bool = False
     is_tester: bool = False
+    plan: str = "FREE"
+    entitlements: list[str] = []

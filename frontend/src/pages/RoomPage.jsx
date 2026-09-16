@@ -748,7 +748,6 @@ export default function RoomPage() {
   const hasVipAccess = localStorage.getItem('isVip') === 'true'
     || localStorage.getItem('isAdmin') === 'true'
     || isSuperAdmin;
-  const legacySoloMode = searchParams.get('mode') === 'solo';
   const localGameId = searchParams.get('localGame');
   const localReleaseId = searchParams.get('localRelease');
   const tournamentCode = searchParams.get('tournament')?.toUpperCase() || '';
@@ -979,7 +978,7 @@ export default function RoomPage() {
   const isAtariSt = roomSystem === 'atarist';
   const isMouseComputer = isAmigaFamily || isAtariSt || isX68000;
   const isArcade = roomSystem === 'arcade';
-  const isSoloMode = isArcade ? !Boolean(room?.arcade_multiplayer) : legacySoloMode;
+  const isSoloMode = isArcade ? !Boolean(room?.arcade_multiplayer) : room?.hosting_mode === 'solo';
   const supportsMameScoreboard = isArcade && isSoloMode;
   const supportsAmigaScoreboard = isPuaeAmiga && Boolean(amigaScoreGame);
   const kickstartStorageKey = isPuaeAmiga
@@ -5973,6 +5972,7 @@ export default function RoomPage() {
         method: 'POST',
         body: JSON.stringify({
           system: roomSystem,
+          hosting_mode: 'multiplayer',
           party_max_players: 2,
         }),
       });
@@ -6776,6 +6776,7 @@ export default function RoomPage() {
                   method: 'POST',
                   body: JSON.stringify({
                     system: 'amiga_aga',
+                    hosting_mode: room?.hosting_mode || 'multiplayer',
                     party_max_players: 2,
                   }),
                 });
