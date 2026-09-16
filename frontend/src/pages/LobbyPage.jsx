@@ -406,7 +406,15 @@ export default function LobbyPage() {
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];
   const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0] || null;
   const selectedModeConfig = selectedSystem?.modes[selectedMode];
+  const canProtectSelectedRoom = Boolean(selectedSystem && selectedSystem.id !== 'arcade' && selectedMode !== 'solo' && selectedModeConfig?.enabled);
   const emptyEraCopy = EMPTY_ERA_COPY[selectedPlatform?.id] || EMPTY_ERA_COPY.micros;
+
+  useEffect(() => {
+    if (!canProtectSelectedRoom) {
+      setPrivateRoom(false);
+      setRoomPassword('');
+    }
+  }, [canProtectSelectedRoom]);
 
   useEffect(() => {
     async function loadAvailableTournaments() {
@@ -600,12 +608,13 @@ export default function LobbyPage() {
   }
 
   async function createSession(mode = selectedMode) {
-    if (privateRoom && (mode === 'solo' || selectedSystem?.id === 'arcade')) {
-      setError('Choose a multiplayer mode to create a private room.');
+    const protectedRoom = privateRoom && mode !== 'solo' && selectedSystem?.id !== 'arcade';
+    if (protectedRoom && !canCreatePrivateRooms) {
+      setSupporterLock('Protected rooms');
       return;
     }
-    if (privateRoom && !canCreatePrivateRooms) {
-      setSupporterLock('Private rooms');
+    if (protectedRoom && roomPassword && roomPassword.length < 4) {
+      setError('Use at least 4 characters for a room password, or leave it blank for invite-only access.');
       return;
     }
     if (partyMaxPlayers > 4 && mode === 'party' && !canHostLargeSessions) {
@@ -637,8 +646,8 @@ export default function LobbyPage() {
           hosting_mode: isArcadeCabinet || mode === 'solo' ? 'solo' : 'multiplayer',
           party_max_players: isArcadeCabinet ? arcadeMaxPlayers : isPartyRoom ? nextPartyMaxPlayers : 2,
           arcade_multiplayer: false,
-          is_private: privateRoom,
-          password: privateRoom && roomPassword ? roomPassword : undefined,
+          is_private: protectedRoom,
+          password: protectedRoom && roomPassword ? roomPassword : undefined,
         }),
       });
 
@@ -977,14 +986,38 @@ export default function LobbyPage() {
               </label>
             ) : null}
 
-            <label className="party-player-select mode-party-select">
-              <input type="checkbox" checked={privateRoom} onChange={(event) => {
-                if (event.target.checked && !canCreatePrivateRooms) setSupporterLock('Private rooms');
-                else setPrivateRoom(event.target.checked);
-              }} />
-              Create private room {!canCreatePrivateRooms ? '🔒' : ''}
-            </label>
-            {privateRoom ? <input type="password" placeholder="Optional room password" minLength={4} value={roomPassword} onChange={(event) => setRoomPassword(event.target.value)} /> : null}
+            {canProtectSelectedRoom ? (
+              <section className="room-access-options" aria-label="Room access">
+                <div className="room-access-default">
+                  <strong>Normal room</strong>
+                  <small>Unlisted. Share the room code or link with the people you want to play with.</small>
+                </div>
+                <button
+                  type="button"
+                  className={`protected-room-option ${privateRoom ? 'active' : ''} ${!canCreatePrivateRooms ? 'locked' : ''}`}
+                  role="switch"
+                  aria-checked={privateRoom}
+                  onClick={() => {
+                    if (privateRoom) setPrivateRoom(false);
+                    else if (!canCreatePrivateRooms) setSupporterLock('Protected rooms');
+                    else setPrivateRoom(true);
+                  }}
+                >
+                  <span className="protected-room-copy">
+                    <span className="protected-room-title">Protected room <span className="protected-room-badge">{canCreatePrivateRooms ? 'Supporter' : '🔒 Supporter'}</span></span>
+                    <small>Require an invite or password before someone can join.</small>
+                  </span>
+                  <span className="protected-room-switch" aria-hidden="true"><span /></span>
+                </button>
+                {privateRoom ? (
+                  <label className="protected-room-password">
+                    <span>Room password <small>Optional</small></span>
+                    <input type="password" placeholder="Leave blank for invite-only access" minLength={4} maxLength={100} value={roomPassword} onChange={(event) => setRoomPassword(event.target.value)} />
+                    <small>Friends you invite can join without the password.</small>
+                  </label>
+                ) : null}
+              </section>
+            ) : null}
 
             <button
               className="launch-button"

@@ -739,6 +739,14 @@ async function loadA500WHDLoadKickstart() {
   return stored ? [{ fileName: 'kick34005.A500', bytes: stored.bytes }] : [];
 }
 
+async function admitProtectedRoom(roomCode, password = '') {
+  await apiFetch('/rooms/join', {
+    method: 'POST',
+    body: JSON.stringify({ room_code: roomCode, password: password || undefined }),
+  });
+  return apiFetch(`/rooms/${roomCode}`);
+}
+
 export default function RoomPage() {
   const navigate = useNavigate();
   const { roomCode } = useParams();
@@ -763,6 +771,10 @@ export default function RoomPage() {
   }, [obsCaptureMode]);
 
   const [room, setRoom] = useState(null);
+  const [passwordPromptOpen, setPasswordPromptOpen] = useState(false);
+  const [roomJoinPassword, setRoomJoinPassword] = useState('');
+  const [roomJoinError, setRoomJoinError] = useState('');
+  const [roomJoinBusy, setRoomJoinBusy] = useState(false);
   const [status, setStatus] = useState('Loading room...');
   const [error, setError] = useState('');
   const [logs, setLogs] = useState([]);
@@ -3327,7 +3339,7 @@ export default function RoomPage() {
     }
   }, [addLog, isHost, isMultiPeerParty, partyMaxPlayers]);
 
-  const { send: sendSignal, isOpen: signalingOpen } = useSignaling(isSoloMode ? null : roomCode, onSignalMessage, signalingClientIdRef.current);
+  const { send: sendSignal, isOpen: signalingOpen } = useSignaling(room?.room_code === roomCode?.toUpperCase() && !isSoloMode ? roomCode : null, onSignalMessage, signalingClientIdRef.current);
 
   function sendChatMessage(message) {
     if (!signalingOpen || isSoloMode) return;
@@ -3619,18 +3631,66 @@ export default function RoomPage() {
   ]);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadRoom() {
+      setRoom(null);
+      setError('');
+      setStatus('Loading room...');
+      setPasswordPromptOpen(false);
+      setRoomJoinPassword('');
+      setRoomJoinError('');
       try {
         const data = await apiFetch(`/rooms/${roomCode}`);
-        setRoom(data);
-        setStatus('Room ready');
+        if (!cancelled) {
+          setRoom(data);
+          setStatus('Room ready');
+        }
       } catch (err) {
-        setError(err.message);
+        if (err.message !== 'Join this private room first') {
+          if (!cancelled) setError(err.message);
+          return;
+        }
+        try {
+          const data = await admitProtectedRoom(roomCode);
+          if (!cancelled) {
+            setRoom(data);
+            setStatus('Room ready');
+          }
+        } catch (joinError) {
+          if (cancelled) return;
+          if (joinError.message === 'Room invitation or password required') {
+            setPasswordPromptOpen(true);
+            setStatus('Protected room admission required');
+          } else {
+            setError(joinError.message);
+          }
+        }
       }
     }
 
     loadRoom();
+    return () => { cancelled = true; };
   }, [roomCode]);
+
+  async function submitRoomPassword(event) {
+    event.preventDefault();
+    if (!roomJoinPassword || roomJoinBusy) return;
+    setRoomJoinBusy(true);
+    setRoomJoinError('');
+    try {
+      const data = await admitProtectedRoom(roomCode, roomJoinPassword);
+      setRoom(data);
+      setPasswordPromptOpen(false);
+      setRoomJoinPassword('');
+      setStatus('Room ready');
+    } catch (err) {
+      setRoomJoinError(err.message === 'Room invitation or password required'
+        ? 'That password did not grant access. Check it with the host, or ask for an invite.'
+        : err.message);
+    } finally {
+      setRoomJoinBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!room) return undefined;
@@ -8312,6 +8372,24 @@ export default function RoomPage() {
         onClose={() => setControllerSetupOpen(false)}
         onInputCaptureStateChange={setControllerCapturingInput}
       />
+      {passwordPromptOpen ? (
+        <div className="tournament-modal-backdrop" role="presentation">
+          <section className="tournament-modal protected-room-join-modal" role="dialog" aria-modal="true" aria-labelledby="protected-room-join-title">
+            <span className="protected-room-badge">Protected room</span>
+            <h2 id="protected-room-join-title">Enter this room</h2>
+            <p>This room needs a host invite or password in addition to its link. Ask the host for access if you do not have the password.</p>
+            <form onSubmit={submitRoomPassword}>
+              <label htmlFor="protected-room-join-password">Room password</label>
+              <input id="protected-room-join-password" type="password" autoComplete="off" autoFocus value={roomJoinPassword} onChange={(event) => setRoomJoinPassword(event.target.value)} />
+              {roomJoinError ? <p className="error" role="alert">{roomJoinError}</p> : null}
+              <div className="protected-room-join-actions">
+                <Link className="button-like secondary" to="/lobby">Back to lobby</Link>
+                <button type="submit" disabled={!roomJoinPassword || roomJoinBusy}>{roomJoinBusy ? 'Checking...' : 'Join room'}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
