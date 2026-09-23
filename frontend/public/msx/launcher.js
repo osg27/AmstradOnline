@@ -299,7 +299,7 @@
     window.EJS_DEBUG_XX = true;
     window.EJS_player = '#game';
     window.EJS_core = 'bluemsx';
-    window.EJS_biosUrl = '/msx/bluemsx-system.zip';
+    window.EJS_biosUrl = '/msx/bluemsx-system.zip?v=2026-09-23-2';
     window.EJS_gameName = fileName;
     window.EJS_gameUrl = romUrl;
     window.EJS_pathtodata = '/emulatorjs/data/';
