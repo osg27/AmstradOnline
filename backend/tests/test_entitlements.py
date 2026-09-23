@@ -106,6 +106,20 @@ def test_early_access_registry_can_protect_future_systems(db, monkeypatch):
     require_system_early_access(supporter, db, "nes")
 
 
+def test_msx_preview_is_enforced_for_admins_on_the_backend(db):
+    regular = add_user(db, "msx_regular")
+    admin = add_user(db, "msx_admin")
+    admin.role = "admin"
+    db.commit()
+
+    with pytest.raises(HTTPException) as error:
+        create_room(RoomCreateRequest(system="msx", hosting_mode="solo"), db, regular.id)
+    assert error.value.status_code == 403
+
+    room = create_room(RoomCreateRequest(system="msx", hosting_mode="solo"), db, admin.id)
+    assert room.system == "msx"
+
+
 def test_solo_burst_is_rate_limited_for_every_plan(db):
     for plan in ("FREE", "SUPPORTER"):
         user = add_user(db, f"burst_{plan.lower()}", plan)

@@ -59,6 +59,7 @@ backend/storage/
 !frontend/public/emulatorjs/data/cores/
 !frontend/public/emulatorjs/data/cores/yabause-wasm.data
 !frontend/public/emulatorjs/data/cores/yabause-legacy-wasm.data
+!frontend/public/emulatorjs/data/cores/bluemsx-wasm.data
 
 # VS Code local settings
 .vscode/

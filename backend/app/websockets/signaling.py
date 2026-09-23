@@ -90,7 +90,7 @@ async def signaling_ws(websocket: WebSocket, room_code: str):
                 "room-system-changed", "arcade-mode-changed", "party-assigned", "party-room-full",
                 "party-turn", "arcade_seat_update", "arcade_start", "arcade_autoload",
                 "amiga_start", "amiga_aga_start", "atari8_start", "atarist_start",
-                "c64_start", "megadrive_start", "nes_start", "snes_start",
+                "c64_start", "msx_start", "megadrive_start", "nes_start", "snes_start",
             }:
                 continue
             for connection in list(room_connections[room_code]):

@@ -37,6 +37,7 @@ const SYSTEM_ACTIONS = {
   cpc_party: TWO_BUTTON,
   spectrum: TWO_BUTTON,
   c64: TWO_BUTTON,
+  msx: TWO_BUTTON,
   atari8: TWO_BUTTON,
   atarist: TWO_BUTTON,
   amiga: TWO_BUTTON,

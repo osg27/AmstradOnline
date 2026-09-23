@@ -16,6 +16,7 @@ describe('local game launch adapter', () => {
   it.each([
     ['amiga', 'amiga'],
     ['c64', 'c64'],
+    ['msx', 'msx'],
     ['spectrum', 'spectrum'],
     ['amstrad', 'cpc'],
   ])('routes %s releases to the existing %s player', (platform, roomSystem) => {

@@ -175,6 +175,23 @@ const PLATFORM_SHELVES = [
               link: { enabled: false, note: 'Not available yet' },
             },
           },
+          {
+            id: 'msx',
+            name: 'MSX / MSX2',
+            shortName: 'MSX',
+            accent: 'blue',
+            logo: null,
+            summary: 'MSX and MSX2 cartridge, disk and cassette games through blueMSX.',
+            formats: '.rom .mx1 .mx2 .dsk .cas .m3u .zip',
+            testing: true,
+            adminOnly: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
         ],
       },
     ],
@@ -382,8 +399,8 @@ export default function LobbyPage() {
   const [openingLibrary, setOpeningLibrary] = useState(false);
   const canUsePreviewSystems = isAdmin || isTester || isSuperAdmin;
   const allLibrarySystemIds = useMemo(
-    () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin).map((system) => system.id),
-    [isSuperAdmin],
+    () => SUPPORTED_SYSTEMS.filter((system) => (!system.superAdminOnly || isSuperAdmin) && (!system.adminOnly || isAdmin || isSuperAdmin)).map((system) => system.id),
+    [isAdmin, isSuperAdmin],
   );
   const filterToLocalLibrary = librarySetupComplete === true && librarySystems.length > 0;
 
@@ -391,7 +408,7 @@ export default function LobbyPage() {
     ...platform,
     eras: platform.eras.map((era) => ({
       ...era,
-      systems: era.systems.filter((system) => !system.superAdminOnly || isSuperAdmin).map((system) => {
+      systems: era.systems.filter((system) => (!system.superAdminOnly || isSuperAdmin) && (!system.adminOnly || isAdmin || isSuperAdmin)).map((system) => {
         const locked = Boolean(system.underConstruction);
         return {
           ...system,
@@ -400,7 +417,7 @@ export default function LobbyPage() {
         };
       }),
     })).filter((era) => era.systems.length > 0),
-  })).filter((platform) => platform.eras.length > 0), [canUsePreviewSystems, isSuperAdmin]);
+  })).filter((platform) => platform.eras.length > 0), [canUsePreviewSystems, isAdmin, isSuperAdmin]);
 
   const selectedPlatform = visibleShelves.find((platform) => platform.id === selectedPlatformId) || visibleShelves[0];
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];

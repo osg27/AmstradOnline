@@ -5,6 +5,7 @@ const ADAPTERS = {
   cpc: { label: 'Amstrad CPC', fps: 50, audioGetter: 'getAmstradAudioStream' },
   cpc_party: { label: 'Amstrad CPC', fps: 50, audioGetter: 'getAmstradAudioStream' },
   c64: { label: 'Commodore 64', fps: 50, audioGetter: 'getC64AudioStream' },
+  msx: { label: 'MSX', fps: 60, audioGetter: 'getMsxAudioStream' },
   spectrum: { label: 'ZX Spectrum', fps: 50, audioGetter: 'getSpectrumAudioStream' },
   mastersystem: { label: 'Master System', fps: 60, audioGetter: 'getMegaDriveAudioStream' },
   megadrive: { label: 'Mega Drive', fps: 60, audioGetter: 'getMegaDriveAudioStream' },

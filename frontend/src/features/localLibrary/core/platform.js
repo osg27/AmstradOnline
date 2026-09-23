@@ -3,6 +3,7 @@ export const LOCAL_LIBRARY_PLATFORM = 'amiga';
 const EXTENSIONS = {
   amiga: new Set(['adf', 'adz', 'dms', 'ipf', 'hdf', 'lha', 'slave', 'zip']),
   c64: new Set(['d64', 'g64', 'f64', 't64', 'p00', 'p01', 'prg', 'crt', 'tap', 'zip']),
+  msx: new Set(['rom', 'mx1', 'mx2', 'dsk', 'cas', 'm3u', 'zip']),
   spectrum: new Set(['tap', 'tzx', 'z80', 'sna', 'zip']),
   amstrad: new Set(['dsk', 'cdt', 'zip']),
   x68000: new Set(['dim', 'img', 'd88', '88d', 'hdm', 'dup', '2hd', 'xdf', 'hdf', 'cmd', 'm3u', 'zip']),

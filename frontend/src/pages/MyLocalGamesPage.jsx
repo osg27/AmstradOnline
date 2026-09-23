@@ -14,6 +14,7 @@ import {
 const LOCAL_PLATFORMS = [
   { id: 'amiga', label: 'Amiga', accept: '.zip,.adf,.adz,.dms,.ipf,.hdf' },
   { id: 'c64', label: 'Commodore 64', accept: '.zip,.d64,.g64,.f64,.t64,.p00,.p01,.tap,.prg,.crt' },
+  { id: 'msx', label: 'MSX / MSX2', accept: '.zip,.rom,.mx1,.mx2,.dsk,.cas,.m3u', adminOnly: true },
   { id: 'spectrum', label: 'ZX Spectrum', accept: '.zip,.tap,.tzx,.z80,.sna' },
   { id: 'amstrad', label: 'Amstrad CPC', accept: '.zip,.dsk,.cdt' },
 ];
@@ -21,6 +22,8 @@ const LOCAL_PLATFORMS = [
 export default function MyLocalGamesPage() {
   const navigate = useNavigate();
   const inputRef = useRef(null);
+  const isAdmin = localStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isSuperAdmin') === 'true';
+  const visiblePlatforms = useMemo(() => LOCAL_PLATFORMS.filter((item) => !item.adminOnly || isAdmin), [isAdmin]);
   const { games, progress, error, folderName, scan } = useLocalLibrary();
   const [search, setSearch] = useState('');
   const [platform, setPlatform] = useState('amiga');
@@ -87,7 +90,7 @@ export default function MyLocalGamesPage() {
               ref={inputRef}
               className="visually-hidden"
               type="file"
-              accept={LOCAL_PLATFORMS.find((item) => item.id === platform)?.accept}
+              accept={visiblePlatforms.find((item) => item.id === platform)?.accept}
               webkitdirectory=""
               multiple
               onChange={chooseFiles}
@@ -95,11 +98,11 @@ export default function MyLocalGamesPage() {
             <label>
               Platform
               <select value={platform} onChange={(event) => setPlatform(event.target.value)}>
-                {LOCAL_PLATFORMS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                {visiblePlatforms.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
             <button type="button" onClick={() => inputRef.current?.click()}>
-              {games.length ? 'Change folder / rescan' : `Choose ${LOCAL_PLATFORMS.find((item) => item.id === platform)?.label} folder`}
+              {games.length ? 'Change folder / rescan' : `Choose ${visiblePlatforms.find((item) => item.id === platform)?.label} folder`}
             </button>
           </div>
         </section>
@@ -107,7 +110,7 @@ export default function MyLocalGamesPage() {
           <div className="local-library-titlebar">
             <div>
               <span>{folderName || 'No folder selected'}</span>
-              <h2>{LOCAL_PLATFORMS.find((item) => item.id === platform)?.label} games</h2>
+              <h2>{visiblePlatforms.find((item) => item.id === platform)?.label} games</h2>
               <span>{games.length} games · {releaseCount} releases</span>
             </div>
             <input

@@ -24,6 +24,8 @@ export function prepareLocalGameLaunch(game, storage = window.localStorage) {
     ? (isWhdLoad || machine.includes('AGA') || machine.includes('CD32') || resolvedModel === 'A1200' ? 'amiga_aga' : 'amiga')
     : game.platform === 'c64'
       ? 'c64'
+      : game.platform === 'msx'
+        ? 'msx'
       : game.platform === 'spectrum'
         ? 'spectrum'
         : game.platform === 'amstrad'

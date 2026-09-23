@@ -130,6 +130,17 @@ export const SUPPORTED_SYSTEMS = [
     pathHints: ['c64', 'commodore'],
   },
   {
+    id: 'msx',
+    roomSystem: 'msx',
+    label: 'MSX / MSX2',
+    shortLabel: 'MSX',
+    logo: null,
+    extensions: ['rom', 'mx1', 'mx2', 'dsk', 'cas', 'm3u', 'zip'],
+    pathHints: ['msx', 'msx1', 'msx2'],
+    note: 'Admin preview: MSX and MSX2 through blueMSX',
+    adminOnly: true,
+  },
+  {
     id: 'nes',
     roomSystem: 'nes',
     label: 'NES',
@@ -229,6 +240,7 @@ const LIBRETRO_BOXART_REPOS = {
   cpc: ['Amstrad_-_CPC'],
   spectrum: ['Sinclair_-_ZX_Spectrum'],
   c64: ['Commodore_-_64'],
+  msx: ['Microsoft_-_MSX', 'Microsoft_-_MSX2'],
   nes: ['Nintendo_-_Nintendo_Entertainment_System'],
   snes: ['Nintendo_-_Super_Nintendo_Entertainment_System'],
   mastersystem: ['Sega_-_Master_System_-_Mark_III'],
@@ -1661,10 +1673,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSuperAdmin = localStorage.getItem('isSuperAdmin') === 'true';
+  const isAdmin = localStorage.getItem('isAdmin') === 'true';
   const isVip = false;
   const availableSystems = useMemo(
-    () => SUPPORTED_SYSTEMS.filter((system) => !system.superAdminOnly || isSuperAdmin),
-    [isSuperAdmin],
+    () => SUPPORTED_SYSTEMS.filter((system) => (!system.superAdminOnly || isSuperAdmin) && (!system.adminOnly || isAdmin || isSuperAdmin)),
+    [isAdmin, isSuperAdmin],
   );
   const requestedSystem = searchParams.get('system');
   const requestedSystemExists = availableSystems.some((system) => system.id === requestedSystem);
