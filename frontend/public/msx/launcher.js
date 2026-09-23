@@ -414,9 +414,10 @@
     }
 
     clearGameContainer();
-    const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
-    gameUrl = URL.createObjectURL(gameBlob);
-    configureEmulator(currentRom.fileName, gameUrl);
+    const gameFile = new File([currentRom.bytes], currentRom.fileName, {
+      type: 'application/octet-stream',
+    });
+    configureEmulator(currentRom.fileName, gameFile);
     drawStatus('Loading MSX', currentRom.fileName);
 
     loaderScript = document.createElement('script');
