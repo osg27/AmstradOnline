@@ -16,6 +16,7 @@ import atariStLogoUrl from '../../assets/atari-st.webp';
 import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
 import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
+import msxLogoUrl from '../../assets/msx-logo.webp';
 import nesLogoUrl from '../../assets/59db13187bf21468ce403a95096fbd14.png';
 import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
 import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
@@ -120,6 +121,23 @@ const PLATFORM_SHELVES = [
               link: { enabled: false, note: 'Not available yet' },
             },
           },
+          {
+            id: 'msx',
+            name: 'MSX / MSX2',
+            shortName: 'MSX',
+            accent: 'blue',
+            logo: msxLogoUrl,
+            summary: 'MSX and MSX2 cartridge, disk and cassette games through WebMSX.',
+            formats: '.rom .mx1 .mx2 .dsk .cas .m3u .zip',
+            testing: true,
+            adminOnly: true,
+            modes: {
+              solo: { enabled: true },
+              hosted: { enabled: true },
+              party: { enabled: false, note: 'Not available yet' },
+              link: { enabled: false, note: 'Not available yet' },
+            },
+          },
         ],
       },
       {
@@ -168,23 +186,6 @@ const PLATFORM_SHELVES = [
             formats: '.dim .img .d88 .88d .hdm .2hd .xdf .hdf .m3u',
             testing: true,
             superAdminOnly: true,
-            modes: {
-              solo: { enabled: true },
-              hosted: { enabled: true },
-              party: { enabled: false, note: 'Not available yet' },
-              link: { enabled: false, note: 'Not available yet' },
-            },
-          },
-          {
-            id: 'msx',
-            name: 'MSX / MSX2',
-            shortName: 'MSX',
-            accent: 'blue',
-            logo: null,
-            summary: 'MSX and MSX2 cartridge, disk and cassette games through blueMSX.',
-            formats: '.rom .mx1 .mx2 .dsk .cas .m3u .zip',
-            testing: true,
-            adminOnly: true,
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },

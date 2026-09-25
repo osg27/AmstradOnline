@@ -12,6 +12,7 @@ import atariStLogoUrl from '../../assets/atari-st.webp';
 import c64LogoUrl from '../../assets/C64_Logo.webp';
 import masterSystemLogoUrl from '../../assets/Sega-master-system-logo.png';
 import megaDriveLogoUrl from '../../assets/MegaDriveJPLogo.svg.webp';
+import msxLogoUrl from '../../assets/msx-logo.webp';
 import nesLogoUrl from '../../assets/NES_logo.svg.webp';
 import pcEngineLogoUrl from '../../assets/PC_engine_logo_red.svg.webp';
 import playStationLogoUrl from '../../assets/PlayStation_logo_and_wordmark.svg';
@@ -134,10 +135,10 @@ export const SUPPORTED_SYSTEMS = [
     roomSystem: 'msx',
     label: 'MSX / MSX2',
     shortLabel: 'MSX',
-    logo: null,
+    logo: msxLogoUrl,
     extensions: ['rom', 'mx1', 'mx2', 'dsk', 'cas', 'm3u', 'zip'],
     pathHints: ['msx', 'msx1', 'msx2'],
-    note: 'Admin preview: MSX and MSX2 through blueMSX',
+    note: 'Admin preview: MSX and MSX2 through WebMSX',
     adminOnly: true,
   },
   {
