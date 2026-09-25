@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>OldStyleGaming WebMSX smoke test</title>
+<style>body { background:#111; color:#eee; font:16px system-ui; } iframe { width:960px; height:600px; border:0; } pre { white-space:pre-wrap; } button { padding:8px; }</style>
+<h1>WebMSX launcher smoke test</h1>
+<p>Development only. Self-authored disk and cartridge fixtures; no commercial game files.</p>
+<button id="run">Run tests</button>
+<button id="disk">Download test disk for RoomPage</button>
+<button id="rom">Download test cartridge for RoomPage</button>
+<pre id="result">Ready</pre>
+<iframe id="emulator" src="/msx/launcher.html" allow="autoplay; fullscreen"></iframe>
+<script type="module">
+const frame = document.querySelector('iframe');
+const output = document.querySelector('#result');
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const win = () => frame.contentWindow;
+const room = () => win().WMSX.room;
+const send = message => win().postMessage(message, location.origin);
+const assert = (condition, label) => { if (!condition) throw Error(label); output.textContent += `\nPASS ${label}`; };
+async function until(predicate, timeout = 20000) {
+  const deadline = performance.now() + timeout;
+  while (performance.now() < deadline) { if (predicate()) return; await sleep(50); }
+  throw Error('Timed out waiting for browser emulation');
+}
+async function ready() { await until(() => win().WMSX?.room && !room().isLoading); }
+function screenText() {
+  const vram = win().wmsx.Util.uncompressStringBase64ToInt8BitArray(room().machine.saveState().vd.vram);
+  return new TextDecoder().decode(new Uint8Array(vram));
+}
+function diskFixture() {
+  const runtime = win().wmsx;
+  const images = new runtime.DiskImages(room());
+  images.connect(room().machine.getDiskDriveSocket());
+  const bytes = images.createNewDisk(0xf9);
+  const game = '10 COLOR 15,4,4:CLS\r\n20 PRINT "OSG DISK GAME BOOT OK"\r\n30 PRINT "PRESS SPACE TO SCORE":S=0\r\n40 A$=INKEY$:IF A$<>" " THEN 40\r\n50 S=S+1:PRINT "SCORE";S:BEEP\r\n60 GOTO 40\r\n';
+  images.writeFilesToImage(bytes, [{name:'AUTOEXEC.BAS',content:new TextEncoder().encode(game)}]);
+  return bytes;
+}
+function romFixture() {
+  const bytes = new Uint8Array(16384);
+  bytes.set([65,66,16,64]); // MSX AB cartridge header, init at 0x4010.
+  const code = [175,205,95,0]; // SCREEN 0 through BIOS CHGMOD.
+  for (const char of 'OSG CARTRIDGE BOOT OK') code.push(62,char.charCodeAt(0),205,162,0);
+  code.push(251,118,24,253); // Enable interrupts and wait forever.
+  bytes.set(code,16);
+  return bytes;
+}
+async function download(kind) {
+  await ready();
+  const bytes = kind === 'disk' ? diskFixture() : romFixture();
+  const url = URL.createObjectURL(new Blob([bytes]));
+  const link = document.createElement('a'); link.href=url; link.download=kind === 'disk' ? 'OSG Disk Game.dsk' : 'OSG Cartridge.rom'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url),1000);
+}
+document.querySelector('#disk').onclick=()=>download('disk');
+document.querySelector('#rom').onclick=()=>download('rom');
+window.runMsxSmoke = async () => {
+  output.textContent='Running';
+  await ready();
+  const disk = diskFixture();
+  send({type:'msx_autoload',fileName:'OSG Disk Game.dsk',bytes:disk});
+  await until(()=>screenText().includes('OSG DISK GAME BOOT OK'));
+  assert(room().diskDrive.isDiskInserted(0), 'disk boots AUTOEXEC.BAS from floppy A');
+  assert(room().diskDrive.getCurrentDiskDesc(0).includes('OSG Disk Game.dsk'), 'original disk filename preserved');
+  send({type:'msx_keyboard',key:' ',code:'Space',action:'down'});
+  await sleep(100); send({type:'msx_keyboard',key:' ',code:'Space',action:'up'});
+  await until(()=>screenText().includes('SCORE'));
+  assert(true, 'forwarded keyboard plays the disk game');
+  send({type:'amstrad_remote_joystick',player:1,mask:17});
+  send({type:'amstrad_remote_joystick',player:2,mask:40});
+  await sleep(100);
+  const hub=room().controllersHub;
+  hub.writeControllerPin8Port(0,0); hub.writeControllerPin8Port(1,0);
+  assert((hub.readControllerPort(0)&63)===46 && (hub.readControllerPort(1)&63)===23, 'separate P1/P2 direction and fire masks');
+  send({type:'amstrad_remote_joystick',player:1,mask:0}); send({type:'amstrad_remote_joystick',player:2,mask:0});
+  await sleep(50);
+  assert((hub.readControllerPort(0)&63)===63 && (hub.readControllerPort(1)&63)===63, 'joystick release');
+  send({type:'emulator_set_paused',paused:true}); await sleep(100);
+  assert(room().machine.isSystemPaused(), 'RoomPage pause');
+  send({type:'emulator_set_paused',paused:false}); await sleep(100);
+  assert(!room().machine.isSystemPaused(), 'RoomPage resume');
+  assert(win().getMsxAudioStream()?.getAudioTracks()[0]?.readyState==='live', 'existing audio stream contract');
+  const canvas=win().document.querySelector('canvas');
+  const capture=canvas.captureStream(10);
+  assert(capture.getVideoTracks()[0]?.readyState==='live', 'existing canvas capture contract');
+  capture.getTracks().forEach(track=>track.stop());
+  const rom=romFixture();
+  for (const extension of ['rom','mx1','mx2']) {
+    send({type:'msx_autoload',media:[new File([rom],`OSG Cartridge.${extension}`)]});
+    await until(()=>room().cartridgeSlot.cartridgeInserted(0)?.rom.source===`OSG Cartridge.${extension}` && screenText().includes('OSG CARTRIDGE BOOT OK'));
+    assert(!room().diskDrive.isDiskInserted(0), `${extension} File cartridge boots with disk ejected`);
+  }
+  send({type:'msx_reset'}); await sleep(200);
+  await until(()=>screenText().includes('OSG CARTRIDGE BOOT OK'));
+  assert(room().machine.powerIsOn,'cartridge reset boots again');
+  send({type:'msx_autoload',fileName:'OSG Disk Game.dsk',bytes:new Blob([disk])});
+  await until(()=>!room().cartridgeSlot.cartridgeInserted(0) && screenText().includes('OSG DISK GAME BOOT OK'));
+  assert(true,'switch back from cartridge to Blob floppy boots cleanly');
+  assert(room().netPlayMode===0 && !win().WMSX.SERVER_ADDRESS,'standalone WebMSX without NetPlay server');
+  window.msxSmokeResult={passed:true,text:output.textContent};
+  output.textContent+='\nALL PASSED';
+  return window.msxSmokeResult;
+};
+document.querySelector('#run').onclick=()=>window.runMsxSmoke().catch(error=>{
+  window.msxSmokeResult={passed:false,error:error.message}; output.textContent+=`\nFAIL ${error.message}`;
+});
+</script>
+</html>

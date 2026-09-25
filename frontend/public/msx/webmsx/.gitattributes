@@ -1,0 +1,2 @@
+# Keep the vendored release byte-for-byte identical to upstream.
+wmsx.js -text
