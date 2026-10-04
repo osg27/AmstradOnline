@@ -685,14 +685,9 @@ function libretroArtworkUrl(repo, folder, fileName) {
 }
 
 function knownBoxArtUrl(game) {
+  if (game.system === 'spectrum') return null;
   const titleKey = normalizeExactBoxArtKey(canonicalLibraryTitle(game));
   const knownNames = {
-    spectrum: {
-      robocop: 'RoboCop (Ocean Software Ltd)',
-      'robo cop': 'RoboCop (Ocean Software Ltd)',
-      'robocop 2': 'RoboCop 2 (Ocean Software Ltd)',
-      'robo cop 2': 'RoboCop 2 (Ocean Software Ltd)',
-    },
     cpc: {
       robocop: 'Robocop (1988)(Ocean)',
       'robo cop': 'Robocop (1988)(Ocean)',
@@ -751,6 +746,15 @@ async function getBoxArtIndex(systemId) {
       aliasMap: new Map(),
       seenTitles: new Set(),
     };
+    if (systemId === 'spectrum') {
+      const response = await fetch('/data/spectrum-front-covers.json?v=1');
+      if (!response.ok) throw new Error('Spectrum front-cover index is unavailable');
+      const payload = await response.json();
+      for (const cover of payload.covers || []) {
+        addBoxArtEntry(collection, '', cover.title, cover.url);
+      }
+      return collection;
+    }
     for (const repo of repos) {
       const artworkFolders = systemId === 'cpc'
         ? ['Named_Boxarts', 'Named_Titles']
@@ -824,6 +828,9 @@ function findIndexedBoxArt(game, index) {
     const match = index.aliasMap.get(key);
     if (match) return match;
   }
+
+  // A short title such as "1942" must not claim "1942 Mission" artwork.
+  if (game.system === 'spectrum') return null;
 
   // Packaging databases commonly omit a descriptive suffix used by a ROM
   // catalogue ("Acro Jet the Advanced Flight Simulator" versus "Acro Jet").
@@ -1185,7 +1192,7 @@ async function restoreCachedBoxArt(games) {
         result = await apiFetch('/library/media/boxart/lookup', {
           method: 'POST',
           body: JSON.stringify({
-            system,
+            system: system === 'spectrum' ? 'spectrum-front' : system,
             rom_names: romNames.slice(offset, offset + batchSize),
             titles: Object.fromEntries(romNames.slice(offset, offset + batchSize).map((romName) => [
               romName,
@@ -1212,7 +1219,9 @@ async function restoreCachedBoxArt(games) {
           boxArtUrl: toApiMediaUrl(cachedPath),
           boxArtCached: true,
         }
-      : game;
+      : game.system === 'spectrum'
+        ? { ...game, boxArtUrl: null, boxArtSource: null, boxArtCached: false }
+        : game;
   });
 }
 
@@ -1222,7 +1231,7 @@ async function cacheBoxArtUrl(game, sourceUrl) {
       method: 'POST',
       body: JSON.stringify({
         url: sourceUrl,
-        system: game.system,
+        system: game.system === 'spectrum' ? 'spectrum-front' : game.system,
         title: game.title,
         rom_name: boxArtLookupKey(game),
       }),
@@ -1248,6 +1257,13 @@ async function buildBoxArtMedia(game, sourceUrl) {
 }
 
 async function findBoxArtForGame(game) {
+  if (game.system === 'spectrum') {
+    const index = await getBoxArtIndex('spectrum');
+    const match = findIndexedBoxArt(game, index);
+    if (!match) return null;
+    const imageUrl = await probeImageUrl(match.url);
+    return imageUrl ? buildBoxArtMedia(game, imageUrl) : null;
+  }
   const savedSourceUrl = game.boxArtSource
     || (game.boxArtUrl && !game.boxArtUrl.includes('/library/media/files/') ? game.boxArtUrl : '');
   if (savedSourceUrl) {
@@ -3325,6 +3341,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const hasServerArtwork = (game) => (
       Boolean(game.boxArtUrl)
       && String(game.boxArtUrl).includes('/library/media/files/')
+      && (game.system !== 'spectrum' || String(game.boxArtUrl).includes('/boxart/spectrum-front/'))
     );
     const needsArtwork = (game) => (
       !game.boxArtUrl
