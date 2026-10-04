@@ -1,3 +1,4 @@
+import { SUPPORTER_UI_ENABLED } from '../config/supporterUi';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import BrandMark from '../components/BrandMark';
@@ -326,9 +327,9 @@ export default function TournamentsPage() {
               <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Enter tournament code" maxLength={12} />
               <button type="submit" disabled={busy || !joinCode.trim()}>Join</button>
             </form>
-            <button type="button" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>
+            {SUPPORTER_UI_ENABLED || canCreateTournaments ? (<button type="button" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>
               {canCreateTournaments ? 'Create tournament' : '🔒 Create tournament'}
-            </button>
+            </button>) : null}
           </div>
           {status ? <p className="status-message">{status}</p> : null}
         </section>
@@ -405,7 +406,7 @@ export default function TournamentsPage() {
         <section className={`panel tournament-list${tournament ? '' : ' tournament-list-wide'}`}>
           <div className="tournament-list-heading">
             <div><p className="eyebrow">YOUR COMPETITIONS</p><h2>My tournaments</h2></div>
-            <button type="button" className="secondary" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>Create new</button>
+            {SUPPORTER_UI_ENABLED || canCreateTournaments ? (<button type="button" className="secondary" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>Create new</button>) : null}
           </div>
           {mine.length ? <div className="tournament-list-grid">{mine.map((item) => (
             <article className="tournament-list-item" key={item.code}>

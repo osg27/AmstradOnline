@@ -1,3 +1,4 @@
+import { SUPPORTER_UI_ENABLED } from '../config/supporterUi';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
@@ -75,7 +76,7 @@ export default function ProfilePage() {
             <div className="profile-identity-copy">
               <span>{roleLabel(profile.role)}</span>
               <h1>{profile.username}</h1>
-              {profile.supporter_badge ? <strong className="profile-supporter-badge">★ OldStyleGaming Supporter</strong> : null}
+              {SUPPORTER_UI_ENABLED && profile.supporter_badge ? <strong className="profile-supporter-badge">★ OldStyleGaming Supporter</strong> : null}
               <p>Member since {memberSince(profile.member_since)}</p>
             </div>
             <div className="profile-level-chip"><small>ACHIEVEMENTS</small><strong>{profile.stats.achievements_unlocked}/{profile.achievements.length}</strong></div>
@@ -120,7 +121,7 @@ export default function ProfilePage() {
               <section className="panel avatar-locker">
                 <div className="profile-section-heading"><div><p>PLAYER LOOK</p><h2>Avatar locker</h2></div></div>
                 <div className="avatar-options">
-                  {profile.available_avatars.map((avatarId) => (
+                  {profile.available_avatars.filter((avatarId) => SUPPORTER_UI_ENABLED || profile.avatar_options?.find((item) => item.id === avatarId)?.available !== false).map((avatarId) => (
                     <button key={avatarId} type="button" className={profile.avatar_id === avatarId ? 'selected' : ''} onClick={() => chooseAvatar(avatarId)} disabled={Boolean(savingAvatar)} title={`${PLAYER_AVATARS[avatarId]?.label}${profile.avatar_options?.find((item) => item.id === avatarId)?.available === false ? ' — Supporter' : ''}`}>
                       <PlayerAvatar avatarId={avatarId} size="small" />
                       {profile.avatar_options?.find((item) => item.id === avatarId)?.available === false ? <span aria-label="Supporter avatar">🔒</span> : null}

@@ -1,3 +1,4 @@
+import { SUPPORTER_UI_ENABLED } from '../config/supporterUi';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, clearAuthSession } from '../api/client';
@@ -988,7 +989,7 @@ export default function LobbyPage() {
                 >
                   {(selectedSystem?.modes.party?.system === 'arcade'
                     ? [3, 4]
-                    : [2, 3, 4, 5, 6, 7, 8]).map((count) => (
+                    : [2, 3, 4, 5, 6, 7, 8]).filter((count) => SUPPORTER_UI_ENABLED || canHostLargeSessions || count <= 4).map((count) => (
                     <option key={count} value={count}>{count > 4 && !canHostLargeSessions ? `🔒 ${count} players` : count}</option>
                   ))}
                 </select>
@@ -999,12 +1000,12 @@ export default function LobbyPage() {
               <label className="party-player-select mode-party-select">
                 <span>Cabinet connections</span>
                 <select value={arcadeMaxPlayers} onChange={(event) => setArcadeMaxPlayers(Number(event.target.value))}>
-                  {[8, 12, 16, 20].map((count) => <option key={count} value={count}>{count > 8 && !canHostLargeSessions ? `🔒 ${count}` : count}</option>)}
+                  {[8, 12, 16, 20].filter((count) => SUPPORTER_UI_ENABLED || canHostLargeSessions || count <= 8).map((count) => <option key={count} value={count}>{count > 8 && !canHostLargeSessions ? `🔒 ${count}` : count}</option>)}
                 </select>
               </label>
             ) : null}
 
-            {canProtectSelectedRoom ? (
+            {canProtectSelectedRoom && (SUPPORTER_UI_ENABLED || canCreatePrivateRooms) ? (
               <section className="room-access-options" aria-label="Room access">
                 <div className="room-access-default">
                   <strong>Normal room</strong>
@@ -1022,7 +1023,7 @@ export default function LobbyPage() {
                   }}
                 >
                   <span className="protected-room-copy">
-                    <span className="protected-room-title">Protected room <span className="protected-room-badge">{canCreatePrivateRooms ? 'Supporter' : '🔒 Supporter'}</span></span>
+                    <span className="protected-room-title">Protected room {SUPPORTER_UI_ENABLED ? <span className="protected-room-badge">{canCreatePrivateRooms ? 'Supporter' : '🔒 Supporter'}</span> : null}</span>
                     <small>Require an invite or password before someone can join.</small>
                   </span>
                   <span className="protected-room-switch" aria-hidden="true"><span /></span>

@@ -1,3 +1,4 @@
+import { SUPPORTER_UI_ENABLED } from '../../config/supporterUi';
 import React, { useState } from 'react';
 import { RECORDING_COUNTDOWNS, RECORDING_DURATIONS, RECORDING_QUALITIES } from './gameRecorder';
 import { useGameRecorder } from './useGameRecorder';
@@ -87,6 +88,8 @@ export default function GameRecorderControls({ available, unavailableReason, sou
     localStorage.removeItem(RECORD_BUTTON_STORAGE_KEY);
     setRecordButton(null);
   }
+
+  if (!SUPPORTER_UI_ENABLED && !canRecord) return null;
 
   if (!available) {
     return <div className="game-recorder unavailable"><strong>Recording unavailable</strong><span>{unavailableReason}</span></div>;

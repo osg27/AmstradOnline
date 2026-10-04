@@ -1,3 +1,5 @@
+import { SUPPORTER_UI_ENABLED } from '../config/supporterUi';
+
 function getDefaultApiBaseUrl() {
   if (window.location.port === '5173') {
     return `${window.location.protocol}//${window.location.hostname}:8000`;
@@ -22,7 +24,12 @@ let refreshPromise = null;
 
 function formatApiErrorDetail(detail) {
   if (!detail) return 'Request failed';
-  if (typeof detail === 'string') return detail;
+  if (typeof detail === 'string') {
+    if (!SUPPORTER_UI_ENABLED && detail.startsWith('Supporter entitlement required:')) {
+      return 'This feature is currently unavailable for your account.';
+    }
+    return detail;
+  }
 
   if (Array.isArray(detail)) {
     return detail.map((item) => {
