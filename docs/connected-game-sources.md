@@ -24,6 +24,18 @@ concurrent requests. Versioned server image responses permit long-lived browser
 caching; unversioned/stale-version requests must revalidate. The shared server
 artwork cache returns existing files before contacting upstream providers.
 
+Shelf rendering uses `size=shelf` on existing versioned image URLs. The backend
+creates a reusable WebP thumbnail bounded to 320×480, preserving aspect ratio,
+under the media volume's `_shelf` directory. Originals remain unchanged. A changed
+original gets a new thumbnail key. Install backend requirements (Pillow 12.3.0)
+and restart the backend when deploying this change; no database migration or
+artwork rescan is necessary. First thumbnail requests create the derivatives.
+
+Saved local games render before background lookup of missing artwork. Linked
+catalogues and saved artwork mappings publish together, avoiding an intermediate
+catalogue render without its stored artwork. Returning to an existing library
+does not display a fetching-library stage.
+
 ## Scope
 
 - Internet Archive metadata discovery; collections are not recursively scanned.

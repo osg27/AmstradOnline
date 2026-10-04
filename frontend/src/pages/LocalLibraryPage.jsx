@@ -7,6 +7,7 @@ import BrandMark from '../components/BrandMark';
 import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
 import { downloadSourceGame, loadSourceCatalogues, saveSourceCatalogues, peekSourceCatalogues, peekSourceArtwork, loadSourceArtwork, saveSourceArtwork } from '../features/gameSources/sourceLibrary';
 import { memoizeLast } from '../features/gameSources/memoizeLast';
+import { shelfArtworkUrl } from '../features/gameSources/shelfArtwork';
 import { registerRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
 import { getMameTitleDatabase } from '../data/mameTitleLookup';
 import amigaLogoUrl from '../../assets/amiga500.svg';
@@ -1736,7 +1737,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [genreIndex, setGenreIndex] = useState(null);
   const deferredQuery = useDeferredValue(query);
   const [favourites, setFavourites] = useState(() => librarySessionCache?.favourites || []);
-  const [status, setStatus] = useState(librarySessionCache ? 'Library ready' : 'Fetching your games...');
+  const [status, setStatus] = useState('Your saved library');
   const [libraryLoading, setLibraryLoading] = useState(!librarySessionCache);
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
@@ -1834,7 +1835,20 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             game.source !== 'internet-archive-mame'
             && !String(game.source || '').startsWith('vip-')
           ));
-          let localGamesWithArtwork = await restoreCachedBoxArt(localGames);
+          // Saved game-to-artwork links are sufficient to render the shelf.
+          // Never make loading the local catalogue depend on the network.
+          const availableSystemIds = new Set(availableSystems.map((system) => system.id));
+          const availableSavedSystems = savedSystems.filter((systemId) => availableSystemIds.has(systemId));
+          setFolders(savedFolders);
+          setGames(localGames);
+          setSelectedSystems(availableSavedSystems.length ? availableSavedSystems : availableSystems.map((system) => system.id));
+          setFavourites(savedFavourites);
+          setLibraryLoading(false);
+          setStatus('Library ready');
+          const missingArtwork = localGames.filter((game) => !game.boxArtUrl || (game.system === 'spectrum' && !game.boxArtUrl.includes('/boxart/spectrum-front/')));
+          const restoredArtwork = await restoreCachedBoxArt(missingArtwork);
+          const restoredById = new Map(restoredArtwork.map((game) => [game.id, game]));
+          let localGamesWithArtwork = missingArtwork.length ? localGames.map((game) => restoredById.get(game.id) || game) : localGames;
           if (forceAmigaBoxArtRepair) {
             const repairedAmigaGames = await applyIndexedBoxArt(
               localGamesWithArtwork.filter((game) => game.system === 'amiga' || game.system === 'amiga_aga'),
@@ -1844,11 +1858,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             localGamesWithArtwork = localGamesWithArtwork.map((game) => repairedById.get(game.id) || game);
             await saveLocalLibraryGames(localGamesWithArtwork);
           }
-          const availableSystemIds = new Set(availableSystems.map((system) => system.id));
-          const availableSavedSystems = savedSystems.filter((systemId) => availableSystemIds.has(systemId));
           setFolders(savedFolders);
           setGames(localGamesWithArtwork);
-          setStatus(localGamesWithArtwork.length ? 'Library ready' : 'Choose a ROM folder to build your local library.');
+          if (missingArtwork.length) {
+            const updated = new Map(localGamesWithArtwork.map((game) => [game.id, game]));
+            await saveLocalLibraryGames(savedGames.map((game) => updated.get(game.id) || game));
+          }
+          setStatus('Library ready');
           setSelectedSystems(availableSavedSystems.length ? availableSavedSystems : availableSystems.map((system) => system.id));
           setFavourites(savedFavourites);
           return;
@@ -2413,8 +2429,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   useEffect(() => {
     let cancelled = false;
     setSourcesReady(false);
-    loadSourceCatalogues(username).then((saved) => {
-      if (!cancelled) { setSources(saved); setSourcesReady(true); }
+    Promise.all([loadSourceCatalogues(username), loadSourceArtwork(username)]).then(([saved, artwork]) => {
+      // Publish the persisted game list and its artwork together in one render.
+      if (!cancelled) { setSourceArtwork(artwork); setSources(saved); setSourcesReady(true); }
     }).catch(() => { if (!cancelled) setStatus('Could not load linked URL sources. Allow browser storage and reload.'); });
     return () => { cancelled = true; };
   }, [username]);
@@ -2534,7 +2551,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         const game = upcoming[cursor++];
         const image = new Image();
         image.referrerPolicy = 'no-referrer';
-        image.src = game.boxArtUrl;
+        image.src = shelfArtworkUrl(game.boxArtUrl);
         try { await image.decode(); } catch { /* Missing artwork is handled by the shelf. */ }
       }
     }
@@ -3508,7 +3525,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           </div>
           <div className="local-library-actions">
             <span>Use a system’s cog to link PC folders or source URLs.</span>
-            <span>{visibleFolderCount ? `${visibleFolderCount} folder${visibleFolderCount === 1 ? '' : 's'} connected` : libraryLoading ? 'Loading saved folders...' : 'No folders connected yet'}</span>
+            <span>{visibleFolderCount ? `${visibleFolderCount} folder${visibleFolderCount === 1 ? '' : 's'} connected` : libraryLoading ? '' : 'No folders connected yet'}</span>
             {!onboarding ? (
               <form className="quick-join library-quick-join" onSubmit={handleJoinRoom}>
                 <label>
@@ -3787,7 +3804,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
             <div className="library-summary-strip">
               <strong>{visibleFilteredCount}</strong>
-              <span>shown from {visibleActiveCount} {activeLibraryCountLabel}{libraryLoading && !games.length ? ' - loading saved games...' : ''}{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
+              <span>shown from {visibleActiveCount} {activeLibraryCountLabel}{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
             </div>
             {vipLoadProgress ? (
               <div className="vip-library-progress" role="status" aria-live="polite">
@@ -3838,7 +3855,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                         {hasBoxArt ? (
                           <>
                             <img
-                              src={game.boxArtUrl}
+                              src={shelfArtworkUrl(game.boxArtUrl)}
                               alt=""
                               loading="eager"
                               decoding="async"
@@ -3900,10 +3917,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               </div>
             ) : (
               <div className="empty-local-library">
-                <strong>{libraryLoading ? 'Fetching your games...' : games.length ? 'No games match that filter' : 'No local library yet'}</strong>
+                <strong>{libraryLoading || !sourcesReady ? '' : shelfGames.length ? 'No games match that filter' : 'No library linked yet'}</strong>
                 <span>
                   {libraryLoading
-                    ? 'Your saved game lists and folders will appear here shortly.'
+                    ? ''
                     : games.length
                     ? 'Try another system or search term.'
                     : activeSystemDetails

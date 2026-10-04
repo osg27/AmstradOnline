@@ -3,6 +3,8 @@ import mimetypes
 import os
 import re
 import shutil
+import tempfile
+import threading
 from functools import lru_cache
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -12,6 +14,7 @@ from urllib.request import Request, urlopen
 from fastapi import APIRouter, HTTPException, Request as FastAPIRequest
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 
 router = APIRouter(prefix="/library/media", tags=["library-media"])
@@ -19,6 +22,38 @@ router = APIRouter(prefix="/library/media", tags=["library-media"])
 DEFAULT_MEDIA_ROOT = Path(__file__).resolve().parents[4] / "library_media"
 MEDIA_ROOT = Path(os.getenv("LIBRARY_MEDIA_DIR", str(DEFAULT_MEDIA_ROOT))).resolve()
 MAX_BYTES = int(os.getenv("LIBRARY_MEDIA_MAX_BYTES", str(8 * 1024 * 1024)))
+_thumbnail_lock = threading.Lock()
+
+
+def _shelf_thumbnail(original: Path) -> Path:
+    stat = original.stat()
+    key = hashlib.sha256(f"shelf-v1:{original.relative_to(MEDIA_ROOT)}:{stat.st_mtime_ns}:{stat.st_size}".encode()).hexdigest()
+    directory = MEDIA_ROOT / '_shelf'
+    target = directory / f'{key}.webp'
+    if target.is_file():
+        return target
+    with _thumbnail_lock:
+        if target.is_file():
+            return target
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        try:
+            with Image.open(original) as image:
+                if image.width * image.height > 25_000_000:
+                    raise HTTPException(413, 'Artwork dimensions are too large')
+                image = ImageOps.exif_transpose(image)
+                image.thumbnail((320, 480), Image.Resampling.LANCZOS)
+                image = image.convert('RGBA' if 'A' in image.getbands() else 'RGB')
+                with tempfile.NamedTemporaryFile(dir=directory, suffix='.tmp', delete=False) as output:
+                    temporary = Path(output.name)
+                    image.save(output, format='WEBP', quality=78, method=4)
+                temporary.replace(target)
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as error:
+            raise HTTPException(422, 'Artwork cannot be decoded') from error
+        finally:
+            if temporary and temporary.exists():
+                temporary.unlink()
+    return target
 
 CONTENT_TYPE_EXTENSIONS = {
     "image/gif": ".gif",
@@ -214,9 +249,11 @@ def get_cached_media(path: str, request: FastAPIRequest):
     if not target.is_file():
         raise HTTPException(status_code=404, detail="Media file not found")
 
-    media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
     # Versioned artwork URLs change whenever the stored file changes. Browsers
     # can reuse these images on room return without another network round trip.
     current_version = _response_url(target).rsplit('?v=', 1)[-1]
     cache_control = 'public, max-age=31536000, immutable' if request.query_params.get('v') == current_version else 'public, max-age=0, must-revalidate'
+    if request.query_params.get('size') == 'shelf':
+        target = _shelf_thumbnail(target)
+    media_type = 'image/webp' if target.suffix.lower() == '.webp' else mimetypes.guess_type(target.name)[0] or "application/octet-stream"
     return FileResponse(target, media_type=media_type, headers={'Cache-Control': cache_control})

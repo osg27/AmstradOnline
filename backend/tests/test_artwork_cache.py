@@ -4,10 +4,29 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from starlette.requests import Request
+from PIL import Image
 from app.api.routes import library_media as media
 
 
 class ArtworkCacheTests(unittest.TestCase):
+    def test_shelf_thumbnail_is_small_reused_and_versioned(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(media, 'MEDIA_ROOT', Path(folder)):
+            original = Path(folder) / 'large.png'
+            Image.new('RGB', (1200, 1800), 'red').save(original)
+            thumbnail = media._shelf_thumbnail(original)
+            with Image.open(thumbnail) as image:
+                self.assertEqual(image.size, (320, 480))
+                self.assertEqual(image.format, 'WEBP')
+            with patch.object(media.Image, 'open', side_effect=AssertionError('must reuse cached thumbnail')):
+                self.assertEqual(media._shelf_thumbnail(original), thumbnail)
+            version = media._response_url(original).split('?')[1]
+            request = Request({'type': 'http', 'query_string': (version + '&size=shelf').encode()})
+            response = media.get_cached_media('large.png', request)
+            self.assertEqual(response.media_type, 'image/webp')
+            self.assertIn('immutable', response.headers['cache-control'])
+            Image.new('RGB', (600, 900), 'blue').save(original)
+            self.assertNotEqual(media._shelf_thumbnail(original), thumbnail)
+
     def test_versioned_file_is_browser_cacheable(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(media, 'MEDIA_ROOT', Path(folder)):
             image = Path(folder) / 'cover.png'
