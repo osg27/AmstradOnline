@@ -5,6 +5,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
+import { downloadSourceGame, loadSourceCatalogues, saveSourceCatalogues } from '../features/gameSources/sourceLibrary';
+import { registerRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
 import { getMameTitleDatabase } from '../data/mameTitleLookup';
 import amigaLogoUrl from '../../assets/amiga500.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
@@ -1689,6 +1691,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [librarySnapshot] = useState(readLibrarySnapshot);
   const [folders, setFolders] = useState(() => librarySessionCache?.folders || []);
   const [games, setGames] = useState(() => librarySessionCache?.games || []);
+  const [sources, setSources] = useState([]);
+  const [sourcesReady, setSourcesReady] = useState(false);
+  const [sourceSystem, setSourceSystem] = useState(null);
+  const [sourceArtwork, setSourceArtwork] = useState({});
   const [selectedSystems, setSelectedSystems] = useState(() => librarySessionCache?.selectedSystems || []);
   const [activeSystem, setActiveSystem] = useState(requestedSystemExists ? requestedSystem : 'all');
   const [query, setQuery] = useState(searchParams.get('q') || '');
@@ -2370,18 +2376,58 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
   }, [mediaProgress]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setSourcesReady(false);
+    loadSourceCatalogues(username).then((saved) => {
+      if (!cancelled) { setSources(saved); setSourcesReady(true); }
+    }).catch(() => { if (!cancelled) setStatus('Could not load linked URL sources. Allow browser storage and reload.'); });
+    return () => { cancelled = true; };
+  }, [username]);
+
+  const sourceEntries = useMemo(() => sources.flatMap((source) => {
+    const system = availableSystems.find((item) => (item.roomSystem || item.id) === source.system);
+    if (!system) return [];
+    return source.games.map((entry) => ({
+      id: `url-source:${source.id}:${entry.url}`, source: 'public-url', sourceId: source.id,
+      sourceEntry: entry, system: system.id, roomSystem: source.system,
+      title: titleFromFileName(entry.file_name), fileName: entry.file_name,
+      extension: entry.file_name.split('.').pop().toLowerCase(), path: entry.file_name,
+      romKey: system.id === 'arcade' ? arcadeRomKey(entry.file_name) : '',
+    }));
+  }), [sources, availableSystems]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Restore existing artwork without blocking the shelf on thousands of
+      // fuzzy index searches. The standard Download box art action fills gaps.
+      const enriched = await restoreCachedBoxArt(sourceEntries);
+      if (!cancelled) setSourceArtwork(Object.fromEntries(enriched.filter((game) => game.boxArtUrl).map((game) => [game.id, {
+        boxArtUrl: game.boxArtUrl, boxArtSource: game.boxArtSource, boxArtCached: game.boxArtCached,
+      }])));
+    })().catch(() => { /* Missing artwork must not block linked games. */ });
+    return () => { cancelled = true; };
+  }, [sourceEntries]);
+  const sourceGames = useMemo(() => sourceEntries.map((game) => ({ ...game, ...sourceArtwork[game.id] })), [sourceEntries, sourceArtwork]);
+  const shelfGames = useMemo(() => [...games, ...sourceGames], [games, sourceGames]);
+
+  async function persistSources(next) {
+    await saveSourceCatalogues(username, next);
+    setSources(next);
+  }
+
   const groupedGames = useMemo(
     () => getGroupedLibraryGames(
-      games.filter((game) => (
+      shelfGames.filter((game) => (
         !isLikelySupportRom(game)
         && (showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game))
       )),
       { showArcadeClones },
     ),
-    [games, showArcadeClones],
+    [shelfGames, showArcadeClones],
   );
   const systemCounts = useMemo(() => buildSystemCounts(groupedGames), [groupedGames]);
-  const effectiveSystemCounts = games.length ? systemCounts : (librarySnapshot.systemCounts || systemCounts);
+  const effectiveSystemCounts = shelfGames.length || !libraryLoading ? systemCounts : (librarySnapshot.systemCounts || systemCounts);
   const visibleSystems = useMemo(
     () => availableSystems.filter((system) => (effectiveSystemCounts[system.id] || 0) > 0 || folders.some((folder) => folder.system === system.id)),
     [availableSystems, effectiveSystemCounts, folders],
@@ -2392,6 +2438,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const activeSystemFolders = activeSystemDetails
     ? folders.filter((folder) => folder.system === activeSystemDetails.id)
     : [];
+  const activeSystemSources = activeSystemDetails ? sources.filter((source) => source.system === activeSystemDetails.roomSystem) : [];
   const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
   const activeLibraryGames = useMemo(() => {
     return groupedGames
@@ -2436,12 +2483,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const hiddenArcadeCloneCount = useMemo(
     () => {
       if (activeSystem !== 'all' && activeSystem !== 'arcade' && activeSystem !== 'favourites') return 0;
-      return games
+      return shelfGames
         .filter((game) => activeSystem !== 'favourites' || favouriteSet.has(game.id))
         .filter((game) => game.system === 'arcade' && !isArcadeParentRom(game))
         .length;
     },
-    [activeSystem, favouriteSet, games],
+    [activeSystem, favouriteSet, shelfGames],
   );
   const hiddenVariantCount = useMemo(
     () => filteredGames.reduce((count, game) => count + Math.max(0, (game.variantCount || 1) - 1), 0),
@@ -2452,8 +2499,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const snapshotActiveCount = activeSystem === 'all'
     ? Number(librarySnapshot.totalGames || 0)
     : Number(librarySnapshot.systemCounts?.[activeSystem] || 0);
-  const visibleFilteredCount = libraryLoading && !games.length ? snapshotActiveCount : filteredGames.length;
-  const visibleActiveCount = libraryLoading && !games.length ? snapshotActiveCount : activeLibraryGames.length;
+  const visibleFilteredCount = libraryLoading && !shelfGames.length ? snapshotActiveCount : filteredGames.length;
+  const visibleActiveCount = libraryLoading && !shelfGames.length ? snapshotActiveCount : activeLibraryGames.length;
   const visibleFolderCount = libraryLoading && !folders.length
     ? Number(librarySnapshot.folderCount || 0)
     : folders.length;
@@ -2794,6 +2841,18 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     setLaunchingId(game.id);
     setStatus(`Starting ${game.title}...`);
     try {
+      if (game.source === 'public-url') {
+        const file = await downloadSourceGame(game.sourceEntry, game.roomSystem, {
+          onProgress: (loaded, total) => setStatus(`Downloading ${game.title}: ${total ? `${Math.round(loaded / total * 100)}%` : `${(loaded / 1048576).toFixed(1)} MB`}`),
+        });
+        const room = await apiFetch('/rooms/create', {
+          method: 'POST', body: JSON.stringify({ system: game.roomSystem, hosting_mode: 'solo', party_max_players: game.roomSystem === 'arcade' ? 8 : 2 }),
+        });
+        const launchId = `source:${crypto.randomUUID()}`;
+        registerRuntimeRelease(launchId, { title: game.title, files: [file], roomSystem: game.roomSystem });
+        navigate(`/room/${room.room_code}?${new URLSearchParams({ localRelease: launchId, returnTo: buildLibraryReturnPath() })}`);
+        return;
+      }
       if (
         (game.system === 'amiga' || game.system === 'amiga_aga')
         && game.source !== 'vip-amiga-whdload'
@@ -3309,6 +3368,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             nextGames = nextGames.map((item) => (
               item.id === game.id ? { ...item, ...media } : item
             ));
+            if (game.source === 'public-url') {
+              setSourceArtwork((current) => ({ ...current, [game.id]: media }));
+            }
             setBrokenBoxArtIds((current) => {
               if (!current.has(game.id)) return current;
               const next = new Set(current);
@@ -3388,11 +3450,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         <section className={`local-library-hero ${onboarding ? 'welcome-library-hero' : ''}`}>
           <div>
             <p className="lobby-eyebrow">{onboarding ? 'Welcome to Old Style Gaming' : 'Your ROMs, your machine'}</p>
-            <h1>{onboarding ? 'Set up your game shelves' : 'Local Game Library'}</h1>
+            <h1>{onboarding ? 'Set up your game shelves' : 'Game Library'}</h1>
             <p>{onboarding ? (games.length ? 'Your browser already has a scanned library. Pick a platform and keep playing.' : 'Connect one or more folders for each system and your games become a console-style library.') : 'Pick a platform, browse the wall, and launch straight into a room.'}</p>
           </div>
           <div className="local-library-actions">
-            <span>Choose a system below, then connect as many ROM folders as you need.</span>
+            <span>Use a system’s cog to link PC folders or source URLs.</span>
             <span>{visibleFolderCount ? `${visibleFolderCount} folder${visibleFolderCount === 1 ? '' : 's'} connected` : libraryLoading ? 'Loading saved folders...' : 'No folders connected yet'}</span>
             {!onboarding ? (
               <form className="quick-join library-quick-join" onSubmit={handleJoinRoom}>
@@ -3412,8 +3474,6 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ) : null}
           </div>
         </section>
-
-        <ConnectedSourcesPanel key={username} systems={availableSystems} username={username} />
 
         {onboarding ? (
           <section className="setup-wizard library-overview-strip" aria-label="Library overview">
@@ -3446,7 +3506,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               <strong>{games.length ? `${games.length} local games indexed` : 'Pick your systems first'}</strong>
               <span>{folders.length ? `${folders.length} folder${folders.length === 1 ? '' : 's'} connected` : 'Add folders now, or just choose systems and add folders later from My Library.'}</span>
             </div>
-            <button type="button" onClick={finishSetup} disabled={!selectedSystems.length}>
+            <button type="button" onClick={finishSetup} disabled={!selectedSystems.length && !sourceGames.length}>
               Continue to home
             </button>
           </div>
@@ -3463,7 +3523,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 {availableSystems.map((system) => {
                   const linkedFolder = folders.find((folder) => folder.system === system.id);
                   const count = effectiveSystemCounts[system.id] || 0;
-                  const folderLabel = linkedFolder ? linkedFolder.name : 'No folder connected';
+                  const folderLabel = linkedFolder ? linkedFolder.name : sources.some((source) => source.system === system.roomSystem) ? 'URL source linked' : 'No sources linked';
                   return (
                     <div key={system.id} className={activeSystem === system.id ? 'system-picker-row enabled' : 'system-picker-row'}>
                       <button
@@ -3495,10 +3555,11 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
-                          pickSystemFolder(system.id);
+                          setSourceSystem(system);
                         }}
                         title={`Configure ${system.label}`}
                         aria-label={`Configure ${system.label}`}
+                        disabled={!sourcesReady}
                       >
                         <i className="bi bi-gear-fill" aria-hidden="true" />
                       </button>
@@ -3581,8 +3642,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                 <div className="local-library-title-actions">
                   <div className="platform-manage-card">
                     <strong>Manage platform</strong>
-                    <span>{activeSystemFolders.length ? `${activeSystemFolders.length} folder${activeSystemFolders.length === 1 ? '' : 's'} connected` : 'No folder connected'}</span>
-                    <small>{activeSystemFolders.length ? `${activeSystemFolders.reduce((total, folder) => total + (folder.gameCount || 0), 0)} indexed files` : 'Open a room or add a folder.'}</small>
+                    <span>{activeSystemFolders.length + activeSystemSources.length} sources linked</span>
+                    <small>{activeSystemFolders.reduce((total, folder) => total + (folder.gameCount || 0), 0) + activeSystemSources.reduce((total, source) => total + source.games.length, 0)} indexed files</small>
                   </div>
                   <button
                     type="button"
@@ -3592,8 +3653,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                   >
                     {launchingSystemId === activeSystemDetails.id ? 'Opening...' : 'Open room'}
                   </button>
-                  <button type="button" onClick={() => pickSystemFolder(activeSystemDetails.id)}>
-                    Add another folder
+                  <button type="button" disabled={!sourcesReady} onClick={() => setSourceSystem(activeSystemDetails)}>
+                    Manage sources
                   </button>
                 </div>
               ) : null}
@@ -3881,13 +3942,22 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     document.body,
   ) : null;
 
-  if (embedded) return <>{content}{versionPicker}{remoteFallbackDialog}</>;
+  const sourceManager = sourceSystem ? createPortal(<ConnectedSourcesPanel
+    key={sourceSystem.id} system={sourceSystem} sources={sources}
+    folders={folders.filter((folder) => folder.system === sourceSystem.id)}
+    onSave={persistSources} onAddFolder={() => pickSystemFolder(sourceSystem.id)}
+    onRescanFolder={rescanLibraryFolder} onUnlinkFolder={clearLibraryFolder}
+    onClose={() => setSourceSystem(null)}
+  />, document.body) : null;
+
+  if (embedded) return <>{content}{versionPicker}{remoteFallbackDialog}{sourceManager}</>;
 
   return (
     <div className="page local-library-page">
       {content}
       {versionPicker}
       {remoteFallbackDialog}
+      {sourceManager}
     </div>
   );
 }

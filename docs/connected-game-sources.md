@@ -1,8 +1,11 @@
 # Public game sources (preview)
 
-Library → Connected sources → Add source accepts a public HTTPS page, an
-Internet Archive **item** URL, or a direct game-file URL. Select the system,
-scan, review candidates and save. Play downloads only the selected file and
+Library → system cog → Link source URL accepts a public HTTPS page, an
+Internet Archive **item** URL, or a direct game-file URL. The system is selected
+by the cog. Scanning links all matching files to that system's normal game shelf.
+The same dialog supports adding, rescanning and unlinking PC folders and URLs.
+Existing connected-source catalogues appear automatically; links persist until
+unlinked (or browser storage is cleared). Play downloads only the selected file and
 passes its original filename and bytes to the existing room File launcher.
 No personal cloud account connection or OAuth is implemented.
 
@@ -18,8 +21,10 @@ the file again, just like the existing temporary file handoff.
   scraping, login, access-control bypass, recursive crawl or pagination.
 - 20 saved sources; safety bounds of 100,000 matching files, 300,000 HTML links
   and a 64 MiB listing per scan. Truncation is explicitly reported.
-- Search covers the whole saved catalogue. Review and browsing render 100 files
-  per page. All review files start selected, including those on other pages.
+- Linked games use the standard shelf search, alphabet, favourites, version
+  grouping, artwork lookup and incremental rendering. There is no separate URL
+  catalogue/grid. Source games are kept separate from folder records in storage,
+  so folder rescans and unlinks cannot accidentally delete URL links.
 - Existing localStorage catalogues migrate after a successful IndexedDB write.
 - 128 MiB per game and per ZIP's expanded contents, at most 2,048 ZIP entries.
 - Supported systems/extensions are listed in `game_sources.py`. CD track sets,
