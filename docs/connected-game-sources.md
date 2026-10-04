@@ -6,7 +6,7 @@ scan, review candidates and save. Play downloads only the selected file and
 passes its original filename and bytes to the existing room File launcher.
 No personal cloud account connection or OAuth is implemented.
 
-Catalogues are stored per username in this browser's localStorage; they are
+Catalogues are stored per username in this browser's IndexedDB; they are
 not synchronised between devices. Clearing browser storage removes them.
 Game bytes are not persisted in the catalogue. A room reload requires loading
 the file again, just like the existing temporary file handoff.
@@ -16,7 +16,11 @@ the file again, just like the existing temporary file handoff.
 - Internet Archive metadata discovery; collections are not recursively scanned.
 - Other sites: links in one HTML page, including relative links. No JavaScript
   scraping, login, access-control bypass, recursive crawl or pagination.
-- 20 saved sources, 500 matching files per source, 4 MiB listing limit.
+- 20 saved sources; safety bounds of 100,000 matching files, 300,000 HTML links
+  and a 64 MiB listing per scan. Truncation is explicitly reported.
+- Search covers the whole saved catalogue. Review and browsing render 100 files
+  per page. All review files start selected, including those on other pages.
+- Existing localStorage catalogues migrate after a successful IndexedDB write.
 - 128 MiB per game and per ZIP's expanded contents, at most 2,048 ZIP entries.
 - Supported systems/extensions are listed in `game_sources.py`. CD track sets,
   playlists, 7z archives and multi-disk grouping are outside this preview.

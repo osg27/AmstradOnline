@@ -17,7 +17,7 @@ export function readSources(storage, username) {
     )).slice(0, 20).map((source) => ({
       ...source,
       games: source.games.filter((game) => game && typeof game.url === 'string'
-        && typeof game.file_name === 'string' && typeof game.title === 'string').slice(0, 500),
+        && typeof game.file_name === 'string' && typeof game.title === 'string'),
     })) : [];
   } catch {
     return [];
@@ -27,6 +27,43 @@ export function readSources(storage, username) {
 export function writeSources(storage, username, sources) {
   if (sources.length > 20) throw new Error('You can save up to 20 sources in this preview. Remove an old source first.');
   storage.setItem(sourceStorageKey(username), JSON.stringify(sources));
+}
+
+// Large catalogues exceed localStorage's small synchronous quota. Store metadata
+// in a separate IndexedDB database; never store the downloaded game bytes here.
+async function catalogueTransaction(mode, username, sources) {
+  const db = await new Promise((resolve, reject) => {
+    const request = indexedDB.open('oldstylegaming-connected-sources', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('catalogues');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error('Close other library tabs and try again.'));
+  });
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('catalogues', mode);
+      const store = tx.objectStore('catalogues');
+      const request = mode === 'readonly' ? store.get(sourceStorageKey(username)) : store.put(sources, sourceStorageKey(username));
+      tx.oncomplete = () => resolve(request.result);
+      tx.onabort = () => reject(tx.error || new Error('Catalogue storage failed'));
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally { db.close(); }
+}
+
+export async function loadSourceCatalogues(username) {
+  const saved = await catalogueTransaction('readonly', username);
+  if (saved !== undefined) return saved;
+  const legacy = readSources(localStorage, username);
+  if (legacy.length) await saveSourceCatalogues(username, legacy);
+  return legacy;
+}
+
+export async function saveSourceCatalogues(username, sources) {
+  if (sources.length > 20) throw new Error('Remove an old source before adding more than 20 sources.');
+  await catalogueTransaction('readwrite', username, sources);
+  // Migration completes only after the IndexedDB transaction has committed.
+  try { localStorage.removeItem(sourceStorageKey(username)); } catch { /* optional cleanup */ }
 }
 
 export async function downloadSourceGame(game, system, { signal, onProgress = () => {} } = {}) {

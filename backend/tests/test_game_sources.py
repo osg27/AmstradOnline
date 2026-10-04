@@ -52,6 +52,18 @@ class GameSourceTests(unittest.TestCase):
         request.assert_not_called()
         self.assertEqual(result["games"][0]["file_name"], "test.mx2")
 
+    def test_large_listing_keeps_games_beyond_old_byte_and_link_limits(self):
+        html = b" " * (4 * 1024 * 1024) + b"".join(
+            f'<a href="game{i}.z80">Game</a><a href="game{i}.z80">Again</a>'.encode()
+            for i in range(12000)
+        )
+        with patch.object(sources, "open_public", return_value=page(html)) as request:
+            result = sources.scan_source("https://example.com/games/", "spectrum")
+        self.assertEqual(len(result["games"]), 12000)
+        self.assertFalse(result["truncated"])
+        self.assertEqual(result["games"][-1]["file_name"], "game11999.z80")
+        request.assert_called_once()
+
     def test_archive_metadata_filters_private_and_oversized_files(self):
         data = {"files": [{"name": "Game A.dsk", "size": "123"}, {"name": "secret.dsk", "private": True}, {"name": "huge.dsk", "size": str(sources.MAX_GAME_BYTES + 1)}]}
         with patch.object(sources, "open_public", return_value=page(json.dumps(data).encode(), "application/json")) as request:

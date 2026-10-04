@@ -22,9 +22,10 @@ from app.core.database import get_db
 from app.core.source_fetch import bounded_chunks, open_public, public_url
 
 router = APIRouter(prefix="/library/sources", tags=["game-sources"])
-MAX_CATALOGUE_BYTES = 4 * 1024 * 1024
+MAX_CATALOGUE_BYTES = 64 * 1024 * 1024
 MAX_GAME_BYTES = 128 * 1024 * 1024
-MAX_GAMES = 500
+MAX_GAMES = 100000
+MAX_LINKS = 300000
 # First version: self-contained media, not CD tracks, playlists or giant sets.
 SOURCE_EXTENSIONS = {
     "cpc": {"dsk", "zip"},
@@ -116,7 +117,7 @@ class LinkParser(HTMLParser):
         self.links = []
 
     def handle_starttag(self, tag, attrs):
-        if tag.lower() == "a" and len(self.links) < 10000:
+        if tag.lower() == "a" and len(self.links) < MAX_LINKS:
             href = dict(attrs).get("href")
             if href:
                 self.links.append(href)
@@ -135,7 +136,12 @@ def scan_source(url, system):
     with open_public(fetch_url) as (response, final_url):
         if not archive and "html" not in response.getheader("Content-Type", "").lower():
             raise HTTPException(422, "Use a public page with game download links, or a direct supported game-file URL")
-        content = b"".join(bounded_chunks(response, MAX_CATALOGUE_BYTES))
+        try:
+            content = b"".join(bounded_chunks(response, MAX_CATALOGUE_BYTES))
+        except HTTPException as error:
+            if error.status_code == 413:
+                raise HTTPException(413, "The directory listing exceeds 64 MB. Choose a smaller subfolder; individual game sizes are not the issue.") from None
+            raise
     candidates = []
     if archive:
         try:
@@ -165,7 +171,7 @@ def scan_source(url, system):
                 candidates.append(entry)
     unique = {entry["url"]: entry for entry in candidates}
     games = list(unique.values())
-    return {"url": url, "kind": "archive" if archive else "page", "games": games[:MAX_GAMES], "truncated": len(games) > MAX_GAMES or (not archive and len(parser.links) >= 10000)}
+    return {"url": url, "kind": "archive" if archive else "page", "games": games[:MAX_GAMES], "truncated": len(games) > MAX_GAMES or (not archive and len(parser.links) >= MAX_LINKS)}
 
 
 def validate_zip(file):
