@@ -425,7 +425,7 @@ export default function LobbyPage() {
   const selectedGroup = selectedPlatform?.eras.find((era) => era.id === selectedEra) || selectedPlatform?.eras[0];
   const selectedSystem = selectedGroup?.systems.find((system) => system.id === selectedSystemId) || selectedGroup?.systems[0] || null;
   const selectedModeConfig = selectedSystem?.modes[selectedMode];
-  const canProtectSelectedRoom = Boolean(selectedSystem && selectedSystem.id !== 'arcade' && selectedMode !== 'solo' && selectedModeConfig?.enabled);
+  const canProtectSelectedRoom = SUPPORTER_UI_ENABLED && Boolean(selectedSystem && selectedSystem.id !== 'arcade' && selectedMode !== 'solo' && selectedModeConfig?.enabled);
   const emptyEraCopy = EMPTY_ERA_COPY[selectedPlatform?.id] || EMPTY_ERA_COPY.micros;
 
   useEffect(() => {
@@ -627,7 +627,7 @@ export default function LobbyPage() {
   }
 
   async function createSession(mode = selectedMode) {
-    const protectedRoom = privateRoom && mode !== 'solo' && selectedSystem?.id !== 'arcade';
+    const protectedRoom = SUPPORTER_UI_ENABLED && privateRoom && mode !== 'solo' && selectedSystem?.id !== 'arcade';
     if (protectedRoom && !canCreatePrivateRooms) {
       setSupporterLock('Protected rooms');
       return;
