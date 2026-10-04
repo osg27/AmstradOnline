@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request as FastAPIRequest
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -141,6 +141,16 @@ def cache_box_art(payload: BoxArtCacheRequest):
     target_dir = MEDIA_ROOT / "boxart" / system
     target_dir.mkdir(parents=True, exist_ok=True)
 
+    # The content key already identifies this URL. Do not contact the remote
+    # provider again when another user requests the same cached artwork.
+    for extension in set(CONTENT_TYPE_EXTENSIONS.values()):
+        existing = target_dir / f"{key}{extension}"
+        if existing.is_file():
+            _index_box_art(existing, system, payload.rom_name)
+            return {"url": _response_url(existing), "cached": True,
+                    "bytes": existing.stat().st_size,
+                    "content_type": mimetypes.guess_type(existing.name)[0]}
+
     request = Request(payload.url, headers={"User-Agent": "OldStyleGaming/1.0"})
     try:
         with urlopen(request, timeout=15) as response:
@@ -194,7 +204,7 @@ def lookup_box_art(payload: BoxArtLookupRequest):
 
 
 @router.get("/files/{path:path}")
-def get_cached_media(path: str):
+def get_cached_media(path: str, request: FastAPIRequest):
     target = (MEDIA_ROOT / path).resolve()
     try:
         target.relative_to(MEDIA_ROOT)
@@ -205,4 +215,8 @@ def get_cached_media(path: str):
         raise HTTPException(status_code=404, detail="Media file not found")
 
     media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-    return FileResponse(target, media_type=media_type)
+    # Versioned artwork URLs change whenever the stored file changes. Browsers
+    # can reuse these images on room return without another network round trip.
+    current_version = _response_url(target).rsplit('?v=', 1)[-1]
+    cache_control = 'public, max-age=31536000, immutable' if request.query_params.get('v') == current_version else 'public, max-age=0, must-revalidate'
+    return FileResponse(target, media_type=media_type, headers={'Cache-Control': cache_control})

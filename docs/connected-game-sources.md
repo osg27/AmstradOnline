@@ -14,6 +14,16 @@ not synchronised between devices. Clearing browser storage removes them.
 Game bytes are not persisted in the catalogue. A room reload requires loading
 the file again, just like the existing temporary file handoff.
 
+Resolved artwork URLs (including checked misses) are saved separately in
+IndexedDB. Room navigation reuses the prepared catalogue and artwork map from
+memory; a page reload reads them from IndexedDB. Linking new files checks only
+unknown artwork entries. Download box art explicitly retries missing images.
+Artwork scan results update the shelf in batches, rather than regrouping the
+whole catalogue for every image. The next 48 covers are prefetched with four
+concurrent requests. Versioned server image responses permit long-lived browser
+caching; unversioned/stale-version requests must revalidate. The shared server
+artwork cache returns existing files before contacting upstream providers.
+
 ## Scope
 
 - Internet Archive metadata discovery; collections are not recursively scanned.

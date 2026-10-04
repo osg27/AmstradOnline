@@ -2,6 +2,22 @@ import { API_BASE_URL, renewSession } from '../../api/client';
 
 export const SOURCE_SYSTEMS = new Set(['cpc', 'spectrum', 'c64', 'msx', 'amiga', 'amiga_aga', 'mastersystem', 'megadrive', 'nes', 'snes', 'pcengine', 'arcade']);
 export const MAX_SOURCE_FILE_BYTES = 128 * 1024 * 1024;
+const catalogueSessions = new Map();
+const artworkSessions = new Map();
+export const peekSourceCatalogues = (username) => catalogueSessions.get(username);
+export const peekSourceArtwork = (username) => artworkSessions.get(username);
+
+export async function loadSourceArtwork(username) {
+  if (artworkSessions.has(username)) return artworkSessions.get(username);
+  const saved = await catalogueTransaction('readonly', `artwork-front-v1:${username}`) || {};
+  artworkSessions.set(username, saved);
+  return saved;
+}
+
+export async function saveSourceArtwork(username, artwork) {
+  artworkSessions.set(username, artwork);
+  await catalogueTransaction('readwrite', `artwork-front-v1:${username}`, artwork);
+}
 
 export function sourceStorageKey(username) {
   return `oldstylegaming:connected-sources:v1:${username || 'anonymous'}`;
@@ -52,16 +68,19 @@ async function catalogueTransaction(mode, username, sources) {
 }
 
 export async function loadSourceCatalogues(username) {
+  if (catalogueSessions.has(username)) return catalogueSessions.get(username);
   const saved = await catalogueTransaction('readonly', username);
-  if (saved !== undefined) return saved;
+  if (saved !== undefined) { catalogueSessions.set(username, saved); return saved; }
   const legacy = readSources(localStorage, username);
   if (legacy.length) await saveSourceCatalogues(username, legacy);
+  catalogueSessions.set(username, legacy);
   return legacy;
 }
 
 export async function saveSourceCatalogues(username, sources) {
   if (sources.length > 20) throw new Error('Remove an old source before adding more than 20 sources.');
   await catalogueTransaction('readwrite', username, sources);
+  catalogueSessions.set(username, sources);
   // Migration completes only after the IndexedDB transaction has committed.
   try { localStorage.removeItem(sourceStorageKey(username)); } catch { /* optional cleanup */ }
 }

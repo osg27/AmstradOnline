@@ -5,7 +5,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
-import { downloadSourceGame, loadSourceCatalogues, saveSourceCatalogues } from '../features/gameSources/sourceLibrary';
+import { downloadSourceGame, loadSourceCatalogues, saveSourceCatalogues, peekSourceCatalogues, peekSourceArtwork, loadSourceArtwork, saveSourceArtwork } from '../features/gameSources/sourceLibrary';
+import { memoizeLast } from '../features/gameSources/memoizeLast';
 import { registerRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
 import { getMameTitleDatabase } from '../data/mameTitleLookup';
 import amigaLogoUrl from '../../assets/amiga500.svg';
@@ -264,6 +265,23 @@ const BOX_ART_ONLY_KEY = 'oldstylegaming:libraryBoxArtOnly';
 const AMIGA_BOX_ART_REPAIR_KEY = 'oldstylegaming:amigaBoxArtRepair';
 const AMIGA_BOX_ART_REPAIR_VERSION = 'strict-amiga-v2';
 let librarySessionCache = null;
+const EMPTY_SHELF_GAMES = [];
+const prepareSourceEntries = memoizeLast((sources, systemIds) => sources.flatMap((source) => {
+  const system = SUPPORTED_SYSTEMS.find((item) => systemIds.split(',').includes(item.id) && (item.roomSystem || item.id) === source.system);
+  if (!system) return [];
+  return source.games.map((entry) => ({
+    id: `url-source:${source.id}:${entry.url}`, source: 'public-url', sourceId: source.id,
+    sourceEntry: entry, system: system.id, roomSystem: source.system,
+    title: titleFromFileName(entry.file_name), fileName: entry.file_name,
+    extension: entry.file_name.split('.').pop().toLowerCase(), path: entry.file_name,
+    romKey: system.id === 'arcade' ? arcadeRomKey(entry.file_name) : '',
+  }));
+}));
+const enrichSourceEntries = memoizeLast((entries, artwork) => entries.map((game) => ({ ...game, ...artwork[game.id] })));
+const combineShelfEntries = memoizeLast((local, remote) => [...local, ...remote]);
+const prepareGroupedShelf = memoizeLast((entries, clones) => getGroupedLibraryGames(entries.filter((game) => (
+  !isLikelySupportRom(game) && (clones || game.system !== 'arcade' || isArcadeParentRom(game))
+)), { showArcadeClones: clones }));
 const groupedLibraryCache = new WeakMap();
 const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 const COMPACT_REGION_SUFFIXES = {
@@ -1707,10 +1725,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [librarySnapshot] = useState(readLibrarySnapshot);
   const [folders, setFolders] = useState(() => librarySessionCache?.folders || []);
   const [games, setGames] = useState(() => librarySessionCache?.games || []);
-  const [sources, setSources] = useState([]);
-  const [sourcesReady, setSourcesReady] = useState(false);
+  const [sources, setSources] = useState(() => peekSourceCatalogues(username) || []);
+  const [sourcesReady, setSourcesReady] = useState(() => Boolean(peekSourceCatalogues(username)));
   const [sourceSystem, setSourceSystem] = useState(null);
-  const [sourceArtwork, setSourceArtwork] = useState({});
+  const [sourceArtwork, setSourceArtwork] = useState(() => peekSourceArtwork(username) || {});
   const [selectedSystems, setSelectedSystems] = useState(() => librarySessionCache?.selectedSystems || []);
   const [activeSystem, setActiveSystem] = useState(requestedSystemExists ? requestedSystem : 'all');
   const [query, setQuery] = useState(searchParams.get('q') || '');
@@ -2401,31 +2419,31 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     return () => { cancelled = true; };
   }, [username]);
 
-  const sourceEntries = useMemo(() => sources.flatMap((source) => {
-    const system = availableSystems.find((item) => (item.roomSystem || item.id) === source.system);
-    if (!system) return [];
-    return source.games.map((entry) => ({
-      id: `url-source:${source.id}:${entry.url}`, source: 'public-url', sourceId: source.id,
-      sourceEntry: entry, system: system.id, roomSystem: source.system,
-      title: titleFromFileName(entry.file_name), fileName: entry.file_name,
-      extension: entry.file_name.split('.').pop().toLowerCase(), path: entry.file_name,
-      romKey: system.id === 'arcade' ? arcadeRomKey(entry.file_name) : '',
-    }));
-  }), [sources, availableSystems]);
+  const sourceEntries = useMemo(() => prepareSourceEntries(sources, availableSystems.map((system) => system.id).join(',')), [sources, availableSystems]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Restore existing artwork without blocking the shelf on thousands of
-      // fuzzy index searches. The standard Download box art action fills gaps.
-      const enriched = await restoreCachedBoxArt(sourceEntries);
-      if (!cancelled) setSourceArtwork(Object.fromEntries(enriched.filter((game) => game.boxArtUrl).map((game) => [game.id, {
+      const saved = await loadSourceArtwork(username);
+      if (cancelled) return;
+      setSourceArtwork(saved);
+      // Previously resolved URLs are local metadata. Only ask the shared server
+      // cache about new files, not the whole catalogue on every room return.
+      const missing = sourceEntries.filter((game) => !Object.hasOwn(saved, game.id));
+      if (!missing.length) return;
+      const enriched = await restoreCachedBoxArt(missing);
+      const restored = Object.fromEntries(enriched.map((game) => [game.id, game.boxArtUrl ? {
         boxArtUrl: game.boxArtUrl, boxArtSource: game.boxArtSource, boxArtCached: game.boxArtCached,
-      }])));
+      } : {}]));
+      if (!cancelled) {
+        const next = { ...saved, ...restored };
+        setSourceArtwork(next);
+        await saveSourceArtwork(username, next);
+      }
     })().catch(() => { /* Missing artwork must not block linked games. */ });
     return () => { cancelled = true; };
-  }, [sourceEntries]);
-  const sourceGames = useMemo(() => sourceEntries.map((game) => ({ ...game, ...sourceArtwork[game.id] })), [sourceEntries, sourceArtwork]);
-  const shelfGames = useMemo(() => [...games, ...sourceGames], [games, sourceGames]);
+  }, [sourceEntries, username]);
+  const sourceGames = useMemo(() => enrichSourceEntries(sourceEntries, sourceArtwork), [sourceEntries, sourceArtwork]);
+  const shelfGames = useMemo(() => combineShelfEntries(games.length ? games : EMPTY_SHELF_GAMES, sourceGames), [games, sourceGames]);
 
   async function persistSources(next) {
     await saveSourceCatalogues(username, next);
@@ -2433,13 +2451,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   }
 
   const groupedGames = useMemo(
-    () => getGroupedLibraryGames(
-      shelfGames.filter((game) => (
-        !isLikelySupportRom(game)
-        && (showArcadeClones || game.system !== 'arcade' || isArcadeParentRom(game))
-      )),
-      { showArcadeClones },
-    ),
+    () => prepareGroupedShelf(shelfGames, showArcadeClones),
     [shelfGames, showArcadeClones],
   );
   const systemCounts = useMemo(() => buildSystemCounts(groupedGames), [groupedGames]);
@@ -2511,6 +2523,24 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     [filteredGames],
   );
   const displayedGames = useMemo(() => filteredGames.slice(0, renderLimit), [filteredGames, renderLimit]);
+  useEffect(() => {
+    // Warm the next batch before it is added to the DOM. Bound concurrency so
+    // artwork never competes with every game in a many-thousand-title library.
+    let cancelled = false;
+    const upcoming = filteredGames.slice(renderLimit, renderLimit + LIBRARY_PAGE_SIZE).filter((game) => game.boxArtUrl);
+    let cursor = 0;
+    async function warm() {
+      while (!cancelled && cursor < upcoming.length) {
+        const game = upcoming[cursor++];
+        const image = new Image();
+        image.referrerPolicy = 'no-referrer';
+        image.src = game.boxArtUrl;
+        try { await image.decode(); } catch { /* Missing artwork is handled by the shelf. */ }
+      }
+    }
+    for (let index = 0; index < 4; index += 1) void warm();
+    return () => { cancelled = true; };
+  }, [filteredGames, renderLimit]);
   const canShowMoreGames = filteredGames.length > displayedGames.length;
   const snapshotActiveCount = activeSystem === 'all'
     ? Number(librarySnapshot.totalGames || 0)
@@ -3367,6 +3397,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     let found = 0;
     let checked = 0;
     let nextGames = games;
+    let nextSourceArtwork = { ...sourceArtwork };
     setMediaProgress({ checked: 0, total: targets.length, found: 0 });
     setStatus(`Downloading box art for ${targets.length} shown game${targets.length === 1 ? '' : 's'}${skippedArcadeClones ? `, skipping ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'}` : ''}... fetching artwork index.`);
 
@@ -3382,11 +3413,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           const media = await findBoxArtForGame(game);
           if (media) {
             found += 1;
-            nextGames = nextGames.map((item) => (
-              item.id === game.id ? { ...item, ...media } : item
-            ));
             if (game.source === 'public-url') {
-              setSourceArtwork((current) => ({ ...current, [game.id]: media }));
+              nextSourceArtwork[game.id] = media;
+            } else {
+              nextGames = nextGames.map((item) => item.id === game.id ? { ...item, ...media } : item);
             }
             setBrokenBoxArtIds((current) => {
               if (!current.has(game.id)) return current;
@@ -3394,15 +3424,19 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               next.delete(game.id);
               return next;
             });
-            setGames(nextGames);
           }
         } catch {
           // Missing artwork is expected for some dumps and naming variants.
         }
         checked += 1;
+        if (checked % 50 === 0 || checked === targets.length) {
+          setGames(nextGames);
+          setSourceArtwork({ ...nextSourceArtwork });
+        }
         setMediaProgress({ checked, total: targets.length, found });
         if (checked % 500 === 0 || checked === targets.length) {
           await saveLocalLibraryGames(nextGames);
+          await saveSourceArtwork(username, { ...nextSourceArtwork });
         }
         await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
@@ -3411,6 +3445,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const workerCount = Math.min(8, targets.length);
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
     await saveLocalLibraryGames(nextGames);
+    await saveSourceArtwork(username, nextSourceArtwork);
+    setSourceArtwork(nextSourceArtwork);
     setMediaProgress(null);
     setStatus(`Box art complete: ${found} found, ${targets.length - found} missing${skippedArcadeClones ? `, ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'} skipped` : ''}.`);
   }
@@ -3804,7 +3840,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                             <img
                               src={game.boxArtUrl}
                               alt=""
-                              loading="lazy"
+                              loading="eager"
                               decoding="async"
                               referrerPolicy="no-referrer"
                               onError={() => {
