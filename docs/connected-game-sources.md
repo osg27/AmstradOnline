@@ -26,7 +26,11 @@ the file again, just like the existing temporary file handoff.
 ## Deployment and security
 
 Deploy both backend and frontend; no database migration or new dependencies.
-Authenticated POST endpoints `/library/sources/scan` and `/download` enforce
+The frontend uses authenticated POST endpoints `/auth/library/sources/scan`
+and `/auth/library/sources/download`, under the existing production API proxy
+prefix. The original `/library/sources/*` backend aliases remain available,
+but nginx may route those paths to the React shell (POST then returns HTML 405).
+Both aliases enforce
 existing server-side system access, including admin/early-access restrictions.
 HTTPS port 443 only; credentials and private/local/reserved addresses are rejected.
 DNS results are checked and sockets pinned to a validated IP, retaining TLS host

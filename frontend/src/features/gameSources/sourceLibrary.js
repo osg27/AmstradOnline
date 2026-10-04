@@ -30,7 +30,7 @@ export function writeSources(storage, username, sources) {
 }
 
 export async function downloadSourceGame(game, system, { signal, onProgress = () => {} } = {}) {
-  const request = () => fetch(`${API_BASE_URL}/library/sources/download`, {
+  const request = () => fetch(`${API_BASE_URL}/auth/library/sources/download`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token') || ''}` },

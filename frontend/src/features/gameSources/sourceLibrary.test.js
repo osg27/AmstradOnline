@@ -21,6 +21,7 @@ describe('connected sources', () => {
     vi.stubGlobal('fetch', fetch);
     const file = await downloadSourceGame({ url: 'https://example.com/Game%20A.dsk', file_name: 'Game A.dsk' }, 'msx');
     expect(file.name).toBe('Game A.dsk');
+    expect(fetch.mock.calls[0][0]).toBe('https://app.example/auth/library/sources/download');
     expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([1, 2, 3]);
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ url: 'https://example.com/Game%20A.dsk', system: 'msx' });
   });

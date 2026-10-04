@@ -43,7 +43,7 @@ export default function ConnectedSourcesPanel({ systems, username }) {
     setError(''); setStatus('Scanning file links…'); setBusy(true); setPreview(null);
     const abort = new AbortController(); controller.current = abort;
     try {
-      const result = await apiFetch('/library/sources/scan', {
+      const result = await apiFetch('/auth/library/sources/scan', {
         method: 'POST', body: JSON.stringify({ url: sourceUrl, system: sourceSystem }), signal: abort.signal,
       });
       if (abort.signal.aborted) return;
@@ -55,6 +55,7 @@ export default function ConnectedSourcesPanel({ systems, username }) {
       setSelected(new Set(result.games.map((game) => game.url)));
       setStatus(`${result.games.length} files found. Review them before saving; no games have been downloaded.`);
     } catch (err) {
+      setStatus('');
       if (err.name !== 'AbortError') setError(err.message);
       else setStatus('Scan cancelled.');
     } finally { setBusy(false); }

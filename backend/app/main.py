@@ -43,6 +43,8 @@ app.include_router(rooms_router)
 app.include_router(feedback_router)
 app.include_router(library_media_router)
 app.include_router(game_sources_router)
+# Production proxies /auth/ to FastAPI; /library/ also serves the React page.
+app.include_router(game_sources_router, prefix="/auth")
 app.include_router(mame_router)
 app.include_router(mame_router, prefix="/scores")
 app.include_router(profile_router)
