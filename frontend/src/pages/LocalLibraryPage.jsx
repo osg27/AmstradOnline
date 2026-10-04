@@ -4,6 +4,7 @@ import { unzipSync } from 'fflate';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
+import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
 import { getMameTitleDatabase } from '../data/mameTitleLookup';
 import amigaLogoUrl from '../../assets/amiga500.svg';
 import amstradLogoUrl from '../../assets/Amstrad_logo_1980s.svg.webp';
@@ -3411,6 +3412,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             ) : null}
           </div>
         </section>
+
+        <ConnectedSourcesPanel key={username} systems={availableSystems} username={username} />
 
         {onboarding ? (
           <section className="setup-wizard library-overview-strip" aria-label="Library overview">

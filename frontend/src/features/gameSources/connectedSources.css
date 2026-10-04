@@ -1,0 +1,17 @@
+.connected-sources { margin: 18px 0; padding: 20px; }
+.connected-sources h2, .connected-sources h3 { margin: 0 0 8px; }
+.source-heading, .source-toolbar, .source-form { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; }
+.source-heading { align-items: center; justify-content: space-between; }
+.source-heading p { margin: 6px 0; }
+.source-form, .source-toolbar, .source-preview { margin-top: 18px; }
+.source-form label, .source-toolbar label { display: grid; gap: 6px; flex: 1 1 180px; min-width: 0; }
+.source-form label:nth-child(2) { flex-grow: 3; }
+.source-form small { flex-basis: 100%; }
+.source-form input, .source-form select, .source-toolbar input, .source-toolbar select { width: 100%; min-width: 0; box-sizing: border-box; }
+.source-file-list { max-height: 280px; overflow: auto; margin: 14px 0; }
+.source-file-list label { display: flex; align-items: center; gap: 10px; padding: 6px 0; overflow-wrap: anywhere; }
+.source-file-list input { flex: 0 0 auto; width: auto; }
+.source-game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin: 16px 0; }
+.source-game-grid article { padding: 14px; border: 1px solid #34423d; border-radius: 10px; background: #141b18; display: flex; flex-direction: column; gap: 10px; overflow-wrap: anywhere; }
+.source-game-grid button { margin-top: auto; align-self: start; }
+.source-address { display: block; margin-top: 10px; overflow-wrap: anywhere; }
