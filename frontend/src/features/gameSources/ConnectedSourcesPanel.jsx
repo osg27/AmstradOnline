@@ -104,7 +104,7 @@ export default function ConnectedSourcesPanel({ systems, username }) {
     <section className="panel connected-sources" aria-label="Connected game sources">
       <div className="source-heading">
         <div><p className="lobby-eyebrow">CONNECT YOUR GAMES</p><h2>Connected sources</h2>
-          <p>Add a public game-file page or Internet Archive item. Build your shelf once, download when you play.</p></div>
+          <p>Add a public game-file page of your choice. Build your shelf once, download when you play.</p></div>
         <button type="button" disabled={busy} onClick={() => { setAdding(!adding); setPreview(null); setError(''); }}> {adding ? 'Close' : 'Add source'}</button>
       </div>
       <small>Catalogues are saved for your account in this browser. No personal cloud sign-in. For files on your device, use the folder controls below.</small>

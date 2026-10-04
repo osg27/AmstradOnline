@@ -144,7 +144,7 @@ def scan_source(url, system):
             if not isinstance(files, list):
                 raise ValueError()
             if data.get("is_dark") or data.get("metadata", {}).get("mediatype") == "collection":
-                raise HTTPException(422, "Choose a public Internet Archive item containing files, rather than a collection")
+                raise HTTPException(422, "Choose a public page containing individual files, rather than a collection")
             for item in files:
                 name = item.get("name", "")
                 if item.get("private") or not isinstance(name, str):
@@ -155,7 +155,7 @@ def scan_source(url, system):
                 if entry and (size is None or size <= MAX_GAME_BYTES):
                     candidates.append(entry)
         except (ValueError, TypeError, AttributeError):
-            raise HTTPException(422, "Internet Archive did not return a usable item file list") from None
+            raise HTTPException(422, "This source did not return a usable file list") from None
     else:
         parser = LinkParser()
         parser.feed(content.decode("utf-8", errors="replace"))
