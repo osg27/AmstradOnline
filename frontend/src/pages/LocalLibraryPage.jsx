@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
-import { downloadSourceGame, loadSourceCatalogues, saveSourceCatalogues, peekSourceCatalogues, peekSourceArtwork, loadSourceArtwork, saveSourceArtwork } from '../features/gameSources/sourceLibrary';
+import { downloadSourceGame, loadCachedSourceCatalogues, loadSourceCatalogues, saveSourceCatalogues, peekSourceCatalogues, peekSourceArtwork, loadSourceArtwork, saveSourceArtwork } from '../features/gameSources/sourceLibrary';
 import { memoizeLast } from '../features/gameSources/memoizeLast';
 import { shelfArtworkUrl } from '../features/gameSources/shelfArtwork';
 import { registerRuntimeRelease } from '../features/localLibrary/storage/runtimeFileRegistry';
@@ -2428,12 +2428,27 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   useEffect(() => {
     let cancelled = false;
-    setSourcesReady(false);
-    Promise.all([loadSourceCatalogues(username), loadSourceArtwork(username)]).then(([saved, artwork]) => {
-      // Publish the persisted game list and its artwork together in one render.
-      if (!cancelled) { setSourceArtwork(artwork); setSources(saved); setSourcesReady(true); }
-    }).catch(() => { if (!cancelled) setStatus('Could not load linked URL sources. Allow browser storage and reload.'); });
-    return () => { cancelled = true; };
+    let lastSync = 0;
+    function sync() {
+      if (Date.now() - lastSync < 10000) return;
+      lastSync = Date.now();
+      Promise.all([loadCachedSourceCatalogues(username), loadSourceArtwork(username)]).then(async ([cached, artwork]) => {
+        if (cancelled) return;
+        setSourceArtwork(artwork); setSources(cached); setSourcesReady(true);
+        const saved = await loadSourceCatalogues(username);
+        // Keep the cached shelf visible during account reconciliation.
+        if (!cancelled) { setSourceArtwork(artwork); setSources(saved); setSourcesReady(true); }
+      }).catch(() => {
+        if (!cancelled) {
+          const cached = peekSourceCatalogues(username);
+          if (cached) { setSources(cached); setSourcesReady(true); }
+          setStatus('Could not sync account sources. Your saved library is retained; reconnect and return to this tab to retry.');
+        }
+      });
+    }
+    sync();
+    window.addEventListener('focus', sync);
+    return () => { cancelled = true; window.removeEventListener('focus', sync); };
   }, [username]);
 
   const sourceEntries = useMemo(() => prepareSourceEntries(sources, availableSystems.map((system) => system.id).join(',')), [sources, availableSystems]);

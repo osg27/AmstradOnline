@@ -5,12 +5,23 @@ Internet Archive **item** URL, or a direct game-file URL. The system is selected
 by the cog. Scanning links all matching files to that system's normal game shelf.
 The same dialog supports adding, rescanning and unlinking PC folders and URLs.
 Existing connected-source catalogues appear automatically; links persist until
-unlinked (or browser storage is cleared). Play downloads only the selected file and
+unlinked. Play downloads only the selected file and
 passes its original filename and bytes to the existing room File launcher.
 No personal cloud account connection or OAuth is implemented.
 
-Catalogues are stored per username in this browser's IndexedDB; they are
-not synchronised between devices. Clearing browser storage removes them.
+External URLs and their scanned catalogues are saved against the authenticated
+account in `user_game_sources`. Another device fetches the saved catalogue,
+without rescanning the upstream site. PC folders remain device-specific.
+IndexedDB and memory retain a local cache for fast shelf rendering. Clearing
+browser storage removes that cache, not account sources. A small revision list
+is checked on library entry and tab focus (at most once per ten seconds); only
+changed or missing catalogues are fetched. Unlinking applies across the account.
+Existing browser-only sources migrate when their original browser next opens
+the library: the server scans each URL once to build a trusted catalogue, without
+downloading games. Failed imports retain the local catalogue for a later retry.
+Deletion tombstones prevent an older device from re-importing an unlinked URL.
+Account deletion removes both active sources and tombstones. Cached lists remain
+available when synchronisation fails; a new device initially needs a connection.
 Game bytes are not persisted in the catalogue. A room reload requires loading
 the file again, just like the existing temporary file handoff.
 
@@ -62,7 +73,14 @@ does not display a fetching-library stage.
 
 ## Deployment and security
 
-Deploy both backend and frontend; no database migration or new dependencies.
+Deploy both backend and frontend. Existing startup `Base.metadata.create_all`
+creates the new `user_game_sources` table; no manual ALTER or new dependency is
+required. Back up this table with account data: it contains URLs and catalogue
+metadata, never ROM bytes. Open the original device once after deployment to
+migrate its existing links before expecting them on a new device.
+Authenticated GET/POST/DELETE `/auth/library/sources/saved` endpoints scope every
+record to the JWT user, never a user ID supplied in the request. Per-source
+updates prevent stale devices from overwriting other devices' added sources.
 The frontend uses authenticated POST endpoints `/auth/library/sources/scan`
 and `/auth/library/sources/download`, under the existing production API proxy
 prefix. The original `/library/sources/*` backend aliases remain available,

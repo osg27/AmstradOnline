@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../../api/client';
-import { SOURCE_SYSTEMS } from './sourceLibrary';
+import { SOURCE_SYSTEMS, unlinkSourceCatalogue } from './sourceLibrary';
 import './connectedSources.css';
 
 export default function ConnectedSourcesPanel({ system, sources, folders, onSave, onAddFolder, onRescanFolder, onUnlinkFolder, onClose }) {
@@ -23,14 +23,11 @@ export default function ConnectedSourcesPanel({ system, sources, folders, onSave
     setBusy(true); setError(''); setStatus('Scanning file links…');
     const abort = new AbortController(); controller.current = abort;
     try {
-      const result = await apiFetch('/auth/library/sources/scan', {
-        method: 'POST', body: JSON.stringify({ url: existing?.url || url.trim(), system: roomSystem }), signal: abort.signal,
+      const result = await apiFetch('/auth/library/sources/saved', {
+        method: 'POST', body: JSON.stringify({ url: existing?.url || url.trim(), system: roomSystem, refresh: Boolean(existing) }), signal: abort.signal,
       });
       if (abort.signal.aborted) return;
-      if (result.truncated) throw new Error('This listing exceeds the scan safety limit. Choose a smaller subfolder so the whole source can be linked.');
-      if (!result.games.length) throw new Error('No matching game files found. Choose a page with direct game-file links for this system.');
-      const previous = existing || sources.find((source) => source.url === result.url && source.system === roomSystem);
-      const source = { id: previous?.id || crypto.randomUUID(), url: result.url, label: result.url, system: roomSystem, games: result.games, scannedAt: new Date().toISOString() };
+      const source = result.source;
       await onSave([...sources.filter((item) => item.id !== source.id), source]);
       setUrl(''); setStatus(`${source.games.length.toLocaleString()} files linked to ${system.label}. They are now in your game shelf.`);
     } catch (err) { setStatus(''); if (err.name !== 'AbortError') setError(err.message); }
@@ -59,7 +56,7 @@ export default function ConnectedSourcesPanel({ system, sources, folders, onSave
       {SOURCE_SYSTEMS.has(roomSystem) ? <form className="source-form" onSubmit={link}>
         <label>Source URL<input type="url" required maxLength={4096} value={url} disabled={busy} placeholder="https://…" onChange={(event) => setUrl(event.target.value)} /></label>
         <button type="submit" disabled={busy || !url.trim()}>Link source URL</button>
-        <small>Only the game you choose to play is downloaded. Links are saved in this browser.</small>
+        <small>URL sources are saved to your account on all devices. PC folders stay on this device. Only the game you choose is downloaded.</small>
       </form> : <p>URL sources are not available for this system yet.</p>}
       <h3>Linked sources</h3>
       {!folders.length && !linked.length ? <p>No sources linked yet.</p> : null}
@@ -75,7 +72,7 @@ export default function ConnectedSourcesPanel({ system, sources, folders, onSave
           <div><strong className="source-address">{source.url}</strong><small>URL · {source.games.length.toLocaleString()} files</small></div>
           <div className="library-folder-actions">
             <button type="button" disabled={busy} onClick={() => link(null, source)}>Rescan</button>
-            <button type="button" disabled={busy} onClick={() => change(() => onSave(sources.filter((item) => item.id !== source.id)))}>Unlink</button>
+            <button type="button" disabled={busy} onClick={() => change(async () => { await unlinkSourceCatalogue(source.id); await onSave(sources.filter((item) => item.id !== source.id)); })}>Unlink</button>
           </div>
         </div>)}
       </div>

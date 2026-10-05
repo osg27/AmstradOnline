@@ -1,5 +1,7 @@
 """User-supplied public catalogues. No shared ROM catalogue or persistent ROM cache."""
 import json
+import hashlib
+import uuid
 import re
 import tempfile
 import threading
@@ -14,12 +16,14 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from starlette.background import BackgroundTask
 
 from app.api.routes.rooms import get_current_user_id, require_system_access
 from app.core.database import get_db
 from app.core.source_fetch import bounded_chunks, open_public, public_url
+from app.models.game_source import SavedGameSource
+from app.models.user import User
 
 router = APIRouter(prefix="/library/sources", tags=["game-sources"])
 MAX_CATALOGUE_BYTES = 64 * 1024 * 1024
@@ -46,6 +50,81 @@ SOURCE_EXTENSIONS = {
 class SourceRequest(BaseModel):
     url: str = Field(min_length=1, max_length=4096)
     system: str = Field(max_length=32)
+
+
+class SaveSourceRequest(SourceRequest):
+    id: str | None = Field(default=None, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')
+    refresh: bool = False
+    migration: bool = False
+
+
+def source_record(row, include_games=False):
+    result = {'id': row.id, 'url': row.url, 'label': row.url, 'system': row.system,
+              'revision': row.revision, 'accountSynced': True, 'gameCount': row.game_count}
+    if include_games:
+        result['games'] = row.games
+    return result
+
+
+@router.get('/saved')
+def list_saved_sources(db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    return {'sources': [source_record(row) for row in db.query(SavedGameSource).options(defer(SavedGameSource.games)).filter_by(user_id=user_id, deleted=False).order_by(SavedGameSource.id).all()]}
+
+
+@router.get('/saved/{source_id}')
+def get_saved_source(source_id: str, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    row = db.query(SavedGameSource).filter_by(user_id=user_id, id=source_id, deleted=False).first()
+    if not row:
+        raise HTTPException(404, 'Source not found')
+    return source_record(row, True)
+
+
+@router.post('/saved')
+def save_source(payload: SaveSourceRequest, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    check_access(payload, db, user_id)
+    url = public_url(payload.url)
+    key = hashlib.sha256(url.encode()).hexdigest()
+    with operation(user_id, 'import' if payload.migration else 'scan'):
+        # Serialize account mutations, including limits, across database clients.
+        db.query(User).filter_by(id=user_id).with_for_update().first()
+        row = db.query(SavedGameSource).filter_by(user_id=user_id, system=payload.system, url_hash=key).first()
+        if row and row.deleted and payload.migration:
+            return {'source': None}  # An old browser must not resurrect an unlink.
+        if row and not row.deleted and not payload.refresh:
+            return {'source': source_record(row, True)}
+        if (not row or row.deleted) and db.query(SavedGameSource).filter_by(user_id=user_id, deleted=False).count() >= 20:
+            raise HTTPException(409, 'Unlink a source before linking more than 20 sources')
+        result = scan_source(url, payload.system)
+        if result['truncated']:
+            raise HTTPException(422, 'Choose a smaller subfolder so the entire source can be linked')
+        if not result['games']:
+            raise HTTPException(422, 'No matching game files found for this system')
+        if not row:
+            source_id = payload.id or str(uuid.uuid4())
+            if db.query(SavedGameSource).filter_by(user_id=user_id, id=source_id).first():
+                source_id = str(uuid.uuid4())
+            row = SavedGameSource(user_id=user_id, id=source_id, system=payload.system, url=url, url_hash=key)
+            db.add(row)
+        row.games = result['games']
+        row.game_count = len(row.games)
+        row.deleted = False
+        row.revision = str(uuid.uuid4())
+        db.commit()
+        return {'source': source_record(row, True)}
+
+
+@router.delete('/saved/{source_id}')
+def delete_saved_source(source_id: str, db: Session = Depends(get_db), user_id: int = Depends(get_current_user_id)):
+    db.query(User).filter_by(id=user_id).with_for_update().first()
+    row = db.query(SavedGameSource).filter_by(user_id=user_id, id=source_id).first()
+    if not row:
+        raise HTTPException(404, 'Source not found')
+    row.deleted = True
+    row.games = []
+    row.game_count = 0
+    row.revision = str(uuid.uuid4())
+    db.commit()
+    return {'ok': True}
 
 
 _lock = threading.Lock()

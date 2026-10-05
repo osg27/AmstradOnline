@@ -12,6 +12,7 @@ from app.models.feedback import FeedbackComment, FeedbackItem, FeedbackNotificat
 from app.models.friendship import DirectMessage, Friendship, LobbyMessage, RoomInvite
 from app.models.room import Room, RoomActivity, RoomAccess
 from app.models.user import AccountToken, User, UserEntitlement
+from app.models.game_source import SavedGameSource
 from app.core.entitlements import PLAN_ENTITLEMENTS, SUPPORTER_ENTITLEMENTS, entitlements_for
 
 router = APIRouter(prefix="/auth/admin", tags=["admin"])
@@ -259,5 +260,6 @@ def delete_user(
     db.query(Room).filter(Room.owner_user_id == user.id).delete(synchronize_session=False)
     db.query(AccountToken).filter(AccountToken.user_id == user.id).delete(synchronize_session=False)
     db.query(UserEntitlement).filter(UserEntitlement.user_id == user.id).delete(synchronize_session=False)
+    db.query(SavedGameSource).filter(SavedGameSource.user_id == user.id).delete(synchronize_session=False)
     db.delete(user)
     db.commit()

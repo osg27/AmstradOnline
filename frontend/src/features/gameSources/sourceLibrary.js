@@ -1,9 +1,10 @@
-import { API_BASE_URL, renewSession } from '../../api/client';
+import { API_BASE_URL, apiFetch, renewSession } from '../../api/client';
 
 export const SOURCE_SYSTEMS = new Set(['cpc', 'spectrum', 'c64', 'msx', 'amiga', 'amiga_aga', 'mastersystem', 'megadrive', 'nes', 'snes', 'pcengine', 'arcade']);
 export const MAX_SOURCE_FILE_BYTES = 128 * 1024 * 1024;
 const catalogueSessions = new Map();
 const artworkSessions = new Map();
+const catalogueLoads = new Map();
 export const peekSourceCatalogues = (username) => catalogueSessions.get(username);
 export const peekSourceArtwork = (username) => artworkSessions.get(username);
 
@@ -67,14 +68,45 @@ async function catalogueTransaction(mode, username, sources) {
   } finally { db.close(); }
 }
 
+export async function loadCachedSourceCatalogues(username) {
+  const local = catalogueSessions.get(username) || await catalogueTransaction('readonly', username) || readSources(localStorage, username);
+  catalogueSessions.set(username, local);
+  return local;
+}
+
 export async function loadSourceCatalogues(username) {
-  if (catalogueSessions.has(username)) return catalogueSessions.get(username);
-  const saved = await catalogueTransaction('readonly', username);
-  if (saved !== undefined) { catalogueSessions.set(username, saved); return saved; }
-  const legacy = readSources(localStorage, username);
-  if (legacy.length) await saveSourceCatalogues(username, legacy);
-  catalogueSessions.set(username, legacy);
-  return legacy;
+  if (catalogueLoads.has(username)) return catalogueLoads.get(username);
+  const loading = (async () => {
+    let local = await loadCachedSourceCatalogues(username);
+    // Import each legacy browser source once, without uploading ROMs or trusting
+    // client-supplied catalogue entries. The server builds its own file list.
+    for (const source of local.filter((item) => !item.accountSynced)) {
+      const imported = await apiFetch('/auth/library/sources/saved', {
+        method: 'POST', body: JSON.stringify({ url: source.url, system: source.system, id: source.id, migration: true }),
+      });
+      local = local.flatMap((item) => item.id === source.id ? (imported.source ? [imported.source] : []) : [item]);
+      await saveSourceCatalogues(username, local);
+    }
+    const manifest = await apiFetch('/auth/library/sources/saved');
+    const next = [];
+    for (const source of manifest.sources) {
+      const cached = local.find((item) => item.id === source.id && item.revision === source.revision);
+      next.push(cached || await apiFetch(`/auth/library/sources/saved/${encodeURIComponent(source.id)}`));
+    }
+    // Preserve reference identity for the prepared shelf when nothing changed.
+    if (next.length === local.length && next.every((item, index) => item === local[index])) {
+      catalogueSessions.set(username, local);
+      return local;
+    }
+    await saveSourceCatalogues(username, next);
+    return next;
+  })().finally(() => catalogueLoads.delete(username));
+  catalogueLoads.set(username, loading);
+  return loading;
+}
+
+export async function unlinkSourceCatalogue(id) {
+  await apiFetch(`/auth/library/sources/saved/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function saveSourceCatalogues(username, sources) {
