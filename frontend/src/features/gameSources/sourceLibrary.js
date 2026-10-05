@@ -1,6 +1,6 @@
 import { API_BASE_URL, apiFetch, renewSession } from '../../api/client';
 
-export const SOURCE_SYSTEMS = new Set(['cpc', 'spectrum', 'c64', 'msx', 'amiga', 'amiga_aga', 'mastersystem', 'megadrive', 'nes', 'snes', 'pcengine', 'arcade']);
+export const SOURCE_SYSTEMS = new Set(['cpc', 'spectrum', 'c64', 'msx', 'amiga', 'amiga_aga', 'atarist', 'mastersystem', 'megadrive', 'nes', 'snes', 'pcengine', 'arcade']);
 export const MAX_SOURCE_FILE_BYTES = 128 * 1024 * 1024;
 const catalogueSessions = new Map();
 const artworkSessions = new Map();
