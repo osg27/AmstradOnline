@@ -39,6 +39,12 @@ does not display a fetching-library stage.
 ## Scope
 
 - Internet Archive metadata discovery; collections are not recursively scanned.
+- Archive-viewer pages can link individual ZIP members. Encoded member folders
+  are preserved in the upstream URL and removed only from the launch filename.
+  Play requests that extracted member, not the containing ZIP. This requires
+  the upstream site to expose member download links; arbitrary ZIP URLs remain
+  ordinary single-file sources. Verified the supplied NES listing: 3,537 files,
+  with one 262,160-byte member returning a valid NES header.
 - Other sites: links in one HTML page, including relative links. No JavaScript
   scraping, login, access-control bypass, recursive crawl or pagination.
 - 20 saved sources; safety bounds of 100,000 matching files, 300,000 HTML links

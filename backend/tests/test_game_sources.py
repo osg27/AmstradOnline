@@ -52,6 +52,26 @@ class GameSourceTests(unittest.TestCase):
         request.assert_not_called()
         self.assertEqual(result["games"][0]["file_name"], "test.mx2")
 
+    def test_archive_viewer_members_keep_individual_filenames(self):
+        url = 'https://archive.org/download/Test/ROMS.zip/Australia%2FGame%20A.nes'
+        html = f'<a href="{url}">Game A</a>'.encode()
+        with patch.object(sources, 'open_public', return_value=page(html)):
+            result = sources.scan_source('https://ia802805.us.archive.org/view_archive.php?archive=/17/items/Test/ROMS.zip', 'nes')
+        self.assertEqual(result['games'][0]['file_name'], 'Game A.nes')
+        self.assertEqual(result['games'][0]['url'], url)
+        with patch.object(sources, 'open_public', return_value=page(b'NES\x1aexample', 'application/octet-stream')) as request:
+            file, length, name = sources.download_file(url, 'nes')
+        try:
+            request.assert_called_once_with(url)
+            self.assertEqual(name, 'Game A.nes')
+            self.assertEqual(file.read(), b'NES\x1aexample')
+        finally:
+            file.close()
+
+    def test_archive_member_paths_are_validated(self):
+        for url in ['https://archive.org/download/Test/ROMS.zip/..%2FGame.nes', 'https://archive.org/download/Test/ROMS.zip/%2FGame.nes', 'https://example.com/Folder%2FGame.nes', 'https://archive.org.evil.example/download/Test/ROMS.zip/Folder%2FGame.nes']:
+            self.assertIsNone(sources.game_entry(url, 'nes'))
+
     def test_large_listing_keeps_games_beyond_old_byte_and_link_limits(self):
         html = b" " * (4 * 1024 * 1024) + b"".join(
             f'<a href="game{i}.z80">Game</a><a href="game{i}.z80">Again</a>'.encode()

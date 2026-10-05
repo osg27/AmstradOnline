@@ -94,7 +94,18 @@ def check_access(payload, db, user_id):
 
 
 def filename_for(url):
-    name = unquote(urlsplit(url).path.rsplit("/", 1)[-1])
+    parts = urlsplit(url)
+    name = unquote(parts.path.rsplit("/", 1)[-1])
+    # Archive viewers expose extracted members as /download/item/ROMs.zip/
+    # Folder%2FGame.nes. The encoded folder belongs to the member path, not
+    # the game filename. Keep the URL intact and pass only its basename on.
+    if parts.hostname == 'archive.org' or (parts.hostname or '').endswith('.archive.org'):
+        member = re.fullmatch(r'/download/[A-Za-z0-9_.-]+/[^/]+\.zip/(.+)', parts.path, re.IGNORECASE)
+        if member:
+            path = unquote(member[1])
+            if path.startswith('/') or '\\' in path or any(piece in ('', '.', '..') for piece in path.split('/')):
+                return None
+            name = path.rsplit('/', 1)[-1]
     if not name or len(name) > 255 or any(ord(c) < 32 for c in name) or "/" in name or "\\" in name:
         return None
     return name
