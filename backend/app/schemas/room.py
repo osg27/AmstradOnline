@@ -64,6 +64,7 @@ class RoomJoinRequest(BaseModel):
 
 class RoomHeartbeatRequest(BaseModel):
     game_name: str | None = Field(default=None, max_length=512)
+    peer_connected: bool = False
 
 
 class RoomResponse(BaseModel):

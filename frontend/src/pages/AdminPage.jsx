@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
+import AdminPlayHistory from '../components/AdminPlayHistory';
 
 function formatDate(value) {
   if (!value) return 'Never';
@@ -99,8 +100,8 @@ export default function AdminPage() {
         </div>
 
         <div className="lobby-intro">
-          <h1>Admin stats</h1>
-          <p>Users, logins, and recent account activity.</p>
+          <h1>Admin dashboard</h1>
+          <p>Gameplay insights, room history and account management.</p>
         </div>
 
         {loading ? <p className="muted">Loading stats...</p> : null}
@@ -108,6 +109,7 @@ export default function AdminPage() {
 
         {stats ? (
           <>
+            <AdminPlayHistory />
             <div className="admin-stat-grid">
               <div className="panel admin-stat">
                 <span>Users</span>

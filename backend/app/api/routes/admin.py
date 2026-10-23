@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -13,6 +13,8 @@ from app.models.friendship import DirectMessage, Friendship, LobbyMessage, RoomI
 from app.models.room import Room, RoomActivity, RoomAccess
 from app.models.user import AccountToken, User, UserEntitlement
 from app.models.game_source import SavedGameSource
+from app.models.play_session import PlaySession
+from app.core.play_history import serialize_session
 from app.core.entitlements import PLAN_ENTITLEMENTS, SUPPORTER_ENTITLEMENTS, entitlements_for
 
 router = APIRouter(prefix="/auth/admin", tags=["admin"])
@@ -75,6 +77,48 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
         raise HTTPException(status_code=403, detail="Admin access required")
 
     return user
+
+
+@router.get('/play-history')
+def get_play_history(
+    db: Session = Depends(get_db), admin_user: User = Depends(require_admin),
+    offset: int = Query(default=0, ge=0), limit: int = Query(default=50, ge=1, le=100),
+    search: str = Query(default='', max_length=120), system: str = Query(default='', max_length=32),
+    mode: str = Query(default='', pattern='^(solo|multiplayer)?$'),
+    connected: bool | None = None, since: datetime | None = None, until: datetime | None = None,
+    room_code: str = Query(default='', max_length=16),
+):
+    query = db.query(PlaySession)
+    if room_code:
+        query = query.filter(PlaySession.room_code == room_code.upper())
+    if search.strip():
+        pattern = '%' + search.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+        query = query.filter(PlaySession.username.ilike(pattern, escape='\\') | PlaySession.host_name.ilike(pattern, escape='\\') | PlaySession.game.ilike(pattern, escape='\\') | PlaySession.room_code.ilike(pattern, escape='\\'))
+    if system:
+        query = query.filter(PlaySession.system == system)
+    if mode:
+        query = query.filter(PlaySession.mode == mode)
+    if connected is not None:
+        query = query.filter(PlaySession.ever_connected == connected)
+    if since:
+        query = query.filter(PlaySession.started_at >= since)
+    if until:
+        query = query.filter(PlaySession.started_at <= until)
+    now = datetime.now(timezone.utc)
+    hosts = query.filter(PlaySession.is_host.is_(True))
+    games = hosts.filter(PlaySession.game.isnot(None))
+    daily = games.with_entities(func.date(PlaySession.started_at).label('day'), func.sum(PlaySession.duration_seconds).label('seconds')).group_by(func.date(PlaySession.started_at)).order_by(func.date(PlaySession.started_at).desc()).limit(31).all()
+    systems = games.with_entities(PlaySession.system, func.sum(PlaySession.duration_seconds).label('seconds')).group_by(PlaySession.system).order_by(func.sum(PlaySession.duration_seconds).desc()).limit(10).all()
+    return {
+        'total': query.count(),
+        'summary': {'rooms': hosts.with_entities(PlaySession.room_id).distinct().count(),
+                    'players': query.with_entities(PlaySession.user_id).distinct().count(),
+                    'game_seconds': games.with_entities(func.coalesce(func.sum(PlaySession.duration_seconds), 0)).scalar(),
+                    'connected_rooms': hosts.filter(PlaySession.ever_connected.is_(True)).with_entities(PlaySession.room_id).distinct().count()},
+        'daily': [{'day': str(row.day), 'seconds': row.seconds or 0} for row in reversed(daily)],
+        'systems': [{'system': row.system, 'seconds': row.seconds or 0} for row in systems],
+        'sessions': [serialize_session(row, now) for row in query.order_by(PlaySession.started_at.desc(), PlaySession.id.desc()).offset(offset).limit(limit)],
+    }
 
 
 @router.get("/stats")
@@ -261,5 +305,6 @@ def delete_user(
     db.query(AccountToken).filter(AccountToken.user_id == user.id).delete(synchronize_session=False)
     db.query(UserEntitlement).filter(UserEntitlement.user_id == user.id).delete(synchronize_session=False)
     db.query(SavedGameSource).filter(SavedGameSource.user_id == user.id).delete(synchronize_session=False)
+    db.query(PlaySession).filter((PlaySession.user_id == user.id) | (PlaySession.host_id == user.id)).delete(synchronize_session=False)
     db.delete(user)
     db.commit()

@@ -782,6 +782,8 @@ export default function RoomPage() {
   const [error, setError] = useState('');
   const [logs, setLogs] = useState([]);
   const [remoteConnected, setRemoteConnected] = useState(false);
+  const historyPeerConnectedRef = useRef(false);
+  historyPeerConnectedRef.current = remoteConnected;
   const [hostStarted, setHostStarted] = useState(false);
   const [guestPrepared, setGuestPrepared] = useState(false);
   const [loadedDiskName, setLoadedDiskName] = useState('');
@@ -3528,9 +3530,17 @@ export default function RoomPage() {
 
     apiFetch(`/rooms/${roomCode}/heartbeat`, {
       method: 'POST',
-      body: JSON.stringify({ game_name: loadedDiskName || null }),
+      body: JSON.stringify({ game_name: loadedDiskName || null, peer_connected: historyPeerConnectedRef.current }),
     }).catch(() => {});
   }, [isHost, loadedDiskName, room, roomCode]);
+
+  useEffect(() => {
+    if (!room) return;
+    apiFetch(`/rooms/${roomCode}/heartbeat`, {
+      method: 'POST',
+      body: JSON.stringify({ game_name: isHost ? loadedDiskNameRef.current || null : null, peer_connected: remoteConnected }),
+    }).catch(() => {});
+  }, [remoteConnected, isHost, roomCode, room]);
 
   useEffect(() => {
     if (!isArcade || !loadedDiskName) {
@@ -3716,6 +3726,7 @@ export default function RoomPage() {
           method: 'POST',
           body: JSON.stringify({
             game_name: isHost ? loadedDiskNameRef.current || null : null,
+            peer_connected: historyPeerConnectedRef.current,
           }),
         });
       } catch (err) {
