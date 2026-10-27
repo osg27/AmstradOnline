@@ -34,6 +34,9 @@ class Strict(BaseModel):
 
 class Drive(Strict):
     asset: str = Field(pattern=r"^[a-f0-9]{32}$")
+    source: Literal["server", "local"] = "server"
+    local_name: str | None = Field(default=None, min_length=1, max_length=255)
+    local_size: int | None = Field(default=None, gt=0, le=MAX_HDF_BYTES)
     label: str = Field(default="Games", pattern=r"^[A-Za-z0-9 _-]{1,30}$")
     priority: int = Field(default=0, ge=-128, le=127)
     mode: Literal["ro"] = "ro"
@@ -42,6 +45,12 @@ class Drive(Strict):
     surfaces: int = Field(default=1, ge=1, le=255)
     reserved: int = Field(default=2, ge=0, le=1024)
     block_size: Literal[512, 1024, 2048, 4096] = 512
+
+    @model_validator(mode="after")
+    def local_metadata(self):
+        if self.source == "local" and (not self.local_name or not self.local_size):
+            raise ValueError("Local HDF requires a filename and size; file contents stay in the browser")
+        return self
 
 
 class Profile(Strict):
@@ -186,12 +195,18 @@ def validate_assets(db, profile):
         record(db, key, "adf")
     total = 0
     for drive in profile.drives:
-        meta = record(db, drive.asset)
+        meta = drive_asset(db, drive)
         if meta["type"] not in ("hdf", "folder"):
             raise HTTPException(400, "Invalid drive source")
         total += meta["size"]
     if total > MAX_SESSION_BYTES:
         raise HTTPException(413, "Mounted drives exceed the 1152 MiB session budget")
+
+
+def drive_asset(db, drive):
+    if drive.source == "local":
+        return {"type": "hdf", "source": "local", "name": drive.local_name, "size": drive.local_size}
+    return record(db, drive.asset)
 
 
 @router.post("/assets")
@@ -354,7 +369,7 @@ def launch(key: str, response: Response):
         validate_assets(db, profile)
         if not profile.kickstart:
             raise HTTPException(400, "Select an administrator-supplied Kickstart ROM")
-        assets = {d.asset: record(db, d.asset) for d in profile.drives}
+        assets = {d.asset: drive_asset(db, d) for d in profile.drives}
         assets[profile.kickstart] = record(db, profile.kickstart, "rom")
         for floppy in profile.floppies:
             assets[floppy] = record(db, floppy, "adf")

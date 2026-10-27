@@ -146,3 +146,20 @@ def test_500_mib_hdf_can_be_saved_and_launched(client):
     launch = client.post(f"/auth/admin/amiga/profiles/{profile_id}/launch")
     assert launch.status_code == 200
     assert launch.json()["assets"][asset_id]["size"] == 512000 * 1024
+
+
+def test_local_hdf_launch_requires_no_server_image(client):
+    base = '/auth/admin/amiga'
+    rom = client.post(base + '/assets?kind=rom&name=test', content=b'x' * 524288).json()
+    local_id, profile_id = key(), key()
+    drive = {"asset": local_id, "source": "local", "local_name": "System_P96.hdf", "local_size": 512000 * 1024}
+    profile = {"name": "Local Workbench", "kickstart": rom['id'], "drives": [drive]}
+    assert client.put(f'{base}/profiles/{profile_id}', json=profile).status_code == 200
+    response = client.post(f'{base}/profiles/{profile_id}/launch')
+    assert response.status_code == 200
+    assert response.json()['assets'][local_id]['source'] == 'local'
+    assert f'/advanced/{local_id}.hdf' in response.json()['uae']
+    assert not (amiga.ROOT / 'assets' / local_id).exists()
+    assert client.get(f'{base}/assets/{local_id}/content').status_code == 404
+    missing_size = {**drive, 'local_size': None}
+    assert client.put(f'{base}/profiles/{key()}', json={**profile, 'drives': [missing_size]}).status_code == 422

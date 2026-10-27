@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { zipSync } from 'fflate';
 import { apiFetch, API_BASE_URL } from '../api/client';
-import { validateMediaSize, uploadPrivateMedia, SESSION_MEDIA_BYTES } from '../features/amiga/privateMediaUpload';
+import { validateMediaSize, uploadPrivateMedia, inspectLocalHdf, SESSION_MEDIA_BYTES } from '../features/amiga/privateMediaUpload';
 
 const API = '/auth/admin/amiga';
 const presets = {
@@ -33,11 +33,16 @@ export default function AdvancedAmigaPage() {
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [player, setPlayer] = useState(false);
   const [folders, setFolders] = useState(null);
   const frame = useRef(null);
   const upload = useRef(null);
   const folderInput = useRef(null);
+  const localInput = useRef(null);
+  const localFiles = useRef(new Map());
+  const reselectLocal = useRef(null);
+  const uploadRequest = useRef(null);
   const uploadKind = useRef('hdf');
   const launchData = useRef(null);
   const change = (key, value) => setProfile(p => ({ ...p, [key]: value }));
@@ -61,18 +66,24 @@ export default function AdvancedAmigaPage() {
     setBusy(true); setError(''); setStatus('');
     try { await fn(); } catch (e) { setStatus(''); setError(e.message); } finally { setBusy(false); }
   }
+  useEffect(() => () => uploadRequest.current?.abort(), []);
   async function save(key = id) {
     await apiFetch(`${API}/profiles/${key}`, { method: 'PUT', body: JSON.stringify(profile) });
-    setId(key); await refresh(); setStatus('Profile saved. Source media are stored privately; guest disk writes are disabled.');
+    setId(key); await refresh(); setStatus('Profile saved. Local HDFs stay on your PC and must be selected again after refreshing. Guest disk writes are disabled.');
   }
   async function importImage(file, kind, name = file.name) {
     validateMediaSize(file, kind);
     const progress = percent => setStatus(`Uploading ${name} (${(file.size / 1024 / 1024).toFixed(1)} MiB): ${percent}%${percent === 100 ? ' - waiting for server confirmation...' : ''}`);
     progress(0);
-    const asset = await uploadPrivateMedia({
-      url: `${API_BASE_URL}${API}/assets?kind=${kind}&name=${encodeURIComponent(name)}`,
-      token: localStorage.getItem('token'), file, onProgress: progress,
-    });
+    let asset;
+    setUploading(true);
+    try {
+      asset = await uploadPrivateMedia({
+        url: `${API_BASE_URL}${API}/assets?kind=${kind}&name=${encodeURIComponent(name)}`,
+        token: localStorage.getItem('token'), file, onProgress: progress,
+        onRequest: request => { uploadRequest.current = request; },
+      });
+    } finally { setUploading(false); uploadRequest.current = null; }
     // Attach the confirmed upload immediately; a failed catalogue refresh must not hide it.
     setCatalogue(current => ({ ...current, assets: [...current.assets, asset] }));
     setProfile(current => {
@@ -81,6 +92,19 @@ export default function AdvancedAmigaPage() {
       return { ...current, drives: [...current.drives, { asset: asset.id, label: kind === 'hdf' ? 'Workbench' : 'Games', priority: current.drives.length ? -128 : 0, mode: 'ro', geometry: 'rdb', sectors: 32, surfaces: 1, reserved: 2, block_size: 512 }] };
     });
     setStatus(`${name} imported${kind === 'hdf' || kind === 'folder' ? ' and added to the drive list below' : ''}. Save the profile to keep this selection.`);
+  }
+  async function selectLocalHdf(file) {
+    const metadata = await inspectLocalHdf(file);
+    const existing = reselectLocal.current;
+    const previous = profile.drives.find(drive => drive.asset === existing);
+    if (previous && (file.size !== previous.local_size || file.name !== previous.local_name)) {
+      throw new Error(`Select ${previous.local_name} (${(previous.local_size / 1024 / 1024).toFixed(1)} MiB) for this drive, or remove it and add a different local HDF.`);
+    }
+    const asset = existing || uuid();
+    localFiles.current.set(asset, file);
+    if (!existing) setProfile(current => ({ ...current, drives: [...current.drives,
+      { ...metadata, asset, label: 'Workbench', priority: current.drives.length ? -128 : 0 }] }));
+    setStatus(`${file.name} ready from your PC - no upload. ${metadata.geometry === 'manual' ? 'No RDB header found: check non-RDB geometry against FS-UAE before starting.' : 'RDB header detected.'}`);
   }
   async function importFolder(files) {
     if (files.length > 4096 || files.reduce((n, f) => n + f.size, 0) > 128 * 1024 * 1024) throw new Error('Folder exceeds 4096 files or 128 MiB');
@@ -99,11 +123,25 @@ export default function AdvancedAmigaPage() {
     if (!profile.floppies.length && !profile.drives.some(d => d.priority > -128)) {
       throw new Error('No boot media selected. Import your Workbench HDF and select its DH device as the boot drive. Kickstart alone shows the insert-disk screen.');
     }
+    for (const drive of profile.drives) {
+      if (drive.source === 'local' && !localFiles.current.has(drive.asset)) {
+        throw new Error(`Select the local file for ${drive.local_name} using Choose file in its drive row.`);
+      }
+    }
     await save();
     const launch = await apiFetch(`${API}/profiles/${id}/launch`, { method: 'POST' });
     const files = [];
     let total = 0;
     for (const [key, asset] of Object.entries(launch.assets)) {
+      if (asset.source === 'local') {
+        const file = localFiles.current.get(key);
+        if (!file || file.size !== asset.size) throw new Error(`Select the local HDF ${asset.name} again.`);
+        total += file.size;
+        if (total > SESSION_MEDIA_BYTES) throw new Error('Mounted media exceed the 1152 MiB session budget');
+        setStatus(`Reading ${asset.name} from your PC - no upload...`);
+        files.push({ path: `/advanced/${key}.hdf`, bytes: await file.arrayBuffer() });
+        continue;
+      }
       const items = asset.type === 'folder' ? asset.files : [{ path: null, size: asset.size }];
       for (const entry of items) {
         total += entry.size;
@@ -124,6 +162,7 @@ export default function AdvancedAmigaPage() {
     <p className="error">{catalogue.capabilities.reason} Workbench installation and blank-drive creation are unavailable in this build.</p>
     {error && <p className="error" role="alert">{error}</p>}
     <p role="status">{status}</p>
+    {uploading && <button onClick={() => uploadRequest.current?.abort()}>Cancel upload</button>}
     <fieldset disabled={busy || player} style={{ display: 'grid', gap: 12 }}>
       <legend>Saved profiles and hardware</legend>
       <select aria-label="Load profile" value={catalogue.profiles.some(p => p.id === id) ? id : ''} onChange={e => {
@@ -139,15 +178,19 @@ export default function AdvancedAmigaPage() {
       <label><input type="checkbox" checked={profile.default} onChange={e => change('default', e.target.checked)} /> Default administrator profile</label>
       <label>Kickstart <select value={profile.kickstart || ''} onChange={e => change('kickstart', e.target.value || null)}><option value="">Select compatible administrator ROM</option>{catalogue.assets.filter(a => a.type === 'rom').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
       <div>{['rom', 'adf', 'hdf'].map(kind => <button key={kind} onClick={() => { uploadKind.current = kind; upload.current.click(); }}>Import {kind === 'rom' ? 'Kickstart' : kind.toUpperCase()}</button>)}</div>
+      <button onClick={() => { reselectLocal.current = null; localInput.current.click(); }}>Use Local HDF (no upload)</button>
+      <input hidden ref={localInput} type="file" accept=".hdf" onChange={e => { const file = e.target.files[0]; if (file) action(() => selectLocalHdf(file)); e.target.value = ''; }} />
+      <p>Use Local HDF reads a file directly from your PC. It is read-only and must be selected again after a page refresh. Import HDF uploads a private server copy instead.</p>
       <p>HDF limit: 1 GiB per image. Folder and other media imports: 128 MiB. Stop Amiga before importing.</p>
       <div aria-live="polite">{error ? <p className="error" role="alert">{error}</p> : <p role="status">{status}</p>}</div>
       <input hidden ref={upload} type="file" onChange={e => { const file = e.target.files[0]; if (file) action(() => importImage(file, uploadKind.current)); e.target.value = ''; }} />
       <div>{profile.floppies.map((key, i) => <p key={`${key}-${i}`}>DF{i}: {assetName(key)} <button onClick={() => change('floppies', profile.floppies.filter((_, j) => j !== i))}>Eject on restart</button></p>)}</div>
       <h2>Mounted drive configuration</h2>
-      <p>Sources are private imported copies. Local folders are uploaded to this server with their hierarchy; no live synchronisation. Drive attachment remains unverified until checked inside Workbench.</p>
+      <p>Local HDF files stay on your PC. Imported HDFs and folders are private server copies; no live synchronisation. Drive attachment remains unverified until checked inside Workbench.</p>
       <table><thead><tr><th>Device</th><th>Source</th><th>Mode / boot priority</th><th>Actions</th></tr></thead><tbody>{profile.drives.map((drive, i) => <tr key={`${drive.asset}-${i}`}>
-        <td>DH{i}</td><td>{assetName(drive.asset)}<br />{catalogue.assets.find(a => a.id === drive.asset)?.source || 'Persistent private HDF'}
-        {catalogue.assets.find(a => a.id === drive.asset)?.type === 'hdf' && <div><select aria-label={`DH${i} geometry`} value={drive.geometry} onChange={e => driveChange(i, 'geometry', e.target.value)}><option value="rdb">RDB (image geometry)</option><option value="manual">Non-RDB (manual geometry)</option></select>
+        <td>DH{i}</td><td>{drive.source === 'local' ? drive.local_name : assetName(drive.asset)}<br />{drive.source === 'local' ? `Local HDF - ${localFiles.current.has(drive.asset) ? 'file selected, no upload' : 'select file again'}` : catalogue.assets.find(a => a.id === drive.asset)?.source || 'Persistent private HDF'}
+        {drive.source === 'local' && <button onClick={() => { reselectLocal.current = drive.asset; localInput.current.click(); }}>Choose file</button>}
+        {(drive.source === 'local' || catalogue.assets.find(a => a.id === drive.asset)?.type === 'hdf') && <div><select aria-label={`DH${i} geometry`} value={drive.geometry} onChange={e => driveChange(i, 'geometry', e.target.value)}><option value="rdb">RDB (image geometry)</option><option value="manual">Non-RDB (manual geometry)</option></select>
           {drive.geometry === 'manual' && ['sectors', 'surfaces', 'reserved', 'block_size'].map(key => <label key={key}>{key} <input type="number" value={drive[key]} onChange={e => driveChange(i, key, Number(e.target.value))} /></label>)}</div>}</td>
         <td>Read only <input aria-label={`DH${i} boot priority`} type="number" min="-128" max="127" value={drive.priority} onChange={e => driveChange(i, 'priority', Number(e.target.value))} /></td>
         <td><button disabled={i === 0} onClick={() => { const drives = [...profile.drives]; [drives[i - 1], drives[i]] = [drives[i], drives[i - 1]]; change('drives', drives); }}>Move up</button><button onClick={() => change('drives', profile.drives.filter((_, j) => i !== j))}>Remove</button></td>

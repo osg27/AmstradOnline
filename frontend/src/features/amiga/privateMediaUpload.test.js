@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateMediaSize, uploadPrivateMedia } from './privateMediaUpload';
+import { validateMediaSize, uploadPrivateMedia, inspectLocalHdf } from './privateMediaUpload';
 
 describe('private Amiga media imports', () => {
   it('accepts the 512000 KiB Workbench image without increasing folder limits', () => {
@@ -38,5 +38,31 @@ describe('private Amiga media imports', () => {
   it('reports an API rejection and a misrouted successful HTML response', async () => {
     await expect(upload(413, '{"detail":"Storage quota exceeded"}').result).rejects.toThrow('Storage quota exceeded');
     await expect(upload(200, '<html>App shell</html>').result).rejects.toThrow('did not reach the media API');
+  });
+
+  it('inspects a local HDF header without reading or uploading the full disk', async () => {
+    const reads = [];
+    const file = { name: 'System_P96.hdf', size: 512000 * 1024,
+      slice(start, end) {
+        reads.push([start, end]);
+        const bytes = new Uint8Array(8192);
+        bytes.set(new TextEncoder().encode('RDSK'), 512);
+        return { arrayBuffer: async () => bytes.buffer };
+      },
+    };
+    expect(await inspectLocalHdf(file)).toMatchObject({ source: 'local', local_name: 'System_P96.hdf', local_size: file.size, geometry: 'rdb', mode: 'ro' });
+    expect(reads).toEqual([[0, 8192]]);
+    expect((await inspectLocalHdf(new File(['DOS\x01'], 'Workbench.hdf'))).geometry).toBe('manual');
+  });
+
+  it('allows cancelling a pending upload and reports timeout', async () => {
+    let pending;
+    const createRequest = () => ({ upload: {}, open() {}, setRequestHeader() {}, send() {}, abort() { this.onabort(); } });
+    const cancelled = uploadPrivateMedia({ url: '/private-assets', file: {}, createRequest, onRequest: request => { pending = request; } });
+    pending.abort();
+    await expect(cancelled).rejects.toThrow('Upload cancelled');
+    const timedOut = uploadPrivateMedia({ url: '/private-assets', file: {}, createRequest, onRequest: request => { pending = request; } });
+    pending.ontimeout();
+    await expect(timedOut).rejects.toThrow('Use Local HDF');
   });
 });
