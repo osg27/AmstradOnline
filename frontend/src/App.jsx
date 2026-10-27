@@ -6,6 +6,7 @@ import RegisterPage from './pages/RegisterPage';
 import LobbyPage from './pages/LobbyPage';
 import RoomPage from './pages/RoomPage';
 import AdminPage from './pages/AdminPage';
+import AdvancedAmigaPage from './pages/AdvancedAmigaPage';
 import FeedbackPage from './pages/FeedbackPage';
 import MessagesPage from './pages/MessagesPage';
 import LocalLibraryPage from './pages/LocalLibraryPage';
@@ -54,6 +55,7 @@ function PrivateRoute({ children }) {
 export default function App() {
   return (
     <Routes>
+      <Route path="/admin/amiga" element={<PrivateRoute><AdvancedAmigaPage /></PrivateRoute>} />
       <Route path="/" element={<Navigate to="/lobby" replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />

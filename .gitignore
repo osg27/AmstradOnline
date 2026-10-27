@@ -72,3 +72,6 @@ $tmp/
 *.sqlite
 *.sqlite3
 Files.sqlite
+
+# Isolated Advanced Amiga test dependencies
+.tmp-amiga-test-deps/

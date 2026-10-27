@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.advanced_amiga import router as advanced_amiga_router
 from app.api.routes.admin import router as admin_router
 from app.api.routes.amiga_scores import router as amiga_scores_router
 from app.api.routes.auth import router as auth_router
@@ -49,6 +50,7 @@ app.include_router(mame_router)
 app.include_router(mame_router, prefix="/scores")
 app.include_router(profile_router)
 app.include_router(admin_router)
+app.include_router(advanced_amiga_router)
 app.include_router(scores_router)
 app.include_router(social_router)
 app.include_router(tournaments_router)

@@ -109,6 +109,7 @@ export default function AdminPage() {
 
         {stats ? (
           <>
+            <Link className="button-like" to="/admin/amiga">Advanced Amiga</Link>
             <AdminPlayHistory />
             <div className="admin-stat-grid">
               <div className="panel admin-stat">
