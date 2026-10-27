@@ -17,6 +17,8 @@ from app.api.routes.admin import require_admin
 
 ROOT = Path(os.getenv("ADVANCED_AMIGA_STORAGE", str(Path(__file__).resolve().parents[3] / "storage" / "advanced-amiga"))).resolve()
 MAX_BYTES = 128 * 1024 * 1024
+MAX_HDF_BYTES = 1024 * 1024 * 1024
+MAX_SESSION_BYTES = 1152 * 1024 * 1024
 MAX_FILES = 4096
 MAX_STORAGE = 2 * 1024 * 1024 * 1024
 def private_headers(response: Response):
@@ -188,8 +190,8 @@ def validate_assets(db, profile):
         if meta["type"] not in ("hdf", "folder"):
             raise HTTPException(400, "Invalid drive source")
         total += meta["size"]
-    if total > 256 * 1024 * 1024:
-        raise HTTPException(413, "Mounted drives exceed the 256 MiB session budget")
+    if total > MAX_SESSION_BYTES:
+        raise HTTPException(413, "Mounted drives exceed the 1152 MiB session budget")
 
 
 @router.post("/assets")
@@ -201,12 +203,13 @@ async def upload(request: Request, kind: Literal["hdf", "rom", "adf", "folder"],
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / key
     size = 0
+    limit = MAX_HDF_BYTES if kind == "hdf" else MAX_BYTES
     try:
         with target.open("xb") as out:
             async for chunk in request.stream():
                 size += len(chunk)
-                if size > MAX_BYTES:
-                    raise HTTPException(413, "Image exceeds 128 MiB")
+                if size > limit:
+                    raise HTTPException(413, f"{kind.upper()} image exceeds {limit // (1024 * 1024)} MiB")
                 out.write(chunk)
         if not size or (kind == "rom" and size not in (262144, 524288, 1048576)):
             raise HTTPException(400, "Invalid image size")

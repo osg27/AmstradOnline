@@ -157,7 +157,12 @@
 
       function installRuntimeFiles() {
         if (advancedLaunch) {
-          for (const file of advancedLaunch.files) writeRuntimeFile(file.path, new Uint8Array(file.bytes));
+          for (const file of advancedLaunch.files) {
+            mkdirp(file.path.split("/").slice(0, -1).join("/"));
+            // Hand the private media buffer to MEMFS instead of duplicating a large HDF.
+            runtimeModule.FS.writeFile(file.path, new Uint8Array(file.bytes), { canOwn: true });
+          }
+          advancedLaunch.files = [];
           pendingContentPath = "/advanced/session.uae";
           writeRuntimeFile(pendingContentPath, encoder.encode(advancedLaunch.uae));
           mkdirp("/home/web_user/retroarch/userdata/saves");

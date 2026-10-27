@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { zipSync } from 'fflate';
 import { apiFetch, API_BASE_URL } from '../api/client';
+import { validateMediaSize, uploadPrivateMedia, SESSION_MEDIA_BYTES } from '../features/amiga/privateMediaUpload';
 
 const API = '/auth/admin/amiga';
 const presets = {
@@ -57,21 +58,29 @@ export default function AdvancedAmigaPage() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [player]);
   async function action(fn) {
-    setBusy(true); setError('');
-    try { await fn(); } catch (e) { setError(e.message); } finally { setBusy(false); }
+    setBusy(true); setError(''); setStatus('');
+    try { await fn(); } catch (e) { setStatus(''); setError(e.message); } finally { setBusy(false); }
   }
   async function save(key = id) {
     await apiFetch(`${API}/profiles/${key}`, { method: 'PUT', body: JSON.stringify(profile) });
     setId(key); await refresh(); setStatus('Profile saved. Source media are stored privately; guest disk writes are disabled.');
   }
   async function importImage(file, kind, name = file.name) {
-    if (file.size > 128 * 1024 * 1024) throw new Error('Image exceeds 128 MiB');
-    const response = await binary(`/assets?kind=${kind}&name=${encodeURIComponent(name)}`, { method: 'POST', body: file });
-    const asset = await response.json();
-    await refresh();
-    if (kind === 'rom') change('kickstart', asset.id);
-    if (kind === 'adf') change('floppies', [...profile.floppies, asset.id].slice(0, 4));
-    if (kind === 'hdf' || kind === 'folder') change('drives', [...profile.drives, { asset: asset.id, label: kind === 'hdf' ? 'Workbench' : 'Games', priority: profile.drives.length ? -128 : 0, mode: 'ro', geometry: 'rdb', sectors: 32, surfaces: 1, reserved: 2, block_size: 512 }]);
+    validateMediaSize(file, kind);
+    const progress = percent => setStatus(`Uploading ${name} (${(file.size / 1024 / 1024).toFixed(1)} MiB): ${percent}%${percent === 100 ? ' - waiting for server confirmation...' : ''}`);
+    progress(0);
+    const asset = await uploadPrivateMedia({
+      url: `${API_BASE_URL}${API}/assets?kind=${kind}&name=${encodeURIComponent(name)}`,
+      token: localStorage.getItem('token'), file, onProgress: progress,
+    });
+    // Attach the confirmed upload immediately; a failed catalogue refresh must not hide it.
+    setCatalogue(current => ({ ...current, assets: [...current.assets, asset] }));
+    setProfile(current => {
+      if (kind === 'rom') return { ...current, kickstart: asset.id };
+      if (kind === 'adf') return { ...current, floppies: [...current.floppies, asset.id].slice(0, 4) };
+      return { ...current, drives: [...current.drives, { asset: asset.id, label: kind === 'hdf' ? 'Workbench' : 'Games', priority: current.drives.length ? -128 : 0, mode: 'ro', geometry: 'rdb', sectors: 32, surfaces: 1, reserved: 2, block_size: 512 }] };
+    });
+    setStatus(`${name} imported${kind === 'hdf' || kind === 'folder' ? ' and added to the drive list below' : ''}. Save the profile to keep this selection.`);
   }
   async function importFolder(files) {
     if (files.length > 4096 || files.reduce((n, f) => n + f.size, 0) > 128 * 1024 * 1024) throw new Error('Folder exceeds 4096 files or 128 MiB');
@@ -87,6 +96,9 @@ export default function AdvancedAmigaPage() {
     await importImage(new Blob([bytes]), 'folder', files[0].webkitRelativePath.split('/')[0]);
   }
   async function start() {
+    if (!profile.floppies.length && !profile.drives.some(d => d.priority > -128)) {
+      throw new Error('No boot media selected. Import your Workbench HDF and select its DH device as the boot drive. Kickstart alone shows the insert-disk screen.');
+    }
     await save();
     const launch = await apiFetch(`${API}/profiles/${id}/launch`, { method: 'POST' });
     const files = [];
@@ -95,7 +107,8 @@ export default function AdvancedAmigaPage() {
       const items = asset.type === 'folder' ? asset.files : [{ path: null, size: asset.size }];
       for (const entry of items) {
         total += entry.size;
-        if (total > 260 * 1024 * 1024) throw new Error('Session memory budget exceeded');
+        if (total > SESSION_MEDIA_BYTES + 8 * 1024 * 1024) throw new Error('Mounted media exceed the 1152 MiB session budget');
+        setStatus(`Loading ${asset.name} for the emulator (${(total / 1024 / 1024).toFixed(1)} MiB)...`);
         const response = await binary(`/assets/${key}/content${entry.path ? `?path=${encodeURIComponent(entry.path)}` : ''}`);
         files.push({ path: asset.type === 'folder' ? `/advanced/${key}/${entry.path}` : asset.type === 'rom' ? '/advanced/kick.rom' : `/advanced/${key}.${asset.type}`, bytes: await response.arrayBuffer() });
       }
@@ -126,6 +139,8 @@ export default function AdvancedAmigaPage() {
       <label><input type="checkbox" checked={profile.default} onChange={e => change('default', e.target.checked)} /> Default administrator profile</label>
       <label>Kickstart <select value={profile.kickstart || ''} onChange={e => change('kickstart', e.target.value || null)}><option value="">Select compatible administrator ROM</option>{catalogue.assets.filter(a => a.type === 'rom').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
       <div>{['rom', 'adf', 'hdf'].map(kind => <button key={kind} onClick={() => { uploadKind.current = kind; upload.current.click(); }}>Import {kind === 'rom' ? 'Kickstart' : kind.toUpperCase()}</button>)}</div>
+      <p>HDF limit: 1 GiB per image. Folder and other media imports: 128 MiB. Stop Amiga before importing.</p>
+      <div aria-live="polite">{error ? <p className="error" role="alert">{error}</p> : <p role="status">{status}</p>}</div>
       <input hidden ref={upload} type="file" onChange={e => { const file = e.target.files[0]; if (file) action(() => importImage(file, uploadKind.current)); e.target.value = ''; }} />
       <div>{profile.floppies.map((key, i) => <p key={`${key}-${i}`}>DF{i}: {assetName(key)} <button onClick={() => change('floppies', profile.floppies.filter((_, j) => j !== i))}>Eject on restart</button></p>)}</div>
       <h2>Mounted drive configuration</h2>

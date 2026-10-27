@@ -120,3 +120,29 @@ def test_hdf_geometry_and_write_rejection():
     assert ',32,4,2,512,10,,uae0' in config
     with pytest.raises(ValueError):
         amiga.Drive(**{**drive, "mode": "rw"})
+
+
+def test_hdf_upload_limit_is_separate_from_folder_and_floppy_limit(client, monkeypatch):
+    # Exercise both boundaries without allocating a 1 GiB test image.
+    monkeypatch.setattr(amiga, "MAX_BYTES", 4)
+    monkeypatch.setattr(amiga, "MAX_HDF_BYTES", 8)
+    base = "/auth/admin/amiga/assets"
+    accepted = client.post(base + "?kind=hdf&name=System_P96.hdf", content=b"123456")
+    assert accepted.status_code == 200
+    assert accepted.json()["size"] == 6
+    assert client.post(base + "?kind=hdf&name=too-large.hdf", content=b"123456789").status_code == 413
+    assert client.post(base + "?kind=adf&name=too-large.adf", content=b"123456").status_code == 413
+
+
+def test_500_mib_hdf_can_be_saved_and_launched(client):
+    asset_id = key()
+    rom_id = key()
+    with amiga.database() as db:
+        amiga.put(db, asset_id, "hdf", {"name": "System_P96.hdf", "type": "hdf", "size": 512000 * 1024})
+        amiga.put(db, rom_id, "rom", {"name": "test ROM metadata", "type": "rom", "size": 524288})
+    profile_id = key()
+    response = client.put(f"/auth/admin/amiga/profiles/{profile_id}", json={"name": "Workbench", "kickstart": rom_id, "drives": [{"asset": asset_id}]})
+    assert response.status_code == 200
+    launch = client.post(f"/auth/admin/amiga/profiles/{profile_id}/launch")
+    assert launch.status_code == 200
+    assert launch.json()["assets"][asset_id]["size"] == 512000 * 1024
