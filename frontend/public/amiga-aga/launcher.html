@@ -77,7 +77,6 @@
       }
       buildCoreOptions();
 
-      let advancedLaunch = null;
       let pendingGame = null;
       let pendingDisks = [];
       let pendingWhdLoadFiles = [];
@@ -156,17 +155,6 @@
       }
 
       function installRuntimeFiles() {
-        if (advancedLaunch) {
-          for (const file of advancedLaunch.files) {
-            mkdirp(file.path.split("/").slice(0, -1).join("/"));
-            // Hand the private media buffer to MEMFS instead of duplicating a large HDF.
-            runtimeModule.FS.writeFile(file.path, new Uint8Array(file.bytes), { canOwn: true });
-          }
-          advancedLaunch.files = [];
-          pendingContentPath = "/advanced/session.uae";
-          writeRuntimeFile(pendingContentPath, encoder.encode(advancedLaunch.uae));
-          mkdirp("/home/web_user/retroarch/userdata/saves");
-        }
         PUAE_SYSTEM_DIRS.forEach((dir) => {
           writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes);
           pendingSupportKickstarts.forEach((entry) => {
@@ -422,7 +410,7 @@
           simulateRuntimeInput = runtimeModule.cwrap("simulate_input", null, ["number", "number", "number"]);
           setKeyboardEnabled = runtimeModule.cwrap("ejs_set_keyboard_enabled", null, ["number"]);
           setKeyboardEnabled(1);
-          runtimeModule.callMain([advancedLaunch ? "/advanced/session.uae" : pendingContentPath]);
+          runtimeModule.callMain([pendingContentPath]);
           runtimeModule.resumeMainLoop?.();
           gameElement.focus();
           statusElement.style.display = "none";
@@ -438,23 +426,6 @@
           setStatus(`PUAE failed to start: ${error.message}`);
         }
       }
-
-      window.startAdvancedAmiga = async (launch) => {
-        if (started) throw new Error("Stop and restart the player before changing hardware");
-        if (!Array.isArray(launch.files) || !launch.files.length) throw new Error("No private media loaded");
-        advancedLaunch = launch;
-        activeProfile = { ...PROFILES.A1200, kickstart: "advanced.rom" };
-        pendingKickstart = { bytes: new Uint8Array(launch.files.find(f => f.path === "/advanced/kick.rom").bytes) };
-        pendingGame = { fileName: "Workbench", bytes: new Uint8Array(0) };
-        pendingDisks = [];
-        coreOptions = ['puae_model = "auto"', 'puae_model_fd = "auto"', 'puae_model_hd = "auto"',
-          'puae_kickstart = "auto"', 'puae_cpu_model = "auto"', 'puae_chipmem_size = "auto"',
-          'puae_bogomem_size = "auto"', 'puae_fastmem_size = "auto"', 'puae_z3mem_size = "auto"',
-          'puae_physical_keyboard_pass_through = "enabled"'].join("\n");
-        await startEmulator();
-        if (!started) throw new Error("PUAE could not start; inspect the player error");
-        return { status: "running", mounted: "unverified" };
-      };
 
       window.getAmigaAgaAudioStream = () => audioCaptureStream;
       window.flushAmigaWHDLoadSave = async () => {

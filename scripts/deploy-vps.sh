@@ -67,12 +67,11 @@ install_upload_policy() {
     return 0
   fi
 
-  log "Installing nginx media upload policy"
+  log "Installing nginx tournament upload policy"
   cat >"$upload_policy" <<'EOF'
-# Advanced Amiga HDF uploads are capped at 1 GiB by the admin-only API.
-# Other endpoints retain their own smaller application limits (including
-# the 256 MiB tournament limit). Leave room for request framing here.
-client_max_body_size 1100m;
+# Tournament ROM uploads are validated and capped at 256 MiB by FastAPI.
+# Allow a little extra space here for multipart form boundaries and fields.
+client_max_body_size 260m;
 EOF
 
   if ! nginx -t; then
