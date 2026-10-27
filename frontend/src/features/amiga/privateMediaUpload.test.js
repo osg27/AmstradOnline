@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateMediaSize, uploadPrivateMedia, inspectLocalHdf } from './privateMediaUpload';
+import { validateMediaSize, uploadPrivateMedia, inspectLocalHdf, inspectLocalFolder } from './privateMediaUpload';
 
 describe('private Amiga media imports', () => {
   it('accepts the 512000 KiB Workbench image without increasing folder limits', () => {
@@ -64,5 +64,31 @@ describe('private Amiga media imports', () => {
     const timedOut = uploadPrivateMedia({ url: '/private-assets', file: {}, createRequest, onRequest: request => { pending = request; } });
     pending.ontimeout();
     await expect(timedOut).rejects.toThrow('Use Local HDF');
+  });
+
+  it('selects a local software folder without reading contents or creating an upload', () => {
+    const files = [
+      { webkitRelativePath: 'Software/Moonstone/Game/Data', size: 10 },
+      { webkitRelativePath: 'Software/Moonstone.info', size: 2 },
+    ];
+    const folder = inspectLocalFolder(files);
+    expect(folder.entries.map(entry => entry.path)).toEqual(['Moonstone/Game/Data', 'Moonstone.info']);
+    expect(folder.entries[0].file).toBe(files[0]);
+    expect(folder.metadata).toMatchObject({ source: 'local', local_kind: 'folder', local_name: 'Software', local_size: 12, local_count: 2, mode: 'ro' });
+    expect(JSON.stringify(folder.metadata)).not.toContain('Moonstone');
+  });
+
+  it('rejects local folder traversal and case aliases including parent directories', () => {
+    expect(() => inspectLocalFolder([{ webkitRelativePath: 'Software/../secret', size: 1 }])).toThrow('invalid');
+    expect(() => inspectLocalFolder([
+      { webkitRelativePath: 'Software/Game/Data', size: 1 },
+      { webkitRelativePath: 'Software/game/Icon', size: 1 },
+    ])).toThrow('collide');
+  });
+
+  it('checks local folder resource limits before reading any file', () => {
+    expect(() => inspectLocalFolder([{ webkitRelativePath: 'Software/Data', size: 513 * 1024 * 1024 }])).toThrow('512 MiB');
+    expect(() => inspectLocalFolder(new Array(20001).fill({}))).toThrow('20000');
+    expect(inspectLocalFolder([{ webkitRelativePath: 'Software/EmptyFile', size: 0 }]).size).toBe(0);
   });
 });

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { zipSync } from 'fflate';
 import { apiFetch, API_BASE_URL } from '../api/client';
-import { validateMediaSize, uploadPrivateMedia, inspectLocalHdf, SESSION_MEDIA_BYTES } from '../features/amiga/privateMediaUpload';
+import { validateMediaSize, uploadPrivateMedia, inspectLocalHdf, inspectLocalFolder, SESSION_MEDIA_BYTES } from '../features/amiga/privateMediaUpload';
 
 const API = '/auth/admin/amiga';
 const presets = {
@@ -40,6 +40,7 @@ export default function AdvancedAmigaPage() {
   const upload = useRef(null);
   const folderInput = useRef(null);
   const localInput = useRef(null);
+  const localFolderInput = useRef(null);
   const localFiles = useRef(new Map());
   const reselectLocal = useRef(null);
   const uploadRequest = useRef(null);
@@ -69,7 +70,7 @@ export default function AdvancedAmigaPage() {
   useEffect(() => () => uploadRequest.current?.abort(), []);
   async function save(key = id) {
     await apiFetch(`${API}/profiles/${key}`, { method: 'PUT', body: JSON.stringify(profile) });
-    setId(key); await refresh(); setStatus('Profile saved. Local HDFs stay on your PC and must be selected again after refreshing. Guest disk writes are disabled.');
+    setId(key); await refresh(); setStatus('Profile saved. Local files and folders stay on your PC and must be selected again after refreshing. Guest disk writes are disabled.');
   }
   async function importImage(file, kind, name = file.name) {
     validateMediaSize(file, kind);
@@ -106,6 +107,21 @@ export default function AdvancedAmigaPage() {
       { ...metadata, asset, label: 'Workbench', priority: current.drives.length ? -128 : 0 }] }));
     setStatus(`${file.name} ready from your PC - no upload. ${metadata.geometry === 'manual' ? 'No RDB header found: check non-RDB geometry against FS-UAE before starting.' : 'RDB header detected.'}`);
   }
+  function selectLocalFolder(files) {
+    const folder = inspectLocalFolder(files);
+    const existing = reselectLocal.current;
+    const previous = profile.drives.find(drive => drive.asset === existing);
+    if (previous && (folder.name !== previous.local_name || folder.size !== previous.local_size || folder.entries.length !== previous.local_count)) {
+      throw new Error(`Select the original ${previous.local_name} folder, or remove this drive and add the changed folder again.`);
+    }
+    const asset = existing || uuid();
+    localFiles.current.set(asset, folder);
+    if (!existing) setProfile(current => ({ ...current, drives: [...current.drives, {
+      ...folder.metadata, asset, label: folder.name.replace(/[^A-Za-z0-9 _-]/g, '').slice(0, 30) || 'Software',
+      priority: -128, geometry: 'rdb', sectors: 32, surfaces: 1, reserved: 2, block_size: 512,
+    }] }));
+    setStatus(`${folder.name} ready from your PC: ${folder.entries.length} files, ${(folder.size / 1024 / 1024).toFixed(1)} MiB - no upload. Its contents will be copied into the read-only emulator volume when you start.`);
+  }
   async function importFolder(files) {
     if (files.length > 4096 || files.reduce((n, f) => n + f.size, 0) > 128 * 1024 * 1024) throw new Error('Folder exceeds 4096 files or 128 MiB');
     const entries = {};
@@ -125,7 +141,7 @@ export default function AdvancedAmigaPage() {
     }
     for (const drive of profile.drives) {
       if (drive.source === 'local' && !localFiles.current.has(drive.asset)) {
-        throw new Error(`Select the local file for ${drive.local_name} using Choose file in its drive row.`);
+        throw new Error(`Select the local ${drive.local_kind === 'folder' ? 'folder' : 'file'} for ${drive.local_name} using its Choose button in the drive row.`);
       }
     }
     await save();
@@ -134,12 +150,19 @@ export default function AdvancedAmigaPage() {
     let total = 0;
     for (const [key, asset] of Object.entries(launch.assets)) {
       if (asset.source === 'local') {
-        const file = localFiles.current.get(key);
-        if (!file || file.size !== asset.size) throw new Error(`Select the local HDF ${asset.name} again.`);
-        total += file.size;
+        const selection = localFiles.current.get(key);
+        if (!selection || selection.size !== asset.size) throw new Error(`Select the local ${asset.type} ${asset.name} again.`);
+        total += selection.size;
         if (total > SESSION_MEDIA_BYTES) throw new Error('Mounted media exceed the 1152 MiB session budget');
         setStatus(`Reading ${asset.name} from your PC - no upload...`);
-        files.push({ path: `/advanced/${key}.hdf`, bytes: await file.arrayBuffer() });
+        if (asset.type === 'folder') {
+          if (selection.entries.length !== asset.count) throw new Error(`Select the original folder ${asset.name} again.`);
+          let loaded = 0;
+          for (const entry of selection.entries) {
+            if (++loaded % 100 === 0) setStatus(`Reading ${asset.name} from your PC: ${loaded}/${selection.entries.length} files - no upload...`);
+            files.push({ path: `/advanced/${key}/${entry.path}`, bytes: await entry.file.arrayBuffer() });
+          }
+        } else files.push({ path: `/advanced/${key}.hdf`, bytes: await selection.arrayBuffer() });
         continue;
       }
       const items = asset.type === 'folder' ? asset.files : [{ path: null, size: asset.size }];
@@ -186,18 +209,20 @@ export default function AdvancedAmigaPage() {
       <input hidden ref={upload} type="file" onChange={e => { const file = e.target.files[0]; if (file) action(() => importImage(file, uploadKind.current)); e.target.value = ''; }} />
       <div>{profile.floppies.map((key, i) => <p key={`${key}-${i}`}>DF{i}: {assetName(key)} <button onClick={() => change('floppies', profile.floppies.filter((_, j) => j !== i))}>Eject on restart</button></p>)}</div>
       <h2>Mounted drive configuration</h2>
-      <p>Local HDF files stay on your PC. Imported HDFs and folders are private server copies; no live synchronisation. Drive attachment remains unverified until checked inside Workbench.</p>
+      <p>Local HDFs and local folders stay on your PC and are read into the emulator without uploading. Uploaded media are private server copies. Local folders are read-only session copies, with no live synchronisation. Drive attachment remains unverified until checked inside Workbench.</p>
       <table><thead><tr><th>Device</th><th>Source</th><th>Mode / boot priority</th><th>Actions</th></tr></thead><tbody>{profile.drives.map((drive, i) => <tr key={`${drive.asset}-${i}`}>
-        <td>DH{i}</td><td>{drive.source === 'local' ? drive.local_name : assetName(drive.asset)}<br />{drive.source === 'local' ? `Local HDF - ${localFiles.current.has(drive.asset) ? 'file selected, no upload' : 'select file again'}` : catalogue.assets.find(a => a.id === drive.asset)?.source || 'Persistent private HDF'}
-        {drive.source === 'local' && <button onClick={() => { reselectLocal.current = drive.asset; localInput.current.click(); }}>Choose file</button>}
-        {(drive.source === 'local' || catalogue.assets.find(a => a.id === drive.asset)?.type === 'hdf') && <div><select aria-label={`DH${i} geometry`} value={drive.geometry} onChange={e => driveChange(i, 'geometry', e.target.value)}><option value="rdb">RDB (image geometry)</option><option value="manual">Non-RDB (manual geometry)</option></select>
+        <td>DH{i}</td><td>{drive.source === 'local' ? drive.local_name : assetName(drive.asset)}<br />{drive.source === 'local' ? `Local ${drive.local_kind === 'folder' ? 'folder' : 'HDF'} - ${localFiles.current.has(drive.asset) ? 'selected, no upload' : 'select again'}` : catalogue.assets.find(a => a.id === drive.asset)?.source || 'Persistent private HDF'}
+        {drive.source === 'local' && <button onClick={() => { reselectLocal.current = drive.asset; (drive.local_kind === 'folder' ? localFolderInput : localInput).current.click(); }}>Choose {drive.local_kind === 'folder' ? 'folder' : 'file'}</button>}
+        {((drive.source === 'local' && drive.local_kind !== 'folder') || catalogue.assets.find(a => a.id === drive.asset)?.type === 'hdf') && <div><select aria-label={`DH${i} geometry`} value={drive.geometry} onChange={e => driveChange(i, 'geometry', e.target.value)}><option value="rdb">RDB (image geometry)</option><option value="manual">Non-RDB (manual geometry)</option></select>
           {drive.geometry === 'manual' && ['sectors', 'surfaces', 'reserved', 'block_size'].map(key => <label key={key}>{key} <input type="number" value={drive[key]} onChange={e => driveChange(i, key, Number(e.target.value))} /></label>)}</div>}</td>
         <td>Read only <input aria-label={`DH${i} boot priority`} type="number" min="-128" max="127" value={drive.priority} onChange={e => driveChange(i, 'priority', Number(e.target.value))} /></td>
         <td><button disabled={i === 0} onClick={() => { const drives = [...profile.drives]; [drives[i - 1], drives[i]] = [drives[i], drives[i - 1]]; change('drives', drives); }}>Move up</button><button onClick={() => change('drives', profile.drives.filter((_, j) => i !== j))}>Remove</button></td>
       </tr>)}</tbody></table>
       <label>Add existing private drive <select value="" onChange={e => { if (e.target.value) change('drives', [...profile.drives, { asset: e.target.value, label: 'Games', priority: -128, mode: 'ro', geometry: 'rdb', sectors: 32, surfaces: 1, reserved: 2, block_size: 512 }]); }}><option value="">Select source</option>{catalogue.assets.filter(a => ['hdf', 'folder'].includes(a.type)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
       <label>Boot drive <select value={profile.drives.findIndex(d => d.priority > -128)} onChange={e => change('drives', profile.drives.map((d, i) => ({ ...d, priority: i === Number(e.target.value) ? 0 : -128 })))}><option value={-1}>Floppy only</option>{profile.drives.map((_, i) => <option key={i} value={i}>DH{i}</option>)}</select></label>
-      <div><button onClick={() => folderInput.current.click()}>Mount Local Folder</button><button onClick={() => action(async () => setFolders((await apiFetch(`${API}/library`)).folders))}>Mount Server Folder</button><button disabled title="Requires a verified writable-drive flush bridge">Create Hard Drive (unavailable)</button></div>
+      <div><button onClick={() => { reselectLocal.current = null; localFolderInput.current.click(); }}>Use Local Folder (no upload)</button><button onClick={() => folderInput.current.click()}>Upload Folder (server copy)</button><button onClick={() => action(async () => setFolders((await apiFetch(`${API}/library`)).folders))}>Mount Server Folder</button><button disabled title="Requires a verified writable-drive flush bridge">Create Hard Drive (unavailable)</button></div>
+      <p>Local folders: up to 512 MiB and 20,000 files. Select Software itself to expose its contents as a volume in Workbench.</p>
+      <input hidden ref={localFolderInput} type="file" webkitdirectory="" multiple onChange={e => { const files = [...e.target.files]; if (files.length) action(() => selectLocalFolder(files)); e.target.value = ''; }} />
       <input hidden ref={folderInput} type="file" webkitdirectory="" multiple onChange={e => { const files = [...e.target.files]; if (files.length) action(() => importFolder(files)); e.target.value = ''; }} />
       {folders && <div>{folders.length ? folders.map(name => <button key={name} onClick={() => action(async () => { const asset = await apiFetch(`${API}/library/import`, { method: 'POST', body: JSON.stringify({ folder: name }) }); await refresh(); change('drives', [...profile.drives, { asset: asset.id, label: 'Games', priority: -128, mode: 'ro', geometry: 'rdb', sectors: 32, surfaces: 1, reserved: 2, block_size: 512 }]); setFolders(null); })}>{name}</button>) : 'No approved folders. Place installed-game directories in the private advanced-amiga/library storage folder.'}</div>}
       <div><button onClick={() => { setId(uuid()); setProfile(initial); }}>New profile</button><button onClick={() => action(() => save())}>Save Drive Configuration / Profile</button><button onClick={() => action(() => save(uuid()))}>Duplicate profile</button><button onClick={() => action(async () => { await apiFetch(`${API}/profiles/${id}`, { method: 'DELETE' }); setId(uuid()); setProfile(initial); await refresh(); })}>Delete profile</button><button onClick={() => action(start)}>Start Workbench</button></div>

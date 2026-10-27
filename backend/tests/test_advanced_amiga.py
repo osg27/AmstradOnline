@@ -163,3 +163,23 @@ def test_local_hdf_launch_requires_no_server_image(client):
     assert client.get(f'{base}/assets/{local_id}/content').status_code == 404
     missing_size = {**drive, 'local_size': None}
     assert client.put(f'{base}/profiles/{key()}', json={**profile, 'drives': [missing_size]}).status_code == 422
+
+
+def test_local_folder_launch_generates_volume_without_uploading_contents(client):
+    base = '/auth/admin/amiga'
+    rom = client.post(base + '/assets?kind=rom&name=test', content=b'x' * 524288).json()
+    folder_id, profile_id = key(), key()
+    drive = {"asset": folder_id, "source": "local", "local_kind": "folder", "local_name": "Software", "local_size": 12, "local_count": 2, "label": "Software", "priority": -128}
+    profile = {"name": "Local Software", "kickstart": rom['id'], "drives": [drive]}
+    assert client.put(f'{base}/profiles/{profile_id}', json=profile).status_code == 200
+    response = client.post(f'{base}/profiles/{profile_id}/launch')
+    assert response.status_code == 200
+    result = response.json()
+    assert f'filesystem2=ro,DH0:Software:"/advanced/{folder_id}",-128' in result['uae']
+    assert result['assets'][folder_id]['type'] == 'folder'
+    assert result['assets'][folder_id]['source'] == 'local'
+    assert 'files' not in result['assets'][folder_id]
+    assert not (amiga.ROOT / 'folders' / folder_id).exists()
+    assert client.get(f'{base}/assets/{folder_id}/content?path=Data').status_code == 404
+    assert client.put(f'{base}/profiles/{key()}', json={**profile, 'drives': [{**drive, 'local_count': None}]}).status_code == 422
+    assert client.put(f'{base}/profiles/{key()}', json={**profile, 'drives': [{**drive, 'local_size': 513 * 1024 * 1024}]}).status_code == 422

@@ -1,6 +1,8 @@
 export const HDF_UPLOAD_BYTES = 1024 * 1024 * 1024;
 export const MEDIA_UPLOAD_BYTES = 128 * 1024 * 1024;
 export const SESSION_MEDIA_BYTES = 1152 * 1024 * 1024;
+export const LOCAL_FOLDER_BYTES = 512 * 1024 * 1024;
+export const LOCAL_FOLDER_FILES = 20000;
 
 export function validateMediaSize(file, kind) {
   const limit = kind === 'hdf' ? HDF_UPLOAD_BYTES : MEDIA_UPLOAD_BYTES;
@@ -52,4 +54,32 @@ export async function inspectLocalHdf(file) {
   }
   return { source: 'local', local_name: file.name, local_size: file.size,
     geometry: rdb ? 'rdb' : 'manual', mode: 'ro', sectors: 32, surfaces: 1, reserved: 2, block_size: 512 };
+}
+
+export function inspectLocalFolder(files) {
+  if (!files.length || files.length > LOCAL_FOLDER_FILES) throw new Error(`Choose a folder with 1 to ${LOCAL_FOLDER_FILES} files.`);
+  const name = files[0].webkitRelativePath?.split('/')[0];
+  if (!name) throw new Error('Choose a folder using the directory selector.');
+  const aliases = new Map();
+  const seen = new Set();
+  let total = 0;
+  const entries = files.map(file => {
+    const parts = (file.webkitRelativePath || '').split('/');
+    if (parts.shift() !== name || !parts.length || parts.join('/').length > 512 || parts.some(part => !part || part === '.' || part === '..' || /[\\:"\x00-\x1f]/.test(part))) {
+      throw new Error('The folder contains an invalid Amiga filename or relative path.');
+    }
+    const path = parts.join('/');
+    if (seen.has(path.toLowerCase())) throw new Error('Folder filenames collide ignoring case.');
+    seen.add(path.toLowerCase());
+    for (let i = 1; i <= parts.length; i++) {
+      const prefix = parts.slice(0, i).join('/');
+      const folded = prefix.toLowerCase();
+      if (aliases.has(folded) && aliases.get(folded) !== prefix) throw new Error('Folder filenames collide ignoring case.');
+      aliases.set(folded, prefix);
+    }
+    total += file.size;
+    if (total > LOCAL_FOLDER_BYTES) throw new Error('Local folder exceeds 512 MiB. Choose a smaller software subfolder.');
+    return { path, file };
+  });
+  return { name, entries, size: total, metadata: { source: 'local', local_kind: 'folder', local_name: name, local_size: total, local_count: entries.length, mode: 'ro' } };
 }

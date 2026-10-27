@@ -35,8 +35,10 @@ class Strict(BaseModel):
 class Drive(Strict):
     asset: str = Field(pattern=r"^[a-f0-9]{32}$")
     source: Literal["server", "local"] = "server"
+    local_kind: Literal["hdf", "folder"] = "hdf"
     local_name: str | None = Field(default=None, min_length=1, max_length=255)
-    local_size: int | None = Field(default=None, gt=0, le=MAX_HDF_BYTES)
+    local_size: int | None = Field(default=None, ge=0, le=MAX_HDF_BYTES)
+    local_count: int | None = Field(default=None, ge=1, le=20000)
     label: str = Field(default="Games", pattern=r"^[A-Za-z0-9 _-]{1,30}$")
     priority: int = Field(default=0, ge=-128, le=127)
     mode: Literal["ro"] = "ro"
@@ -48,8 +50,13 @@ class Drive(Strict):
 
     @model_validator(mode="after")
     def local_metadata(self):
-        if self.source == "local" and (not self.local_name or not self.local_size):
-            raise ValueError("Local HDF requires a filename and size; file contents stay in the browser")
+        if self.source == "local":
+            if not self.local_name or self.local_size is None:
+                raise ValueError("Local media require a name and size; contents stay in the browser")
+            if self.local_kind == "hdf" and not self.local_size:
+                raise ValueError("Local HDF must not be empty")
+            if self.local_kind == "folder" and (not self.local_count or self.local_size > 512 * 1024 * 1024):
+                raise ValueError("Local folder requires 1-20000 files and at most 512 MiB")
         return self
 
 
@@ -205,7 +212,7 @@ def validate_assets(db, profile):
 
 def drive_asset(db, drive):
     if drive.source == "local":
-        return {"type": "hdf", "source": "local", "name": drive.local_name, "size": drive.local_size}
+        return {"type": drive.local_kind, "source": "local", "name": drive.local_name, "size": drive.local_size, "count": drive.local_count}
     return record(db, drive.asset)
 
 
