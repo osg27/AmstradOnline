@@ -160,6 +160,22 @@
       12000
     ]
   },
+  "splatter": {
+    "display_name": "Splatterhouse",
+    "score_offset": 0,
+    "row_size": 7,
+    "row_stride": 8,
+    "row_count": 8,
+    "score_start": 0,
+    "score_length": 3,
+    "encoding": "bcd_be",
+    "multiplier": 100,
+    "max_score": 99999900,
+    "initials_start": 4,
+    "initials_length": 3,
+    "default_initials": ["..."],
+    "default_scores": []
+  },
   "robotron": {
     "display_name": "Robotron: 2084",
     "score_offset": 878,

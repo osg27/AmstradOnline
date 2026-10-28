@@ -94,34 +94,39 @@ def print_configured_decode(rom: str, data: bytes) -> None:
 
     score_offset = int(rule.get("score_offset", 0))
     row_size = int(rule["row_size"])
+    row_stride = int(rule.get("row_stride", row_size))
     row_count = int(rule.get("row_count") or 0)
     score_start = int(rule.get("score_start", 0))
     score_length = int(rule["score_length"])
     multiplier = int(rule.get("multiplier", 1))
     encoding = str(rule.get("encoding", "bcd_be"))
     defaults = {int(score) for score in rule.get("default_scores", [])}
+    initials_start = int(rule.get("initials_start", 0))
+    initials_length = int(rule.get("initials_length", 0))
+    default_initials = set(rule.get("default_initials", []))
     display_name = str(rule.get("display_name") or rom)
 
     print()
     print(f"Configured parser decode for {display_name}")
     print(
-        f"offset={score_offset}, row_size={row_size}, rows={row_count}, "
+        f"offset={score_offset}, row_size={row_size}, row_stride={row_stride}, rows={row_count}, "
         f"score_start={score_start}, score_length={score_length}, encoding={encoding}, multiplier={multiplier}"
     )
 
     table = data[score_offset:]
     if row_count > 0:
-        table = table[:row_count * row_size]
+        table = table[:row_count * row_stride]
 
     found = False
-    for index in range(0, len(table) - (len(table) % row_size), row_size):
+    for index in range(0, len(table) - row_size + 1, row_stride):
         row = table[index:index + row_size]
         raw = decode_rule_score(row[score_start:score_start + score_length], encoding)
         if raw is None:
             continue
         score = raw * multiplier
-        marker = "default" if score in defaults else "player?"
-        print(f"row {(index // row_size) + 1}: score={score} {marker} bytes={' '.join(f'{value:02x}' for value in row)}")
+        initials = row[initials_start:initials_start + initials_length].decode("ascii", errors="replace").strip() if initials_length else None
+        marker = "default" if score in defaults or initials in default_initials else "player?"
+        print(f"row {(index // row_stride) + 1}: score={score} initials={initials or '---'} {marker} bytes={' '.join(f'{value:02x}' for value in row)}")
         found = True
 
     if not found:

@@ -657,26 +657,39 @@ def parse_configured_hi_table(source_path: Path, rom_name: str) -> list[ParsedMa
     data = source_path.read_bytes()
     score_offset = int(rule.get("score_offset", 0))
     row_size = int(rule["row_size"])
+    row_stride = int(rule.get("row_stride", row_size))
     row_count = int(rule.get("row_count") or 0)
     score_start = int(rule.get("score_start", 0))
     score_length = int(rule["score_length"])
     multiplier = int(rule.get("multiplier", 1))
     encoding = str(rule.get("encoding", "bcd_be"))
     default_scores = {int(score) for score in rule.get("default_scores", [])}
+    initials_start = int(rule.get("initials_start", 0))
+    initials_length = int(rule.get("initials_length", 0))
+    default_initials = set(rule.get("default_initials", []))
 
     if row_size <= 0 or score_length <= 0:
         raise ValueError(f"Invalid MAME .hi parser rule for {rom_name}: row_size and score_length must be positive")
     if score_start < 0 or score_start + score_length > row_size:
         raise ValueError(f"Invalid MAME .hi parser rule for {rom_name}: score bytes must fit inside row")
+    if row_stride < row_size:
+        raise ValueError(f"Invalid MAME .hi parser rule for {rom_name}: row stride must cover the row")
+    if initials_start < 0 or initials_length < 0 or initials_start + initials_length > row_size:
+        raise ValueError(f"Invalid MAME .hi parser rule for {rom_name}: initials must fit inside row")
 
     table = data[score_offset:]
     if row_count > 0:
-        table = table[:row_count * row_size]
+        table = table[:row_count * row_stride]
 
     parsed: list[ParsedMameScore] = []
     seen: set[int] = set()
-    for row_index in range(0, len(table) - (len(table) % row_size), row_size):
+    for row_index in range(0, len(table) - row_size + 1, row_stride):
         row = table[row_index:row_index + row_size]
+        initials = None
+        if initials_length:
+            initials = row[initials_start:initials_start + initials_length].decode("ascii", errors="replace").strip()
+            if initials in default_initials:
+                continue
         raw_score = decode_configured_hi_score(row[score_start:score_start + score_length], encoding)
         if raw_score is None:
             continue
@@ -684,7 +697,7 @@ def parse_configured_hi_table(source_path: Path, rom_name: str) -> list[ParsedMa
         if not plausible_arcade_score(score, rom_name) or score in seen:
             continue
         seen.add(score)
-        parsed.append(ParsedMameScore(score=score, rank_in_game=len(parsed) + 1))
+        parsed.append(ParsedMameScore(score=score, initials=initials, rank_in_game=row_index // row_stride + 1))
 
     player_scores = [score for score in parsed if score.score not in default_scores]
     if not player_scores:
