@@ -67,7 +67,8 @@ does not display a fetching-library stage.
 - Existing localStorage catalogues migrate after a successful IndexedDB write.
 - 128 MiB per game and per ZIP's expanded contents, at most 2,048 ZIP entries.
 - Supported systems/extensions are listed in `game_sources.py`. CD track sets,
-  playlists, 7z archives and multi-disk grouping are outside this preview.
+  playlists and multi-disk grouping are outside this preview. PC Engine sources
+  accept individual `.7z` game archives, passed unchanged to the browser player.
 - Filenames identify candidates, not verified games. A ZIP should contain one
   game's media, not an entire collection. Existing firmware requirements apply.
 

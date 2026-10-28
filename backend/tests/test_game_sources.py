@@ -26,6 +26,27 @@ def page(body, content_type="text/html"):
 
 
 class GameSourceTests(unittest.TestCase):
+    def test_pcengine_archive_metadata_accepts_7z_roms(self):
+        data = {"files": [
+            {"name": "1943 Kai (Japan).7z", "size": "226000"},
+            {"name": "Aero Blasters (USA).7z", "size": "266000"},
+            {"name": "nointro.tg-16_meta.xml"},
+        ]}
+        with patch.object(sources, "open_public", return_value=page(json.dumps(data).encode(), "application/json")) as request:
+            result = sources.scan_source("https://archive.org/download/nointro.tg-16", "pcengine")
+        request.assert_called_once_with("https://archive.org/metadata/nointro.tg-16")
+        self.assertEqual([game["file_name"] for game in result["games"]], ["1943 Kai (Japan).7z", "Aero Blasters (USA).7z"])
+        self.assertTrue(result["games"][0]["url"].endswith("1943%20Kai%20%28Japan%29.7z"))
+
+    def test_pcengine_7z_download_preserves_archive_for_browser_player(self):
+        contents = b"7z\xbc\xaf\x27\x1c" + b"archive payload"
+        with patch.object(sources, "open_public", return_value=page(contents, "application/octet-stream")):
+            file, length, name = sources.download_file("https://archive.org/download/nointro.tg-16/Aero%20Blasters%20%28USA%29.7z", "pcengine")
+        try:
+            self.assertEqual((file.read(), length, name), (contents, len(contents), "Aero Blasters (USA).7z"))
+        finally:
+            file.close()
+
     def test_private_urls_and_credentials_rejected(self):
         for url in ["http://example.com/", "https://localhost/", "https://127.0.0.1/", "https://[::1]/", "https://10.0.0.1/", "https://user:pass@example.com/", "https://example.com:8080/", "file:///tmp/game.rom"]:
             with self.subTest(url=url), self.assertRaises(HTTPException):

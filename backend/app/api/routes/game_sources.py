@@ -43,7 +43,7 @@ SOURCE_EXTENSIONS = {
     "megadrive": {"bin", "gen", "md", "smd", "zip"},
     "nes": {"nes", "zip"},
     "snes": {"sfc", "smc", "fig", "swc", "zip"},
-    "pcengine": {"pce", "sgx", "zip"},
+    "pcengine": {"pce", "sgx", "zip", "7z"},
     "arcade": {"zip"},
 }
 
