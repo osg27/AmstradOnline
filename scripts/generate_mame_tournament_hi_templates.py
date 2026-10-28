@@ -84,7 +84,7 @@ def configured_score_layout(rule: dict, data_size: int) -> tuple[list[tuple[int,
     if rule.get("encoding") != "bcd_be":
         return None
     offset = int(rule.get("score_offset", 0))
-    stride = int(rule.get("row_size", 0))
+    stride = int(rule.get("row_stride", rule.get("row_size", 0)))
     count = int(rule.get("row_count", 0))
     score_start = int(rule.get("score_start", 0))
     length = int(rule.get("score_length", 0))

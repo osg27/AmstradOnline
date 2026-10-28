@@ -3352,6 +3352,19 @@
     },
     "template": "AAAAAAAAAAAAAAAAAAAAAAAA"
   },
+  "splatter": {
+    "score_rule": {
+      "count": 8,
+      "encoding": "packed_bcd",
+      "length": 3,
+      "minimum_score": 1,
+      "multiplier": 100,
+      "offset": 0,
+      "parser": "configured",
+      "stride": 8
+    },
+    "template": "AAAAAS4uLiAAAAABLi4uIAAAAAEuLi4gAAAAAS4uLiAAAAACLi4uIAAAAAEuLi4gAAAAAS4uLiAAAAABLi4u"
+  },
   "spnchout": {
     "score_rule": {
       "minimum_score": 1,
