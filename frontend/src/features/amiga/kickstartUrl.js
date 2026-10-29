@@ -86,6 +86,29 @@ async function fetchKickstartUrl(url) {
   return response;
 }
 
+export async function downloadArchiveKickstartFile(item, file, metadata, download) {
+  const path = file.name.split('/').map(encodeURIComponent).join('/');
+  const primary = `https://archive.org/download/${encodeURIComponent(item)}/${path}`;
+  const targets = [primary, primary];
+  // Archive.org's download redirect can fail while its replicas remain available.
+  for (const host of [metadata.d1, metadata.d2]) {
+    if (typeof host === 'string' && /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.archive\.org$/i.test(host)
+      && typeof metadata.dir === 'string' && /^\/\d+\/items\/[A-Za-z0-9_.-]+$/.test(metadata.dir)) {
+      targets.push(`https://${host}${metadata.dir}/${path}`);
+    }
+  }
+  let lastError;
+  for (const url of targets) {
+    try {
+      return await download({ url, file_name: file.name }, 'amiga');
+    } catch (err) {
+      lastError = err;
+      if (!/HTTP (?:429|5\d\d)|timed out|connection failed|fetch|network|incomplete/i.test(err.message)) throw err;
+    }
+  }
+  throw new Error(`Kickstart source is temporarily unavailable. Your URL is still saved; try again shortly. ${lastError?.message || ''}`);
+}
+
 export async function downloadKickstarts(value) {
   const url = validateKickstartUrl(value);
   const item = archiveKickstartListing(url);
@@ -99,7 +122,7 @@ export async function downloadKickstarts(value) {
     for (const file of files) {
       const target = `https://archive.org/download/${encodeURIComponent(item)}/${file.name.split('/').map(encodeURIComponent).join('/')}`;
       const download = /\.zip$/i.test(file.name)
-        ? await downloadSourceGame({ url: target, file_name: file.name }, 'amiga')
+        ? await downloadArchiveKickstartFile(item, file, metadata, downloadSourceGame)
         : await fetchKickstartUrl(target);
       const bytes = new Uint8Array(await download.arrayBuffer());
       try {

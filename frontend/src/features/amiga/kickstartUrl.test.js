@@ -1,9 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import { zipSync } from 'fflate';
 import { sha1Bytes } from '../localLibrary/core/hash';
-import { archiveKickstartListing, identifyKickstartDownload, saveKickstartSource, selectArchiveKickstartFiles, validateKickstartUrl } from './kickstartUrl';
+import { archiveKickstartListing, downloadArchiveKickstartFile, identifyKickstartDownload, saveKickstartSource, selectArchiveKickstartFiles, validateKickstartUrl } from './kickstartUrl';
 
 describe('personal Kickstart URL imports', () => {
+  it('retries upstream failures then uses the Archive.org replica', async () => {
+    const result = new Blob(['rom']);
+    const download = vi.fn().mockRejectedValueOnce(new Error('The source returned HTTP 500'))
+      .mockRejectedValueOnce(new Error('The source returned HTTP 503')).mockResolvedValueOnce(result);
+    await expect(downloadArchiveKickstartFile('firmware', { name: 'Kickstart A1200.zip' }, {
+      d1: 'ia123.us.archive.org', dir: '/10/items/firmware',
+    }, download)).resolves.toBe(result);
+    expect(download.mock.calls[2][0].url).toBe('https://ia123.us.archive.org/10/items/firmware/Kickstart%20A1200.zip');
+  });
+
+  it('does not retry permission errors', async () => {
+    const download = vi.fn().mockRejectedValue(new Error('This source requires permission or blocks downloads'));
+    await expect(downloadArchiveKickstartFile('firmware', { name: 'rom.zip' }, {}, download)).rejects.toThrow('permission');
+    expect(download).toHaveBeenCalledTimes(1);
+  });
   it('resolves Archive.org listing URLs and selects supported unmodified ROM candidates', () => {
     expect(archiveKickstartListing('https://archive.org/download/commodore-amiga-firmware')).toBe('commodore-amiga-firmware');
     expect(archiveKickstartListing('https://archive.org/details/firmware/')).toBe('firmware');
