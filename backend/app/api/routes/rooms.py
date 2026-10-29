@@ -233,6 +233,35 @@ def update_room(
     return serialize_room(room)
 
 
+@router.post("/{room_code}/multiplayer", response_model=RoomResponse)
+def open_multiplayer_room(
+    room_code: str,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    room = db.query(Room).filter(Room.room_code == room_code.upper()).with_for_update().first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room.owner_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Only the room host can open multiplayer")
+    require_open_solo_room(db, room)
+    require_system_access(db, user_id, room.system or "cpc", creating=True)
+    if room.hosting_mode == "multiplayer":
+        return serialize_room(room)
+    user = db.query(User).filter(User.id == user_id).with_for_update().first()
+    require_multiplayer_hosting_allowance(user, db)
+    free_limit = FREE_ARCADE_SESSION_LIMIT if room.system == "arcade" else FREE_PARTY_PLAYER_LIMIT
+    if (room.party_max_players or 2) > free_limit:
+        require_entitlement(user, db, "larger_multiplayer_sessions")
+    room.hosting_mode = "multiplayer"
+    room.hosting_started_at = datetime.now(timezone.utc)
+    if room.system == "arcade":
+        room.arcade_multiplayer = True
+    db.commit()
+    db.refresh(room)
+    return serialize_room(room)
+
+
 @router.patch("/{room_code}/arcade-mode", response_model=RoomResponse)
 def update_arcade_mode(
     room_code: str,

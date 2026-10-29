@@ -33,6 +33,7 @@ import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardA
 import { getControllerMapping } from '../utils/controllerMappingStorage';
 import { applyCustomMapping } from '../utils/applyControllerMapping';
 import { supportsControllerMapping } from '../utils/defaultControllerMappings';
+import { copyText } from '../utils/clipboard';
 import { downloadKickstarts, KICKSTART_URL_KEY } from '../features/amiga/kickstartUrl';
 import GameRecorderControls from '../features/recording/GameRecorderControls';
 import { getAdapterAudioStream, getEmulatorRecordingAdapter } from '../features/recording/emulatorRecordingAdapters';
@@ -809,7 +810,6 @@ export default function RoomPage() {
   const [isScreenFullscreen, setIsScreenFullscreen] = useState(false);
   const [roomCodeCopied, setRoomCodeCopied] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
-  const [soloInviteRoom, setSoloInviteRoom] = useState(null);
   const [soloInviteBusy, setSoloInviteBusy] = useState(false);
   const [localGamePickerOpen, setLocalGamePickerOpen] = useState(false);
   const [localGameSearch, setLocalGameSearch] = useState('');
@@ -905,6 +905,7 @@ export default function RoomPage() {
   const partyHostPeersRef = useRef(new Map());
   const pendingPartyGuestsRef = useRef(new Map());
   const hostStartingRef = useRef(false);
+  const multiplayerPromotionRef = useRef(false);
   const hostStartedRef = useRef(false);
   const localLibraryLoadAttemptedRef = useRef(false);
   const loadedDiskNameRef = useRef('');
@@ -5126,10 +5127,29 @@ export default function RoomPage() {
   }
 
   useEffect(() => {
-    if (!isSoloMode && isHost && signalingOpen && !isAmigaFamily && !isArcade && !isAtariSt) {
+    if (!isSoloMode && isHost && signalingOpen && !multiplayerPromotionRef.current && !isAmigaFamily && !isArcade && !isAtariSt) {
       startHostSession();
     }
   }, [isAmigaFamily, isArcade, isAtariSt, isHost, isSoloMode, room, signalingOpen]);
+
+  useEffect(() => {
+    if (isSoloMode || !isHost || !signalingOpen || !multiplayerPromotionRef.current) return undefined;
+    let cancelled = false;
+    let timer;
+    const attachRunningGame = async () => {
+      if (cancelled) return;
+      if (hostStartingRef.current || !pcRef.current) {
+        timer = window.setTimeout(attachRunningGame, 100);
+        return;
+      }
+      multiplayerPromotionRef.current = false;
+      hostStartedRef.current = false;
+      setHostStarted(false);
+      await startHostSession();
+    };
+    timer = window.setTimeout(attachRunningGame, 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [isHost, isSoloMode, signalingOpen, roomSessionKey]);
 
   useEffect(() => {
     if (
@@ -6090,40 +6110,27 @@ export default function RoomPage() {
     navigate(libraryReturnPath);
   }
 
+  async function copyRoomInvite() {
+    const copied = await copyText(`${window.location.origin}/room/${roomCode}`);
+    setInviteCopied(copied);
+    if (copied) window.setTimeout(() => setInviteCopied(false), 1400);
+    else setStatus(`Room ${roomCode} is ready. Share this code with your player.`);
+  }
+
   async function invitePlayerFromSolo() {
     if (!room || soloInviteBusy) return;
-
     setSoloInviteBusy(true);
     setError('');
     try {
-      const nextRoom = await apiFetch('/rooms/create', {
-        method: 'POST',
-        body: JSON.stringify({
-          system: roomSystem,
-          hosting_mode: 'multiplayer',
-          party_max_players: 2,
-        }),
-      });
-      const nextParams = new URLSearchParams();
-      if (localGameId) nextParams.set('localGame', localGameId);
-      if (libraryReturnPath !== '/library') nextParams.set('returnTo', libraryReturnPath);
-      const query = nextParams.toString();
-      const invitePath = `/room/${nextRoom.room_code}${query ? `?${query}` : ''}`;
-      const inviteUrl = `${window.location.origin}${invitePath}`;
-      setSoloInviteRoom({
-        code: nextRoom.room_code,
-        path: invitePath,
-        url: inviteUrl,
-      });
-      await navigator.clipboard.writeText(inviteUrl);
-      setInviteCopied(true);
-      window.setTimeout(() => setInviteCopied(false), 1400);
-      addLog(`Created multiplayer invite room ${nextRoom.room_code}`);
-      setStatus('Multiplayer room ready. Open it when you want to host guests.');
+      const nextRoom = await apiFetch(`/rooms/${roomCode}/multiplayer`, { method: 'POST' });
+      multiplayerPromotionRef.current = true;
+      setRoom(nextRoom);
+      addLog(`Opened multiplayer in the current room ${nextRoom.room_code}; keeping the running game`);
+      setStatus(`Multiplayer ready. Share room code ${nextRoom.room_code}.`);
+      await copyRoomInvite();
     } catch (err) {
-      setInviteCopied(false);
       setError(err.message);
-      addLog(`Invite room error: ${err.message}`);
+      addLog(`Could not open multiplayer: ${err.message}`);
     } finally {
       setSoloInviteBusy(false);
     }
@@ -7070,13 +7077,10 @@ export default function RoomPage() {
   }
 
   async function copyRoomCode() {
-    try {
-      await navigator.clipboard.writeText(roomCode);
-      setRoomCodeCopied(true);
-      window.setTimeout(() => setRoomCodeCopied(false), 1800);
-    } catch {
-      setError('Could not copy the room code');
-    }
+    const copied = await copyText(roomCode);
+    setRoomCodeCopied(copied);
+    if (copied) window.setTimeout(() => setRoomCodeCopied(false), 1800);
+    else setStatus(`Room code: ${roomCode}. Select the code in the heading to copy it manually.`);
   }
 
   async function handlePlayStationBiosSelected(event) {
@@ -7187,9 +7191,14 @@ export default function RoomPage() {
             <Link className="button-like secondary" to={tournamentCode ? `/tournaments/${tournamentCode}` : '/library'}>
               {tournamentCode ? 'Tournament' : 'Library'}
             </Link>
+            {!isSoloMode && isHost ? (
+              <button type="button" className="secondary" onClick={copyRoomInvite}>
+                {inviteCopied ? 'Invite copied' : 'Copy invite'}
+              </button>
+            ) : null}
             {isSoloMode && isHost && !isArcade ? (
               <button type="button" className="secondary" onClick={invitePlayerFromSolo} disabled={soloInviteBusy}>
-                {soloInviteBusy ? 'Creating...' : inviteCopied ? 'Invite copied' : 'Invite player'}
+                {soloInviteBusy ? 'Opening multiplayer...' : 'Invite player'}
               </button>
             ) : null}
             <button className="secondary" onClick={leaveRoom}>
@@ -7259,29 +7268,6 @@ export default function RoomPage() {
             ))}
           </div>
         </div>
-
-        {isSoloMode && soloInviteRoom ? (
-          <div className="session-strip invite-room-strip">
-            <div>
-              <strong>Multiplayer room ready</strong>
-              <span>Code {soloInviteRoom.code}. Your solo game is still running here; open the multiplayer room when you want guests to join.</span>
-            </div>
-            <Link className="button-like" to={soloInviteRoom.path}>
-              Open multiplayer room
-            </Link>
-            <button
-              type="button"
-              className="secondary"
-              onClick={async () => {
-                await navigator.clipboard.writeText(soloInviteRoom.url);
-                setInviteCopied(true);
-                window.setTimeout(() => setInviteCopied(false), 1400);
-              }}
-            >
-              {inviteCopied ? 'Copied' : 'Copy invite'}
-            </button>
-          </div>
-        ) : null}
 
         {isHost && canControlLocalEmulator && (!loadedDiskName || (isPuaeAmiga && !kickstartRomName)) ? (
           <section className="room-getting-started" aria-labelledby="room-getting-started-title">
