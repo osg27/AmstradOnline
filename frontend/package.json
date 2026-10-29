@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:x68000 && vite build",
+    "build:x68000": "node scripts/build-x68000.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "data:amiga": "python ../scripts/import-openretro-amiga.py --source ../Amiga.sqlite --output public/data/amiga"
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
+    "esbuild": "^0.21.5",
     "vite": "^5.4.8",
     "vitest": "^4.1.10"
   }
