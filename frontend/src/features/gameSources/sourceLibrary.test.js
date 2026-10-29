@@ -5,6 +5,13 @@ import { downloadSourceGame, readSources, writeSources } from './sourceLibrary';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('connected sources', () => {
+  it('preserves linked X68000 game sources', () => {
+    const values = new Map();
+    const storage = { getItem: (key) => values.get(key), setItem: (key, value) => values.set(key, value) };
+    const sources = [{ id: 'x68k', url: 'https://example.com/x68k', label: 'X68k games', system: 'x68000', games: [{ url: 'https://example.com/Game.dim', file_name: 'Game.dim', title: 'Game' }] }];
+    writeSources(storage, 'alice', sources);
+    expect(readSources(storage, 'alice')).toEqual(sources);
+  });
   it('keeps catalogues separated by account and tolerates corrupt storage', () => {
     const values = new Map();
     const storage = { getItem: (key) => values.get(key), setItem: (key, value) => values.set(key, value) };

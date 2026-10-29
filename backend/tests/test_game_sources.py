@@ -26,6 +26,17 @@ def page(body, content_type="text/html"):
 
 
 class GameSourceTests(unittest.TestCase):
+    def test_x68000_archive_metadata_accepts_disks_and_game_archives(self):
+        data = {"files": [
+            {"name": "Game (Disk 1).dim", "size": "1261824"},
+            {"name": "Game.zip", "size": "1000000"},
+            {"name": "Hard disk.hdf", "size": "2000000"},
+            {"name": "metadata.xml"},
+        ]}
+        with patch.object(sources, "open_public", return_value=page(json.dumps(data).encode(), "application/json")):
+            result = sources.scan_source("https://archive.org/download/x68k-test", "x68000")
+        self.assertEqual([game["file_name"] for game in result["games"]], ["Game (Disk 1).dim", "Game.zip", "Hard disk.hdf"])
+
     def test_pcengine_archive_metadata_accepts_7z_roms(self):
         data = {"files": [
             {"name": "1943 Kai (Japan).7z", "size": "226000"},

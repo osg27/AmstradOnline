@@ -38,6 +38,7 @@ SOURCE_EXTENSIONS = {
     "msx": {"rom", "mx1", "mx2", "dsk", "cas", "zip"},
     "amiga": {"adf", "adz", "dms", "ipf", "zip"},
     "amiga_aga": {"adf", "adz", "dms", "ipf", "zip"},
+    "x68000": {"dim", "img", "d88", "88d", "hdm", "dup", "2hd", "xdf", "hdf", "cmd", "m3u", "zip"},
     "atarist": {"st", "msa", "stx", "ipf", "zip"},
     "mastersystem": {"sms", "zip"},
     "megadrive": {"bin", "gen", "md", "smd", "zip"},
