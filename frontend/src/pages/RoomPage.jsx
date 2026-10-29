@@ -33,7 +33,7 @@ import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardA
 import { getControllerMapping } from '../utils/controllerMappingStorage';
 import { applyCustomMapping } from '../utils/applyControllerMapping';
 import { supportsControllerMapping } from '../utils/defaultControllerMappings';
-import { downloadKickstarts, KICKSTART_URL_KEY, validateKickstartUrl } from '../features/amiga/kickstartUrl';
+import { downloadKickstarts, KICKSTART_URL_KEY } from '../features/amiga/kickstartUrl';
 import GameRecorderControls from '../features/recording/GameRecorderControls';
 import { getAdapterAudioStream, getEmulatorRecordingAdapter } from '../features/recording/emulatorRecordingAdapters';
 
@@ -803,8 +803,6 @@ export default function RoomPage() {
   const [amigaRequiredModel, setAmigaRequiredModel] = useState('');
   const [x68000FirmwareName, setX68000FirmwareName] = useState('');
   const [vipKickstartBusy, setVipKickstartBusy] = useState(false);
-  const [kickstartUrl, setKickstartUrl] = useState(() => localStorage.getItem(KICKSTART_URL_KEY) || '');
-  const [kickstartUrlBusy, setKickstartUrlBusy] = useState(false);
   const [playstationBiosName, setPlaystationBiosName] = useState('');
   const [inputCaptured, setInputCaptured] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -5867,36 +5865,6 @@ export default function RoomPage() {
     return roms;
   }
 
-  async function saveKickstartUrl() {
-    if (kickstartUrlBusy) return;
-    setKickstartUrlBusy(true);
-    setError('');
-    try {
-      if (!kickstartUrl.trim()) {
-        localStorage.removeItem(KICKSTART_URL_KEY);
-        setStatus('Kickstart URL removed; downloaded ROMs remain saved locally.');
-        return;
-      }
-      const url = validateKickstartUrl(kickstartUrl.trim());
-      const roms = await cacheUrlKickstarts(url);
-      localStorage.setItem(KICKSTART_URL_KEY, url);
-      setKickstartUrl(url);
-      const supportKickstarts = await loadA500WHDLoadKickstart();
-      setWhdLoadSupportReady(supportKickstarts.length > 0);
-      const selected = roms.find((rom) => rom.kickstart.model === amigaRequiredModel)
-        || (kickstartStorageKey ? await loadStoredKickstart(kickstartStorageKey) : null);
-      if (selected) {
-        forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, selected.fileName, selected.bytes, amigaRequiredModel === 'A1200' ? supportKickstarts : []));
-        setKickstartRomName(`${selected.fileName} (saved)`);
-      }
-      setStatus(`Saved ${roms.length} Kickstart ROM(s). Games automatically select their required ROM.${amigaRequiredModel && !selected ? ' This URL does not contain the ROM required by the current game.' : ''}`);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setKickstartUrlBusy(false);
-    }
-  }
-
   async function loadVipKickstart() {
     if (!canControlLocalEmulator || !isPuaeAmiga || !hasVipAccess || vipKickstartBusy) return;
 
@@ -7961,14 +7929,6 @@ export default function RoomPage() {
                   {isPuaeAmiga ? (
                     <details className="amiga-room-options">
                       <summary>Amiga options</summary>
-                      <label>
-                        Kickstart ZIP or ROM URL
-                        <input type="url" value={kickstartUrl} onChange={(event) => setKickstartUrl(event.target.value)} placeholder="https://example.com/kickstarts.zip" disabled={kickstartUrlBusy} />
-                      </label>
-                      <button type="button" className="secondary" onClick={saveKickstartUrl} disabled={kickstartUrlBusy}>
-                        {kickstartUrlBusy ? 'Downloading Kickstarts...' : 'Save Kickstart URL'}
-                      </button>
-                      <small>Use a ZIP with A500 1.3 and A1200 3.1 ROMs. The game selects the ROM automatically. Saved in this browser; the server must allow CORS. Clear and save to remove the URL.</small>
                       <div>
                         <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>Left click</button>
                         <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>Right click</button>

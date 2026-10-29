@@ -4,6 +4,37 @@ import { KICKSTART_CATALOGUE } from './kickstarts';
 
 export const KICKSTART_URL_KEY = 'amiga-kickstart-source-url';
 
+export async function saveKickstartSource(value) {
+  if (!value.trim()) {
+    localStorage.removeItem(KICKSTART_URL_KEY);
+    return [];
+  }
+  const url = validateKickstartUrl(value.trim());
+  const roms = await downloadKickstarts(url);
+  const db = await new Promise((resolve, reject) => {
+    const request = indexedDB.open('oldstylegaming-kickstarts', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('roms');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction('roms', 'readwrite');
+      for (const rom of roms) {
+        const key = rom.kickstart.model === 'A1200' ? 'amiga-aga-a1200-kickstart-clean' : 'amiga-a500-kickstart-clean';
+        transaction.objectStore('roms').put({ fileName: rom.fileName, bytes: rom.bytes }, key);
+      }
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error || new Error('Could not save Kickstarts.'));
+    });
+    localStorage.setItem(KICKSTART_URL_KEY, url);
+    return roms;
+  } finally {
+    db.close();
+  }
+}
+
 export function validateKickstartUrl(value) {
   const url = new URL(value);
   if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) {
