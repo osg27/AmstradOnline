@@ -2490,7 +2490,7 @@
   var keyboardMasks = [0, 0];
   var controllerMasks = [0, 0];
   var pressedKeys = /* @__PURE__ */ new Set();
-  var state = { engine: "WebX68k", frameCount: 0, running: false, paused: false, error: "" };
+  var state = { engine: "WebX68k", ramMb: 12, frameCount: 0, running: false, paused: false, error: "" };
   window.x68000Runtime = state;
   function trace(stage, detail = "") {
     const entry = { stage, detail: String(detail), timestamp: (/* @__PURE__ */ new Date()).toISOString() };
@@ -2611,7 +2611,7 @@
       const media = prepareX68000Media(currentGame);
       nextHost = new LibretroHost(canvas, pushAudio);
       nextHost.setCoreOption("px68k_cpuspeed", "16Mhz");
-      nextHost.setCoreOption("px68k_ramsize", "2MB");
+      nextHost.setCoreOption("px68k_ramsize", "12MB");
       nextHost.setCoreOption("px68k_no_wait_mode", "enabled");
       nextHost.setCoreOption("px68k_save_fdd_path", "disabled");
       nextHost.setCoreOption("px68k_save_hdd_path", "disabled");

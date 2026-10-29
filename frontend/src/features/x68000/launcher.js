@@ -18,7 +18,7 @@ const audioSources = new Set();
 const keyboardMasks = [0, 0];
 const controllerMasks = [0, 0];
 const pressedKeys = new Set();
-const state = { engine: 'WebX68k', frameCount: 0, running: false, paused: false, error: '' };
+const state = { engine: 'WebX68k', ramMb: 12, frameCount: 0, running: false, paused: false, error: '' };
 window.x68000Runtime = state;
 
 function trace(stage, detail = '') {
@@ -108,7 +108,7 @@ async function start() {
     const media = prepareX68000Media(currentGame);
     nextHost = new LibretroHost(canvas, pushAudio);
     nextHost.setCoreOption('px68k_cpuspeed', '16Mhz');
-    nextHost.setCoreOption('px68k_ramsize', '2MB');
+    nextHost.setCoreOption('px68k_ramsize', '12MB');
     nextHost.setCoreOption('px68k_no_wait_mode', 'enabled');
     nextHost.setCoreOption('px68k_save_fdd_path', 'disabled');
     nextHost.setCoreOption('px68k_save_hdd_path', 'disabled');
