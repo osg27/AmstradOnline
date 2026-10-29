@@ -15,11 +15,9 @@ class X68000AccessTests(unittest.TestCase):
         with patch.object(rooms, 'is_super_admin_user', return_value=False):
             rooms.require_system_access(self.db, 2, 'x68000')
 
-    def test_regular_user_cannot_create_x68000_room(self):
+    def test_regular_user_can_create_x68000_room_and_link_sources(self):
         with patch.object(rooms, 'is_super_admin_user', return_value=False):
-            with self.assertRaises(HTTPException) as result:
-                rooms.require_system_access(self.db, 2, 'x68000', creating=True)
-        self.assertEqual(result.exception.status_code, 403)
+            rooms.require_system_access(self.db, 2, 'x68000', creating=True)
 
     def test_super_admin_can_create_x68000_room(self):
         with patch.object(rooms, 'is_super_admin_user', return_value=True):

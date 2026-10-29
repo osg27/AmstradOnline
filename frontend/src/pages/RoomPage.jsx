@@ -7668,7 +7668,7 @@ export default function RoomPage() {
                           onChange={(event) => setSelectedRoomSystem(event.target.value)}
                           disabled={switchingSystem}
                         >
-                          {ROOM_SYSTEM_OPTIONS.filter(([value]) => (value !== 'x68000' || isSuperAdmin) && (value !== 'msx' || isAdmin)).map(([value, label]) => (
+                          {ROOM_SYSTEM_OPTIONS.filter(([value]) => value !== 'msx' || isAdmin).map(([value, label]) => (
                             <option key={value} value={value}>{label}</option>
                           ))}
                         </select>

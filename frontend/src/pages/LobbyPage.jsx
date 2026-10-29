@@ -186,7 +186,6 @@ const PLATFORM_SHELVES = [
             summary: 'Japanese 16/32-bit computer games through PX68k.',
             formats: '.dim .img .d88 .88d .hdm .2hd .xdf .hdf .m3u',
             testing: true,
-            superAdminOnly: true,
             modes: {
               solo: { enabled: true },
               hosted: { enabled: true },
