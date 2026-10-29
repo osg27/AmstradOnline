@@ -77,7 +77,8 @@ def require_system_access(db: Session, user_id: int, system: str, *, creating: b
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     require_system_early_access(user, db, system)
-    if system in PRIVATE_SUPER_ADMIN_SYSTEMS:
+    # Experimental hosts stay restricted; guests can join their streamed rooms.
+    if creating and system in PRIVATE_SUPER_ADMIN_SYSTEMS:
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not is_super_admin_user(user):
             raise HTTPException(status_code=403, detail="This system is only available to the super admin")
