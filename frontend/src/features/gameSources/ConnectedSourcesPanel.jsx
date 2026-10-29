@@ -69,12 +69,15 @@ export default function ConnectedSourcesPanel({ system, sources, folders, onSave
             const roms = await saveKickstartSource(kickstartUrl);
             setKickstartUrl(localStorage.getItem(KICKSTART_URL_KEY) || '');
             setStatus(roms.length ? `${roms.length} Kickstart ROM(s) saved. Games automatically select the required ROM.` : 'Kickstart URL removed. Downloaded ROMs remain saved locally.');
-          } catch (err) { setStatus(''); throw err; }
+          } catch (err) {
+            setStatus(localStorage.getItem(KICKSTART_URL_KEY) === kickstartUrl.trim() ? 'Kickstarts URL saved in this browser. ROM download could not finish; save again to retry.' : '');
+            throw err;
+          }
         });
       }}>
         <label>Kickstarts URL<input type="url" maxLength={4096} value={kickstartUrl} disabled={busy} placeholder="https://example.com/kickstarts.zip" onChange={(event) => setKickstartUrl(event.target.value)} /></label>
         <button type="submit" disabled={busy}>Save Kickstarts URL</button>
-        <small>Link a ZIP containing A500 1.3 and A1200 3.1 ROMs, or a single ROM. Saved in this browser; the server must allow CORS. Clear and save to remove the URL.</small>
+        <small>Link an Archive.org file listing, a ZIP containing A500 1.3 and A1200 3.1 ROMs, or a single ROM. Saved in this browser; the server must allow CORS. Clear and save to remove the URL.</small>
       </form> : null}
       <h3>Linked sources</h3>
       {!folders.length && !linked.length ? <p>No sources linked yet.</p> : null}
