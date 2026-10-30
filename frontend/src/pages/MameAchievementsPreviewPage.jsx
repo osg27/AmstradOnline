@@ -7,12 +7,13 @@ export default function MameAchievementsPreviewPage() {
   const canvas = useRef(null), preview = useRef(null);
   const [message, setMessage] = useState('Choose your own pacman.zip to begin.'), [busy, setBusy] = useState(false);
   const [paused, setPaused] = useState(false), [data, setData] = useState(null), [hits, setHits] = useState([]);
+  const [controller, setController] = useState('');
   useEffect(() => () => preview.current?.stop(), []);
   async function start(event) {
     const file = event.target.files?.[0]; if (!file) return;
-    preview.current?.stop(); setBusy(true); setData(null); setHits([]); setPaused(false);
+    preview.current?.stop(); setBusy(true); setData(null); setHits([]); setPaused(false); setController('');
     const instance = createMamePreview({ canvas: canvas.current, status: setMessage, snapshot: setData,
-      hit: title => setHits(previous => [...previous, title]) });
+      hit: title => setHits(previous => [...previous, title]), controller: setController });
     preview.current = instance;
     try { await instance.start(file); }
     catch (error) { instance.stop(); setMessage(error.message); setBusy(false); }
@@ -28,7 +29,9 @@ export default function MameAchievementsPreviewPage() {
     <label>Pac-Man ROM archive <input type="file" accept=".zip" onChange={start} disabled={busy} /></label>
     <p role="status">{message}</p>
     <p>Click the screen, then use arrows to move, 5 for a coin and 1 or Enter to start.</p>
-    <canvas ref={canvas} tabIndex={0} aria-label="Pac-Man preview. Arrow keys move, 5 inserts a coin, 1 starts."
+    <p>Controller: D-pad or left stick to move, Back/Select or B to insert a coin, Start or A to start. Click the screen to enable controls.</p>
+    {busy && <p role="status">{controller ? `Controller detected: ${controller}` : 'Press a button on your controller to connect it. Standard browser gamepads are supported.'}</p>}
+    <canvas ref={canvas} tabIndex={0} aria-label="Pac-Man preview. Arrow keys or controller move, 5 inserts a coin, 1 starts."
       onKeyDown={event => key(event, true)} onKeyUp={event => key(event, false)} onBlur={() => preview.current?.release()}
       style={{ background: '#000', width: 'min(100%, 448px)', aspectRatio: '224 / 288', imageRendering: 'pixelated', display: 'block' }} />
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '1rem 0' }}>
@@ -37,7 +40,7 @@ export default function MameAchievementsPreviewPage() {
         onPointerUp={() => preview.current?.input(bit, false)} onPointerCancel={() => preview.current?.release()}>{label}</button>)}
       <button disabled={!busy} onClick={() => { preview.current?.pause(!paused); setPaused(!paused); }}>{paused ? 'Resume' : 'Pause'}</button>
       <button disabled={!busy} onClick={() => preview.current?.reset()}>Reset</button>
-      <button disabled={!busy} onClick={() => { preview.current?.stop(); setBusy(false); setMessage('Preview stopped. Choose a file to restart.'); }}>Stop</button>
+      <button disabled={!busy} onClick={() => { preview.current?.stop(); setBusy(false); setController(''); setMessage('Preview stopped. Choose a file to restart.'); }}>Stop</button>
     </div>
     {hits.length > 0 && <p role="status">Local condition hits (not submitted): {hits.join(', ')}</p>}
     {data && <>

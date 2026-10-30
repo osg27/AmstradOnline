@@ -14,6 +14,10 @@ static unsigned pixel_format, rotation, width, height;
 static uint16_t input_mask;
 static uint32_t pixels[512 * 512];
 static double sample_rate = 48000, fps = 60;
+/* Legacy SET_VARIABLES strings put the core's selected default first.
+ * Copy them: the core frees its registration strings after this callback. */
+static struct { char key[128], value[128]; } core_defaults[256];
+static unsigned core_default_count;
 
 EM_JS(void, report_log, (const char* message), { Module.onLog?.(UTF8ToString(message)); });
 EM_JS(void, report_audio, (const int16_t* data, int frames, double rate), {
@@ -42,14 +46,37 @@ static bool environment(unsigned command, void* data) {
         case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION: *(unsigned*)data = 0; return true;
         case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS: return true;
         case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
-        case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
-        case RETRO_ENVIRONMENT_SET_VARIABLES: return true;
+        case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO: return true;
+        case RETRO_ENVIRONMENT_SET_VARIABLES: {
+            const struct retro_variable* variable = data;
+            core_default_count = 0;
+            for (; variable && variable->key; ++variable) {
+                const char* value = variable->value ? strchr(variable->value, ';') : NULL;
+                if (!value || core_default_count >= 256) continue;
+                while (*++value == ' ') {}
+                size_t length = strcspn(value, "|");
+                if (strlen(variable->key) >= 128 || length >= 128) continue;
+                strcpy(core_defaults[core_default_count].key, variable->key);
+                memcpy(core_defaults[core_default_count].value, value, length);
+                core_defaults[core_default_count].value[length] = 0;
+                ++core_default_count;
+            }
+            return true;
+        }
         case RETRO_ENVIRONMENT_GET_VARIABLE: {
             struct retro_variable* variable = data;
             if (strstr(variable->key, "skip_disclaimer") || strstr(variable->key, "skip_warnings")) variable->value = "enabled";
             else if (strstr(variable->key, "sample_rate")) variable->value = "48000";
             else if (strstr(variable->key, "frameskip")) variable->value = "0";
-            else { variable->value = NULL; return false; }
+            else {
+                for (unsigned i = 0; i < core_default_count; ++i) {
+                    if (!strcmp(variable->key, core_defaults[i].key)) {
+                        variable->value = core_defaults[i].value;
+                        return true;
+                    }
+                }
+                variable->value = NULL; return false;
+            }
             return true;
         }
         default: return false;

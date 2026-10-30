@@ -48,4 +48,33 @@ test('isolated MAME boots real Pac-Man and translates credit/work/video/colour R
  for(const a of [0,0x3ff,0x800,0xfff,0x1810,0xffffffff])assert.equal(m._probe_ra_byte(a),-1);
  for(let i=0;i<900;i++)m._probe_step(i<10?8:0);
  assert.equal(m._probe_ra_byte(0x66e),0); // Starting consumes the coin through real game code.
+ const pixels=m.HEAPU32.subarray(m._probe_pixels()/4,m._probe_pixels()/4+224*288);
+ let blue=0,white=0;
+ for(const pixel of pixels){
+  const r=pixel&255,g=(pixel>>>8)&255,b=(pixel>>>16)&255;
+  if(b>150&&r<80&&g<80)blue++;
+  if(r>180&&g>180&&b>180)white++;
+ }
+ // A missing default gamma previously made the blue maze and white text black.
+ assert.ok(blue>1000,`Expected the blue maze, got ${blue} blue pixels`);
+ assert.ok(white>50,`Expected visible score text, got ${white} white pixels`);
+});
+
+test('preview gamepad supports D-pad, stick deadzone, coin/start and disconnect',()=>{
+ const context=vm.createContext({});
+ vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../src/features/retroachievements/mamePreviewControls.js'),'utf8').replace('export function','function'),context);
+ const buttons=Array.from({length:16},()=>({pressed:false}));
+ const pad={connected:true,mapping:'standard',id:'Fixture controller',axes:[0.1,-0.1],buttons};
+ const read=()=>context.readPreviewGamepad([null,pad]);
+ assert.equal(read().mask,0);assert.equal(read().name,'Fixture controller');
+ buttons[8].pressed=true;assert.equal(read().mask,4);buttons[8].pressed=false;
+ buttons[9].pressed=true;assert.equal(read().mask,8);buttons[9].pressed=false;
+ buttons[1].pressed=true;assert.equal(read().mask,4);buttons[1].pressed=false;
+ buttons[0].pressed=true;assert.equal(read().mask,8);buttons[0].pressed=false;
+ for(const [button,bit]of[[12,4],[13,5],[14,6],[15,7]]){
+  buttons[button].pressed=true;assert.equal(read().mask,1<<bit);buttons[button].pressed=false;
+ }
+ pad.axes=[-0.8,0.8];assert.equal(read().mask,(1<<6)|(1<<5));
+ pad.connected=false;assert.equal(read().mask,0);assert.equal(read().name,'');
+ pad.connected=true;pad.mapping='';assert.equal(read().mask,0);
 });

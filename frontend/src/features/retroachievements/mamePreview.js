@@ -1,4 +1,5 @@
 import { apiFetch } from '../../api/client';
+import { readPreviewGamepad } from './mamePreviewControls';
 
 const assets = '/experiments/mame-ra/';
 const scripts = new Map();
@@ -24,7 +25,7 @@ export function readPacmanMemory(core, address, length) {
   return bytes;
 }
 
-export function createMamePreview({ canvas, status, snapshot, hit }) {
+export function createMamePreview({ canvas, status, snapshot, hit, controller = () => {} }) {
   let disposed = false, core, client, timer, audio, audioTime = 0, mask = 0, paused = false, tracking = false;
   const abort = new AbortController();
   const post = (path, data) => apiFetch(`/auth/retroachievements/mame-preview/${path}`, {
@@ -73,10 +74,14 @@ export function createMamePreview({ canvas, status, snapshot, hit }) {
       core.FS.writeFile('/roms/pacman.zip', new Uint8Array(await file.arrayBuffer()));
       if (disposed) return;
       if (!core._probe_load()) throw new Error('MAME could not load this Pac-Man set. Check that the archive contains the required ROM files.');
-      let ticks = 0;
+      let ticks = 0, controllerName;
       timer = setInterval(() => {
         if (disposed || paused || document.hidden) return;
-        core._probe_step(mask);
+        const pad = readPreviewGamepad(navigator.getGamepads?.());
+        if (pad.name !== controllerName) { controllerName = pad.name; controller(pad.name); }
+        const padMask = document.activeElement === canvas ? pad.mask : 0;
+        if (padMask && audio?.state === 'suspended') audio.resume().catch(() => {});
+        core._probe_step(mask | padMask);
         if (tracking) client._ra_frame();
         const width = core._probe_width(), height = core._probe_height();
         if (width && height) {
