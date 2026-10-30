@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -11,6 +12,7 @@ from app.core.database import get_db
 from app.models.room import Room, RoomActivity
 from app.models.tournament import Tournament, TournamentEntry, TournamentScore
 from app.models.user import User
+from app.services import retroachievements
 
 
 router = APIRouter(prefix="/auth/profile", tags=["profile"])
@@ -23,6 +25,54 @@ AVATAR_ENTITLEMENTS: dict[str, str] = {}
 
 class AvatarUpdate(BaseModel):
     avatar_id: str
+
+
+class RetroAchievementsUpdate(BaseModel):
+    username: str = Field(default='', max_length=64)
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, value):
+        value = value.strip()
+        if value and not re.fullmatch(r'[A-Za-z0-9_-]+', value):
+            raise ValueError('Enter a RetroAchievements username using letters, numbers, underscores or hyphens.')
+        return value
+
+
+def retroachievements_state(user, db, remote=None):
+    result = {'configured': retroachievements.configured(), 'username': user.retroachievements_username or '', 'profile': None, 'error': ''}
+    if not result['username'] or not result['configured']:
+        return result
+    try:
+        remote = remote or retroachievements.public_profile(user.retroachievements_ulid or result['username'])
+        if (user.retroachievements_username, user.retroachievements_ulid) != (remote['username'], remote['ulid']):
+            user.retroachievements_username = remote['username']
+            user.retroachievements_ulid = remote['ulid']
+            db.commit()
+        result['username'] = remote['username']
+        result['profile'] = {key: value for key, value in remote.items() if key != 'ulid'}
+        try:
+            result['profile']['recent_unlocks'] = retroachievements.recent_unlocks(remote['ulid'] or remote['username'])
+        except HTTPException as error:
+            result['profile']['recent_unlocks'] = []
+            result['profile']['recent_error'] = error.detail
+    except HTTPException as error:
+        result['error'] = error.detail
+    return result
+
+
+@router.get('/retroachievements')
+def get_retroachievements(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return retroachievements_state(user, db)
+
+
+@router.patch('/retroachievements')
+def update_retroachievements(payload: RetroAchievementsUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    remote = retroachievements.public_profile(payload.username) if payload.username and retroachievements.configured() else None
+    user.retroachievements_username = remote['username'] if remote else payload.username or None
+    user.retroachievements_ulid = remote['ulid'] if remote else None
+    db.commit()
+    return retroachievements_state(user, db, remote)
 
 
 def aware(value: datetime) -> datetime:

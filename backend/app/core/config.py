@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_TESTER_USERNAMES = ["Lucarse", "LesleyM", "Fenryr", "MagicKnight", "SaltUrPasta"]
@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = "info@oldstylegaming.co.uk"
     SMTP_FROM_NAME: str = "Old Style Gaming"
+    RETROACHIEVEMENTS_API_KEY: SecretStr = SecretStr("")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

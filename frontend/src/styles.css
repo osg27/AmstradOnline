@@ -5489,6 +5489,27 @@ ul {
 .profile-stat-grid span { color: var(--muted); padding-bottom: .25rem; }
 .profile-content-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, .75fr); gap: 16px; align-items: start; }
 .profile-side-column { display: grid; gap: 16px; }
+.profile-main-column { display: grid; gap: 16px; min-width: 0; }
+.retroachievements-card { min-width: 0; }
+.ra-intro, .ra-notice { color: var(--muted); line-height: 1.5; }
+.ra-profile-form { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 14px; }
+.ra-profile-form input { flex: 1 1 220px; min-width: 0; }
+.ra-error { color: #ff9c91; }
+.ra-player { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+.ra-player img { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; }
+.ra-player > div, .ra-stats > div { display: grid; gap: 4px; }
+.ra-player a { font-size: 1.2rem; font-weight: 700; overflow-wrap: anywhere; }
+.ra-player small, .ra-stats small, .ra-unlocks small, .retroachievements-card h3 small { color: var(--muted); font-size: .8rem; }
+.ra-stats { display: flex; gap: 28px; flex-wrap: wrap; margin: 18px 0 24px; }
+.ra-stats strong { font-size: 1.6rem; color: var(--gold); }
+.ra-unlocks { list-style: none; padding: 0; }
+.ra-unlocks li { display: flex; gap: 12px; align-items: start; padding: 14px 0; border-top: 1px solid #303936; }
+.ra-unlocks img { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; }
+.ra-unlocks li > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ra-unlocks small { display: block; margin-top: 4px; }
+.ra-unlocks p { margin: 6px 0 0; font-size: .85rem; }
+.ra-unlocks li > span { text-align: right; flex-shrink: 0; font-weight: 700; }
+.ra-site-link { display: inline-block; margin-top: 14px; }
 .profile-section-heading { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
 .profile-section-heading p { margin: 0 0 .25rem; }
 .profile-section-heading h2 { margin: 0; font-size: 1.75rem; }

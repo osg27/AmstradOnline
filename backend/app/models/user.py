@@ -18,6 +18,8 @@ class User(Base):
     plan = Column(String(20), nullable=False, default="FREE", server_default="FREE")
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     avatar_id = Column(String(32), nullable=False, default="arcade-green", server_default="arcade-green")
+    retroachievements_username = Column(String(64), nullable=True)
+    retroachievements_ulid = Column(String(26), nullable=True)
 
 
 class AccountToken(Base):

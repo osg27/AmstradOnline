@@ -61,6 +61,11 @@ def ensure_runtime_columns(engine):
         if "avatar_id" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN avatar_id VARCHAR(32) NOT NULL DEFAULT 'arcade-green'"))
 
+        if "retroachievements_username" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN retroachievements_username VARCHAR(64)"))
+        if "retroachievements_ulid" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN retroachievements_ulid VARCHAR(26)"))
+
         if "system" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN system VARCHAR(32) NOT NULL DEFAULT 'cpc'"))
 

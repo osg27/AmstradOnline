@@ -5,6 +5,7 @@ import { apiFetch } from '../api/client';
 import BrandMark from '../components/BrandMark';
 import PlayerAvatar, { PLAYER_AVATARS } from '../components/PlayerAvatar';
 import SupporterLockModal from '../components/SupporterLockModal';
+import RetroAchievementsCard from '../components/RetroAchievementsCard';
 
 const achievementIcons = {
   coin: '●', joystick: '🕹️', systems: '▦', flag: '⚑', bronze: '🥉', gold: '🏆', clock: '◷',
@@ -90,19 +91,22 @@ export default function ProfilePage() {
           </section>
 
           <div className="profile-content-grid">
-            <section className="panel achievement-vault">
-              <div className="profile-section-heading"><div><p>PLAYER CABINET</p><h2>Achievements</h2></div><span>{profile.stats.achievements_unlocked} unlocked</span></div>
-              <div className="achievement-grid">
-                {profile.achievements.map((achievement) => (
-                  <article key={achievement.id} className={achievement.unlocked ? 'unlocked' : 'locked'}>
-                    <div className="achievement-icon">{achievementIcons[achievement.icon] || '★'}</div>
-                    <div><strong>{achievement.name}</strong><p>{achievement.description}</p></div>
-                    <span>{achievement.unlocked ? 'UNLOCKED' : 'LOCKED'}</span>
-                  </article>
-                ))}
-              </div>
-            </section>
+            <div className="profile-main-column">
+              <RetroAchievementsCard />
+              <section className="panel achievement-vault">
+                <div className="profile-section-heading"><div><p>PLAYER CABINET</p><h2>Achievements</h2></div><span>{profile.stats.achievements_unlocked} unlocked</span></div>
+                <div className="achievement-grid">
+                  {profile.achievements.map((achievement) => (
+                    <article key={achievement.id} className={achievement.unlocked ? 'unlocked' : 'locked'}>
+                      <div className="achievement-icon">{achievementIcons[achievement.icon] || '★'}</div>
+                      <div><strong>{achievement.name}</strong><p>{achievement.description}</p></div>
+                      <span>{achievement.unlocked ? 'UNLOCKED' : 'LOCKED'}</span>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
+            </div>
             <aside className="profile-side-column">
               <section className="panel trophy-case">
                 <div className="profile-section-heading"><div><p>TOURNAMENTS</p><h2>Trophy case</h2></div></div>
