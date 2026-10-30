@@ -32,7 +32,7 @@ export default function RetroAchievementsCard() {
   const profile = data?.profile;
   return <section className="panel retroachievements-card">
     <div className="profile-section-heading"><div><p>RETROACHIEVEMENTS</p><h2>Retro game achievements</h2></div></div>
-    <p className="ra-intro">Display your public RetroAchievements profile here. Earning achievements while playing on this site is not enabled yet.</p>
+    <p className="ra-intro">Display your public RetroAchievements profile here. To earn softcore achievements, launch a solo Mega Drive game and sign in to RetroAchievements in the room.</p>
     <form onSubmit={(event) => { event.preventDefault(); save(username); }}>
       <label htmlFor="ra-username">RetroAchievements username</label>
       <div className="ra-profile-form">

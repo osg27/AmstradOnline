@@ -1,0 +1,115 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 591dbff..ee52e77 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1 +1 @@
+-cmake_minimum_required(VERSION 3.0)
++cmake_minimum_required(VERSION 3.5)
+@@ -89,0 +90 @@ add_compile_flags(LD
++    "-s EXPORT_ALL=1"
+diff --git a/src/main/c/wasm/config.c b/src/main/c/wasm/config.c
+index 2c41dad..38a0d1c 100644
+--- a/src/main/c/wasm/config.c
++++ b/src/main/c/wasm/config.c
+@@ -30,3 +30,3 @@ void set_config_defaults(void)
+-  config.region_detect  = 3;         /* = AUTO (1 = USA, 2 = EUROPE, 3 = JAPAN/NTSC, 4 = JAPAN/PAL) */
+-  config.vdp_mode       = 1;         /* = AUTO (1 = NTSC, 2 = PAL) */
+-  config.master_clock   = 1;         /* = AUTO (1 = NTSC, 2 = PAL) */
++  config.region_detect  = 0;         /* = AUTO (1 = USA, 2 = EUROPE, 3 = JAPAN/NTSC, 4 = JAPAN/PAL) */
++  config.vdp_mode       = 0;         /* = AUTO (1 = NTSC, 2 = PAL) */
++  config.master_clock   = 0;         /* = AUTO (1 = NTSC, 2 = PAL) */
+diff --git a/src/main/c/wasm/fileio.c b/src/main/c/wasm/fileio.c
+index 461afaa..196fbc8 100644
+--- a/src/main/c/wasm/fileio.c
++++ b/src/main/c/wasm/fileio.c
+@@ -11 +11 @@ int load_archive(char *filename, unsigned char *buffer, int maxsize, char *exten
+-    strncpy(extension, "BIN", 3);
++    strncpy(extension, (config.system & SYSTEM_SMS) ? "SMS" : "BIN", 3);
+diff --git a/src/main/c/wasm/wasm.c b/src/main/c/wasm/wasm.c
+index ef49a2b..0ac1f9d 100644
+--- a/src/main/c/wasm/wasm.c
++++ b/src/main/c/wasm/wasm.c
+@@ -13 +13,2 @@
+-#define GAMEPAD_API_INDEX 32
++#define GAMEPAD_API_INDEX 64
++#define GAMEPAD_API_STRIDE 32
+@@ -22,0 +24 @@ struct _zbank_memory_map zbank_memory_map[256];
++static int requested_system = SYSTEM_MD;
+@@ -39,0 +42 @@ void EMSCRIPTEN_KEEPALIVE start(void)
++    config.system = requested_system;
+@@ -57,0 +61,10 @@ void EMSCRIPTEN_KEEPALIVE start(void)
++void EMSCRIPTEN_KEEPALIVE set_system(int master_system)
++{
++    requested_system = master_system ? SYSTEM_SMS2 : SYSTEM_MD;
++}
++
++int EMSCRIPTEN_KEEPALIVE is_pal(void)
++{
++    return vdp_pal;
++}
++
+@@ -71 +84,5 @@ void EMSCRIPTEN_KEEPALIVE tick(void) {
+-    system_frame_gen(0);
++    if (requested_system & SYSTEM_SMS) {
++        system_frame_sms(0);
++    } else {
++        system_frame_gen(0);
++    }
+@@ -85,17 +102,16 @@ int EMSCRIPTEN_KEEPALIVE sound(void) {
+-int EMSCRIPTEN_KEEPALIVE wasm_input_update(void) {
+-    // reset input
+-    input.pad[0] = 0;
+-    // read button
+-    if(input_buffer[8 + 2]) input.pad[0] |= INPUT_A;
+-    if(input_buffer[8 + 3]) input.pad[0] |= INPUT_B;
+-    if(input_buffer[8 + 1]) input.pad[0] |= INPUT_C;
+-    if(input_buffer[8 + 7]) input.pad[0] |= INPUT_START;
+-    if(input_buffer[8 + 0]) input.pad[0] |= INPUT_X;
+-    if(input_buffer[8 + 4]) input.pad[0] |= INPUT_Y;
+-    if(input_buffer[8 + 5]) input.pad[0] |= INPUT_Z;
+-    if(input_buffer[8 + 6]) input.pad[0] |= INPUT_MODE;
+-    // read axes
+-    if(input_buffer[7] == -1) {
+-        input.pad[0] |= INPUT_UP;
+-    } else if(input_buffer[7] == 1) {
+-        input.pad[0] |= INPUT_DOWN;
++static void read_pad(int pad_index, int offset) {
++    input.pad[pad_index] = 0;
++
++    if(input_buffer[offset + 8 + 2]) input.pad[pad_index] |= INPUT_A;
++    if(input_buffer[offset + 8 + 3]) input.pad[pad_index] |= INPUT_B;
++    if(input_buffer[offset + 8 + 1]) input.pad[pad_index] |= INPUT_C;
++    if(input_buffer[offset + 8 + 7]) input.pad[pad_index] |= INPUT_START;
++    if(input_buffer[offset + 8 + 0]) input.pad[pad_index] |= INPUT_X;
++    if(input_buffer[offset + 8 + 4]) input.pad[pad_index] |= INPUT_Y;
++    if(input_buffer[offset + 8 + 5]) input.pad[pad_index] |= INPUT_Z;
++    if(input_buffer[offset + 8 + 6]) input.pad[pad_index] |= INPUT_MODE;
++
++    if(input_buffer[offset + 7] == -1) {
++        input.pad[pad_index] |= INPUT_UP;
++    } else if(input_buffer[offset + 7] == 1) {
++        input.pad[pad_index] |= INPUT_DOWN;
+@@ -103,4 +119,4 @@ int EMSCRIPTEN_KEEPALIVE wasm_input_update(void) {
+-    if(input_buffer[6] == -1) {
+-        input.pad[0] |= INPUT_LEFT;
+-    } else if(input_buffer[6] == 1) {
+-        input.pad[0] |= INPUT_RIGHT;
++    if(input_buffer[offset + 6] == -1) {
++        input.pad[pad_index] |= INPUT_LEFT;
++    } else if(input_buffer[offset + 6] == 1) {
++        input.pad[pad_index] |= INPUT_RIGHT;
+@@ -108,3 +124,5 @@ int EMSCRIPTEN_KEEPALIVE wasm_input_update(void) {
+-    // EM_ASM_({
+-    //     console.log('input_buffer[4 + 7]: ' + $0);
+-    // }, input_buffer[8 + 7]);
++}
++
++int EMSCRIPTEN_KEEPALIVE wasm_input_update(void) {
++    read_pad(0, 0);
++    read_pad(4, GAMEPAD_API_STRIDE);
+@@ -133,0 +152,5 @@ float_t* EMSCRIPTEN_KEEPALIVE get_input_buffer_ref(void) {
++
++/* Old Style Gaming RetroAchievements memory bridge */
++/* Included in wasm-genplus's wasm.c by build-retroachievements.ps1. */
++uint8_t* EMSCRIPTEN_KEEPALIVE ra_get_work_ram(void) { return work_ram; }
++uint8_t* EMSCRIPTEN_KEEPALIVE ra_get_save_ram(void) { return sram.detected ? sram.sram : 0; }

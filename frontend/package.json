@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run build:x68000 && vite build",
+    "build": "npm run build:x68000 && npm run build:retroachievements && vite build",
+    "build:retroachievements": "node scripts/build-retroachievements.mjs",
     "build:x68000": "node scripts/build-x68000.mjs",
     "preview": "vite preview",
     "test": "vitest run",

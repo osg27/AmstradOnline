@@ -17,6 +17,7 @@
   const imageData = ctx.createImageData(CANVAS_WIDTH, CANVAS_HEIGHT);
 
   let gens = null;
+  const achievements = !isMasterSystem && window.OSGRetroAchievements?.create({ getCore: () => gens });
   let wasmReady = false;
   let romReady = false;
   let pendingStart = false;
@@ -190,6 +191,7 @@
       interval = 1000 / targetFps;
       bindViews();
       started = true;
+      achievements?.started();
       emulatorPaused = false;
       pendingStart = false;
       then = Date.now();
@@ -221,6 +223,7 @@
     }
 
     gens._start();
+    achievements?.reset();
     targetFps = gens._is_pal() ? 50 : NTSC_FPS;
     interval = 1000 / targetFps;
     bindViews();
@@ -253,6 +256,7 @@
       romBytes.byteLength,
     );
     romBuffer.set(romBytes);
+    achievements?.romLoaded(romBytes);
     started = false;
     soundShedTime = 0;
     romReady = true;
@@ -274,6 +278,7 @@
 
     for (let catchUpFrame = 0; catchUpFrame < framesToRun; catchUpFrame += 1) {
       gens._tick();
+      achievements?.frame();
 
       const sampleCount = gens._sound();
       if (audioContext && sampleCount > 0) {
@@ -425,7 +430,7 @@
 
   drawStatus(`Starting ${systemName}`, 'Checking genplus runtime...');
 
-  window.Module().then((module) => {
+  window.Module({ locateFile: (file) => `./${file}?v=2026-10-30-ra-1` }).then((module) => {
     gens = module;
     gens._init();
     gens._set_system(isMasterSystem ? 1 : 0);

@@ -1,0 +1,15 @@
+// RetroAchievements console 1: 64 KB system RAM, then 64 KB cartridge RAM.
+export function readMegaDriveMemory(core, address, length) {
+  if (!core || !Number.isInteger(address) || !Number.isInteger(length) || address < 0 || length < 1 || address + length > 0x20000) return null;
+  const ram = core._ra_get_work_ram?.() || 0;
+  const save = core._ra_get_save_ram?.() || 0;
+  if (!ram) return null;
+  const result = new Uint8Array(length);
+  for (let index = 0; index < length; index++) {
+    const offset = address + index;
+    if (offset < 0x10000) result[index] = core.HEAPU8[ram + (offset ^ 1)];
+    else if (save) result[index] = core.HEAPU8[save + offset - 0x10000];
+    else return index ? result.subarray(0, index) : null;
+  }
+  return result;
+}

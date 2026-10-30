@@ -5510,6 +5510,14 @@ ul {
 .ra-unlocks p { margin: 6px 0 0; font-size: .85rem; }
 .ra-unlocks li > span { text-align: right; flex-shrink: 0; font-weight: 700; }
 .ra-site-link { display: inline-block; margin-top: 14px; }
+.ra-play-panel { margin: 14px 0; padding: 16px; border: 1px solid #34483e; border-radius: 10px; background: #111b16; }
+.ra-play-panel > div:first-child { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.ra-play-panel span, .ra-play-panel small { color: var(--muted); }
+.ra-play-panel form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 14px; }
+.ra-play-panel label { display: grid; gap: 6px; flex: 1 1 190px; min-width: 0; }
+.ra-play-panel input { width: 100%; box-sizing: border-box; }
+.ra-play-panel p { margin: 12px 0; }
+.ra-unlock-toast { position: fixed; z-index: 10000; top: 20px; right: 20px; max-width: min(360px, calc(100vw - 40px)); display: grid; gap: 8px; padding: 20px; border: 2px solid var(--gold); border-radius: 12px; background: #14231a; box-shadow: 0 12px 45px #0009; }
 .profile-section-heading { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
 .profile-section-heading p { margin: 0 0 .25rem; }
 .profile-section-heading h2 { margin: 0; font-size: 1.75rem; }
