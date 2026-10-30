@@ -139,6 +139,15 @@ EMSCRIPTEN_KEEPALIVE int ra_load(const uint8_t* rom, int size) {
 
 #ifdef OSG_MAME_RA_EXPERIMENT
 /* Separate preview binary only. Arcade hashes identify the archive basename. */
+EMSCRIPTEN_KEEPALIVE int ra_pacman_softcore(int enabled) {
+    ra_init();
+    /* Choose before loading. Never promote an already-running preview. */
+    if (rc_client_get_game_info(client)) return 0;
+    rc_client_set_hardcore_enabled(client, 0);
+    rc_client_set_spectator_mode_enabled(client, enabled ? 0 : 1);
+    return 1;
+}
+
 EMSCRIPTEN_KEEPALIVE int ra_load_pacman(void) {
     ra_init();
     rc_client_unload_game(client);

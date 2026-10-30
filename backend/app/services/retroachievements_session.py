@@ -35,13 +35,13 @@ def limit_request(user_id, action):
         recent.append((now, action))
 
 
-def forward_rpc(post_data):
+def forward_rpc(post_data, *, user_agent='OldStyleGaming/0.1 rcheevos/12.5'):
     if not _slots.acquire(blocking=False):
         raise HTTPException(503, 'Achievement connections are busy. Please try again shortly.')
     try:
         request = Request(RPC_URL, data=post_data.encode('utf-8'), headers={
             'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json',
-            'User-Agent': 'OldStyleGaming/0.1 rcheevos/12.5',
+            'User-Agent': user_agent,
         })
         try:
             response = build_opener(NoRedirects()).open(request, timeout=10)

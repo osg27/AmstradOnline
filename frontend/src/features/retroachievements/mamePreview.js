@@ -2,11 +2,12 @@ import { apiFetch } from '../../api/client';
 import { readPreviewGamepad } from './mamePreviewControls';
 
 const assets = '/experiments/mame-ra/';
+const assetFile = name => `${assets}${name}?v=pacman-softcore-1`;
 const scripts = new Map();
 function loadScript(name) {
   if (!scripts.has(name)) scripts.set(name, new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = assets + name;
+    script.src = assetFile(name);
     script.onload = resolve;
     script.onerror = () => { scripts.delete(name); script.remove(); reject(new Error('Could not load the preview runtime.')); };
     document.head.append(script);
@@ -25,10 +26,11 @@ export function readPacmanMemory(core, address, length) {
   return bytes;
 }
 
-export function createMamePreview({ canvas, status, snapshot, hit, controller = () => {} }) {
+export function createMamePreview({ canvas, status, snapshot, hit, controller = () => {}, submitted = () => {}, softcore = false }) {
   let disposed = false, core, client, timer, audio, audioTime = 0, mask = 0, paused = false, tracking = false;
+  let gameReady = !softcore;
   const abort = new AbortController();
-  const post = (path, data) => apiFetch(`/auth/retroachievements/mame-preview/${path}`, {
+  const post = (path, data) => apiFetch(`/auth/retroachievements/mame-preview/${softcore ? 'softcore/' : ''}${path}`, {
     method: 'POST', body: JSON.stringify(data), signal: abort.signal,
   });
   const reply = (callback, userdata, code, data) => {
@@ -56,7 +58,7 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
       if (Audio) audio = new Audio();
       await Promise.all([loadScript('mame-pacman.js'), loadScript('rc-client.js')]);
       if (disposed) return;
-      core = await window.OSGMamePacman({ locateFile: name => assets + name, print() {}, printErr() {},
+      core = await window.OSGMamePacman({ locateFile: assetFile, print() {}, printErr() {},
         onAudio(samples, rate) {
           if (disposed || paused || !audio || audio.state !== 'running') return;
           if (audioTime > audio.currentTime + 0.15) return;
@@ -81,7 +83,8 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
         if (pad.name !== controllerName) { controllerName = pad.name; controller(pad.name); }
         const padMask = document.activeElement === canvas ? pad.mask : 0;
         if (padMask && audio?.state === 'suspended') audio.resume().catch(() => {});
-        core._probe_step(mask | padMask);
+        // No gameplay before a new softcore session has loaded its unlock history.
+        core._probe_step(gameReady ? mask | padMask : 0);
         if (tracking) client._ra_frame();
         const width = core._probe_width(), height = core._probe_height();
         if (width && height) {
@@ -92,7 +95,7 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
         if (++ticks % 60 === 0 && tracking) client._ra_snapshot();
       }, 1000 / core._probe_fps());
       status('Pac-Man loaded. Connecting the read-only achievement preview…');
-      client = await window.OSGMameRA({ locateFile: name => assets + name,
+      client = await window.OSGMameRA({ locateFile: assetFile,
         readMemory: (address, length) => readPacmanMemory(core, address, length),
         onSnapshot: value => { if (!disposed) snapshot(value); },
         onEvent(event) {
@@ -102,23 +105,32 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
             if (!client._ra_load_pacman()) status('Could not identify Pac-Man.');
           } else if (event.kind === 'game') {
             tracking = event.result === 0 && event.id === 12192;
-            status(tracking ? `${event.title}: ${event.points} achievement${event.points === 1 ? '' : 's'} loaded. Local preview only — nothing is submitted.` : 'Pac-Man achievements could not load.');
+            if (tracking && softcore) { core._probe_reset(); mask = 0; gameReady = true; }
+            status(tracking ? `${event.title}: ${event.points} achievement${event.points === 1 ? '' : 's'} loaded. ${softcore ? 'Softcore submissions enabled. Game restarted for this new session.' : 'Local preview only — nothing is submitted.'}` : 'Pac-Man achievements could not load.');
             if (!tracking) client._ra_unload();
-          } else if (event.kind === 'unlock') hit(event.title);
+          } else if (event.kind === 'unlock') hit(event);
+          else if (event.kind === 'pending') status('An unlock is waiting to sync. Keep this page open.');
+          else if (event.kind === 'synced') status('Pending unlocks have synced to RetroAchievements.');
           else if (event.kind === 'error') {
             tracking = false;
-            status('Achievement preview stopped after a connection error. Reload to retry.');
+            status('RetroAchievements reported an error. Tracking has stopped; reload to retry.');
           }
         },
         async serverCall(url, body, callback, userdata) {
           try {
             const response = await post('request', { post_data: body });
-            reply(callback, userdata, response.status, JSON.parse(response.body));
+            const result = JSON.parse(response.body);
+            const params = new URLSearchParams(body);
+            if (!disposed && softcore && params.get('r') === 'awardachievement' && response.status === 200 && result.Success === true) {
+              submitted(Number(params.get('a')));
+            }
+            reply(callback, userdata, response.status, result);
           }
           catch { reply(callback, userdata, 502, { Success: false, Error: 'Preview request failed. Reconnect in Profile or reload to retry.' }); }
         }, print() {}, printErr() {},
       });
       if (disposed) { client._ra_logout(); return; }
+      if (!client._ra_pacman_softcore(softcore ? 1 : 0)) throw new Error('Could not start a fresh Pac-Man achievement session.');
       const connection = await post('session', {});
       if (disposed) return;
       client.cwrap('ra_login_token', null, ['string', 'string'])(connection.username, connection.token);
