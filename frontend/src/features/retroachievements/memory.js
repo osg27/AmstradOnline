@@ -16,3 +16,14 @@ export function readMegaDriveMemory(core, address, length) {
   }
   return result;
 }
+
+// Caprice32 exposes physical RAM, without CPU bank mapping or ROM overlays.
+// CPCBox's pv.aM has that same linear layout; pv.T is only the CPU bank view.
+export function readCpcMemory(cpc, address, length) {
+  const ram = cpc?.pv?.aM;
+  const size = cpc?.oU?.p ? 0x90000 : [2, 4].includes(cpc?.qG) ? 0x20000 : 0x10000;
+  if (!ram || ram.length < size || !Number.isInteger(address) || !Number.isInteger(length)
+    || address < 0 || length < 1 || address >= size) return null;
+  const available = Math.min(length, size - address);
+  return Uint8Array.from(ram.slice(address, address + available));
+}

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 
-export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCode, solo }) {
+export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCode, solo, system = 'megadrive' }) {
   const [connection, setConnection] = useState(null);
   const [signedIn, setSignedIn] = useState(false);
   const [status, setStatus] = useState('Checking your RetroAchievements connection…');
@@ -66,6 +66,8 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
           setStatus(`Unlocked: ${item.title} (${item.points} points).`);
         } else if (item.kind === 'logout') {
           clearTimeout(loginTimer); setSignedIn(false); setSnapshot(null);
+        } else if (item.kind === 'media') {
+          setSnapshot(null); setStatus(item.message);
         } else if (['error', 'pending', 'synced'].includes(item.kind)) {
           clearTimeout(loginTimer); setStatus(item.message);
         }
@@ -95,7 +97,7 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
   const unlocked = items.filter((item) => item.unlocked).length;
   const disabled = items.filter((item) => item.state === 3).length;
   return <section className="ra-play-panel">
-    <div><strong>RetroAchievements</strong><span>Softcore · Mega Drive</span></div>
+    <div><strong>RetroAchievements</strong><span>Softcore · {system === 'cpc' ? 'Amstrad CPC' : 'Mega Drive'}</span></div>
     {!solo ? <p>Achievement earning is available in solo play. Tracking is stopped while guests can join.</p> : <>
       <p role="status">{status}</p>
       <Link to="/profile">{connection?.connected ? 'Manage RetroAchievements in Profile' : 'Add RetroAchievements in Profile'}</Link>

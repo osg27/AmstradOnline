@@ -1,6 +1,8 @@
-import { readMegaDriveMemory } from './memory';
+import { readMegaDriveMemory, readCpcMemory } from './memory';
 
-export function createRetroAchievements({ getCore }) {
+export function createRetroAchievements({ getCore, system = 'megadrive' }) {
+  if (!['megadrive', 'cpc'].includes(system)) throw new Error('Unsupported achievement system');
+  const consoleId = system === 'cpc' ? 37 : 1;
   let client;
   let loading;
   let enabled = false;
@@ -23,8 +25,8 @@ export function createRetroAchievements({ getCore }) {
 
   async function ensureClient() {
     if (!loading) loading = window.RACreateClient({
-      locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-2`,
-      readMemory: (address, length) => readMegaDriveMemory(getCore(), address, length),
+      locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-3`,
+      readMemory: (address, length) => (system === 'cpc' ? readCpcMemory : readMegaDriveMemory)(getCore(), address, length),
       serverCall: (url, postData, callback, userdata) => {
         if (!enabled) { reply(callback, userdata, -1, '{}'); return; }
         const id = ++sequence;
@@ -59,14 +61,14 @@ export function createRetroAchievements({ getCore }) {
 
   function loadGame() {
     if (!enabled || !loggedIn || !running || !rom || !client) return;
-    if (!getCore()?._ra_get_work_ram) {
+    if (!(system === 'cpc' ? getCore()?.pv?.aM : getCore()?._ra_get_work_ram)) {
       notify({ kind: 'error', message: 'The game is detected, but this emulator copy cannot read achievement memory. Refresh the page to load the latest emulator.' });
       return;
     }
     const pointer = client._malloc(rom.length);
     client.HEAPU8.set(rom, pointer);
     try {
-      if (!client._ra_load(pointer, rom.length)) notify({ kind: 'error', message: 'This ROM could not be identified for achievements.' });
+      if (!client._ra_load_system(pointer, rom.length, consoleId)) notify({ kind: 'error', message: 'This game file could not be identified for achievements.' });
     } finally { client._free(pointer); }
   }
 
@@ -114,11 +116,18 @@ export function createRetroAchievements({ getCore }) {
   setInterval(() => { if (enabled && loggedIn && running && client) client._ra_snapshot(); }, 3000);
   window.parent.postMessage({ type: 'ra_ready' }, location.origin);
   return {
-    romLoaded(bytes) { client?._ra_unload(); rom = new Uint8Array(bytes); running = false; },
+    romLoaded(bytes) {
+      client?._ra_unload(); rom = new Uint8Array(bytes); running = false;
+      if (enabled && loggedIn) notify({ kind: 'media', message: 'Loading game and matching its achievement set...' });
+    },
     started() { running = true; if (loggedIn) { client?._ra_reset(); loadGame(); } },
     reset() { client?._ra_reset(); },
+    stop(message) {
+      client?._ra_unload(); rom = null; running = false;
+      if (enabled && loggedIn) notify({ kind: 'media', message });
+    },
     frame() {
-      if (!enabled || !loggedIn || !client) return;
+      if (!enabled || !loggedIn || !running || !client) return;
       try { client._ra_frame(); }
       catch { logout(); notify({ kind: 'error', message: 'Achievement tracking stopped. The game can continue; sign in again to retry.' }); }
     },

@@ -29,7 +29,7 @@ class RetroAchievementsPlayTests(unittest.TestCase):
         self.assertEqual(ra.validate_rpc('r=awardachievement&h=0'), 'awardachievement')
 
     def test_only_solo_megadrive_owner_can_forward_requests(self):
-        for changes in [{'owner_user_id': 18}, {'system': 'x68000'}, {'hosting_mode': 'multiplayer'}]:
+        for changes in [{'owner_user_id': 18}, {'system': 'x68000'}, {'system': 'cpc_party'}, {'hosting_mode': 'multiplayer'}]:
             original = vars(self.room).copy()
             vars(self.room).update(changes)
             with patch.object(transport, 'build_opener') as upstream, self.assertRaises(HTTPException) as error:
@@ -70,3 +70,10 @@ class RetroAchievementsPlayTests(unittest.TestCase):
 
     def test_options_do_not_expose_site_web_api_key(self):
         self.assertEqual(ra.options(self.user), {'username': 'Player', 'connected': False, 'softcore': True})
+
+    def test_cpc_solo_host_can_use_same_transport(self):
+        self.room.system = 'cpc'
+        with patch.object(ra, 'forward_rpc', return_value={'status': 200, 'body': '{"Success":true}'}) as upstream:
+            result = ra.client_request(self.payload('r=startsession&g=1&h=0'), self.user, self.db)
+        self.assertEqual(result.status_code, 200)
+        upstream.assert_called_once()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readMegaDriveMemory } from './memory';
+import { readMegaDriveMemory, readCpcMemory } from './memory';
 
 function core(save = 0x11000) {
   return { HEAPU8: new Uint8Array(0x21000), _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => save };
@@ -25,5 +25,29 @@ describe('Mega Drive achievement memory', () => {
     for (const [address, length] of [[-1, 1], [0x1ffff, 2], [0, 0], [0.5, 1]]) {
       expect(readMegaDriveMemory(module, address, length)).toBeNull();
     }
+  });
+});
+
+
+describe('CPC achievement memory', () => {
+  const cpc = (model = 2, expansion = false) => ({ pv: { aM: Array(0x90000).fill(0), T: [0x10000, 0x14000, 0x18000, 0x1c000] }, qG: model, oU: { p: expansion } });
+  it('reads physical RAM without following CPU bank switching or ROM overlays', () => {
+    const machine = cpc();
+    machine.pv.aM[0x20] = 12; machine.pv.aM[0x10020] = 34;
+    expect([...readCpcMemory(machine, 0x20, 1)]).toEqual([12]);
+    expect([...readCpcMemory(machine, 0x10020, 1)]).toEqual([34]);
+  });
+  it('reads byte and word boundaries across the base and extended RAM', () => {
+    const machine = cpc();
+    machine.pv.aM[0xffff] = 0x34; machine.pv.aM[0x10000] = 0x12;
+    expect([...readCpcMemory(machine, 0xffff, 2)]).toEqual([0x34, 0x12]);
+  });
+  it('does not expose uninstalled memory as fake zeroes', () => {
+    expect(readCpcMemory(cpc(0), 0x10000, 1)).toBeNull();
+    expect(readCpcMemory(cpc(), 0x20000, 1)).toBeNull();
+    expect(readCpcMemory(cpc(), 0x1ffff, 2)).toHaveLength(1);
+    expect(readCpcMemory(cpc(2, true), 0x8ffff, 1)).toHaveLength(1);
+    expect(readCpcMemory(cpc(2, true), 0x90000, 1)).toBeNull();
+    expect(readCpcMemory(cpc(), -1, 1)).toBeNull();
   });
 });

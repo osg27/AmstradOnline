@@ -14,9 +14,18 @@
     }
     return result;
   }
+  function readCpcMemory(cpc, address, length) {
+    const ram = cpc?.pv?.aM;
+    const size = cpc?.oU?.p ? 589824 : [2, 4].includes(cpc?.qG) ? 131072 : 65536;
+    if (!ram || ram.length < size || !Number.isInteger(address) || !Number.isInteger(length) || address < 0 || length < 1 || address >= size) return null;
+    const available = Math.min(length, size - address);
+    return Uint8Array.from(ram.slice(address, address + available));
+  }
 
   // src/features/retroachievements/runtime.js
-  function createRetroAchievements({ getCore }) {
+  function createRetroAchievements({ getCore, system = "megadrive" }) {
+    if (!["megadrive", "cpc"].includes(system)) throw new Error("Unsupported achievement system");
+    const consoleId = system === "cpc" ? 37 : 1;
     let client;
     let loading;
     let enabled = false;
@@ -40,8 +49,8 @@
     }
     async function ensureClient() {
       if (!loading) loading = window.RACreateClient({
-        locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-2`,
-        readMemory: (address, length) => readMegaDriveMemory(getCore(), address, length),
+        locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-3`,
+        readMemory: (address, length) => (system === "cpc" ? readCpcMemory : readMegaDriveMemory)(getCore(), address, length),
         serverCall: (url, postData, callback, userdata) => {
           if (!enabled) {
             reply(callback, userdata, -1, "{}");
@@ -83,14 +92,14 @@
     }
     function loadGame() {
       if (!enabled || !loggedIn || !running || !rom || !client) return;
-      if (!getCore()?._ra_get_work_ram) {
+      if (!(system === "cpc" ? getCore()?.pv?.aM : getCore()?._ra_get_work_ram)) {
         notify({ kind: "error", message: "The game is detected, but this emulator copy cannot read achievement memory. Refresh the page to load the latest emulator." });
         return;
       }
       const pointer = client._malloc(rom.length);
       client.HEAPU8.set(rom, pointer);
       try {
-        if (!client._ra_load(pointer, rom.length)) notify({ kind: "error", message: "This ROM could not be identified for achievements." });
+        if (!client._ra_load_system(pointer, rom.length, consoleId)) notify({ kind: "error", message: "This game file could not be identified for achievements." });
       } finally {
         client._free(pointer);
       }
@@ -146,6 +155,7 @@
         client?._ra_unload();
         rom = new Uint8Array(bytes);
         running = false;
+        if (enabled && loggedIn) notify({ kind: "media", message: "Loading game and matching its achievement set..." });
       },
       started() {
         running = true;
@@ -157,8 +167,14 @@
       reset() {
         client?._ra_reset();
       },
+      stop(message) {
+        client?._ra_unload();
+        rom = null;
+        running = false;
+        if (enabled && loggedIn) notify({ kind: "media", message });
+      },
       frame() {
-        if (!enabled || !loggedIn || !client) return;
+        if (!enabled || !loggedIn || !running || !client) return;
         try {
           client._ra_frame();
         } catch {

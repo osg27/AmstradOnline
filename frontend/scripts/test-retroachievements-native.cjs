@@ -6,7 +6,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createHash } = require('node:crypto');
 
-test('official rc_client identifies a ROM, evaluates memory, and submits softcore only', async () => {
+for (const system of ['megadrive', 'cpc']) test(`official rc_client evaluates ${system} memory and submits softcore only`, async () => {
+  const consoleId = system === 'cpc' ? 37 : 1;
   const directory = path.resolve(__dirname, '../public/retroachievements');
   const context = vm.createContext({ module: { exports: {} }, exports: {}, require, __dirname: directory,
     __filename: path.join(directory, 'rc-client.js'), process, console, TextDecoder, TextEncoder,
@@ -15,8 +16,9 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
   const heap = new Uint8Array(0x21000);
   const core = { HEAPU8: heap, _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => 0x11000 };
   const ram = heap.subarray(0x1000);
+  const cpc = { pv: { aM: ram, T: [0x10000, 0x14000, 0x18000, 0x1c000] }, qG: 2, oU: { p: false } };
   // Exercise the real JS bridge too. Reversing RAM byte order must fail this test.
-  vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../src/features/retroachievements/memory.js'), 'utf8').replace('export function', 'function'), context);
+  vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../src/features/retroachievements/memory.js'), 'utf8').replaceAll('export function', 'function'), context);
   const events = [];
   const requests = [];
   let snapshot;
@@ -30,7 +32,7 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
   }
   client = await context.module.exports({
     wasmBinary: fs.readFileSync(path.join(directory, 'rc-client.wasm')),
-    readMemory: (address, length) => context.readMegaDriveMemory(core, address, length),
+    readMemory: (address, length) => system === 'cpc' ? context.readCpcMemory(cpc, address, length) : context.readMegaDriveMemory(core, address, length),
     onSnapshot: (value) => { snapshot = value; },
     onEvent: (event) => events.push(event), print: () => {}, printErr: () => {},
     serverCall: (url, body, callback, userdata) => {
@@ -40,7 +42,7 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
       let response;
       if (action === 'login2') response = { Success: true, User: 'FixtureUser', Token: 'fixture-token', Score: 0, SoftcoreScore: 0 };
       else if (action === 'achievementsets') response = {
-        Success: true, GameId: 1234, Title: 'Offline fixture', ConsoleId: 1,
+        Success: true, GameId: 1234, Title: 'Offline fixture', ConsoleId: consoleId,
         ImageIconUrl: 'https://example.invalid/icon.png', RichPresenceGameId: 1234, RichPresencePatch: '',
         Sets: [{ AchievementSetId: 1111, GameId: 1234, Title: null, Type: 'core',
           ImageIconUrl: 'https://example.invalid/icon.png', Leaderboards: [], Achievements: [{
@@ -63,7 +65,7 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
   const rom = Buffer.alloc(1024, 0x42);
   const pointer = client._malloc(rom.length); client.HEAPU8.set(rom, pointer);
   assert.equal(client.UTF8ToString(client._ra_hash(pointer, rom.length)), createHash('md5').update(rom).digest('hex'));
-  assert.equal(client._ra_load(pointer, rom.length), 1); client._free(pointer);
+  assert.equal(client._ra_load_system(pointer, rom.length, consoleId), 1); client._free(pointer);
   await settle(); await settle();
   const game = events.find((event) => event.kind === 'game');
   assert.equal(game?.result, 0); assert.equal(game?.points, 1);
@@ -89,9 +91,9 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
   assert.equal(requests.at(-1).has('p'), false);
   // A stale emulator without RAM access must report unavailable achievements,
   // rather than appearing to track successfully just because the ROM matched.
-  core._ra_get_work_ram = () => 0;
+  core._ra_get_work_ram = () => 0; cpc.pv.aM = null;
   const unavailableRom = client._malloc(rom.length); client.HEAPU8.set(rom, unavailableRom);
-  client._ra_load(unavailableRom, rom.length); client._free(unavailableRom);
+  client._ra_load_system(unavailableRom, rom.length, consoleId); client._free(unavailableRom);
   await settle(); await settle(); client._ra_frame(); client._ra_snapshot();
   assert.ok(snapshot.failures > 0); assert.equal(snapshot.items[0].state, 3);
   client._ra_unload(); client._ra_logout();

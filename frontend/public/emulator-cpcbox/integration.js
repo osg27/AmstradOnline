@@ -6,6 +6,42 @@
   let audioScheduledAt = 0;
   let emulatorVolume = 1;
   let emulatorPaused = false;
+  const achievements = window.OSGRetroAchievements?.create({ system: 'cpc', getCore: () => window });
+  let achievementDisk = null;
+  let diskLoadTimer = null;
+  let resetting = false;
+
+  function sameDisk(bytes) {
+    const expected = achievementDisk?.bytes;
+    return expected && bytes.length === expected.length && bytes.every((byte, index) => byte === expected[index]);
+  }
+
+  function attachAchievementHooks() {
+    const display = window.qz.display;
+    window.qz.display = function (...args) {
+      const result = display.apply(this, args);
+      if (!emulatorPaused && !resetting) achievements?.frame();
+      return result;
+    };
+    const reset = window.qH.aa;
+    window.qH.aa = function (...args) {
+      resetting = true;
+      try { return reset.apply(this, args); }
+      finally { achievements?.reset(); resetting = false; }
+    };
+    const parseDisk = window.pG.eq;
+    window.pG.eq = function (bytes) {
+      try {
+        const disk = parseDisk.call(this, bytes);
+        if (disk && sameDisk(bytes)) achievements?.started();
+        else achievements?.stop('Achievement tracking stopped. Load a supported DSK game through the room to identify it.');
+        return disk;
+      } catch (error) {
+        achievements?.stop('The disk could not be loaded. Achievement tracking is stopped.');
+        throw error;
+      }
+    };
+  }
 
   function ensureAudio() {
     if (!AudioContextClass) return null;
@@ -265,11 +301,14 @@
   }
 
   function loadDisk(fileName, bytes, autoloadCommand) {
+    clearTimeout(diskLoadTimer);
+    achievementDisk = { fileName, bytes: new Uint8Array(bytes) };
+    achievements?.romLoaded(bytes);
     pendingDisk = { fileName, bytes, autoloadCommand };
     if (!ready) return;
 
     boot6128();
-    setTimeout(() => {
+    diskLoadTimer = setTimeout(() => {
       if (pendingDisk && insertDisk(pendingDisk.fileName, pendingDisk.bytes, pendingDisk.autoloadCommand)) {
         pendingDisk = null;
       }
@@ -348,9 +387,10 @@
 
   const readinessTimer = setInterval(() => {
     const canvas = document.getElementById('screen');
-    if (typeof window.qH !== 'object' || !canvas) return;
+    if (typeof window.qH !== 'object' || !window.qz?.display || !window.pG?.eq || !canvas) return;
     ready = true;
     clearInterval(readinessTimer);
+    attachAchievementHooks();
     boot6128();
     if (pendingDisk) loadDisk(pendingDisk.fileName, pendingDisk.bytes, pendingDisk.autoloadCommand);
   }, 50);

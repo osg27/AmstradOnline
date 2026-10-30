@@ -1,12 +1,12 @@
 # RetroAchievements
 
 The Profile page displays public RetroAchievements points and recent unlocks.
-Solo Mega Drive rooms also support softcore achievement earning using the official
+Solo Mega Drive and Amstrad CPC rooms support softcore achievement earning using the official
 rcheevos `rc_client`. Existing site achievements remain separate.
 
 ## Earning achievements
 
-1. Launch a Mega Drive game in solo mode, from the shelf or your PC.
+1. Launch a Mega Drive or Amstrad CPC game in solo mode, from the shelf or your PC.
 2. Open Profile, click **Add RetroAchievements**, and sign in once with your own
    RA username and password. Return to a supported room; it connects automatically.
    Saving only a public username does not connect an account for earning.
@@ -18,7 +18,7 @@ rcheevos `rc_client`. Existing site achievements remain separate.
    to refresh because its API responses are cached. The room lists loaded
    achievements, requirements, measured progress and locked/unlocked states.
 
-Everyone can use this in their own solo Mega Drive rooms. Multiplayer and other
+Everyone can use this in their own solo Mega Drive or Amstrad CPC rooms. Multiplayer and other
 systems do not track achievements. Promoting a room to multiplayer stops tracking;
 new solo rooms reuse the Profile connection automatically. Hardcore and leaderboard
 submissions are disabled. No additional environment variable is needed for earning.
@@ -46,9 +46,33 @@ Routes: `GET/POST/DELETE /auth/profile/retroachievements/connection`,
 Existing databases receive the nullable encrypted-token column on startup.
 
 The authenticated backend transport accepts only the fixed RA RPC endpoint,
-checks solo room ownership and Mega Drive, rejects hardcore requests, limits
+checks solo room ownership and a supported system, rejects hardcore requests, limits
 requests, and does not cache credential responses. It forwards only actions used
 by the official client; it cannot submit leaderboards.
+
+## Amstrad CPC
+
+CPC uses the existing CPCBox core. No emulator replacement or core-file changes
+are required. The integration wraps the display callback once per emulated frame
+and reads physical RAM (`pv.aM`), without CPU banking (`pv.T`) or ROM overlays.
+RAM availability follows the selected 64K/128K/expanded model; uninstalled RAM is
+reported unavailable rather than read as zeroes.
+
+Load a supported `.dsk`/`.edsk` through the room. The original, extracted disk bytes
+are hashed by the official rcheevos CPC whole-file algorithm (console 37).
+Identification starts only after CPCBox successfully parses the same disk bytes.
+A different disk loaded through the embedded controls stops tracking until a disk
+is loaded through the room again. ZIP files must be extracted by the room loader
+before matching. Snapshot/tape achievement support is not included in this version.
+
+Reset clears achievement hit state; pause does not evaluate frames. A new disk
+unloads the old set before boot. Multiplayer and CPC party rooms cannot earn.
+The Profile connection and room achievement list work as they do for Mega Drive.
+
+The offline native test covers both consoles through the actual JS memory readers;
+CPC tests include base/extended physical RAM, bank independence, unavailable banks,
+softcore submissions and reset behavior. Browser QA uses a local mock RA service;
+no synthetic unlock is sent to a real account.
 
 ## Runtime sources and builds
 

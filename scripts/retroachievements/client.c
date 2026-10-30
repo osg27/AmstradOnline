@@ -8,6 +8,7 @@
 
 static rc_client_t* client;
 static char game_hash[33];
+static uint32_t expected_console = RC_CONSOLE_MEGA_DRIVE;
 static uint32_t memory_reads, memory_failures, frames;
 
 EM_JS(void, snapshot_begin, (uint32_t reads, uint32_t failures, uint32_t ticks), {
@@ -107,19 +108,30 @@ EMSCRIPTEN_KEEPALIVE void ra_login_token(const char* username, const char* token
 
 static void game_done(int result, const char* error, rc_client_t* active, void* unused) {
     const rc_client_game_t* game = rc_client_get_game_info(active);
+    if (result == 0 && game && game->console_id != expected_console) {
+        rc_client_unload_game(active);
+        notify("game", -1, "This file matched a different system. Use a supported game file for this room.", "", 0, 0);
+        return;
+    }
     rc_client_user_game_summary_t summary;
     memset(&summary, 0, sizeof(summary));
     rc_client_get_user_game_summary(active, &summary);
     notify("game", result, error, game ? game->title : "", game ? game->id : 0, summary.num_core_achievements);
 }
 
-EMSCRIPTEN_KEEPALIVE int ra_load(const uint8_t* rom, int size) {
+EMSCRIPTEN_KEEPALIVE int ra_load_system(const uint8_t* rom, int size, uint32_t console_id) {
+    if (console_id != RC_CONSOLE_MEGA_DRIVE && console_id != RC_CONSOLE_AMSTRAD_PC) return 0;
     ra_init();
     rc_client_unload_game(client);
     memory_reads = memory_failures = frames = 0;
-    if (!rc_hash_generate_from_buffer(game_hash, RC_CONSOLE_MEGA_DRIVE, rom, (size_t)size)) return 0;
+    expected_console = console_id;
+    if (!rc_hash_generate_from_buffer(game_hash, console_id, rom, (size_t)size)) return 0;
     rc_client_begin_load_game(client, game_hash, game_done, NULL);
     return 1;
+}
+
+EMSCRIPTEN_KEEPALIVE int ra_load(const uint8_t* rom, int size) {
+    return ra_load_system(rom, size, RC_CONSOLE_MEGA_DRIVE);
 }
 
 EMSCRIPTEN_KEEPALIVE const char* ra_hash(const uint8_t* rom, int size) {
