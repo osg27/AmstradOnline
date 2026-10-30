@@ -69,7 +69,7 @@ export default function RetroAchievementsCard() {
   const profile = data?.profile;
   return <section className="panel retroachievements-card">
     <div className="profile-section-heading"><div><p>RETROACHIEVEMENTS</p><h2>Retro game achievements</h2></div></div>
-    <p className="ra-intro">Connect your RetroAchievements account once. Supported solo Mega Drive and Amstrad CPC games will sign in automatically and earn softcore achievements.</p>
+    <p className="ra-intro">Connect your RetroAchievements account once. Supported solo Mega Drive, Master System and Amstrad CPC games will sign in automatically and earn softcore achievements.</p>
     {connection?.connected ? <div className="ra-connection">
       <p><strong>Connected as {connection.username}</strong><br />Automatic sign-in is enabled.</p>
       <button type="button" className="secondary" disabled={busy} onClick={disconnect}>Disconnect RetroAchievements</button>

@@ -1,8 +1,9 @@
-import { readMegaDriveMemory, readCpcMemory } from './memory';
+import { readMegaDriveMemory, readMasterSystemMemory, readCpcMemory } from './memory';
 
 export function createRetroAchievements({ getCore, system = 'megadrive' }) {
-  if (!['megadrive', 'cpc'].includes(system)) throw new Error('Unsupported achievement system');
-  const consoleId = system === 'cpc' ? 37 : 1;
+  if (!['megadrive', 'mastersystem', 'cpc'].includes(system)) throw new Error('Unsupported achievement system');
+  const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37 }[system];
+  const readMemory = { megadrive: readMegaDriveMemory, mastersystem: readMasterSystemMemory, cpc: readCpcMemory }[system];
   let client;
   let loading;
   let enabled = false;
@@ -25,8 +26,8 @@ export function createRetroAchievements({ getCore, system = 'megadrive' }) {
 
   async function ensureClient() {
     if (!loading) loading = window.RACreateClient({
-      locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-3`,
-      readMemory: (address, length) => (system === 'cpc' ? readCpcMemory : readMegaDriveMemory)(getCore(), address, length),
+      locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-4`,
+      readMemory: (address, length) => readMemory(getCore(), address, length),
       serverCall: (url, postData, callback, userdata) => {
         if (!enabled) { reply(callback, userdata, -1, '{}'); return; }
         const id = ++sequence;

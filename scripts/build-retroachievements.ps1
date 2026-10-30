@@ -25,6 +25,15 @@ if (-not (Test-Path $GenplusPath)) {
 if ((git -c "safe.directory=$([IO.Path]::GetFullPath($GenplusPath).Replace('\','/'))" -C $GenplusPath rev-parse HEAD) -ne $genRevision) { throw 'Unexpected wasm-genplus revision.' }
 $genSource = Join-Path $GenplusPath 'src/main/c/wasm/wasm.c'
 $genText = [IO.File]::ReadAllText($genSource)
+if ($genText.Contains('ra_get_work_ram')) {
+    # Refresh our exported SRAM getter when rebuilding an already patched tree.
+    $bridge = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'retroachievements/genplus-memory.c'))
+    $pattern = 'uint8_t\* EMSCRIPTEN_KEEPALIVE ra_get_save_ram\(void\) \{[^}]*\}'
+    if ([regex]::Matches($genText, $pattern).Count -ne 1) { throw 'Unexpected memory bridge source.' }
+    $replacement = [regex]::Match($bridge, $pattern).Value
+    $genText = [regex]::Replace($genText, $pattern, $replacement)
+    [IO.File]::WriteAllText($genSource, $genText, (New-Object Text.UTF8Encoding $false))
+}
 if (-not $genText.Contains('ra_get_work_ram')) {
     # A pristine checkout needs the existing site changes (SMS, two pads, PAL) too.
     if (-not $genText.Contains('requested_system')) {

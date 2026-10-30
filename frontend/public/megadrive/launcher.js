@@ -17,7 +17,7 @@
   const imageData = ctx.createImageData(CANVAS_WIDTH, CANVAS_HEIGHT);
 
   let gens = null;
-  const achievements = !isMasterSystem && window.OSGRetroAchievements?.create({ getCore: () => gens });
+  const achievements = window.OSGRetroAchievements?.create({ system: isMasterSystem ? 'mastersystem' : 'megadrive', getCore: () => gens });
   let wasmReady = false;
   let romReady = false;
   let pendingStart = false;
@@ -430,7 +430,7 @@
 
   drawStatus(`Starting ${systemName}`, 'Checking genplus runtime...');
 
-  window.Module({ locateFile: (file) => `./${file}?v=2026-10-30-ra-1` }).then((module) => {
+  window.Module({ locateFile: (file) => `./${file}?v=2026-10-30-ra-4` }).then((module) => {
     gens = module;
     gens._init();
     gens._set_system(isMasterSystem ? 1 : 0);

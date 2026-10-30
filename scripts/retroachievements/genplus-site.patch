@@ -26,7 +26,7 @@ index 461afaa..196fbc8 100644
 -    strncpy(extension, "BIN", 3);
 +    strncpy(extension, (config.system & SYSTEM_SMS) ? "SMS" : "BIN", 3);
 diff --git a/src/main/c/wasm/wasm.c b/src/main/c/wasm/wasm.c
-index ef49a2b..0ac1f9d 100644
+index ef49a2b..a6d4b43 100644
 --- a/src/main/c/wasm/wasm.c
 +++ b/src/main/c/wasm/wasm.c
 @@ -13 +13,2 @@
@@ -112,4 +112,4 @@ index ef49a2b..0ac1f9d 100644
 +/* Old Style Gaming RetroAchievements memory bridge */
 +/* Included in wasm-genplus's wasm.c by build-retroachievements.ps1. */
 +uint8_t* EMSCRIPTEN_KEEPALIVE ra_get_work_ram(void) { return work_ram; }
-+uint8_t* EMSCRIPTEN_KEEPALIVE ra_get_save_ram(void) { return sram.detected ? sram.sram : 0; }
++uint8_t* EMSCRIPTEN_KEEPALIVE ra_get_save_ram(void) { return (requested_system & SYSTEM_SMS ? sram.on : sram.detected) ? sram.sram : 0; }

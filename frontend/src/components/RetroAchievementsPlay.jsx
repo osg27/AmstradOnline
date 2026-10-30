@@ -97,7 +97,7 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
   const unlocked = items.filter((item) => item.unlocked).length;
   const disabled = items.filter((item) => item.state === 3).length;
   return <section className="ra-play-panel">
-    <div><strong>RetroAchievements</strong><span>Softcore · {system === 'cpc' ? 'Amstrad CPC' : 'Mega Drive'}</span></div>
+    <div><strong>RetroAchievements</strong><span>Softcore · {{ cpc: 'Amstrad CPC', mastersystem: 'Master System', megadrive: 'Mega Drive' }[system]}</span></div>
     {!solo ? <p>Achievement earning is available in solo play. Tracking is stopped while guests can join.</p> : <>
       <p role="status">{status}</p>
       <Link to="/profile">{connection?.connected ? 'Manage RetroAchievements in Profile' : 'Add RetroAchievements in Profile'}</Link>

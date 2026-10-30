@@ -120,7 +120,7 @@ static void game_done(int result, const char* error, rc_client_t* active, void* 
 }
 
 EMSCRIPTEN_KEEPALIVE int ra_load_system(const uint8_t* rom, int size, uint32_t console_id) {
-    if (console_id != RC_CONSOLE_MEGA_DRIVE && console_id != RC_CONSOLE_AMSTRAD_PC) return 0;
+    if (console_id != RC_CONSOLE_MEGA_DRIVE && console_id != RC_CONSOLE_MASTER_SYSTEM && console_id != RC_CONSOLE_AMSTRAD_PC) return 0;
     ra_init();
     rc_client_unload_game(client);
     memory_reads = memory_failures = frames = 0;

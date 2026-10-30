@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readMegaDriveMemory, readCpcMemory } from './memory';
+import { readMegaDriveMemory, readMasterSystemMemory, readCpcMemory } from './memory';
 
 function core(save = 0x11000) {
   return { HEAPU8: new Uint8Array(0x21000), _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => save };
@@ -49,5 +49,31 @@ describe('CPC achievement memory', () => {
     expect(readCpcMemory(cpc(2, true), 0x8ffff, 1)).toHaveLength(1);
     expect(readCpcMemory(cpc(2, true), 0x90000, 1)).toBeNull();
     expect(readCpcMemory(cpc(), -1, 1)).toBeNull();
+  });
+});
+
+
+describe('Master System achievement memory', () => {
+  it('reads the 8 KB Z80 RAM without swapping bytes or duplicating CPU mirrors', () => {
+    const module = core(); module.HEAPU8.set([0x34, 0x12], 0x1000);
+    expect([...readMasterSystemMemory(module, 0, 2)]).toEqual([0x34, 0x12]);
+    module.HEAPU8[0x1000 + 0x2000] = 99;
+    module.HEAPU8[0x11000] = 7;
+    expect([...readMasterSystemMemory(module, 0x2000, 1)]).toEqual([7]);
+    expect(readMasterSystemMemory(module, 0xc000, 1)).toBeNull();
+  });
+  it('maps cartridge RAM after system RAM and handles the boundary', () => {
+    const module = core(); module.HEAPU8[0x1000 + 0x1fff] = 4;
+    module.HEAPU8.set([5, 6], 0x11000);
+    expect([...readMasterSystemMemory(module, 0x1fff, 3)]).toEqual([4, 5, 6]);
+    module.HEAPU8[0x11000 + 0x7fff] = 8;
+    expect([...readMasterSystemMemory(module, 0x9fff, 1)]).toEqual([8]);
+    expect(readMasterSystemMemory(module, 0x9fff, 2)).toBeNull();
+  });
+  it('reports unavailable RAM instead of providing fake values', () => {
+    expect(readMasterSystemMemory(core(0), 0x2000, 1)).toBeNull();
+    expect(readMasterSystemMemory(core(0), 0x1fff, 2)).toHaveLength(1);
+    const module = core(); module._ra_get_work_ram = () => 0;
+    expect(readMasterSystemMemory(module, 0, 1)).toBeNull();
   });
 });

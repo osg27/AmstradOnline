@@ -14,6 +14,20 @@
     }
     return result;
   }
+  function readMasterSystemMemory(core, address, length) {
+    if (!core || !Number.isInteger(address) || !Number.isInteger(length) || address < 0 || length < 1 || address + length > 40960) return null;
+    const ram = core._ra_get_work_ram?.() || 0;
+    const save = core._ra_get_save_ram?.() || 0;
+    if (!ram) return null;
+    const result = new Uint8Array(length);
+    for (let index = 0; index < length; index++) {
+      const offset = address + index;
+      if (offset < 8192) result[index] = core.HEAPU8[ram + offset];
+      else if (save) result[index] = core.HEAPU8[save + offset - 8192];
+      else return index ? result.subarray(0, index) : null;
+    }
+    return result;
+  }
   function readCpcMemory(cpc, address, length) {
     const ram = cpc?.pv?.aM;
     const size = cpc?.oU?.p ? 589824 : [2, 4].includes(cpc?.qG) ? 131072 : 65536;
@@ -24,8 +38,9 @@
 
   // src/features/retroachievements/runtime.js
   function createRetroAchievements({ getCore, system = "megadrive" }) {
-    if (!["megadrive", "cpc"].includes(system)) throw new Error("Unsupported achievement system");
-    const consoleId = system === "cpc" ? 37 : 1;
+    if (!["megadrive", "mastersystem", "cpc"].includes(system)) throw new Error("Unsupported achievement system");
+    const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37 }[system];
+    const readMemory = { megadrive: readMegaDriveMemory, mastersystem: readMasterSystemMemory, cpc: readCpcMemory }[system];
     let client;
     let loading;
     let enabled = false;
@@ -49,8 +64,8 @@
     }
     async function ensureClient() {
       if (!loading) loading = window.RACreateClient({
-        locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-3`,
-        readMemory: (address, length) => (system === "cpc" ? readCpcMemory : readMegaDriveMemory)(getCore(), address, length),
+        locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-4`,
+        readMemory: (address, length) => readMemory(getCore(), address, length),
         serverCall: (url, postData, callback, userdata) => {
           if (!enabled) {
             reply(callback, userdata, -1, "{}");

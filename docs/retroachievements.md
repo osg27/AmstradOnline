@@ -1,12 +1,12 @@
 # RetroAchievements
 
 The Profile page displays public RetroAchievements points and recent unlocks.
-Solo Mega Drive and Amstrad CPC rooms support softcore achievement earning using the official
+Solo Mega Drive, Master System and Amstrad CPC rooms support softcore achievement earning using the official
 rcheevos `rc_client`. Existing site achievements remain separate.
 
 ## Earning achievements
 
-1. Launch a Mega Drive or Amstrad CPC game in solo mode, from the shelf or your PC.
+1. Launch a Mega Drive, Master System or Amstrad CPC game in solo mode, from the shelf or your PC.
 2. Open Profile, click **Add RetroAchievements**, and sign in once with your own
    RA username and password. Return to a supported room; it connects automatically.
    Saving only a public username does not connect an account for earning.
@@ -18,7 +18,7 @@ rcheevos `rc_client`. Existing site achievements remain separate.
    to refresh because its API responses are cached. The room lists loaded
    achievements, requirements, measured progress and locked/unlocked states.
 
-Everyone can use this in their own solo Mega Drive or Amstrad CPC rooms. Multiplayer and other
+Everyone can use this in their own solo Mega Drive, Master System or Amstrad CPC rooms. Multiplayer and other
 systems do not track achievements. Promoting a room to multiplayer stops tracking;
 new solo rooms reuse the Profile connection automatically. Hardcore and leaderboard
 submissions are disabled. No additional environment variable is needed for earning.
@@ -49,6 +49,26 @@ The authenticated backend transport accepts only the fixed RA RPC endpoint,
 checks solo room ownership and a supported system, rejects hardcore requests, limits
 requests, and does not cache credential responses. It forwards only actions used
 by the official client; it cannot submit leaderboards.
+
+## Master System
+
+Master System uses the existing shared wasm-genplus launcher/core. It uses the
+same Profile connection, solo-only transport and softcore achievement list.
+The official rcheevos hash routine uses console 11 and the original `.sms` bytes.
+Use a ROM version listed under Supported Game Files; renaming a ROM does not
+change its identity. Archive extraction remains the room loader's responsibility.
+
+The memory bridge reads 8 KB of Z80 RAM followed by 32 KB of linear cartridge RAM,
+matching the rcheevos console map. It does not expose the CPU's C000/E000 mirrors
+or apply Mega Drive byte swapping. The core's SRAM export now uses its SMS SRAM
+enabled flag in SMS mode, and retains its existing Genesis detection in MD mode.
+Frame checks run after each core tick. Reset, ROM changes, pause and multiplayer
+promotion share the existing lifecycle handling.
+
+Native tests exercise console 11 through the real memory reader, byte/word
+conditions, softcore submission and reset. Browser QA verifies automatic sign-in,
+ROM checksum, RAM access, pause, mock unlock, reset and multiplayer stop. No test
+unlock is sent to the real RA service. SNES, NES and PC Engine are not enabled.
 
 ## Amstrad CPC
 

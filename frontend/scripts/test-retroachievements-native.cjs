@@ -6,8 +6,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createHash } = require('node:crypto');
 
-for (const system of ['megadrive', 'cpc']) test(`official rc_client evaluates ${system} memory and submits softcore only`, async () => {
-  const consoleId = system === 'cpc' ? 37 : 1;
+for (const system of ['megadrive', 'mastersystem', 'cpc']) test(`official rc_client evaluates ${system} memory and submits softcore only`, async () => {
+  const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37 }[system];
   const directory = path.resolve(__dirname, '../public/retroachievements');
   const context = vm.createContext({ module: { exports: {} }, exports: {}, require, __dirname: directory,
     __filename: path.join(directory, 'rc-client.js'), process, console, TextDecoder, TextEncoder,
@@ -32,7 +32,7 @@ for (const system of ['megadrive', 'cpc']) test(`official rc_client evaluates ${
   }
   client = await context.module.exports({
     wasmBinary: fs.readFileSync(path.join(directory, 'rc-client.wasm')),
-    readMemory: (address, length) => system === 'cpc' ? context.readCpcMemory(cpc, address, length) : context.readMegaDriveMemory(core, address, length),
+    readMemory: (address, length) => system === 'cpc' ? context.readCpcMemory(cpc, address, length) : system === 'mastersystem' ? context.readMasterSystemMemory(core, address, length) : context.readMegaDriveMemory(core, address, length),
     onSnapshot: (value) => { snapshot = value; },
     onEvent: (event) => events.push(event), print: () => {}, printErr: () => {},
     serverCall: (url, body, callback, userdata) => {
