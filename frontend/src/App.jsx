@@ -16,6 +16,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import ResendVerificationPage from './pages/ResendVerificationPage';
 import TournamentsPage from './pages/TournamentsPage';
 import ProfilePage from './pages/ProfilePage';
+import MameAchievementsPreviewPage from './pages/MameAchievementsPreviewPage';
 import TournamentNotifications from './components/TournamentNotifications';
 
 function PrivateRoute({ children }) {
@@ -54,6 +55,7 @@ function PrivateRoute({ children }) {
 export default function App() {
   return (
     <Routes>
+      <Route path="/experiments/mame-retroachievements" element={<PrivateRoute><MameAchievementsPreviewPage /></PrivateRoute>} />
       <Route path="/" element={<Navigate to="/lobby" replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />

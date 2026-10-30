@@ -89,6 +89,9 @@ EMSCRIPTEN_KEEPALIVE void ra_init(void) {
     client = rc_client_create(read_memory, server_call);
     rc_client_set_hardcore_enabled(client, 0);
     rc_client_set_event_handler(client, event_handler);
+#ifdef OSG_MAME_RA_EXPERIMENT
+    rc_client_set_spectator_mode_enabled(client, 1);
+#endif
 }
 
 static void login_done(int result, const char* error, rc_client_t* active, void* unused) {
@@ -133,6 +136,19 @@ EMSCRIPTEN_KEEPALIVE int ra_load_system(const uint8_t* rom, int size, uint32_t c
 EMSCRIPTEN_KEEPALIVE int ra_load(const uint8_t* rom, int size) {
     return ra_load_system(rom, size, RC_CONSOLE_MEGA_DRIVE);
 }
+
+#ifdef OSG_MAME_RA_EXPERIMENT
+/* Separate preview binary only. Arcade hashes identify the archive basename. */
+EMSCRIPTEN_KEEPALIVE int ra_load_pacman(void) {
+    ra_init();
+    rc_client_unload_game(client);
+    memory_reads = memory_failures = frames = 0;
+    expected_console = RC_CONSOLE_ARCADE;
+    if (!rc_hash_generate_from_file(game_hash, RC_CONSOLE_ARCADE, "pacman.zip")) return 0;
+    rc_client_begin_load_game(client, game_hash, game_done, NULL);
+    return 1;
+}
+#endif
 
 EMSCRIPTEN_KEEPALIVE const char* ra_hash(const uint8_t* rom, int size) {
     if (!rc_hash_generate_from_buffer(game_hash, RC_CONSOLE_MEGA_DRIVE, rom, (size_t)size)) return "";

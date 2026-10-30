@@ -1,0 +1,49 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { createMamePreview } from '../features/retroachievements/mamePreview';
+
+const keys = { ArrowUp: 4, ArrowDown: 5, ArrowLeft: 6, ArrowRight: 7, Digit5: 2, Digit1: 3, Enter: 3 };
+export default function MameAchievementsPreviewPage() {
+  const canvas = useRef(null), preview = useRef(null);
+  const [message, setMessage] = useState('Choose your own pacman.zip to begin.'), [busy, setBusy] = useState(false);
+  const [paused, setPaused] = useState(false), [data, setData] = useState(null), [hits, setHits] = useState([]);
+  useEffect(() => () => preview.current?.stop(), []);
+  async function start(event) {
+    const file = event.target.files?.[0]; if (!file) return;
+    preview.current?.stop(); setBusy(true); setData(null); setHits([]); setPaused(false);
+    const instance = createMamePreview({ canvas: canvas.current, status: setMessage, snapshot: setData,
+      hit: title => setHits(previous => [...previous, title]) });
+    preview.current = instance;
+    try { await instance.start(file); }
+    catch (error) { instance.stop(); setMessage(error.message); setBusy(false); }
+  }
+  function key(event, down) {
+    const bit = keys[event.code]; if (bit === undefined) return;
+    event.preventDefault(); preview.current?.input(bit, down);
+  }
+  return <main style={{ maxWidth: 1000, margin: '2rem auto', padding: '1rem', display: 'block' }}>
+    <h1>Pac-Man achievement preview</h1>
+    <p>Isolated MAME 2003-Plus experiment. Condition hits stay on this page: no points, unlocks or played-game activity are sent to RetroAchievements.</p>
+    <p><Link to="/profile">Connect RetroAchievements in Profile</Link> · <Link to="/library?system=arcade">Back to Arcade</Link></p>
+    <label>Pac-Man ROM archive <input type="file" accept=".zip" onChange={start} disabled={busy} /></label>
+    <p role="status">{message}</p>
+    <p>Click the screen, then use arrows to move, 5 for a coin and 1 or Enter to start.</p>
+    <canvas ref={canvas} tabIndex={0} aria-label="Pac-Man preview. Arrow keys move, 5 inserts a coin, 1 starts."
+      onKeyDown={event => key(event, true)} onKeyUp={event => key(event, false)} onBlur={() => preview.current?.release()}
+      style={{ background: '#000', width: 'min(100%, 448px)', aspectRatio: '224 / 288', imageRendering: 'pixelated', display: 'block' }} />
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '1rem 0' }}>
+      {[[2, 'Insert coin'], [3, 'Start']].map(([bit, label]) => <button key={bit} disabled={!busy}
+        onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); preview.current?.input(bit, true); }}
+        onPointerUp={() => preview.current?.input(bit, false)} onPointerCancel={() => preview.current?.release()}>{label}</button>)}
+      <button disabled={!busy} onClick={() => { preview.current?.pause(!paused); setPaused(!paused); }}>{paused ? 'Resume' : 'Pause'}</button>
+      <button disabled={!busy} onClick={() => preview.current?.reset()}>Reset</button>
+      <button disabled={!busy} onClick={() => { preview.current?.stop(); setBusy(false); setMessage('Preview stopped. Choose a file to restart.'); }}>Stop</button>
+    </div>
+    {hits.length > 0 && <p role="status">Local condition hits (not submitted): {hits.join(', ')}</p>}
+    {data && <>
+      <p>{data.items.length} achievements · {data.frames} frames checked · {data.failures} unavailable memory reads. Conditions requiring unmapped memory are disabled.</p>
+      <ul>{data.items.map(item => <li key={item.id}><strong>{item.title}</strong> — {item.description} ({item.points} points)
+        {item.state === 3 ? ' · unavailable memory' : item.unlocked ? ' · condition met locally' : item.progress ? ` · ${item.progress}` : ''}</li>)}</ul>
+    </>}
+  </main>;
+}
