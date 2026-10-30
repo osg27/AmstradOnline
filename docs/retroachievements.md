@@ -7,25 +7,43 @@ rcheevos `rc_client`. Existing site achievements remain separate.
 ## Earning achievements
 
 1. Launch a Mega Drive game in solo mode, from the shelf or your PC.
-2. In the room's RetroAchievements panel, sign in with your own RA username and
-   password. This is separate from saving a public username on Profile.
+2. Open Profile, click **Add RetroAchievements**, and sign in once with your own
+   RA username and password. Return to a supported room; it connects automatically.
+   Saving only a public username does not connect an account for earning.
 3. The ROM is hashed by rcheevos. The panel identifies the game and achievement
    count, or explains that no matching set exists. Use a ROM version listed under
    Supported Game Files on the game's RetroAchievements page.
 4. Play normally. Unlock notifications appear in the room and softcore unlocks
    are submitted to that RA account. The public Profile card may take five minutes
-   to refresh because its API responses are cached.
+   to refresh because its API responses are cached. The room lists loaded
+   achievements, requirements, measured progress and locked/unlocked states.
 
 Everyone can use this in their own solo Mega Drive rooms. Multiplayer and other
-systems do not track achievements. Promoting a room to multiplayer signs RA out;
-starting a new solo room requires signing in again. Hardcore and leaderboard
+systems do not track achievements. Promoting a room to multiplayer stops tracking;
+new solo rooms reuse the Profile connection automatically. Hardcore and leaderboard
 submissions are disabled. No additional environment variable is needed for earning.
 The existing site Web API key is only for the public Profile card.
 
-Passwords are forwarded to RetroAchievements over HTTPS, then discarded. The RA
-session token stays in the emulator's memory, without localStorage or database
-persistence. Refreshing or leaving the room ends the local sign-in. Do not add
-player passwords or RA session tokens to `.env`.
+Passwords are forwarded to RetroAchievements over HTTPS and are never saved.
+The returned RA token is encrypted in a nullable user column with Fernet and a
+per-user HKDF-derived key from the existing server `JWT_SECRET`. No extra environment
+setting is needed. Keep the same `JWT_SECRET` across restarts/workers; rotating it
+requires players to reconnect RA. No plaintext RA token goes into localStorage,
+public profile responses, admin lists or logs. An authorized solo host can retrieve
+their own remembered session into emulator memory via a no-store response.
+
+Profile offers **Disconnect RetroAchievements**, which deletes the encrypted token.
+An open room in another tab on the same browser also stops its local RA session
+through BroadcastChannel. It does not revoke a token already loaded on another
+device; leaving/reloading that room ends that local session. Site sign-out clears
+the site login, while the encrypted RA connection remains attached to that site
+account for its next login. RA may invalidate a token; reconnect in Profile if needed.
+Never add player passwords or RA tokens to `.env`.
+
+Routes: `GET/POST/DELETE /auth/profile/retroachievements/connection`,
+`GET /auth/retroachievements/play/options`, and the authorized
+`POST /auth/retroachievements/play/session` and `/request` transports.
+Existing databases receive the nullable encrypted-token column on startup.
 
 The authenticated backend transport accepts only the fixed RA RPC endpoint,
 checks solo room ownership and Mega Drive, rejects hardcore requests, limits
@@ -40,8 +58,12 @@ by the official client; it cannot submit leaderboards.
 - `scripts/retroachievements/client.c` bridges the official client to JS transport
   and game memory. `genplus-site.patch` records the existing site core changes
   plus the new RAM exports. `genplus-memory.c` is the incremental bridge for an
-  already adapted core. RAM reads undo the core's 68000 byte swapping; cartridge
-  SRAM follows the official console memory map.
+  already adapted core. RAM reads preserve Genesis Plus GX's raw word-swizzled
+  layout. Existing Genesis sets rely on this legacy layout; converting to 68000
+  CPU bus byte order breaks them. Cartridge SRAM follows the official memory map.
+  See https://github.com/RetroAchievements/rcheevos/issues/302 and the upstream
+  libretro `retro_get_memory_data` implementation. The native regression test
+  exercises the actual JS bridge with both byte and word conditions.
 - Generated JS/WASM and the rcheevos license are committed. A VPS only needs the
   usual frontend build and backend restart; it does not need Emscripten.
 - To rebuild native assets on Windows (tested with Emscripten 3.1.57, CMake, Ninja):

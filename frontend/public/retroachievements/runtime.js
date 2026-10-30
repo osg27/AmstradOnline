@@ -8,7 +8,7 @@
     const result = new Uint8Array(length);
     for (let index = 0; index < length; index++) {
       const offset = address + index;
-      if (offset < 65536) result[index] = core.HEAPU8[ram + (offset ^ 1)];
+      if (offset < 65536) result[index] = core.HEAPU8[ram + offset];
       else if (save) result[index] = core.HEAPU8[save + offset - 65536];
       else return index ? result.subarray(0, index) : null;
     }
@@ -40,7 +40,7 @@
     }
     async function ensureClient() {
       if (!loading) loading = window.RACreateClient({
-        locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-1`,
+        locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-2`,
         readMemory: (address, length) => readMegaDriveMemory(getCore(), address, length),
         serverCall: (url, postData, callback, userdata) => {
           if (!enabled) {
@@ -62,6 +62,10 @@
             if (loggedIn) loadGame();
           }
           if (enabled) notify(event);
+          if (enabled && ["game", "unlock"].includes(event.kind)) queueMicrotask(() => client?._ra_snapshot());
+        },
+        onSnapshot: (snapshot) => {
+          if (enabled && loggedIn) window.parent.postMessage({ type: "ra_achievements", snapshot }, location.origin);
         },
         print: () => {
         },
@@ -79,6 +83,10 @@
     }
     function loadGame() {
       if (!enabled || !loggedIn || !running || !rom || !client) return;
+      if (!getCore()?._ra_get_work_ram) {
+        notify({ kind: "error", message: "The game is detected, but this emulator copy cannot read achievement memory. Refresh the page to load the latest emulator." });
+        return;
+      }
       const pointer = client._malloc(rom.length);
       client.HEAPU8.set(rom, pointer);
       try {
@@ -115,12 +123,12 @@
         reply(request.callback, request.userdata, enabled ? message.status : -1, message.body);
       } else if (message.type === "ra_logout") {
         logout();
-      } else if (message.type === "ra_login" && enabled) {
+      } else if (["ra_login", "ra_login_token"].includes(message.type) && enabled) {
         const attempt = generation;
         try {
           await ensureClient();
           if (!enabled || attempt !== generation) return;
-          client.cwrap("ra_login", null, ["string", "string"])(message.username, message.password);
+          client.cwrap(message.type, null, ["string", "string"])(message.username, message.type === "ra_login_token" ? message.token : message.password);
         } catch {
           notify({ kind: "error", message: "The achievements runtime could not start. Try reloading the room." });
         }
@@ -129,6 +137,9 @@
     setInterval(() => {
       if (enabled && loggedIn && client) client._ra_idle();
     }, 250);
+    setInterval(() => {
+      if (enabled && loggedIn && running && client) client._ra_snapshot();
+    }, 3e3);
     window.parent.postMessage({ type: "ra_ready" }, location.origin);
     return {
       romLoaded(bytes) {

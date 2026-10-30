@@ -5628,3 +5628,20 @@ details.game-recorder {
 @keyframes recording-pulse {
   50% { opacity: 0.35; }
 }
+
+.ra-connect-form { display: grid; gap: 10px; margin: 16px 0; max-width: 540px; }
+.ra-connect-form input { box-sizing: border-box; width: 100%; }
+.ra-connect-form small, .ra-connect-form label { color: var(--muted); }
+.ra-connection { margin: 14px 0; }
+.ra-public-settings { margin-top: 20px; }
+.ra-public-settings > form { margin-top: 12px; }
+.ra-game-achievements { margin-top: 14px; }
+.ra-game-achievements summary, .ra-public-settings summary { cursor: pointer; font-weight: 700; }
+.ra-game-achievements ul { list-style: none; padding: 0; max-height: 380px; overflow-y: auto; }
+.ra-game-achievements li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid #34483e; }
+.ra-game-achievements li > div { min-width: 0; overflow-wrap: anywhere; }
+.ra-game-achievements li > span { flex-shrink: 0; text-align: right; }
+.ra-game-achievements li p { margin: 6px 0; }
+.ra-game-achievements li small { display: block; }
+.ra-game-achievements li.earned a { color: var(--gold); }
+.ra-play-note { display: block; margin-top: 12px; }

@@ -12,9 +12,14 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
     __filename: path.join(directory, 'rc-client.js'), process, console, TextDecoder, TextEncoder,
     setTimeout, clearTimeout, performance });
   vm.runInContext(fs.readFileSync(path.join(directory, 'rc-client.js'), 'utf8'), context);
-  const ram = new Uint8Array(0x20000);
+  const heap = new Uint8Array(0x21000);
+  const core = { HEAPU8: heap, _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => 0x11000 };
+  const ram = heap.subarray(0x1000);
+  // Exercise the real JS bridge too. Reversing RAM byte order must fail this test.
+  vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../src/features/retroachievements/memory.js'), 'utf8').replace('export function', 'function'), context);
   const events = [];
   const requests = [];
+  let snapshot;
   let client;
   function respond(callback, userdata, value) {
     const bytes = Buffer.from(JSON.stringify(value));
@@ -25,7 +30,8 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
   }
   client = await context.module.exports({
     wasmBinary: fs.readFileSync(path.join(directory, 'rc-client.wasm')),
-    readMemory: (address, length) => ram.slice(address, address + length),
+    readMemory: (address, length) => context.readMegaDriveMemory(core, address, length),
+    onSnapshot: (value) => { snapshot = value; },
     onEvent: (event) => events.push(event), print: () => {}, printErr: () => {},
     serverCall: (url, body, callback, userdata) => {
       assert.equal(url, 'https://retroachievements.org/dorequest.php');
@@ -39,7 +45,7 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
         Sets: [{ AchievementSetId: 1111, GameId: 1234, Title: null, Type: 'core',
           ImageIconUrl: 'https://example.invalid/icon.png', Leaderboards: [], Achievements: [{
             ID: 5501, Title: 'Memory changed', Description: 'Offline test only', Flags: 3, Points: 5,
-            MemAddr: '0xH0001=3_0xH0002=7', Author: 'Fixture', BadgeName: '00234', Created: 1367266583, Modified: 1376929305,
+            MemAddr: '0xH0001=3_0x0002=4660', Author: 'Fixture', BadgeName: '00234', Created: 1367266583, Modified: 1376929305,
           }] }],
       };
       else if (action === 'startsession') response = { Success: true, HardcoreUnlocks: [], Unlocks: [] };
@@ -62,16 +68,33 @@ test('official rc_client identifies a ROM, evaluates memory, and submits softcor
   const game = events.find((event) => event.kind === 'game');
   assert.equal(game?.result, 0); assert.equal(game?.points, 1);
   client._ra_frame();
+  client._ra_snapshot();
+  assert.equal(snapshot.items.length, 1); assert.equal(snapshot.items[0].unlocked, false);
+  assert.ok(snapshot.reads > 0); assert.equal(snapshot.failures, 0); assert.ok(snapshot.frames > 0);
   assert.equal(requests.filter((params) => params.get('r') === 'awardachievement').length, 0);
-  ram[1] = 3; ram[2] = 7;
+  ram[1] = 3; ram[2] = 0x34; ram[3] = 0x12;
   client._ra_frame(); await settle();
   assert.equal(events.filter((event) => event.kind === 'unlock').length, 1);
   const awards = requests.filter((params) => params.get('r') === 'awardachievement');
   assert.equal(awards.length, 1); assert.equal(awards[0].get('h'), '0');
+  client._ra_snapshot(); assert.equal(snapshot.items[0].unlocked, true);
   assert.ok(requests.filter((params) => params.has('h')).every((params) => params.get('h') === '0'));
   client._ra_reset(); client._ra_frame(); client._ra_frame(); await settle();
   assert.equal(requests.filter((params) => params.get('r') === 'awardachievement').length, 1);
   client._ra_unload(); client._ra_logout(); client._ra_frame();
+  client.cwrap('ra_login_token', null, ['string', 'string'])('FixtureUser', 'fixture-token');
+  await settle();
+  assert.equal(requests.at(-1).get('r'), 'login2');
+  assert.equal(requests.at(-1).get('t'), 'fixture-token');
+  assert.equal(requests.at(-1).has('p'), false);
+  // A stale emulator without RAM access must report unavailable achievements,
+  // rather than appearing to track successfully just because the ROM matched.
+  core._ra_get_work_ram = () => 0;
+  const unavailableRom = client._malloc(rom.length); client.HEAPU8.set(rom, unavailableRom);
+  client._ra_load(unavailableRom, rom.length); client._free(unavailableRom);
+  await settle(); await settle(); client._ra_frame(); client._ra_snapshot();
+  assert.ok(snapshot.failures > 0); assert.equal(snapshot.items[0].state, 3);
+  client._ra_unload(); client._ra_logout();
   assert.ok(!JSON.stringify(events).includes('fixture-password'));
   assert.ok(!JSON.stringify(events).includes('fixture-token'));
 });

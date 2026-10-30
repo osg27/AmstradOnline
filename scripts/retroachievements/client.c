@@ -8,6 +8,35 @@
 
 static rc_client_t* client;
 static char game_hash[33];
+static uint32_t memory_reads, memory_failures, frames;
+
+EM_JS(void, snapshot_begin, (uint32_t reads, uint32_t failures, uint32_t ticks), {
+    Module.achievementSnapshot = { items: [], reads, failures, frames: ticks };
+});
+EM_JS(void, snapshot_item, (uint32_t id, const char* title, const char* description, uint32_t points, int state, int unlocked, const char* progress), {
+    Module.achievementSnapshot.items.push({id, title: UTF8ToString(title), description: UTF8ToString(description),
+        points, state, unlocked: Boolean(unlocked), progress: UTF8ToString(progress)});
+});
+EM_JS(void, snapshot_end, (), { Module.onSnapshot?.(Module.achievementSnapshot); });
+
+EMSCRIPTEN_KEEPALIVE void ra_snapshot(void) {
+    if (!client) return;
+    rc_client_achievement_list_t* list = rc_client_create_achievement_list(client,
+        RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_LOCK_STATE);
+    snapshot_begin(memory_reads, memory_failures, frames);
+    if (list) {
+        for (uint32_t b = 0; b < list->num_buckets; ++b) {
+            const rc_client_achievement_bucket_t* bucket = &list->buckets[b];
+            for (uint32_t i = 0; i < bucket->num_achievements; ++i) {
+                const rc_client_achievement_t* a = bucket->achievements[i];
+                snapshot_item(a->id, a->title, a->description, a->points, a->state,
+                    a->unlocked, a->measured_progress);
+            }
+        }
+        rc_client_destroy_achievement_list(list);
+    }
+    snapshot_end();
+}
 
 EM_JS(void, notify, (const char* kind, int result, const char* message, const char* title, int id, int points), {
     Module.onEvent?.({kind: UTF8ToString(kind), result, message: message ? UTF8ToString(message) : "",
@@ -26,7 +55,10 @@ EM_JS(void, request_js, (const char* url, const char* data, uintptr_t callback, 
 });
 
 static uint32_t read_memory(uint32_t address, uint8_t* buffer, uint32_t size, rc_client_t* unused) {
-    return read_js(address, buffer, size);
+    uint32_t read = read_js(address, buffer, size);
+    ++memory_reads;
+    if (read != size) ++memory_failures;
+    return read;
 }
 
 static void server_call(const rc_api_request_t* request, rc_client_server_callback_t callback, void* userdata, rc_client_t* unused) {
@@ -68,6 +100,11 @@ EMSCRIPTEN_KEEPALIVE void ra_login(const char* username, const char* password) {
     rc_client_begin_login_with_password(client, username, password, login_done, NULL);
 }
 
+EMSCRIPTEN_KEEPALIVE void ra_login_token(const char* username, const char* token) {
+    ra_init();
+    rc_client_begin_login_with_token(client, username, token, login_done, NULL);
+}
+
 static void game_done(int result, const char* error, rc_client_t* active, void* unused) {
     const rc_client_game_t* game = rc_client_get_game_info(active);
     rc_client_user_game_summary_t summary;
@@ -79,6 +116,7 @@ static void game_done(int result, const char* error, rc_client_t* active, void* 
 EMSCRIPTEN_KEEPALIVE int ra_load(const uint8_t* rom, int size) {
     ra_init();
     rc_client_unload_game(client);
+    memory_reads = memory_failures = frames = 0;
     if (!rc_hash_generate_from_buffer(game_hash, RC_CONSOLE_MEGA_DRIVE, rom, (size_t)size)) return 0;
     rc_client_begin_load_game(client, game_hash, game_done, NULL);
     return 1;
@@ -89,7 +127,7 @@ EMSCRIPTEN_KEEPALIVE const char* ra_hash(const uint8_t* rom, int size) {
     return game_hash;
 }
 
-EMSCRIPTEN_KEEPALIVE void ra_frame(void) { if (client) rc_client_do_frame(client); }
+EMSCRIPTEN_KEEPALIVE void ra_frame(void) { if (client) { ++frames; rc_client_do_frame(client); } }
 EMSCRIPTEN_KEEPALIVE void ra_idle(void) { if (client) rc_client_idle(client); }
 EMSCRIPTEN_KEEPALIVE void ra_reset(void) { if (client) rc_client_reset(client); }
 EMSCRIPTEN_KEEPALIVE void ra_unload(void) { if (client) rc_client_unload_game(client); }

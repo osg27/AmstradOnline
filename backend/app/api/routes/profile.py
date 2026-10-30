@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
+import json
 import re
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -13,6 +16,7 @@ from app.models.room import Room, RoomActivity
 from app.models.tournament import Tournament, TournamentEntry, TournamentScore
 from app.models.user import User
 from app.services import retroachievements
+from app.services.retroachievements_session import forward_rpc, limit_request, saved_session, seal_token
 
 
 router = APIRouter(prefix="/auth/profile", tags=["profile"])
@@ -73,6 +77,48 @@ def update_retroachievements(payload: RetroAchievementsUpdate, user: User = Depe
     user.retroachievements_ulid = remote['ulid'] if remote else None
     db.commit()
     return retroachievements_state(user, db, remote)
+
+
+class RetroAchievementsConnect(RetroAchievementsUpdate):
+    password: str = Field(min_length=1, max_length=256, repr=False)
+
+
+def connection_state(user):
+    session = saved_session(user)
+    return {'connected': bool(session), 'username': session['username'] if session else '',
+            'reconnect_required': bool(getattr(user, 'retroachievements_token', None)) and not session}
+
+
+@router.get('/retroachievements/connection')
+def get_ra_connection(user: User = Depends(get_current_user)):
+    return JSONResponse(connection_state(user), headers={'Cache-Control': 'no-store'})
+
+
+@router.post('/retroachievements/connection')
+def connect_ra(payload: RetroAchievementsConnect, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not payload.username:
+        raise HTTPException(400, 'Enter your RetroAchievements username.')
+    limit_request(user.id, 'login2')
+    response = forward_rpc(urlencode({'r': 'login2', 'u': payload.username, 'p': payload.password}))
+    data = json.loads(response['body'])
+    if response['status'] != 200 or not data.get('Success') or not isinstance(data.get('Token'), str) or not data['Token']:
+        # Do not echo upstream error bodies, which could contain submitted credentials.
+        raise HTTPException(400, 'RetroAchievements sign-in failed. Check your username and password, then try again.')
+    username = data.get('User')
+    if not isinstance(username, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', username) or len(data['Token']) > 4096:
+        raise HTTPException(502, 'RetroAchievements returned an invalid account response.')
+    user.retroachievements_token = seal_token(user.id, username, data['Token'])
+    user.retroachievements_username = username
+    user.retroachievements_ulid = None
+    db.commit()
+    return JSONResponse(connection_state(user), headers={'Cache-Control': 'no-store'})
+
+
+@router.delete('/retroachievements/connection')
+def disconnect_ra(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    user.retroachievements_token = None
+    db.commit()
+    return JSONResponse(connection_state(user), headers={'Cache-Control': 'no-store'})
 
 
 def aware(value: datetime) -> datetime:

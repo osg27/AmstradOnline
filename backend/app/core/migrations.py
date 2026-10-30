@@ -63,6 +63,8 @@ def ensure_runtime_columns(engine):
 
         if "retroachievements_username" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN retroachievements_username VARCHAR(64)"))
+        if "retroachievements_token" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN retroachievements_token TEXT"))
         if "retroachievements_ulid" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN retroachievements_ulid VARCHAR(26)"))
 

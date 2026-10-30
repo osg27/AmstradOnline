@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, func
 
 from app.core.database import Base
 
@@ -20,6 +20,7 @@ class User(Base):
     avatar_id = Column(String(32), nullable=False, default="arcade-green", server_default="arcade-green")
     retroachievements_username = Column(String(64), nullable=True)
     retroachievements_ulid = Column(String(26), nullable=True)
+    retroachievements_token = Column(Text, nullable=True)
 
 
 class AccountToken(Base):

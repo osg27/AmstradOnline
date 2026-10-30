@@ -7,11 +7,12 @@ from urllib.error import URLError
 
 from fastapi import HTTPException
 from app.api.routes import retroachievements_play as ra
+from app.services import retroachievements_session as transport
 
 
 class RetroAchievementsPlayTests(unittest.TestCase):
     def setUp(self):
-        ra._requests.clear()
+        transport._requests.clear()
         self.user = SimpleNamespace(id=17, retroachievements_username='Player')
         self.room = SimpleNamespace(owner_user_id=17, system='megadrive', hosting_mode='solo')
         self.db = MagicMock()
@@ -31,7 +32,7 @@ class RetroAchievementsPlayTests(unittest.TestCase):
         for changes in [{'owner_user_id': 18}, {'system': 'x68000'}, {'hosting_mode': 'multiplayer'}]:
             original = vars(self.room).copy()
             vars(self.room).update(changes)
-            with patch.object(ra, 'build_opener') as upstream, self.assertRaises(HTTPException) as error:
+            with patch.object(transport, 'build_opener') as upstream, self.assertRaises(HTTPException) as error:
                 ra.client_request(self.payload(), self.user, self.db)
             self.assertEqual(error.exception.status_code, 403)
             upstream.assert_not_called()
@@ -41,7 +42,7 @@ class RetroAchievementsPlayTests(unittest.TestCase):
         response = io.BytesIO(b'{"Success":true,"Token":"fixture-token"}')
         response.status = 200
         opener = MagicMock(); opener.open.return_value = response
-        with patch.object(ra, 'build_opener', return_value=opener):
+        with patch.object(transport, 'build_opener', return_value=opener):
             result = ra.client_request(self.payload(), self.user, self.db)
         request = opener.open.call_args.args[0]
         self.assertEqual(request.full_url, ra.RPC_URL)
@@ -53,7 +54,7 @@ class RetroAchievementsPlayTests(unittest.TestCase):
 
     def test_failures_do_not_expose_passwords_or_tokens(self):
         opener = MagicMock(); opener.open.side_effect = URLError('private-password fixture-token')
-        with patch.object(ra, 'build_opener', return_value=opener), self.assertRaises(HTTPException) as error:
+        with patch.object(transport, 'build_opener', return_value=opener), self.assertRaises(HTTPException) as error:
             ra.client_request(self.payload(), self.user, self.db)
         self.assertEqual(error.exception.status_code, 502)
         self.assertNotIn('private-password', error.exception.detail)
@@ -61,11 +62,11 @@ class RetroAchievementsPlayTests(unittest.TestCase):
         self.assertNotIn('private-password', repr(self.payload()))
 
     def test_login_attempts_are_limited_before_upstream(self):
-        ra._requests[self.user.id].extend([(ra.time.monotonic(), 'login2')] * 6)
-        with patch.object(ra, 'build_opener') as upstream, self.assertRaises(HTTPException) as error:
+        transport._requests[self.user.id].extend([(transport.time.monotonic(), 'login2')] * 6)
+        with patch.object(transport, 'build_opener') as upstream, self.assertRaises(HTTPException) as error:
             ra.client_request(self.payload(), self.user, self.db)
         self.assertEqual(error.exception.status_code, 429)
         upstream.assert_not_called()
 
     def test_options_do_not_expose_site_web_api_key(self):
-        self.assertEqual(ra.options(self.user), {'username': 'Player', 'softcore': True})
+        self.assertEqual(ra.options(self.user), {'username': 'Player', 'connected': False, 'softcore': True})

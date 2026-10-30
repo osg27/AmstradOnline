@@ -6,15 +6,15 @@ function core(save = 0x11000) {
 }
 
 describe('Mega Drive achievement memory', () => {
-  it('reads byte-swapped 68000 RAM in CPU order, including multi-byte operands', () => {
+  it('preserves the raw Genesis Plus GX layout expected by existing achievement sets', () => {
     const module = core();
     module.HEAPU8.set([0x34, 0x12, 0x78, 0x56], 0x1000);
-    expect([...readMegaDriveMemory(module, 0, 4)]).toEqual([0x12, 0x34, 0x56, 0x78]);
-    expect([...readMegaDriveMemory(module, 1, 2)]).toEqual([0x34, 0x56]);
+    expect([...readMegaDriveMemory(module, 0, 4)]).toEqual([0x34, 0x12, 0x78, 0x56]);
+    expect([...readMegaDriveMemory(module, 1, 2)]).toEqual([0x12, 0x78]);
   });
   it('crosses from RAM to unswapped cartridge SRAM', () => {
     const module = core();
-    module.HEAPU8[0x1000 + 0xfffe] = 7;
+    module.HEAPU8[0x1000 + 0xffff] = 7;
     module.HEAPU8.set([8, 9], 0x11000);
     expect([...readMegaDriveMemory(module, 0xffff, 3)]).toEqual([7, 8, 9]);
   });
