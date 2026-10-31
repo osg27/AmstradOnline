@@ -16,6 +16,9 @@
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
   let statusText = 'SNES ready';
+  const achievements = window.OSGRetroAchievements?.create({
+    system: 'snes', getCore: () => window.EJS_emulator?.gameManager?.Module,
+  });
   const ROM_RELOAD_CACHE = 'oldstylegaming-snes-rom-reload-v1';
   const ROM_RELOAD_REQUEST = `${window.location.origin}/__snes-rom-reload__`;
 
@@ -267,6 +270,9 @@
   }
 
   function clearGameContainer() {
+    achievements?.stop('Waiting for a SNES game…');
+    const previousModule = window.EJS_emulator?.gameManager?.Module;
+    if (previousModule) previousModule.osgRAFrame = null;
     try {
       window.EJS_emulator?.gameManager?.clearEJSResetTimer?.();
       window.EJS_emulator?.gamepad?.terminate?.();
@@ -308,7 +314,17 @@
       'utils.js': '/emulatorjs/data/src/utils.js',
       'nipplejs.js': '/emulatorjs/data/src/vendor/nipplejs.js',
       'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
+      'snes9x-wasm.data': '/snes/snes9x-ra-wasm.data?v=2026-10-31-ra-1',
+      'snes9x-legacy-wasm.data': '/snes/snes9x-ra-legacy-wasm.data?v=2026-10-31-ra-1',
     };
+    // EmulatorJS appends a report version to core filenames before consulting
+    // filePaths. Resolve that query without changing other systems' loaders.
+    window.EJS_paths = new Proxy(window.EJS_paths, {
+      get(target, key, receiver) {
+        const clean = typeof key === 'string' ? key.split('?')[0] : key;
+        return Object.hasOwn(target, clean) ? target[clean] : Reflect.get(target, key, receiver);
+      },
+    });
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
     window.EJS_forceLegacyCores = false;
@@ -381,8 +397,16 @@
     window.EJS_onGameStart = () => {
       console.log('Old Style Gaming SNES: game started');
       statusText = '';
+      const emulator = window.EJS_emulator;
+      const module = emulator?.gameManager?.Module;
+      if (window.OSGRetroAchievements?.attachSnesFrames(module, achievements, () => emulatorPaused || emulator.paused)) {
+        achievements?.started();
+      } else {
+        achievements?.stop('SNES achievement memory is unavailable. Refresh the room to load the latest runtime.');
+      }
     };
     window.EJS_onExit = () => {
+      achievements?.stop('SNES stopped. Load a game to resume achievements.');
       drawStatus('SNES stopped', fileName);
     };
   }
@@ -403,6 +427,7 @@
     }
 
     clearGameContainer();
+    achievements?.romLoaded(currentRom.bytes);
     const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
     gameUrl = URL.createObjectURL(gameBlob);
     configureEmulator(currentRom.fileName, gameUrl);
@@ -446,7 +471,8 @@
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extractzip.js',
       '/emulatorjs/data/compression/extract7z.js',
-      '/emulatorjs/data/cores/snes9x-wasm.data',
+      '/snes/snes9x-ra-wasm.data',
+      '/snes/snes9x-ra-legacy-wasm.data',
     ];
 
     for (const path of required) {
@@ -494,7 +520,7 @@
   }
 
   window.addEventListener('message', (event) => {
-    if (event.origin !== window.location.origin) return;
+    if (event.origin !== window.location.origin || event.source !== window.parent) return;
 
     const message = event.data || {};
     if (message.type === 'snes_start') {
@@ -508,6 +534,7 @@
         bytes: new Uint8Array(message.bytes || []),
       };
       if (loaderScript || window.EJS_emulator) {
+        achievements?.stop('Changing SNES game…');
         saveRomForCleanReload(nextRom).then((saved) => {
           if (saved) window.location.reload();
           else drawStatus('Could not change SNES game', 'Browser cache storage is unavailable');
@@ -520,7 +547,11 @@
     }
 
     if (message.type === 'snes_reset') {
-      loadCurrentRom();
+      if (window.EJS_emulator?.started) {
+        achievements?.reset();
+        window.EJS_emulator.gameManager.restart();
+        setMask(1, 0); setMask(2, 0);
+      } else loadCurrentRom();
       return;
     }
 

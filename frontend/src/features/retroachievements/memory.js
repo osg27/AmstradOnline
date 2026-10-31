@@ -45,3 +45,22 @@ export function readCpcMemory(cpc, address, length) {
   const available = Math.min(length, size - address);
   return Uint8Array.from(ram.slice(address, address + available));
 }
+
+// SNES: 128 KB WRAM, followed by the cartridge's exposed SRAM/BW-RAM.
+// Both are linear native byte arrays. SA-1 I-RAM is not exposed by this build.
+export function readSnesMemory(core, address, length) {
+  if (!core?.HEAPU8 || !core._ra_memory_data || !core._ra_memory_size
+    || !Number.isInteger(address) || !Number.isInteger(length)
+    || address < 0 || length < 1 || address + length > 0xa0000) return null;
+  const ram = core._ra_memory_data(2), ramSize = core._ra_memory_size(2);
+  if (!ram || ramSize !== 0x20000 || ram + ramSize > core.HEAPU8.length) return null;
+  const save = core._ra_memory_data(0), saveSize = core._ra_memory_size(0);
+  const result = new Uint8Array(length);
+  for (let i = 0; i < length; i++) {
+    const at = address + i;
+    if (at < 0x20000) result[i] = core.HEAPU8[ram + at];
+    else if (save > 0 && saveSize > 0 && at - 0x20000 < saveSize && save + saveSize <= core.HEAPU8.length) result[i] = core.HEAPU8[save + at - 0x20000];
+    else return i ? result.subarray(0, i) : null;
+  }
+  return result;
+}

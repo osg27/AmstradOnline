@@ -6,15 +6,17 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createHash } = require('node:crypto');
 
-for (const system of ['megadrive', 'mastersystem', 'cpc']) test(`official rc_client evaluates ${system} memory and submits softcore only`, async () => {
-  const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37 }[system];
+for (const system of ['megadrive', 'mastersystem', 'cpc', 'snes']) test(`official rc_client evaluates ${system} memory and submits softcore only`, async () => {
+  const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37, snes: 3 }[system];
   const directory = path.resolve(__dirname, '../public/retroachievements');
   const context = vm.createContext({ module: { exports: {} }, exports: {}, require, __dirname: directory,
     __filename: path.join(directory, 'rc-client.js'), process, console, TextDecoder, TextEncoder,
     setTimeout, clearTimeout, performance });
   vm.runInContext(fs.readFileSync(path.join(directory, 'rc-client.js'), 'utf8'), context);
-  const heap = new Uint8Array(0x21000);
-  const core = { HEAPU8: heap, _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => 0x11000 };
+  const heap = new Uint8Array(0x51000);
+  const core = { HEAPU8: heap, _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => 0x11000,
+    _ra_memory_data: id => id === 2 ? 0x1000 : 0x21000,
+    _ra_memory_size: id => id === 2 ? 0x20000 : 0x2000 };
   const ram = heap.subarray(0x1000);
   const cpc = { pv: { aM: ram, T: [0x10000, 0x14000, 0x18000, 0x1c000] }, qG: 2, oU: { p: false } };
   // Exercise the real JS bridge too. Reversing RAM byte order must fail this test.
@@ -32,7 +34,7 @@ for (const system of ['megadrive', 'mastersystem', 'cpc']) test(`official rc_cli
   }
   client = await context.module.exports({
     wasmBinary: fs.readFileSync(path.join(directory, 'rc-client.wasm')),
-    readMemory: (address, length) => system === 'cpc' ? context.readCpcMemory(cpc, address, length) : system === 'mastersystem' ? context.readMasterSystemMemory(core, address, length) : context.readMegaDriveMemory(core, address, length),
+    readMemory: (address, length) => system === 'snes' ? context.readSnesMemory(core, address, length) : system === 'cpc' ? context.readCpcMemory(cpc, address, length) : system === 'mastersystem' ? context.readMasterSystemMemory(core, address, length) : context.readMegaDriveMemory(core, address, length),
     onSnapshot: (value) => { snapshot = value; },
     onEvent: (event) => events.push(event), print: () => {}, printErr: () => {},
     serverCall: (url, body, callback, userdata) => {
@@ -62,7 +64,7 @@ for (const system of ['megadrive', 'mastersystem', 'cpc']) test(`official rc_cli
   client.cwrap('ra_login', null, ['string', 'string'])('FixtureUser', 'fixture-password');
   await settle();
   assert.equal(events.find((event) => event.kind === 'login').result, 0);
-  const rom = Buffer.alloc(1024, 0x42);
+  const rom = Buffer.alloc(system === 'snes' ? 0x2000 : 1024, 0x42);
   const pointer = client._malloc(rom.length); client.HEAPU8.set(rom, pointer);
   assert.equal(client.UTF8ToString(client._ra_hash(pointer, rom.length)), createHash('md5').update(rom).digest('hex'));
   assert.equal(client._ra_load_system(pointer, rom.length, consoleId), 1); client._free(pointer);
@@ -89,9 +91,17 @@ for (const system of ['megadrive', 'mastersystem', 'cpc']) test(`official rc_cli
   assert.equal(requests.at(-1).get('r'), 'login2');
   assert.equal(requests.at(-1).get('t'), 'fixture-token');
   assert.equal(requests.at(-1).has('p'), false);
+  if (system === 'snes') {
+    const headered = Buffer.concat([Buffer.alloc(512, 0xaa), rom]);
+    const memory = client._malloc(headered.length); client.HEAPU8.set(headered, memory);
+    assert.equal(client._ra_load_system(memory, headered.length, consoleId), 1); client._free(memory);
+    await settle(); await settle();
+    const matching = requests.filter(params => params.get('r') === 'achievementsets').at(-1);
+    assert.equal(matching.get('m'), createHash('md5').update(rom).digest('hex'));
+  }
   // A stale emulator without RAM access must report unavailable achievements,
   // rather than appearing to track successfully just because the ROM matched.
-  core._ra_get_work_ram = () => 0; cpc.pv.aM = null;
+  core._ra_get_work_ram = () => 0; core._ra_memory_data = () => 0; cpc.pv.aM = null;
   const unavailableRom = client._malloc(rom.length); client.HEAPU8.set(rom, unavailableRom);
   client._ra_load_system(unavailableRom, rom.length, consoleId); client._free(unavailableRom);
   await settle(); await settle(); client._ra_frame(); client._ra_snapshot();

@@ -1,9 +1,51 @@
 import { describe, expect, it } from 'vitest';
-import { readMegaDriveMemory, readMasterSystemMemory, readCpcMemory } from './memory';
+import { readMegaDriveMemory, readMasterSystemMemory, readCpcMemory, readSnesMemory } from './memory';
+import { attachSnesFrames } from './snesFrameBridge';
 
 function core(save = 0x11000) {
   return { HEAPU8: new Uint8Array(0x21000), _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => save };
 }
+
+describe('SNES achievement memory', () => {
+  function snes(saveSize = 0x2000) {
+    return { HEAPU8: new Uint8Array(0x51000),
+      _ra_memory_data: id => id === 2 ? 0x1000 : id === 0 ? 0x21000 : 0,
+      _ra_memory_size: id => id === 2 ? 0x20000 : id === 0 ? saveSize : 0 };
+  }
+  it('reads little-endian WRAM and cartridge SRAM across the boundary', () => {
+    const module = snes();
+    module.HEAPU8.set([0x34, 0x12], 0x1000);
+    module.HEAPU8[0x20fff] = 7;
+    module.HEAPU8.set([8, 9], 0x21000);
+    expect([...readSnesMemory(module, 0, 2)]).toEqual([0x34, 0x12]);
+    expect([...readSnesMemory(module, 0x1ffff, 3)]).toEqual([7, 8, 9]);
+    expect([...readSnesMemory(module, 0x20000, 2)]).toEqual([8, 9]);
+  });
+  it('fails closed for absent SRAM, extra SA-1 I-RAM and invalid heap bounds', () => {
+    expect(readSnesMemory(snes(0), 0x20000, 1)).toBeNull();
+    expect(readSnesMemory(snes(0), 0x1ffff, 2)).toHaveLength(1);
+    expect(readSnesMemory(snes(), 0x22000, 1)).toBeNull();
+    expect(readSnesMemory(snes(), 0x21fff, 2)).toHaveLength(1);
+    for (const [address, length] of [[-1, 1], [0xa0000, 1], [0, 0], [0.5, 1], [0, 1.5]]) {
+      expect(readSnesMemory(snes(), address, length)).toBeNull();
+    }
+    const invalid = snes(); invalid._ra_memory_data = () => 0x50000;
+    expect(readSnesMemory(invalid, 0, 1)).toBeNull();
+    expect(readSnesMemory({}, 0, 1)).toBeNull();
+  });
+  it('checks only advancing native frames and does not replay paused frames', () => {
+    let counter = 0, checks = 0, paused = false;
+    const module = { ...snes(), _get_current_frame_count: () => counter };
+    expect(attachSnesFrames(module, { frame: () => checks++ }, () => paused)).toBe(true);
+    module.osgRAFrame(); expect(checks).toBe(0);
+    counter++; module.osgRAFrame(); expect(checks).toBe(1);
+    module.osgRAFrame(); expect(checks).toBe(1);
+    paused = true; counter++; module.osgRAFrame(); expect(checks).toBe(1);
+    paused = false; module.osgRAFrame(); expect(checks).toBe(1);
+    counter++; module.osgRAFrame(); expect(checks).toBe(2);
+    expect(attachSnesFrames({}, null, () => false)).toBe(false);
+  });
+});
 
 describe('Mega Drive achievement memory', () => {
   it('preserves the raw Genesis Plus GX layout expected by existing achievement sets', () => {

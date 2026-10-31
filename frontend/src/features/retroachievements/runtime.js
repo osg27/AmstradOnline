@@ -1,9 +1,10 @@
-import { readMegaDriveMemory, readMasterSystemMemory, readCpcMemory } from './memory';
+import { readMegaDriveMemory, readMasterSystemMemory, readCpcMemory, readSnesMemory } from './memory';
+import { attachSnesFrames } from './snesFrameBridge';
 
 export function createRetroAchievements({ getCore, system = 'megadrive' }) {
-  if (!['megadrive', 'mastersystem', 'cpc'].includes(system)) throw new Error('Unsupported achievement system');
-  const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37 }[system];
-  const readMemory = { megadrive: readMegaDriveMemory, mastersystem: readMasterSystemMemory, cpc: readCpcMemory }[system];
+  if (!['megadrive', 'mastersystem', 'cpc', 'snes'].includes(system)) throw new Error('Unsupported achievement system');
+  const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37, snes: 3 }[system];
+  const readMemory = { megadrive: readMegaDriveMemory, mastersystem: readMasterSystemMemory, cpc: readCpcMemory, snes: readSnesMemory }[system];
   let client;
   let loading;
   let enabled = false;
@@ -26,7 +27,7 @@ export function createRetroAchievements({ getCore, system = 'megadrive' }) {
 
   async function ensureClient() {
     if (!loading) loading = window.RACreateClient({
-      locateFile: (file) => `/retroachievements/${file}?v=2026-10-30-4`,
+      locateFile: (file) => `/retroachievements/${file}?v=2026-10-31-snes-1`,
       readMemory: (address, length) => readMemory(getCore(), address, length),
       serverCall: (url, postData, callback, userdata) => {
         if (!enabled) { reply(callback, userdata, -1, '{}'); return; }
@@ -62,7 +63,7 @@ export function createRetroAchievements({ getCore, system = 'megadrive' }) {
 
   function loadGame() {
     if (!enabled || !loggedIn || !running || !rom || !client) return;
-    if (!(system === 'cpc' ? getCore()?.pv?.aM : getCore()?._ra_get_work_ram)) {
+    if (!(system === 'cpc' ? getCore()?.pv?.aM : system === 'snes' ? getCore()?._ra_memory_data : getCore()?._ra_get_work_ram)) {
       notify({ kind: 'error', message: 'The game is detected, but this emulator copy cannot read achievement memory. Refresh the page to load the latest emulator.' });
       return;
     }
@@ -135,4 +136,4 @@ export function createRetroAchievements({ getCore, system = 'megadrive' }) {
   };
 }
 
-window.OSGRetroAchievements = { create: createRetroAchievements };
+window.OSGRetroAchievements = { create: createRetroAchievements, attachSnesFrames };
