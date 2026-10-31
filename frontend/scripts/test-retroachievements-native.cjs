@@ -6,8 +6,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createHash } = require('node:crypto');
 
-for (const system of ['megadrive', 'mastersystem', 'cpc', 'snes']) test(`official rc_client evaluates ${system} memory and submits softcore only`, async () => {
-  const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37, snes: 3 }[system];
+for (const system of ['megadrive', 'mastersystem', 'cpc', 'snes', 'nes']) test(`official rc_client evaluates ${system} memory and submits softcore only`, async () => {
+  const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37, snes: 3, nes: 7 }[system];
   const directory = path.resolve(__dirname, '../public/retroachievements');
   const context = vm.createContext({ module: { exports: {} }, exports: {}, require, __dirname: directory,
     __filename: path.join(directory, 'rc-client.js'), process, console, TextDecoder, TextEncoder,
@@ -16,7 +16,8 @@ for (const system of ['megadrive', 'mastersystem', 'cpc', 'snes']) test(`officia
   const heap = new Uint8Array(0x51000);
   const core = { HEAPU8: heap, _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => 0x11000,
     _ra_memory_data: id => id === 2 ? 0x1000 : 0x21000,
-    _ra_memory_size: id => id === 2 ? 0x20000 : 0x2000 };
+    _ra_memory_size: id => id === 2 ? system === 'nes' ? 0x800 : 0x20000 : 0x2000,
+    _ra_nes_pages: () => 0x41000, _ra_nes_unmapped: () => 0x43000 };
   const ram = heap.subarray(0x1000);
   const cpc = { pv: { aM: ram, T: [0x10000, 0x14000, 0x18000, 0x1c000] }, qG: 2, oU: { p: false } };
   // Exercise the real JS bridge too. Reversing RAM byte order must fail this test.
@@ -34,7 +35,7 @@ for (const system of ['megadrive', 'mastersystem', 'cpc', 'snes']) test(`officia
   }
   client = await context.module.exports({
     wasmBinary: fs.readFileSync(path.join(directory, 'rc-client.wasm')),
-    readMemory: (address, length) => system === 'snes' ? context.readSnesMemory(core, address, length) : system === 'cpc' ? context.readCpcMemory(cpc, address, length) : system === 'mastersystem' ? context.readMasterSystemMemory(core, address, length) : context.readMegaDriveMemory(core, address, length),
+    readMemory: (address, length) => system === 'nes' ? context.readNesMemory(core, address, length) : system === 'snes' ? context.readSnesMemory(core, address, length) : system === 'cpc' ? context.readCpcMemory(cpc, address, length) : system === 'mastersystem' ? context.readMasterSystemMemory(core, address, length) : context.readMegaDriveMemory(core, address, length),
     onSnapshot: (value) => { snapshot = value; },
     onEvent: (event) => events.push(event), print: () => {}, printErr: () => {},
     serverCall: (url, body, callback, userdata) => {
@@ -64,12 +65,19 @@ for (const system of ['megadrive', 'mastersystem', 'cpc', 'snes']) test(`officia
   client.cwrap('ra_login', null, ['string', 'string'])('FixtureUser', 'fixture-password');
   await settle();
   assert.equal(events.find((event) => event.kind === 'login').result, 0);
-  const rom = Buffer.alloc(system === 'snes' ? 0x2000 : 1024, 0x42);
+  let rom = Buffer.alloc(system === 'snes' ? 0x2000 : 1024, 0x42);
+  if (system === 'nes') {
+    const header = Buffer.alloc(16); header.set([0x4e, 0x45, 0x53, 0x1a, 1, 1]);
+    rom = Buffer.concat([header, Buffer.alloc(0x4000, 0x42), Buffer.alloc(0x2000, 0x24)]);
+  }
   const pointer = client._malloc(rom.length); client.HEAPU8.set(rom, pointer);
   assert.equal(client.UTF8ToString(client._ra_hash(pointer, rom.length)), createHash('md5').update(rom).digest('hex'));
   assert.equal(client._ra_load_system(pointer, rom.length, consoleId), 1); client._free(pointer);
   await settle(); await settle();
   const game = events.find((event) => event.kind === 'game');
+  if (system === 'nes') {
+    assert.equal(requests.find(params => params.get('r') === 'achievementsets').get('m'), createHash('md5').update(rom.subarray(16)).digest('hex'));
+  }
   assert.equal(game?.result, 0); assert.equal(game?.points, 1);
   client._ra_frame();
   client._ra_snapshot();

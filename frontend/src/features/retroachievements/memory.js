@@ -64,3 +64,31 @@ export function readSnesMemory(core, address, length) {
   }
   return result;
 }
+
+// NES CPU address space. Mirror the 2 KB RAM, then follow FCEUmm's live Page[]
+// pointers for cartridge RAM/ROM. Never invoke hardware read handlers.
+export function readNesMemory(core, address, length) {
+  const heap = core?.HEAPU8;
+  if (!heap || !core._ra_memory_data || !core._ra_memory_size || !core._ra_nes_pages || !core._ra_nes_unmapped
+    || !Number.isInteger(address) || !Number.isInteger(length)
+    || address < 0 || length < 1 || address + length > 0x10000) return null;
+  const ram = core._ra_memory_data(2), size = core._ra_memory_size(2);
+  const pages = core._ra_nes_pages(), unmapped = core._ra_nes_unmapped();
+  if (!ram || size !== 0x800 || ram + size > heap.length || pages <= 0 || pages + 128 > heap.length
+    || unmapped <= 0 || unmapped + 8192 > heap.length) return null;
+  const view = new DataView(heap.buffer, heap.byteOffset, heap.byteLength);
+  const result = new Uint8Array(length);
+  for (let i = 0; i < length; i++) {
+    const at = address + i;
+    if (at < 0x2000) { result[i] = heap[ram + (at & 0x7ff)]; continue; }
+    if (at >= 0x4020) {
+      const base = view.getUint32(pages + (at >>> 11) * 4, true);
+      const pointer = (base + at) >>> 0;
+      if (base && pointer < heap.length && !(pointer >= unmapped && pointer < unmapped + 8192)) {
+        result[i] = heap[pointer]; continue;
+      }
+    }
+    return i ? result.subarray(0, i) : null;
+  }
+  return result;
+}

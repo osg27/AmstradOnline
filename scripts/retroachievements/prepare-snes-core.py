@@ -46,7 +46,7 @@ def sections(data):
         offset = start + length
 
 
-def add_exports(data, imports):
+def add_exports(data, imports, getters=(2192, 2193)):
     out = bytearray(data[:8])
     for kind, body in sections(data):
         if kind == 7:
@@ -54,7 +54,7 @@ def add_exports(data, imports):
             extra = bytearray()
             # Binaryen's defined-function labels 2192/2193: native libretro
             # memory size/data. Absolute WASM indices also count imported funcs.
-            for name, index in [('osg_ra_memory_size', imports + 2192), ('osg_ra_memory_data', imports + 2193)]:
+            for name, index in [('osg_ra_memory_size', imports + getters[0]), ('osg_ra_memory_data', imports + getters[1])]:
                 encoded = name.encode()
                 extra += leb(len(encoded)) + encoded + b'\0' + leb(index)
             body = leb(count + 2) + body[offset:] + extra
@@ -62,6 +62,15 @@ def add_exports(data, imports):
     # Every instruction, global, import and data segment must remain identical.
     assert [(k, b) for k, b in sections(data) if k != 7] == [(k, b) for k, b in sections(out) if k != 7]
     return out
+
+
+def patch_js(text, metadata=''):
+    pattern = r'var _get_current_frame_count=Module\["_get_current_frame_count"\]=wasmExports\["[^"]+"\];'
+    assert len(re.findall(pattern, text)) == 1
+    text = re.sub(pattern, lambda m: m.group() + 'Module["_ra_memory_data"]=wasmExports["osg_ra_memory_data"];Module["_ra_memory_size"]=wasmExports["osg_ra_memory_size"];' + metadata, text)
+    boundary = 'callUserCallback(func);for(var post of MainLoop.postMainLoop)'
+    assert text.count(boundary) == 1
+    return text.replace(boundary, 'callUserCallback(func);Module["osgRAFrame"]?.();for(var post of MainLoop.postMainLoop)')
 
 
 def prepare(sevenzip):
@@ -74,14 +83,7 @@ def prepare(sevenzip):
         assert hashlib.sha256(wasm.read_bytes()).hexdigest() == wasm_hash, 'Unexpected SNES native build'
         assert hashlib.sha256(js.read_bytes()).hexdigest() == js_hash, 'Unexpected SNES JS build'
         wasm.write_bytes(add_exports(wasm.read_bytes(), imports))
-        text = js.read_text(encoding='utf-8')
-        pattern = r'var _get_current_frame_count=Module\["_get_current_frame_count"\]=wasmExports\["[^"]+"\];'
-        assert len(re.findall(pattern, text)) == 1
-        text = re.sub(pattern, lambda m: m.group() + 'Module["_ra_memory_data"]=wasmExports["osg_ra_memory_data"];Module["_ra_memory_size"]=wasmExports["osg_ra_memory_size"];', text)
-        boundary = 'callUserCallback(func);for(var post of MainLoop.postMainLoop)'
-        assert text.count(boundary) == 1
-        text = text.replace(boundary, 'callUserCallback(func);Module["osgRAFrame"]?.();for(var post of MainLoop.postMainLoop)')
-        js.write_text(text, encoding='utf-8')
+        js.write_text(patch_js(js.read_text(encoding='utf-8')), encoding='utf-8')
         output = ROOT / f'frontend/public/snes/snes9x-ra{variant}-wasm.data'
         if output.exists():
             output.unlink()  # Fixed task-owned artifact; never edits the source core.

@@ -11,3 +11,5 @@ export function attachSnesFrames(module, achievements, isPaused) {
   };
   return true;
 }
+
+export const attachEmulatorJsFrames = attachSnesFrames;

@@ -1,10 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { readMegaDriveMemory, readMasterSystemMemory, readCpcMemory, readSnesMemory } from './memory';
+import { readMegaDriveMemory, readMasterSystemMemory, readCpcMemory, readSnesMemory, readNesMemory } from './memory';
 import { attachSnesFrames } from './snesFrameBridge';
 
 function core(save = 0x11000) {
   return { HEAPU8: new Uint8Array(0x21000), _ra_get_work_ram: () => 0x1000, _ra_get_save_ram: () => save };
 }
+
+describe('NES achievement memory', () => {
+  function nes() {
+    const module = { HEAPU8: new Uint8Array(0x50000), _ra_memory_data: () => 0x1000,
+      _ra_memory_size: () => 0x800, _ra_nes_pages: () => 0x4000, _ra_nes_unmapped: () => 0x5000 };
+    const view = new DataView(module.HEAPU8.buffer);
+    for (let page = 0; page < 32; page++) view.setUint32(0x4000 + page * 4, (0x5000 - page * 0x800) >>> 0, true);
+    return { module, map: (address, pointer) => view.setUint32(0x4000 + (address >>> 11) * 4, (pointer - address) >>> 0, true) };
+  }
+  it('maps all four internal RAM mirrors and wraps at each 2 KB boundary', () => {
+    const { module } = nes();
+    module.HEAPU8[0x1000] = 3; module.HEAPU8[0x17ff] = 7;
+    for (const address of [0, 0x800, 0x1000, 0x1800]) expect([...readNesMemory(module, address, 1)]).toEqual([3]);
+    expect([...readNesMemory(module, 0x7ff, 2)]).toEqual([7, 3]);
+  });
+  it('follows current cartridge RAM and ROM banks instead of a stale SRAM copy', () => {
+    const { module, map } = nes();
+    map(0x6000, 0x10000); map(0x7800, 0x11800); map(0x8000, 0x20000);
+    module.HEAPU8[0x10000] = 1; module.HEAPU8[0x11fff] = 2;
+    module.HEAPU8[0x20000] = 9; module.HEAPU8[0x30000] = 10;
+    expect([...readNesMemory(module, 0x6000, 1)]).toEqual([1]);
+    expect([...readNesMemory(module, 0x7fff, 2)]).toEqual([2, 9]);
+    map(0x8000, 0x30000);
+    expect([...readNesMemory(module, 0x8000, 1)]).toEqual([10]);
+  });
+  it('rejects hardware registers, unmapped sentinel pages and invalid pointers', () => {
+    const { module, map } = nes();
+    for (const [address, length] of [[0x2000, 1], [0x4016, 1], [0x4020, 1], [0x6000, 1], [-1, 1], [0xffff, 2], [0, 0], [0.5, 1]]) {
+      expect(readNesMemory(module, address, length)).toBeNull();
+    }
+    expect(readNesMemory(module, 0x1fff, 2)).toHaveLength(1);
+    map(0x6000, 0x60000); expect(readNesMemory(module, 0x6000, 1)).toBeNull();
+    expect(readNesMemory({}, 0, 1)).toBeNull();
+  });
+});
 
 describe('SNES achievement memory', () => {
   function snes(saveSize = 0x2000) {

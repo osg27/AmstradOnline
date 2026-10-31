@@ -49,6 +49,32 @@
     }
     return result;
   }
+  function readNesMemory(core, address, length) {
+    const heap = core?.HEAPU8;
+    if (!heap || !core._ra_memory_data || !core._ra_memory_size || !core._ra_nes_pages || !core._ra_nes_unmapped || !Number.isInteger(address) || !Number.isInteger(length) || address < 0 || length < 1 || address + length > 65536) return null;
+    const ram = core._ra_memory_data(2), size = core._ra_memory_size(2);
+    const pages = core._ra_nes_pages(), unmapped = core._ra_nes_unmapped();
+    if (!ram || size !== 2048 || ram + size > heap.length || pages <= 0 || pages + 128 > heap.length || unmapped <= 0 || unmapped + 8192 > heap.length) return null;
+    const view = new DataView(heap.buffer, heap.byteOffset, heap.byteLength);
+    const result = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+      const at = address + i;
+      if (at < 8192) {
+        result[i] = heap[ram + (at & 2047)];
+        continue;
+      }
+      if (at >= 16416) {
+        const base = view.getUint32(pages + (at >>> 11) * 4, true);
+        const pointer = base + at >>> 0;
+        if (base && pointer < heap.length && !(pointer >= unmapped && pointer < unmapped + 8192)) {
+          result[i] = heap[pointer];
+          continue;
+        }
+      }
+      return i ? result.subarray(0, i) : null;
+    }
+    return result;
+  }
 
   // src/features/retroachievements/snesFrameBridge.js
   function attachSnesFrames(module, achievements, isPaused) {
@@ -62,12 +88,13 @@
     };
     return true;
   }
+  var attachEmulatorJsFrames = attachSnesFrames;
 
   // src/features/retroachievements/runtime.js
   function createRetroAchievements({ getCore, system = "megadrive" }) {
-    if (!["megadrive", "mastersystem", "cpc", "snes"].includes(system)) throw new Error("Unsupported achievement system");
-    const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37, snes: 3 }[system];
-    const readMemory = { megadrive: readMegaDriveMemory, mastersystem: readMasterSystemMemory, cpc: readCpcMemory, snes: readSnesMemory }[system];
+    if (!["megadrive", "mastersystem", "cpc", "snes", "nes"].includes(system)) throw new Error("Unsupported achievement system");
+    const consoleId = { megadrive: 1, mastersystem: 11, cpc: 37, snes: 3, nes: 7 }[system];
+    const readMemory = { megadrive: readMegaDriveMemory, mastersystem: readMasterSystemMemory, cpc: readCpcMemory, snes: readSnesMemory, nes: readNesMemory }[system];
     let client;
     let loading;
     let enabled = false;
@@ -91,7 +118,7 @@
     }
     async function ensureClient() {
       if (!loading) loading = window.RACreateClient({
-        locateFile: (file) => `/retroachievements/${file}?v=2026-10-31-snes-1`,
+        locateFile: (file) => `/retroachievements/${file}?v=2026-10-31-nes-1`,
         readMemory: (address, length) => readMemory(getCore(), address, length),
         serverCall: (url, postData, callback, userdata) => {
           if (!enabled) {
@@ -134,7 +161,7 @@
     }
     function loadGame() {
       if (!enabled || !loggedIn || !running || !rom || !client) return;
-      if (!(system === "cpc" ? getCore()?.pv?.aM : system === "snes" ? getCore()?._ra_memory_data : getCore()?._ra_get_work_ram)) {
+      if (!(system === "cpc" ? getCore()?.pv?.aM : ["snes", "nes"].includes(system) ? getCore()?._ra_memory_data : getCore()?._ra_get_work_ram)) {
         notify({ kind: "error", message: "The game is detected, but this emulator copy cannot read achievement memory. Refresh the page to load the latest emulator." });
         return;
       }
@@ -226,5 +253,5 @@
       }
     };
   }
-  window.OSGRetroAchievements = { create: createRetroAchievements, attachSnesFrames };
+  window.OSGRetroAchievements = { create: createRetroAchievements, attachSnesFrames, attachEmulatorJsFrames };
 })();

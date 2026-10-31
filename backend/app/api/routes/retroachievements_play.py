@@ -47,8 +47,8 @@ def validate_rpc(data):
 
 def require_room(room_code, user, db):
     room = db.query(Room).filter(Room.room_code == room_code.upper()).first()
-    if not room or room.owner_user_id != user.id or room.system not in {'megadrive', 'mastersystem', 'cpc', 'snes'} or room.hosting_mode != 'solo':
-        raise HTTPException(403, 'Achievement earning is available only to the host in solo Mega Drive, Master System, Amstrad CPC and SNES rooms.')
+    if not room or room.owner_user_id != user.id or room.system not in {'megadrive', 'mastersystem', 'cpc', 'snes', 'nes'} or room.hosting_mode != 'solo':
+        raise HTTPException(403, 'Achievement earning is available only to the host in solo Mega Drive, Master System, Amstrad CPC, SNES and NES rooms.')
     require_open_solo_room(db, room)
 
 

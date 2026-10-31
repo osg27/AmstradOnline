@@ -29,7 +29,7 @@ class RetroAchievementsPlayTests(unittest.TestCase):
         self.assertEqual(ra.validate_rpc('r=awardachievement&h=0'), 'awardachievement')
 
     def test_only_supported_solo_owner_can_forward_requests(self):
-        for changes in [{'owner_user_id': 18}, {'system': 'x68000'}, {'system': 'arcade'}, {'system': 'nes'}, {'system': 'pcengine'}, {'system': 'cpc_party'}, {'hosting_mode': 'multiplayer'}]:
+        for changes in [{'owner_user_id': 18}, {'system': 'x68000'}, {'system': 'arcade'}, {'system': 'pcengine'}, {'system': 'cpc_party'}, {'hosting_mode': 'multiplayer'}]:
             original = vars(self.room).copy()
             vars(self.room).update(changes)
             with patch.object(transport, 'build_opener') as upstream, self.assertRaises(HTTPException) as error:
@@ -92,6 +92,16 @@ class RetroAchievementsPlayTests(unittest.TestCase):
                 result = ra.client_request(self.payload(data), self.user, self.db)
             self.assertEqual(result.status_code, 200)
             upstream.assert_called_once()
+        self.room.hosting_mode = 'multiplayer'
+        with patch.object(ra, 'forward_rpc') as upstream, self.assertRaises(HTTPException):
+            ra.client_request(self.payload(), self.user, self.db)
+        upstream.assert_not_called()
+
+    def test_nes_solo_owner_can_use_the_transport_and_multiplayer_is_rejected(self):
+        self.room.system = 'nes'
+        with patch.object(ra, 'forward_rpc', return_value={'status': 200, 'body': '{"Success":true}'}) as upstream:
+            result = ra.client_request(self.payload('r=awardachievement&a=1&h=0'), self.user, self.db)
+        self.assertEqual(result.status_code, 200); upstream.assert_called_once()
         self.room.hosting_mode = 'multiplayer'
         with patch.object(ra, 'forward_rpc') as upstream, self.assertRaises(HTTPException):
             ra.client_request(self.payload(), self.user, self.db)
