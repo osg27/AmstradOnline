@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
-import BrandMark from '../components/BrandMark';
+import AppShell from '../components/AppShell';
 
 const SYSTEM_OPTIONS = [
   ['general', 'General'],
@@ -160,14 +159,9 @@ export default function FeedbackPage() {
   });
 
   return (
+    <AppShell className="osg-legacy-page">
     <div className="page feedback-page">
       <div className="card feedback-card">
-        <div className="lobby-header">
-          <BrandMark />
-          <div className="account-strip">
-            <Link className="button-like secondary" to="/lobby">Lobby</Link>
-          </div>
-        </div>
 
         <div className="lobby-intro">
           <h1>Tester feedback</h1>
@@ -345,5 +339,6 @@ export default function FeedbackPage() {
         </div>
       </div>
     </div>
+    </AppShell>
   );
 }

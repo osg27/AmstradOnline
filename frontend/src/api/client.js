@@ -46,19 +46,27 @@ function formatApiErrorDetail(detail) {
   return JSON.stringify(detail);
 }
 
-function storeAuthSession(data) {
+export function setEmailVerified(verified) {
+  const next = verified ? 'true' : 'false';
+  if (localStorage.getItem('emailVerified') === next) return;
+  localStorage.setItem('emailVerified', next);
+  window.dispatchEvent(new CustomEvent('osg-email-verified-changed', { detail: verified }));
+}
+
+export function storeAuthSession(data) {
   if (!data?.access_token) return;
   localStorage.setItem('token', data.access_token);
   localStorage.setItem('username', data.username);
   localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
   localStorage.setItem('isSuperAdmin', data.is_super_admin ? 'true' : 'false');
   localStorage.setItem('isTester', data.is_tester ? 'true' : 'false');
+  if (typeof data.email_verified === 'boolean') setEmailVerified(data.email_verified);
   localStorage.removeItem('isVip');
   localStorage.removeItem('isXyphoe');
 }
 
 export function clearAuthSession() {
-  ['token', 'username', 'isAdmin', 'isSuperAdmin', 'isTester', 'isVip', 'isXyphoe', 'playerAvatar']
+  ['token', 'username', 'isAdmin', 'isSuperAdmin', 'isTester', 'emailVerified', 'isVip', 'isXyphoe', 'playerAvatar']
     .forEach((key) => localStorage.removeItem(key));
 }
 

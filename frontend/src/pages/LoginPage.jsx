@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { apiFetch } from '../api/client';
+import { apiFetch, storeAuthSession } from '../api/client';
 import BrandMark from '../components/BrandMark';
 
 export default function LoginPage() {
@@ -20,13 +20,7 @@ export default function LoginPage() {
         body: JSON.stringify(form),
       });
 
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('username', data.username);
-      localStorage.setItem('isAdmin', data.is_admin ? 'true' : 'false');
-      localStorage.setItem('isSuperAdmin', data.is_super_admin ? 'true' : 'false');
-      localStorage.setItem('isTester', data.is_tester ? 'true' : 'false');
-      localStorage.removeItem('isVip');
-      localStorage.removeItem('isXyphoe');
+      storeAuthSession(data);
       navigate('/lobby');
     } catch (err) {
       setError(err.message);
@@ -59,8 +53,10 @@ export default function LoginPage() {
           <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
         </form>
         <p className="auth-switch"><Link to="/forgot-password">Forgot your password?</Link></p>
-        <p className="auth-switch"><Link to="/resend-verification">Resend verification email</Link></p>
-        <p className="auth-switch">Need an account? <Link to="/register">Create one</Link></p>
+        <div className="auth-alt">
+          <span>New here?</span>
+          <Link className="button-like secondary" to="/register">Create account</Link>
+        </div>
       </div>
     </div>
   );

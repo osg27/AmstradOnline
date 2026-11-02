@@ -1,12 +1,18 @@
 import { SUPPORTER_UI_ENABLED } from '../config/supporterUi';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import BrandMark from '../components/BrandMark';
+import AppShell from '../components/AppShell';
+import RecentArcadeScores from '../features/home/RecentArcadeScores';
 import SupporterLockModal from '../components/SupporterLockModal';
 import useEntitlement from '../hooks/useEntitlement';
 import { apiFetch } from '../api/client';
 import { getLocalLibraryGames, readLocalLibraryFile } from '../localLibraryDb';
 import { prepareTournamentMameFile } from '../vipMameCache';
+import '../features/home/home.css';
+import '../features/compete/compete.css';
+import {
+  Countdown, Empty, PastRow, Section, StatePill, TournamentCard, useBuckets, useRomArt,
+} from '../features/compete/CompeteParts';
 
 function formatDate(value) {
   return value ? new Date(value).toLocaleString() : '';
@@ -26,10 +32,6 @@ function remainingText(tournament) {
 
 function gameOptionLabel(game) {
   return `${game.display_name} — MAME Arcade [${game.rom_name}]`;
-}
-
-function tournamentMedal(rank) {
-  return ({ 1: '🥇', 2: '🥈', 3: '🥉' })[rank] || '';
 }
 
 function tournamentRomKey(value) {
@@ -69,6 +71,9 @@ export default function TournamentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [supporterLock, setSupporterLock] = useState('');
   const [, setClock] = useState(0);
+  const artFor = useRomArt();
+  const buckets = useBuckets(mine, publicTournaments);
+  const myUsername = localStorage.getItem('username') || '';
 
   const selectedGame = useMemo(
     () => games.find((game) => game.rom_name === romName),
@@ -122,7 +127,7 @@ export default function TournamentsPage() {
   }, [routeCode]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setClock((value) => value + 1), 30000);
+    const timer = window.setInterval(() => setClock((value) => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -306,59 +311,60 @@ export default function TournamentsPage() {
   }
 
   return (
-    <div className="page tournaments-page">
-      <header className="lobby-header">
-        <BrandMark />
-        <div className="header-actions">
-          <Link className="button-like secondary" to="/lobby">Lobby</Link>
-          <Link className="button-like secondary" to="/library">Library</Link>
+    <AppShell className="osg-legacy-page">
+    <div className="page tournaments-page cmp-page">
+
+      <header className="cmp-head">
+        <div>
+          <span className="osg-eyebrow">Compete</span>
+          <h1>Tournaments</h1>
+          <p>Play as often as you like. Your best verified score before the clock expires is the one that counts.</p>
         </div>
+        <div className="cmp-head-actions">
+          <form className="cmp-join" onSubmit={join}>
+            <label htmlFor="cmp-join-code" className="cmp-visually-hidden">Tournament code</label>
+            <input id="cmp-join-code" value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Join with a code" maxLength={12} autoComplete="off" />
+            <button type="submit" className="secondary" disabled={busy || !joinCode.trim()}>Join</button>
+          </form>
+          {SUPPORTER_UI_ENABLED || canCreateTournaments ? (<button type="button" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>
+            {canCreateTournaments ? 'Create tournament' : '🔒 Create tournament'}
+          </button>) : null}
+        </div>
+        {status ? <p className="status-message cmp-status" role="status">{status}</p> : null}
       </header>
 
-      <main className="tournament-layout">
-        <section className="panel tournament-hero">
-          <div className="tournament-hero-copy">
-            <p className="eyebrow">MAME COMPETITION</p>
-            <h1>Tournaments</h1>
-            <p>Play as often as you like. Your best verified score before the clock expires is the one that counts.</p>
-          </div>
-          <div className="tournament-hero-actions">
-            <form className="tournament-join-form" onSubmit={join}>
-              <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Enter tournament code" maxLength={12} />
-              <button type="submit" disabled={busy || !joinCode.trim()}>Join</button>
-            </form>
-            {SUPPORTER_UI_ENABLED || canCreateTournaments ? (<button type="button" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>
-              {canCreateTournaments ? 'Create tournament' : '🔒 Create tournament'}
-            </button>) : null}
-          </div>
-          {status ? <p className="status-message">{status}</p> : null}
-        </section>
-
+      <main className="cmp-main">
         {tournament ? (
-          <section className="panel tournament-card tournament-current">
-            <div className="tournament-title-row">
-              <div>
-                <span className={`tournament-state ${tournament.status}`}>{tournament.status}</span>
-                <h2>{tournament.name}</h2>
+          <section className={`cmp-detail${tournament.status === 'active' ? ' is-live' : ''}`} aria-labelledby="cmp-detail-title">
+            <div className="cmp-detail-top">
+              <div className="cmp-detail-title">
+                <StatePill status={tournament.status} />
+                <h2 id="cmp-detail-title">{tournament.name}</h2>
                 <p>{tournament.display_name} · {tournament.is_public ? 'Public' : 'Private'}</p>
               </div>
-              <div className="tournament-code"><small>CODE</small><strong>{tournament.code}</strong><button type="button" className="secondary" onClick={copyTournamentCode}>{codeCopied ? 'Copied' : 'Copy code'}</button></div>
+              <div className="tournament-code cmp-code"><small>CODE</small><strong>{tournament.code}</strong><button type="button" className="secondary" onClick={copyTournamentCode}>{codeCopied ? 'Copied' : 'Copy code'}</button></div>
             </div>
-            <div className="tournament-facts">
-              <span>Starts: {formatDate(tournament.starts_at)}</span>
-              <span>Ends: {formatDate(tournament.ends_at)}</span>
-              <span>{tournament.status === 'active' ? 'Time left' : 'Countdown'}: {remainingText(tournament)}</span>
-              <span>{tournament.entry_count} entrant{tournament.entry_count === 1 ? '' : 's'}</span>
+            {tournament.status !== 'completed' ? (
+              <Countdown
+                target={tournament.status === 'active' ? tournament.ends_at : tournament.starts_at}
+                label={tournament.status === 'active' ? 'Time left' : 'Starts in'}
+              />
+            ) : null}
+            <div className="cmp-facts">
+              <span>Starts <b>{formatDate(tournament.starts_at)}</b></span>
+              <span>Ends <b>{formatDate(tournament.ends_at)}</b></span>
+              <span>{tournament.status === 'active' ? 'Time left' : tournament.status === 'upcoming' ? 'Countdown' : 'Status'} <b>{remainingText(tournament)}</b></span>
+              <span><b>{tournament.entry_count}</b> entrant{tournament.entry_count === 1 ? '' : 's'}</span>
             </div>
             {!tournament.joined ? (
-              <button type="button" onClick={join} disabled={busy}>Enter tournament</button>
+              <button type="button" className="cmp-main-action" onClick={join} disabled={busy}>Enter tournament</button>
             ) : tournament.status === 'active' ? (
-              <button type="button" onClick={play} disabled={busy}>{busy ? `Preparing${progress ? ` ${progress.percent}%` : '…'}` : 'Play now'}</button>
+              <button type="button" className="cmp-main-action" onClick={play} disabled={busy}>{busy ? `Preparing${progress ? ` ${progress.percent}%` : '…'}` : 'Play now'}</button>
             ) : null}
 
             {tournament.joined ? (
-              <div className="tournament-scoreboard">
-                <div className="tournament-scoreboard-heading">
+              <div className="cmp-board-wrap">
+                <div className="cmp-board-head">
                   <h3>{tournament.status === 'completed' ? 'Final standings' : 'Live standings'}</h3>
                   <div className="tournament-manage-actions">
                     {tournament.can_delete ? <button className="secondary" type="button" disabled={busy || !leaderboard.length} onClick={resetStandings}>Reset standings</button> : null}
@@ -366,60 +372,59 @@ export default function TournamentsPage() {
                   </div>
                 </div>
                 {leaderboard.length ? (
-                  <ol>
+                  <ol className="osg-board cmp-board">
                     {leaderboard.map((entry) => (
-                      <li key={entry.username}>
-                        <strong>
-                          {tournamentMedal(entry.rank) ? (
-                            <span className="tournament-medal" role="img" aria-label={`${entry.rank === 1 ? 'Gold' : entry.rank === 2 ? 'Silver' : 'Bronze'} medal`}>
-                              {tournamentMedal(entry.rank)}
-                            </span>
-                          ) : `#${entry.rank}`}
-                          {' '}{entry.username}
-                        </strong>
-                        <span>{Number(entry.score).toLocaleString()}</span>
+                      <li key={entry.username} className={`${entry.rank <= 3 ? `top top-${entry.rank}` : ''}${entry.username === myUsername ? ' you' : ''}`}>
+                        <span className="rk" aria-label={`Rank ${entry.rank}${entry.rank === 1 ? ', gold' : entry.rank === 2 ? ', silver' : entry.rank === 3 ? ', bronze' : ''}`}>{entry.rank}</span>
+                        <span className="nm">{entry.username}{entry.username === myUsername ? ' (you)' : ''}</span>
+                        <span className="sc">{Number(entry.score).toLocaleString()}</span>
                       </li>
                     ))}
                   </ol>
-                ) : <p>No verified scores yet. Be the first.</p>}
+                ) : <p className="cmp-note">No verified scores yet. Be the first.</p>}
               </div>
             ) : null}
           </section>
         ) : null}
 
-        <section className={`panel tournament-list${tournament ? '' : ' tournament-list-wide'}`}>
-          <div className="tournament-list-heading">
-            <div><p className="eyebrow">OPEN TO EVERYONE</p><h2>Public tournaments</h2></div>
-          </div>
-          {publicTournaments.length ? <div className="tournament-list-grid">{publicTournaments.map((item) => (
-            <article className="tournament-list-item" key={item.code}>
-              <Link to={`/tournaments/${item.code}`}>
-                <span className={`tournament-state ${item.status}`}>{item.status}</span>
-                <strong>{item.name}</strong>
-                <span className="tournament-list-game">{item.display_name}</span>
-                <small>{item.entry_count} entrant{item.entry_count === 1 ? '' : 's'} · {remainingText(item)}</small>
-              </Link>
-            </article>
-          ))}</div> : <div className="tournament-empty"><strong>No public tournaments right now</strong><p>New public competitions will appear here automatically.</p></div>}
-        </section>
+        <Section id="cmp-live" title="Live now" hint="Open to enter, best score counts.">
+          {buckets.live.length ? (
+            <div className="cmp-grid">{buckets.live.map((item) => <TournamentCard key={item.code} item={item} art={artFor(item.rom_name)} remaining={remainingText(item)} />)}</div>
+          ) : <Empty title="No live tournament right now">When a tournament opens it shows up here with its countdown.</Empty>}
+        </Section>
 
-        <section className={`panel tournament-list${tournament ? '' : ' tournament-list-wide'}`}>
-          <div className="tournament-list-heading">
-            <div><p className="eyebrow">YOUR COMPETITIONS</p><h2>My tournaments</h2></div>
-            {SUPPORTER_UI_ENABLED || canCreateTournaments ? (<button type="button" className="secondary" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>Create new</button>) : null}
-          </div>
-          {mine.length ? <div className="tournament-list-grid">{mine.map((item) => (
-            <article className="tournament-list-item" key={item.code}>
+        <Section id="cmp-upcoming" title="Upcoming">
+          {buckets.upcoming.length ? (
+            <div className="cmp-grid">{buckets.upcoming.map((item) => <TournamentCard key={item.code} item={item} art={artFor(item.rom_name)} remaining={remainingText(item)} />)}</div>
+          ) : <Empty title="Nothing scheduled">Upcoming competitions will appear here automatically.</Empty>}
+        </Section>
+
+        <Section
+          id="cmp-mine"
+          title="My tournaments"
+          action={SUPPORTER_UI_ENABLED || canCreateTournaments ? (<button type="button" className="secondary" onClick={() => canCreateTournaments ? setCreateOpen(true) : setSupporterLock('Creating tournaments')}>Create new</button>) : null}
+        >
+          {mine.length ? <ul className="cmp-mine-list">{mine.map((item) => (
+            <li key={item.code}>
               <Link to={`/tournaments/${item.code}`}>
-                <span className={`tournament-state ${item.status}`}>{item.status}</span>
+                <StatePill status={item.status} />
                 <strong>{item.name}</strong>
-                <span className="tournament-list-game">{item.display_name}</span>
+                <span className="cmp-mine-game">{item.display_name}</span>
                 <small>{item.code}</small>
               </Link>
               {item.can_delete ? <button type="button" className="danger tournament-list-delete" disabled={busy} onClick={() => deleteTournament(item)} aria-label={`Delete ${item.name}`} title="Delete tournament"><i className="bi bi-trash3" aria-hidden="true" /></button> : null}
-            </article>
-          ))}</div> : <div className="tournament-empty"><strong>No tournaments yet</strong><p>Enter a code above to join one{canCreateTournaments ? ', or create your own.' : '.'}</p></div>}
-        </section>
+            </li>
+          ))}</ul> : <Empty title="No tournaments yet">Join with a code above{canCreateTournaments ? ', or create your own.' : '.'}</Empty>}
+        </Section>
+
+        <Section id="cmp-past" title="Past">
+          {buckets.past.length ? <ul className="cmp-past">{buckets.past.map((item) => <PastRow key={item.code} item={item} />)}</ul>
+            : <Empty title="No finished tournaments yet">Results will be listed here once a competition ends.</Empty>}
+        </Section>
+
+        <div className="cmp-scores osg-scores-slot">
+          <RecentArcadeScores />
+        </div>
       </main>
 
       <SupporterLockModal feature={supporterLock} onClose={() => setSupporterLock('')} />
@@ -469,5 +474,6 @@ export default function TournamentsPage() {
         </div>
       ) : null}
     </div>
+    </AppShell>
   );
 }

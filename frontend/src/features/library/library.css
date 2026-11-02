@@ -1,0 +1,175 @@
+/* Library page (standalone /library). Matches the Play page: chips, cover grid, game sheet.
+   The old per-system rail and cogs are gone; "Add games" is one dialog (AddGamesPanel). */
+.osg-lib {
+  container: lib / inline-size;
+  padding-top: 26px;
+  padding-bottom: 24px;
+  font-size: 15px;
+  line-height: 1.45;
+  min-width: 0;
+}
+.osg-lib img { display: block; }
+.osg-lib button,
+.osg-lib input,
+.osg-lib select { font-family: var(--osg-font-ui); }
+
+.osg-visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+/* The shell used to style the old library box; the new layout draws no frame. */
+.osg-lib-page .osg-lib-shell { padding: 0; background: none; border: 0; box-shadow: none; }
+
+/* ---------- title row ---------- */
+.osg-lib-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.osg-lib-head h1 {
+  margin: 0; font-family: var(--osg-font-display); font-weight: 400; font-size: clamp(28px, 3.4vw, 40px);
+  line-height: 1; letter-spacing: .01em; color: var(--osg-ink);
+}
+.osg-lib-head p { margin: 6px 0 0; color: var(--osg-ink-2); font-size: 14px; font-weight: 600; }
+.osg-lib-add { flex: none; }
+
+/* ---------- system chips ---------- */
+.osg-lib-chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.osg-lib-chips::-webkit-scrollbar { display: none; }
+.osg-lib .osg-lib-chip {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+  background: var(--osg-deck); border: 1px solid var(--osg-hair); box-shadow: none; color: var(--osg-ink-2);
+  font-weight: 700; font-size: 13.5px; cursor: pointer; transition: .12s;
+}
+.osg-lib .osg-lib-chip:hover:not(:disabled) { color: var(--osg-ink); border-color: var(--osg-hair-2); background: var(--osg-deck); transform: none; }
+.osg-lib .osg-lib-chip:active:not(:disabled) { transform: none; box-shadow: none; }
+.osg-lib .osg-lib-chip[aria-pressed="true"] { background: var(--osg-ink); color: var(--osg-night); border-color: var(--osg-ink); }
+.osg-lib-chip > i:not(.bi) { width: 8px; height: 8px; border-radius: 2px; background: var(--sys, var(--osg-blue)); flex: none; }
+.osg-lib-chip-star { color: var(--osg-coin); font-size: 12px; }
+.osg-lib-chip[aria-pressed="true"] .osg-lib-chip-star { color: #b98a00; }
+.osg-lib-chip b { font-weight: 700; font-size: 12px; opacity: .6; font-variant-numeric: tabular-nums; }
+
+/* ---------- search + filter row ---------- */
+.osg-lib-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 4px 0 18px; }
+.osg-lib-search { position: relative; flex: 1 1 280px; min-width: 0; display: block; }
+.osg-lib-search .bi { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--osg-ink-3); pointer-events: none; }
+.osg-lib-search input { width: 100%; box-sizing: border-box; padding-left: 40px; min-height: 42px; }
+.osg-lib-filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.osg-lib-filter-row select { min-height: 42px; max-width: 100%; width: auto; }
+.osg-lib .osg-lib-toggle {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 14px; border-radius: 999px; cursor: pointer;
+  background: var(--osg-deck); border: 1px solid var(--osg-hair); color: var(--osg-ink-2); font-weight: 700; font-size: 13.5px; user-select: none;
+}
+.osg-lib .osg-lib-toggle input { width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; accent-color: var(--osg-coin); flex: none; }
+.osg-lib .osg-lib-toggle:hover { color: var(--osg-ink); border-color: var(--osg-hair-2); }
+.osg-lib .osg-lib-toggle:has(input:checked) { color: var(--osg-ink); border-color: var(--osg-coin); background: rgba(255, 200, 46, .08); }
+.osg-lib .osg-lib-toggle:has(input:focus-visible) { outline: 2px solid var(--osg-coin); outline-offset: 2px; }
+
+.osg-lib-status { margin: 0 0 14px; color: var(--osg-ink-2); font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+
+/* ---------- grid ---------- */
+.osg-lib-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 22px 16px; padding-top: 8px; }
+.osg-lib-card { position: relative; min-width: 0; }
+.osg-lib-card .osg-cover-card { width: 100%; }
+.osg-lib-fav {
+  position: absolute; top: 6px; right: 6px; z-index: 2; width: 32px; height: 32px; display: grid; place-items: center; padding: 0;
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, .16); background: rgba(6, 9, 20, .62); color: #fff; box-shadow: none; cursor: pointer;
+  font-size: 14px; opacity: .85; transition: opacity .12s, transform .12s, background .12s;
+}
+.osg-lib-fav:hover:not(:disabled) { background: rgba(6, 9, 20, .85); opacity: 1; transform: none; }
+.osg-lib-fav:active:not(:disabled) { transform: scale(.94); box-shadow: none; }
+.osg-lib-fav.on { color: var(--osg-coin); opacity: 1; border-color: rgba(255, 200, 46, .5); }
+.osg-lib-fav:focus-visible, .osg-lib-versions:focus-visible { outline: 2px solid var(--osg-coin); outline-offset: 2px; }
+.osg-lib-versions {
+  position: absolute; left: 6px; top: 6px; z-index: 2;
+  padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .18); background: rgba(6, 9, 20, .78); color: #fff;
+  font-size: 11px; font-weight: 700; box-shadow: none; cursor: pointer; line-height: 1.3;
+}
+.osg-lib-versions:hover:not(:disabled) { background: rgba(6, 9, 20, .95); transform: none; }
+.osg-lib-versions:active:not(:disabled) { transform: none; box-shadow: none; }
+.osg-lib-more { text-align: center; color: var(--osg-ink-3); font-size: 13px; margin: 22px 0 0; }
+.osg-lib-grid-loading .osg-lib-skeleton { display: block; aspect-ratio: 3 / 4; border-radius: 8px; background: var(--osg-deck); }
+
+.osg-lib-empty { margin-top: 12px; }
+.osg-lib-empty .osg-empty-actions button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; }
+
+@container lib (max-width: 1099px) {
+  .osg-lib-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+@container lib (max-width: 819px) {
+  .osg-lib-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@container lib (max-width: 559px) {
+  .osg-lib { padding-top: 16px; }
+  .osg-lib-head { align-items: center; }
+  .osg-lib-chips { margin: 0 -16px; padding: 2px 16px 8px; }
+  .osg-lib-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 12px; }
+  .osg-lib-fav { width: 28px; height: 28px; top: 4px; right: 4px; font-size: 12px; }
+  .osg-lib .osg-cover-card .t { font-size: 12.5px; }
+  .osg-lib .osg-cover-card .s { font-size: 11px; }
+  .osg-lib .osg-cover .osg-play { display: none; }
+  .osg-lib-filter-row { width: 100%; }
+  .osg-lib-filter-row select { flex: 1 1 100%; }
+}
+
+/* ---------- Add games panel (portalled to body) ---------- */
+html.osg-locked, html.osg-locked body { overflow: hidden; }
+.osg-lib-scrim {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; overscroll-behavior: contain;
+  background: rgba(2, 4, 10, .72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  font-family: var(--osg-font-ui); color: var(--osg-ink);
+  animation: osg-lib-fade .18s ease;
+}
+.osg-lib-panel {
+  width: min(720px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 22px; background: var(--osg-deck); border: 1px solid var(--osg-hair-2); box-shadow: 0 40px 80px rgba(0, 0, 0, .7);
+  animation: osg-lib-rise .24s cubic-bezier(.2, .8, .2, 1);
+}
+.osg-lib-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 22px 24px 14px; border-bottom: 1px solid var(--osg-hair); }
+.osg-lib-panel-head h2 { margin: 0; font-family: var(--osg-font-display); font-weight: 400; font-size: 26px; line-height: 1.05; color: var(--osg-ink); }
+.osg-lib-panel-head p { margin: 6px 0 0; color: var(--osg-ink-2); font-size: 13.5px; }
+.osg-lib-panel .osg-lib-panel-close {
+  flex: none; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, .08); border: 1px solid var(--osg-hair-2); color: var(--osg-ink); box-shadow: none; cursor: pointer;
+}
+.osg-lib-panel .osg-lib-panel-close:hover:not(:disabled) { background: rgba(255, 255, 255, .14); transform: none; }
+.osg-lib-panel .osg-lib-panel-close:active:not(:disabled) { transform: none; box-shadow: none; }
+.osg-lib-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 8px 24px 24px; display: grid; gap: 22px; }
+.osg-lib-panel h3 { margin: 18px 0 10px; font: 400 12px var(--osg-font-pixel); letter-spacing: .1em; text-transform: uppercase; color: var(--osg-coin); }
+.osg-lib-panel .osg-lib-muted { margin: 0 0 10px; color: var(--osg-ink-2); font-size: 13.5px; }
+.osg-lib-panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.osg-lib-panel button { font-family: var(--osg-font-ui); }
+.osg-lib-panel button.secondary { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 6px 12px; font-size: 13px; }
+.osg-lib-sys {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px;
+  border-radius: var(--osg-r-md); background: var(--osg-deck-2); border: 1px solid var(--osg-hair);
+}
+.osg-lib-sys-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.osg-lib-sys-name > i { width: 9px; height: 9px; border-radius: 2px; background: var(--sys); flex: none; }
+.osg-lib-sys-name strong { display: block; font-size: 14.5px; }
+.osg-lib-sys-name small, .osg-lib-folders small { display: block; color: var(--osg-ink-3); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.osg-lib-sys-actions, .osg-lib-folder-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.osg-lib-folders li {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px;
+  border-radius: var(--osg-r-md); background: var(--osg-deck-2); border: 1px solid var(--osg-hair);
+}
+.osg-lib-folders strong { overflow-wrap: anywhere; }
+.osg-lib-folders li > div:first-child { min-width: 0; }
+.osg-lib-status-text { margin: 0 0 6px; color: var(--osg-ink); font-size: 13.5px; overflow-wrap: anywhere; }
+
+/* Phone: full-height bottom sheet, own scroll area, safe-area padding. */
+@media (max-width: 720px) {
+  .osg-lib-scrim { padding: 0; place-items: end center; background: rgba(2, 4, 10, .82); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .osg-lib-panel {
+    width: 100%; height: calc(100% - 8px - env(safe-area-inset-top, 0px)); max-height: none; border-radius: 22px 22px 0 0; border-bottom: 0;
+    animation: osg-lib-slide .28s cubic-bezier(.2, .8, .2, 1);
+  }
+  .osg-lib-panel-head { padding: 18px 16px 12px; }
+  .osg-lib-panel-body { padding: 4px 16px calc(24px + env(safe-area-inset-bottom, 0px)); }
+  .osg-lib-sys-actions { width: 100%; }
+  .osg-lib-sys-actions button { flex: 1 1 auto; justify-content: center; }
+}
+@keyframes osg-lib-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes osg-lib-rise { from { opacity: 0; transform: translateY(16px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes osg-lib-slide { from { transform: translateY(100%); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .osg-lib-scrim, .osg-lib-panel { animation: none; }
+  .osg-lib .osg-cover, .osg-lib-fav, .osg-lib .osg-lib-chip { transition: none; }
+}

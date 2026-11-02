@@ -3,8 +3,18 @@ import { createPortal } from 'react-dom';
 import { unzipSync } from 'fflate';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
-import BrandMark from '../components/BrandMark';
+import AppShell from '../components/AppShell';
 import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
+import GameSheet from '../features/home/GameSheet';
+import { boxArtFor, screenshotFor } from '../features/home/homeLibrary';
+import { systemFamily, systemStyle } from '../features/home/systemCapabilities';
+import AddGamesPanel from '../features/library/AddGamesPanel';
+import LibraryFilters from '../features/library/LibraryFilters';
+import LibraryGrid from '../features/library/LibraryGrid';
+import LibraryHeader from '../features/library/LibraryHeader';
+import SystemChips from '../features/library/SystemChips';
+import { buildSystemChips, describeLibraryEmptyState, formatLibraryCount } from '../features/library/libraryView';
+import '../features/library/library.css';
 import { downloadSourceGame, loadCachedSourceCatalogues, loadSourceCatalogues, saveSourceCatalogues, peekSourceCatalogues, peekSourceArtwork, loadSourceArtwork, saveSourceArtwork } from '../features/gameSources/sourceLibrary';
 import { memoizeLast } from '../features/gameSources/memoizeLast';
 import { shelfArtworkUrl } from '../features/gameSources/shelfArtwork';
@@ -89,12 +99,427 @@ function cleanSnesArchiveVersions(game, fileNames) {
     });
 }
 
-function readPreferredVariants() {
+export function readPreferredVariants() {
   try {
     return JSON.parse(localStorage.getItem(PREFERRED_VARIANTS_KEY)) || {};
   } catch {
     return {};
   }
+}
+
+/**
+ * Starts a library game in a new room. Shared by the Library shelf and the Play
+ * home so both create rooms with the same request bodies and URL parameters.
+ * hostingMode is 'solo' (the library default) or 'multiplayer' for an online
+ * room with the game already loaded.
+ */
+export async function launchLibraryGame(game, {
+  navigate,
+  returnTo = '/library',
+  hostingMode = 'solo',
+  onStatus = () => {},
+  onPreparation = () => {},
+} = {}) {
+  if (game.source === 'public-url') {
+    const file = await downloadSourceGame(game.sourceEntry, game.roomSystem, {
+      onProgress: (loaded, total) => onStatus(`Downloading ${game.title}: ${total ? `${Math.round(loaded / total * 100)}%` : `${(loaded / 1048576).toFixed(1)} MB`}`),
+    });
+    const room = await apiFetch('/rooms/create', {
+      method: 'POST', body: JSON.stringify({ system: game.roomSystem, hosting_mode: hostingMode, party_max_players: game.roomSystem === 'arcade' ? 8 : 2 }),
+    });
+    const launchId = `source:${crypto.randomUUID()}`;
+    registerRuntimeRelease(launchId, { title: game.title, files: [file], roomSystem: game.roomSystem });
+    navigate(`/room/${room.room_code}?${new URLSearchParams({ localRelease: launchId, returnTo })}`);
+    return;
+  }
+  if (
+    (game.system === 'amiga' || game.system === 'amiga_aga')
+    && game.source !== 'vip-amiga-whdload'
+  ) {
+    const variants = game.variants || [game];
+    const files = [];
+    for (const variant of variants) {
+      if (!variant.handle && !variant.runtimeFileKey) continue;
+      if (variant.handle && typeof variant.handle.queryPermission === 'function') {
+        let permission = await variant.handle.queryPermission({ mode: 'read' });
+        if (permission !== 'granted' && typeof variant.handle.requestPermission === 'function') {
+          permission = await variant.handle.requestPermission({ mode: 'read' });
+        }
+        if (permission !== 'granted') throw new Error('Browser permission is needed to read this Amiga release.');
+      }
+      files.push(await readLocalLibraryFile(variant));
+    }
+    if (!files.length) throw new Error('No readable files remain for this Amiga release. Re-scan the folder.');
+
+    await markWhdLoadArchives(files);
+    const scanned = await scanReleaseFiles(files, { platform: 'amiga' });
+    const releaseGame = groupReleaseFiles(scanned)
+      .find((candidate) => candidate.title.toLowerCase() === game.title.toLowerCase())
+      || groupReleaseFiles(scanned)[0];
+    if (!releaseGame) throw new Error('The selected Amiga files could not be grouped into a release.');
+    const launch = prepareLocalGameLaunch(releaseGame);
+    const room = await apiFetch('/rooms/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        system: launch.roomSystem,
+        hosting_mode: hostingMode,
+        party_max_players: launch.roomSystem === 'arcade' ? 8 : 2,
+      }),
+    });
+    const nextParams = new URLSearchParams({
+      localRelease: launch.launchId,
+      returnTo,
+    });
+    navigate(`/room/${room.room_code}?${nextParams.toString()}`);
+    return;
+  }
+
+  if (game.source === 'internet-archive-mame') {
+    const prepareFile = async (directory, fileName, label) => {
+      onPreparation({
+        badge: 'VIP MAME',
+        title: game.title,
+        fileName,
+        label,
+        loaded: 0,
+        total: 0,
+        percent: 0,
+        attempt: 1,
+      });
+      await prepareVipMameFile(directory, fileName, ({ loaded, total, attempt, retrying }) => {
+        onPreparation({
+          badge: 'VIP MAME',
+          title: game.title,
+          fileName,
+          label: retrying ? `Retrying ${label.toLowerCase()}...` : label,
+          loaded,
+          total,
+          percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0,
+          attempt,
+        });
+      });
+    };
+
+    await prepareFile('roms', game.fileName, 'Downloading ROM');
+    if (game.archiveSampleFileName) {
+      try {
+        await prepareFile('samples', game.archiveSampleFileName, 'Downloading samples');
+      } catch {
+        onStatus('Optional MAME samples are unavailable; starting the game without them.');
+      }
+    }
+    onPreparation({
+      badge: 'VIP MAME',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'ROM ready — opening room',
+      loaded: 1,
+      total: 1,
+      percent: 100,
+      attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-c64-oneload') {
+    onPreparation({
+      badge: 'VIP C64',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Downloading OneLoad cartridge',
+      loaded: 0,
+      total: game.size || 0,
+      percent: 0,
+      attempt: 1,
+    });
+    await prepareVipC64File(game.fileName, ({ loaded, total, attempt, retrying }) => {
+      onPreparation({
+        badge: 'VIP C64',
+        title: game.title,
+        fileName: game.fileName,
+        label: retrying ? 'Retrying cartridge download...' : 'Downloading OneLoad cartridge',
+        loaded,
+        total: total || game.size || 0,
+        percent: (total || game.size)
+          ? Math.min(100, Math.round((loaded / (total || game.size)) * 100))
+          : 0,
+        attempt,
+      });
+    });
+    onPreparation({
+      badge: 'VIP C64',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Cartridge ready — opening room',
+      loaded: game.size || 1,
+      total: game.size || 1,
+      percent: 100,
+      attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-amiga-whdload') {
+    onPreparation({
+      badge: 'VIP Amiga',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Downloading WHDLoad game',
+      loaded: 0,
+      total: game.size || 0,
+      percent: 0,
+      attempt: 1,
+    });
+    await prepareVipAmigaFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+      const expectedTotal = total || game.size || 0;
+      onPreparation({
+        badge: 'VIP Amiga',
+        title: game.title,
+        fileName: game.fileName,
+        label: retrying ? 'Retrying WHDLoad download...' : 'Downloading WHDLoad game',
+        loaded,
+        total: expectedTotal,
+        percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+        attempt,
+      });
+    });
+    onPreparation({
+      badge: 'VIP Amiga',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'WHDLoad game ready — opening room',
+      loaded: game.size || 1,
+      total: game.size || 1,
+      percent: 100,
+      attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-amstrad-ghostware') {
+    onPreparation({
+      badge: 'VIP Amstrad',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Downloading sorted CPC release',
+      loaded: 0,
+      total: game.size || 0,
+      percent: 0,
+      attempt: 1,
+    });
+    await prepareVipAmstradFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+      const expectedTotal = total || game.size || 0;
+      onPreparation({
+        badge: 'VIP Amstrad',
+        title: game.title,
+        fileName: game.fileName,
+        label: retrying ? 'Retrying CPC download...' : 'Downloading sorted CPC release',
+        loaded,
+        total: expectedTotal,
+        percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+        attempt,
+      });
+    });
+    onPreparation({
+      badge: 'VIP Amstrad',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'CPC release ready â€” opening room',
+      loaded: game.size || 1,
+      total: game.size || 1,
+      percent: 100,
+      attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-spectrum-z80') {
+    onPreparation({
+      badge: 'VIP ZX Spectrum',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Downloading sorted Z80 release',
+      loaded: 0,
+      total: game.size || 0,
+      percent: 0,
+      attempt: 1,
+    });
+    await prepareVipSpectrumFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+      const expectedTotal = total || game.size || 0;
+      onPreparation({
+        badge: 'VIP ZX Spectrum',
+        title: game.title,
+        fileName: game.fileName,
+        label: retrying ? 'Retrying Z80 download...' : 'Downloading sorted Z80 release',
+        loaded,
+        total: expectedTotal,
+        percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+        attempt,
+      });
+    });
+    onPreparation({
+      badge: 'VIP ZX Spectrum',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Z80 release ready â€” opening room',
+      loaded: game.size || 1,
+      total: game.size || 1,
+      percent: 100,
+      attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-megadrive-ghostware') {
+    onPreparation({
+      badge: 'VIP Mega Drive',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Downloading sorted Mega Drive release',
+      loaded: 0,
+      total: game.size || 0,
+      percent: 0,
+      attempt: 1,
+    });
+    await prepareVipMegadriveFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+      const expectedTotal = total || game.size || 0;
+      onPreparation({
+        badge: 'VIP Mega Drive',
+        title: game.title,
+        fileName: game.fileName,
+        label: retrying ? 'Retrying Mega Drive download...' : 'Downloading sorted Mega Drive release',
+        loaded,
+        total: expectedTotal,
+        percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+        attempt,
+      });
+    });
+    onPreparation({
+      badge: 'VIP Mega Drive',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Mega Drive release ready — opening room',
+      loaded: game.size || 1,
+      total: game.size || 1,
+      percent: 100,
+      attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-pcengine-nointro') {
+    onPreparation({
+      badge: 'VIP PC Engine',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'Downloading sorted PC Engine release',
+      loaded: 0,
+      total: game.size || 0,
+      percent: 0,
+      attempt: 1,
+    });
+    await prepareVipPcengineFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+      const expectedTotal = total || game.size || 0;
+      onPreparation({
+        badge: 'VIP PC Engine',
+        title: game.title,
+        fileName: game.fileName,
+        label: retrying ? 'Retrying PC Engine download...' : 'Downloading sorted PC Engine release',
+        loaded,
+        total: expectedTotal,
+        percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+        attempt,
+      });
+    });
+    onPreparation({
+      badge: 'VIP PC Engine',
+      title: game.title,
+      fileName: game.fileName,
+      label: 'PC Engine release ready — opening room',
+      loaded: game.size || 1,
+      total: game.size || 1,
+      percent: 100,
+      attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-mastersystem-nointro') {
+    onPreparation({
+      badge: 'VIP Master System', title: game.title, fileName: game.fileName,
+      label: 'Downloading sorted Master System release', loaded: 0,
+      total: game.size || 0, percent: 0, attempt: 1,
+    });
+    await prepareVipMastersystemFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
+      const expectedTotal = total || game.size || 0;
+      onPreparation({
+        badge: 'VIP Master System', title: game.title, fileName: game.fileName,
+        label: retrying ? 'Retrying Master System download...' : 'Downloading sorted Master System release',
+        loaded, total: expectedTotal,
+        percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+        attempt,
+      });
+    });
+    onPreparation({
+      badge: 'VIP Master System', title: game.title, fileName: game.fileName,
+      label: 'Master System release ready — opening room', loaded: game.size || 1,
+      total: game.size || 1, percent: 100, attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-nes-megapack') {
+    onPreparation({
+      badge: 'VIP NES', title: game.title, fileName: game.fileName,
+      label: 'Downloading sorted NES release', loaded: 0,
+      total: game.size || 0, percent: 0, attempt: 1,
+    });
+    await prepareVipNesFile(game.archiveMemberPath, ({ loaded, total, attempt, retrying }) => {
+      const expectedTotal = total || game.size || 0;
+      onPreparation({
+        badge: 'VIP NES', title: game.title, fileName: game.fileName,
+        label: retrying ? 'Retrying NES download...' : 'Downloading sorted NES release',
+        loaded, total: expectedTotal,
+        percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+        attempt,
+      });
+    });
+    onPreparation({
+      badge: 'VIP NES', title: game.title, fileName: game.fileName,
+      label: 'NES release ready — opening room', loaded: game.size || 1,
+      total: game.size || 1, percent: 100, attempt: 1,
+    });
+  }
+
+  if (game.source === 'vip-snes-gameplay') {
+    onPreparation({ badge: 'VIP SNES', title: game.title, fileName: game.fileName,
+      label: 'Downloading SNES release', loaded: 0, total: game.size || 0, percent: 0, attempt: 1 });
+    await prepareVipSnesFile(game.fileName, ({ loaded, total, attempt, cached }) => {
+      const expectedTotal = total || game.size || 0;
+      onPreparation({ badge: 'VIP SNES', title: game.title, fileName: game.fileName,
+        label: cached ? 'Using saved SNES release' : 'Downloading SNES release', loaded,
+        total: expectedTotal, percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
+        attempt: attempt || 1 });
+    });
+  }
+
+  sessionStorage.setItem('oldstylegaming:pendingLocalGame', JSON.stringify({
+    id: game.id,
+    title: game.title,
+    fileName: game.fileName,
+    system: game.system,
+    roomSystem: game.roomSystem,
+    source: game.source || 'local',
+    archiveSampleFileName: game.archiveSampleFileName || '',
+    archiveMemberPath: game.archiveMemberPath || '',
+    archiveEntryName: game.archiveEntryName || '',
+  }));
+
+  const room = await apiFetch('/rooms/create', {
+    method: 'POST',
+    body: JSON.stringify({
+      system: game.roomSystem,
+      hosting_mode: hostingMode,
+      party_max_players: game.roomSystem === 'arcade' ? 8 : 2,
+    }),
+  });
+  const nextParams = new URLSearchParams({
+    localGame: game.id,
+    returnTo,
+  });
+  navigate(`/room/${room.room_code}?${nextParams.toString()}`);
 }
 
 export const SUPPORTED_SYSTEMS = [
@@ -230,7 +655,7 @@ export const SUPPORTED_SYSTEMS = [
   },
 ];
 
-const SYSTEM_BY_ID = Object.fromEntries(SUPPORTED_SYSTEMS.map((system) => [system.id, system]));
+export const SYSTEM_BY_ID = Object.fromEntries(SUPPORTED_SYSTEMS.map((system) => [system.id, system]));
 const mame2003PlusTitles = getMameTitleDatabase();
 const EXTENSION_SYSTEMS = SUPPORTED_SYSTEMS.reduce((map, system) => {
   system.extensions.forEach((extension) => {
@@ -283,7 +708,6 @@ const prepareGroupedShelf = memoizeLast((entries, clones) => getGroupedLibraryGa
   !isLikelySupportRom(game) && (clones || game.system !== 'arcade' || isArcadeParentRom(game))
 )), { showArcadeClones: clones }));
 const groupedLibraryCache = new WeakMap();
-const LIBRARY_ALPHABET = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 const COMPACT_REGION_SUFFIXES = {
   U: 'USA',
   E: 'Europe',
@@ -414,7 +838,7 @@ function canonicalArcadeParentKey(romKey) {
   return parentKey;
 }
 
-function isArcadeParentRom(game) {
+export function isArcadeParentRom(game) {
   if (game.system !== 'arcade') return true;
   const romKey = game.romKey || arcadeRomKey(game.fileName);
   return canonicalArcadeParentKey(romKey) === romKey;
@@ -1439,7 +1863,7 @@ function buildSystemCounts(games) {
   }, {});
 }
 
-function canonicalLibraryTitle(game) {
+export function canonicalLibraryTitle(game) {
   const arcadeTitle = arcadeMetadataTitle(game);
   if (arcadeTitle) return arcadeTitle;
 
@@ -1460,7 +1884,7 @@ function canonicalLibraryTitle(game) {
     .replace(/\b(?:rev(?:ision)?|version|ver)\s*[a-z0-9.]+$/i, '')
     .replace(/\b(?:beta|proto(?:type)?|sample|demo|hack|trainer|translation|overdump|bad dump|alternate)\b.*$/i, '')
     .replace(/\b(?:sound(?:s|track)?|music|bgm|sample(?:s)?|speech|voice(?:s)?)\b$/i, '')
-    .replace(/\b(?:usa|europe|japan|world|korea|brazil|australia|france|germany|spain|italy)\b$/i, '')
+    .replace(/\b(?:usa|europe|japan|korea|brazil|australia|france|germany|spain|italy)\b$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
   return titleCaseSmallWords(moveTrailingArticle(withoutMeta || rawTitle));
@@ -1552,11 +1976,6 @@ function matchesLibraryQuery(game, query) {
   ));
 }
 
-function getLibraryTitleInitial(title) {
-  const first = String(title || '').trim().charAt(0).toUpperCase();
-  return /^[A-Z]$/.test(first) ? first : '#';
-}
-
 function isLikelySupportRom(gameOrName) {
   const fileName = typeof gameOrName === 'string'
     ? gameOrName
@@ -1570,7 +1989,7 @@ function isLikelySupportRom(gameOrName) {
   return SUPPORT_ROM_PATTERN.test(normalizedName);
 }
 
-function libraryGroupKey(game, { showArcadeClones = false } = {}) {
+export function libraryGroupKey(game, { showArcadeClones = false } = {}) {
   if (game.system === 'arcade') {
     if (showArcadeClones) return `arcade:${game.id}`;
     const romKey = game.romKey || arcadeRomKey(game.fileName);
@@ -1698,7 +2117,7 @@ function groupLibraryGames(games, options = {}) {
   return [...groups.values()].map(makeGroupedGame);
 }
 
-function getGroupedLibraryGames(games, options = {}) {
+export function getGroupedLibraryGames(games, options = {}) {
   const cacheKey = options.showArcadeClones ? 'with-arcade-clones' : 'parents-only';
   const cached = groupedLibraryCache.get(games);
   if (cached?.[cacheKey]) return cached[cacheKey];
@@ -1719,8 +2138,6 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   );
   const requestedSystem = searchParams.get('system');
   const requestedSystemExists = availableSystems.some((system) => system.id === requestedSystem);
-  const requestedLetter = searchParams.get('letter');
-  const requestedLetterExists = requestedLetter === 'all' || LIBRARY_ALPHABET.includes(requestedLetter);
   const username = localStorage.getItem('username');
   const [librarySnapshot] = useState(readLibrarySnapshot);
   const [folders, setFolders] = useState(() => librarySessionCache?.folders || []);
@@ -1753,9 +2170,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       ? searchParams.get('boxArt') === '1'
       : localStorage.getItem(BOX_ART_ONLY_KEY) === 'true'
   ));
-  const [letterFilter, setLetterFilter] = useState(requestedLetterExists ? requestedLetter : 'all');
-  const [joinCode, setJoinCode] = useState('');
-  const [loadingJoin, setLoadingJoin] = useState(false);
+  const [sheetItem, setSheetItem] = useState(null);
+  const [addGamesOpen, setAddGamesOpen] = useState(false);
   const [renderLimit, setRenderLimit] = useState(LIBRARY_PAGE_SIZE);
   const [brokenBoxArtIds, setBrokenBoxArtIds] = useState(() => new Set());
   const braveFolderInputRef = useRef(null);
@@ -1766,14 +2182,12 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const params = new URLSearchParams();
     const nextSystem = overrides.system ?? activeSystem;
     const nextQuery = overrides.query ?? query;
-    const nextLetter = overrides.letter ?? letterFilter;
     const nextShowArcadeClones = overrides.showArcadeClones ?? showArcadeClones;
     const nextShowBoxArtOnly = overrides.showBoxArtOnly ?? showBoxArtOnly;
     const nextGenre = overrides.genre ?? genreFilter;
 
     if (nextSystem && nextSystem !== 'all') params.set('system', nextSystem);
     if (nextQuery.trim()) params.set('q', nextQuery.trim());
-    if (nextLetter && nextLetter !== 'all') params.set('letter', nextLetter);
     if (nextShowArcadeClones) params.set('clones', '1');
     if (nextShowBoxArtOnly) params.set('boxArt', '1');
     if (nextGenre && nextGenre !== 'all') params.set('genre', nextGenre);
@@ -2519,7 +2933,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     });
     return [...counts.entries()].sort(([left], [right]) => left.localeCompare(right));
   }, [activeLibraryGames, genreIndex]);
-  const letterSourceGames = useMemo(() => {
+  const filteredGames = useMemo(() => {
     return activeLibraryGames
       .filter((game) => !showBoxArtOnly || (Boolean(game.boxArtUrl) && !brokenBoxArtIds.has(game.id)))
       .filter((game) => genreFilter === 'all' || genresForGame(game, genreIndex).includes(genreFilter))
@@ -2527,18 +2941,6 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         || genresForGame(game, genreIndex).some((genre) => genre.toLowerCase().includes(deferredQuery.trim().toLowerCase())))
       .sort((a, b) => a.title.localeCompare(b.title));
   }, [activeLibraryGames, brokenBoxArtIds, deferredQuery, genreFilter, genreIndex, showBoxArtOnly]);
-  const alphabetCounts = useMemo(() => {
-    const counts = Object.fromEntries(LIBRARY_ALPHABET.map((letter) => [letter, 0]));
-    letterSourceGames.forEach((game) => {
-      const initial = getLibraryTitleInitial(game.title);
-      counts[initial] = (counts[initial] || 0) + 1;
-    });
-    return counts;
-  }, [letterSourceGames]);
-  const filteredGames = useMemo(() => {
-    if (letterFilter === 'all') return letterSourceGames;
-    return letterSourceGames.filter((game) => getLibraryTitleInitial(game.title) === letterFilter);
-  }, [letterFilter, letterSourceGames]);
   const hiddenArcadeCloneCount = useMemo(
     () => {
       if (activeSystem !== 'all' && activeSystem !== 'arcade' && activeSystem !== 'favourites') return 0;
@@ -2598,13 +3000,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   useEffect(() => {
     setRenderLimit(LIBRARY_PAGE_SIZE);
-  }, [activeSystem, genreFilter, letterFilter, query, showArcadeClones, showBoxArtOnly]);
-
-  useEffect(() => {
-    if (letterFilter !== 'all' && !alphabetCounts[letterFilter]) {
-      setLetterFilter('all');
-    }
-  }, [alphabetCounts, letterFilter]);
+  }, [activeSystem, genreFilter, query, showArcadeClones, showBoxArtOnly]);
 
   useEffect(() => {
     if (!canShowMoreGames) return undefined;
@@ -2914,410 +3310,17 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     }
   }
 
-  async function launchGame(game) {
+  async function launchGame(game, options = {}) {
     setLaunchingId(game.id);
     setStatus(`Starting ${game.title}...`);
     try {
-      if (game.source === 'public-url') {
-        const file = await downloadSourceGame(game.sourceEntry, game.roomSystem, {
-          onProgress: (loaded, total) => setStatus(`Downloading ${game.title}: ${total ? `${Math.round(loaded / total * 100)}%` : `${(loaded / 1048576).toFixed(1)} MB`}`),
-        });
-        const room = await apiFetch('/rooms/create', {
-          method: 'POST', body: JSON.stringify({ system: game.roomSystem, hosting_mode: 'solo', party_max_players: game.roomSystem === 'arcade' ? 8 : 2 }),
-        });
-        const launchId = `source:${crypto.randomUUID()}`;
-        registerRuntimeRelease(launchId, { title: game.title, files: [file], roomSystem: game.roomSystem });
-        navigate(`/room/${room.room_code}?${new URLSearchParams({ localRelease: launchId, returnTo: buildLibraryReturnPath() })}`);
-        return;
-      }
-      if (
-        (game.system === 'amiga' || game.system === 'amiga_aga')
-        && game.source !== 'vip-amiga-whdload'
-      ) {
-        const variants = game.variants || [game];
-        const files = [];
-        for (const variant of variants) {
-          if (!variant.handle && !variant.runtimeFileKey) continue;
-          if (variant.handle && typeof variant.handle.queryPermission === 'function') {
-            let permission = await variant.handle.queryPermission({ mode: 'read' });
-            if (permission !== 'granted' && typeof variant.handle.requestPermission === 'function') {
-              permission = await variant.handle.requestPermission({ mode: 'read' });
-            }
-            if (permission !== 'granted') throw new Error('Browser permission is needed to read this Amiga release.');
-          }
-          files.push(await readLocalLibraryFile(variant));
-        }
-        if (!files.length) throw new Error('No readable files remain for this Amiga release. Re-scan the folder.');
-
-        await markWhdLoadArchives(files);
-        const scanned = await scanReleaseFiles(files, { platform: 'amiga' });
-        const releaseGame = groupReleaseFiles(scanned)
-          .find((candidate) => candidate.title.toLowerCase() === game.title.toLowerCase())
-          || groupReleaseFiles(scanned)[0];
-        if (!releaseGame) throw new Error('The selected Amiga files could not be grouped into a release.');
-        const launch = prepareLocalGameLaunch(releaseGame);
-        const room = await apiFetch('/rooms/create', {
-          method: 'POST',
-          body: JSON.stringify({
-            system: launch.roomSystem,
-            hosting_mode: 'solo',
-            party_max_players: launch.roomSystem === 'arcade' ? 8 : 2,
-          }),
-        });
-        const nextParams = new URLSearchParams({
-          localRelease: launch.launchId,
-          returnTo: buildLibraryReturnPath(),
-        });
-        navigate(`/room/${room.room_code}?${nextParams.toString()}`);
-        return;
-      }
-
-      if (game.source === 'internet-archive-mame') {
-        const prepareFile = async (directory, fileName, label) => {
-          setVipPreparation({
-            badge: 'VIP MAME',
-            title: game.title,
-            fileName,
-            label,
-            loaded: 0,
-            total: 0,
-            percent: 0,
-            attempt: 1,
-          });
-          await prepareVipMameFile(directory, fileName, ({ loaded, total, attempt, retrying }) => {
-            setVipPreparation({
-              badge: 'VIP MAME',
-              title: game.title,
-              fileName,
-              label: retrying ? `Retrying ${label.toLowerCase()}...` : label,
-              loaded,
-              total,
-              percent: total ? Math.min(100, Math.round((loaded / total) * 100)) : 0,
-              attempt,
-            });
-          });
-        };
-
-        await prepareFile('roms', game.fileName, 'Downloading ROM');
-        if (game.archiveSampleFileName) {
-          try {
-            await prepareFile('samples', game.archiveSampleFileName, 'Downloading samples');
-          } catch {
-            setStatus('Optional MAME samples are unavailable; starting the game without them.');
-          }
-        }
-        setVipPreparation({
-          badge: 'VIP MAME',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'ROM ready — opening room',
-          loaded: 1,
-          total: 1,
-          percent: 100,
-          attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-c64-oneload') {
-        setVipPreparation({
-          badge: 'VIP C64',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Downloading OneLoad cartridge',
-          loaded: 0,
-          total: game.size || 0,
-          percent: 0,
-          attempt: 1,
-        });
-        await prepareVipC64File(game.fileName, ({ loaded, total, attempt, retrying }) => {
-          setVipPreparation({
-            badge: 'VIP C64',
-            title: game.title,
-            fileName: game.fileName,
-            label: retrying ? 'Retrying cartridge download...' : 'Downloading OneLoad cartridge',
-            loaded,
-            total: total || game.size || 0,
-            percent: (total || game.size)
-              ? Math.min(100, Math.round((loaded / (total || game.size)) * 100))
-              : 0,
-            attempt,
-          });
-        });
-        setVipPreparation({
-          badge: 'VIP C64',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Cartridge ready — opening room',
-          loaded: game.size || 1,
-          total: game.size || 1,
-          percent: 100,
-          attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-amiga-whdload') {
-        setVipPreparation({
-          badge: 'VIP Amiga',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Downloading WHDLoad game',
-          loaded: 0,
-          total: game.size || 0,
-          percent: 0,
-          attempt: 1,
-        });
-        await prepareVipAmigaFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
-          const expectedTotal = total || game.size || 0;
-          setVipPreparation({
-            badge: 'VIP Amiga',
-            title: game.title,
-            fileName: game.fileName,
-            label: retrying ? 'Retrying WHDLoad download...' : 'Downloading WHDLoad game',
-            loaded,
-            total: expectedTotal,
-            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
-            attempt,
-          });
-        });
-        setVipPreparation({
-          badge: 'VIP Amiga',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'WHDLoad game ready — opening room',
-          loaded: game.size || 1,
-          total: game.size || 1,
-          percent: 100,
-          attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-amstrad-ghostware') {
-        setVipPreparation({
-          badge: 'VIP Amstrad',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Downloading sorted CPC release',
-          loaded: 0,
-          total: game.size || 0,
-          percent: 0,
-          attempt: 1,
-        });
-        await prepareVipAmstradFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
-          const expectedTotal = total || game.size || 0;
-          setVipPreparation({
-            badge: 'VIP Amstrad',
-            title: game.title,
-            fileName: game.fileName,
-            label: retrying ? 'Retrying CPC download...' : 'Downloading sorted CPC release',
-            loaded,
-            total: expectedTotal,
-            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
-            attempt,
-          });
-        });
-        setVipPreparation({
-          badge: 'VIP Amstrad',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'CPC release ready â€” opening room',
-          loaded: game.size || 1,
-          total: game.size || 1,
-          percent: 100,
-          attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-spectrum-z80') {
-        setVipPreparation({
-          badge: 'VIP ZX Spectrum',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Downloading sorted Z80 release',
-          loaded: 0,
-          total: game.size || 0,
-          percent: 0,
-          attempt: 1,
-        });
-        await prepareVipSpectrumFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
-          const expectedTotal = total || game.size || 0;
-          setVipPreparation({
-            badge: 'VIP ZX Spectrum',
-            title: game.title,
-            fileName: game.fileName,
-            label: retrying ? 'Retrying Z80 download...' : 'Downloading sorted Z80 release',
-            loaded,
-            total: expectedTotal,
-            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
-            attempt,
-          });
-        });
-        setVipPreparation({
-          badge: 'VIP ZX Spectrum',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Z80 release ready â€” opening room',
-          loaded: game.size || 1,
-          total: game.size || 1,
-          percent: 100,
-          attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-megadrive-ghostware') {
-        setVipPreparation({
-          badge: 'VIP Mega Drive',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Downloading sorted Mega Drive release',
-          loaded: 0,
-          total: game.size || 0,
-          percent: 0,
-          attempt: 1,
-        });
-        await prepareVipMegadriveFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
-          const expectedTotal = total || game.size || 0;
-          setVipPreparation({
-            badge: 'VIP Mega Drive',
-            title: game.title,
-            fileName: game.fileName,
-            label: retrying ? 'Retrying Mega Drive download...' : 'Downloading sorted Mega Drive release',
-            loaded,
-            total: expectedTotal,
-            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
-            attempt,
-          });
-        });
-        setVipPreparation({
-          badge: 'VIP Mega Drive',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Mega Drive release ready — opening room',
-          loaded: game.size || 1,
-          total: game.size || 1,
-          percent: 100,
-          attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-pcengine-nointro') {
-        setVipPreparation({
-          badge: 'VIP PC Engine',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'Downloading sorted PC Engine release',
-          loaded: 0,
-          total: game.size || 0,
-          percent: 0,
-          attempt: 1,
-        });
-        await prepareVipPcengineFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
-          const expectedTotal = total || game.size || 0;
-          setVipPreparation({
-            badge: 'VIP PC Engine',
-            title: game.title,
-            fileName: game.fileName,
-            label: retrying ? 'Retrying PC Engine download...' : 'Downloading sorted PC Engine release',
-            loaded,
-            total: expectedTotal,
-            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
-            attempt,
-          });
-        });
-        setVipPreparation({
-          badge: 'VIP PC Engine',
-          title: game.title,
-          fileName: game.fileName,
-          label: 'PC Engine release ready — opening room',
-          loaded: game.size || 1,
-          total: game.size || 1,
-          percent: 100,
-          attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-mastersystem-nointro') {
-        setVipPreparation({
-          badge: 'VIP Master System', title: game.title, fileName: game.fileName,
-          label: 'Downloading sorted Master System release', loaded: 0,
-          total: game.size || 0, percent: 0, attempt: 1,
-        });
-        await prepareVipMastersystemFile(game.fileName, ({ loaded, total, attempt, retrying }) => {
-          const expectedTotal = total || game.size || 0;
-          setVipPreparation({
-            badge: 'VIP Master System', title: game.title, fileName: game.fileName,
-            label: retrying ? 'Retrying Master System download...' : 'Downloading sorted Master System release',
-            loaded, total: expectedTotal,
-            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
-            attempt,
-          });
-        });
-        setVipPreparation({
-          badge: 'VIP Master System', title: game.title, fileName: game.fileName,
-          label: 'Master System release ready — opening room', loaded: game.size || 1,
-          total: game.size || 1, percent: 100, attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-nes-megapack') {
-        setVipPreparation({
-          badge: 'VIP NES', title: game.title, fileName: game.fileName,
-          label: 'Downloading sorted NES release', loaded: 0,
-          total: game.size || 0, percent: 0, attempt: 1,
-        });
-        await prepareVipNesFile(game.archiveMemberPath, ({ loaded, total, attempt, retrying }) => {
-          const expectedTotal = total || game.size || 0;
-          setVipPreparation({
-            badge: 'VIP NES', title: game.title, fileName: game.fileName,
-            label: retrying ? 'Retrying NES download...' : 'Downloading sorted NES release',
-            loaded, total: expectedTotal,
-            percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
-            attempt,
-          });
-        });
-        setVipPreparation({
-          badge: 'VIP NES', title: game.title, fileName: game.fileName,
-          label: 'NES release ready — opening room', loaded: game.size || 1,
-          total: game.size || 1, percent: 100, attempt: 1,
-        });
-      }
-
-      if (game.source === 'vip-snes-gameplay') {
-        setVipPreparation({ badge: 'VIP SNES', title: game.title, fileName: game.fileName,
-          label: 'Downloading SNES release', loaded: 0, total: game.size || 0, percent: 0, attempt: 1 });
-        await prepareVipSnesFile(game.fileName, ({ loaded, total, attempt, cached }) => {
-          const expectedTotal = total || game.size || 0;
-          setVipPreparation({ badge: 'VIP SNES', title: game.title, fileName: game.fileName,
-            label: cached ? 'Using saved SNES release' : 'Downloading SNES release', loaded,
-            total: expectedTotal, percent: expectedTotal ? Math.min(100, Math.round((loaded / expectedTotal) * 100)) : 0,
-            attempt: attempt || 1 });
-        });
-      }
-
-      sessionStorage.setItem('oldstylegaming:pendingLocalGame', JSON.stringify({
-        id: game.id,
-        title: game.title,
-        fileName: game.fileName,
-        system: game.system,
-        roomSystem: game.roomSystem,
-        source: game.source || 'local',
-        archiveSampleFileName: game.archiveSampleFileName || '',
-        archiveMemberPath: game.archiveMemberPath || '',
-        archiveEntryName: game.archiveEntryName || '',
-      }));
-
-      const room = await apiFetch('/rooms/create', {
-        method: 'POST',
-        body: JSON.stringify({
-          system: game.roomSystem,
-          hosting_mode: 'solo',
-          party_max_players: game.roomSystem === 'arcade' ? 8 : 2,
-        }),
-      });
-      const nextParams = new URLSearchParams({
-        localGame: game.id,
+      await launchLibraryGame(game, {
+        navigate,
         returnTo: buildLibraryReturnPath(),
+        hostingMode: options.hostingMode || 'solo',
+        onStatus: setStatus,
+        onPreparation: setVipPreparation,
       });
-      navigate(`/room/${room.room_code}?${nextParams.toString()}`);
     } catch (err) {
       setStatus(`Could not start ${game.title}: ${err.message}`);
       if (REMOTE_FALLBACK_SOURCES.has(game.source)) {
@@ -3342,36 +3345,6 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     } catch (err) {
       setStatus(`Could not use ${file.name}: ${err.message}`);
     }
-  }
-
-  async function handleJoinRoom(event) {
-    event.preventDefault();
-    const code = joinCode.trim().toUpperCase();
-    if (!code || loadingJoin) return;
-
-    setLoadingJoin(true);
-    setStatus(`Joining room ${code}...`);
-    try {
-      const room = await apiFetch('/rooms/join', {
-        method: 'POST',
-        body: JSON.stringify({ room_code: code }),
-      });
-      const nextParams = new URLSearchParams({
-        returnTo: buildLibraryReturnPath(),
-      });
-      navigate(`/room/${room.room_code}?${nextParams.toString()}`);
-    } catch (err) {
-      setStatus(`Could not join room ${code}: ${err.message}`);
-    } finally {
-      setLoadingJoin(false);
-    }
-  }
-
-  function leaveLibrary() {
-    if (mediaProgress && !window.confirm('Box art download is still running. Leave this page anyway?')) {
-      return;
-    }
-    navigate('/lobby');
   }
 
   async function launchSystemRoom(system) {
@@ -3482,8 +3455,64 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     setStatus(`Box art complete: ${found} found, ${targets.length - found} missing${skippedArcadeClones ? `, ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'} skipped` : ''}.`);
   }
 
+  const totalGames = shelfGames.length || !libraryLoading ? groupedGames.length : Number(librarySnapshot.totalGames || 0);
+  const favouriteCount = useMemo(
+    () => groupedGames.reduce((count, game) => count + (game.variants.some((variant) => favouriteSet.has(variant.id)) ? 1 : 0), 0),
+    [favouriteSet, groupedGames],
+  );
+  const systemChips = buildSystemChips({
+    systems: visibleSystems,
+    counts: effectiveSystemCounts,
+    totalGames,
+    favouriteCount,
+    activeSystem,
+  });
+  const filtersActive = Boolean(query.trim()) || genreFilter !== 'all' || showBoxArtOnly;
+  const emptyState = describeLibraryEmptyState({
+    loading: !shelfGames.length && (libraryLoading || !sourcesReady),
+    totalGames: shelfGames.length ? groupedGames.length : 0,
+    matchCount: filteredGames.length,
+    activeSystem,
+    systemLabel: activeSystemDetails ? systemStyle(activeSystemDetails.id).label : '',
+    systemGames: activeSystemDetails ? (systemCounts[activeSystemDetails.id] || 0) : 0,
+    filtersActive,
+  });
+
+  function openGameSheet(game) {
+    setSheetItem({
+      key: game.id,
+      system: systemFamily(game.system),
+      title: game.title,
+      libraryGame: game,
+      variantCount: game.variantCount || 1,
+      boxArt: brokenBoxArtIds.has(game.id) ? '' : boxArtFor(game),
+      screenshot: screenshotFor(game),
+    });
+  }
+
+  function openVersionsFor(game) {
+    if (game.source === 'vip-snes-gameplay') openSnesVersionPicker(game);
+    else setVersionPickerGame(game);
+  }
+
+  function markBoxArtBroken(gameId) {
+    setBrokenBoxArtIds((current) => {
+      if (current.has(gameId)) return current;
+      const next = new Set(current);
+      next.add(gameId);
+      return next;
+    });
+  }
+
+  function clearLibraryFilters() {
+    setQuery('');
+    setGenreFilter('all');
+    setShowBoxArtOnly(false);
+    setActiveSystem('all');
+  }
+
   const content = (
-    <div className="local-library-shell">
+    <div className={onboarding ? 'local-library-shell' : 'local-library-shell osg-lib-shell'}>
       <input
         ref={braveFolderInputRef}
         type="file"
@@ -3521,43 +3550,20 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           </div>
         </div>
       ) : null}
-      {!embedded ? (
-      <header className="lobby-header local-library-header">
-        <BrandMark />
-        <div className="account-strip">
-          <span>{username}</span>
-          <button type="button" className="secondary" onClick={leaveLibrary}>Lobby</button>
-        </div>
-      </header>
-      ) : null}
 
-        <section className={`local-library-hero ${onboarding ? 'welcome-library-hero' : ''}`}>
-          <div>
-            <p className="lobby-eyebrow">{onboarding ? 'Welcome to Old Style Gaming' : 'Your ROMs, your machine'}</p>
-            <h1>{onboarding ? 'Set up your game shelves' : 'Game Library'}</h1>
-            <p>{onboarding ? (games.length ? 'Your browser already has a scanned library. Pick a platform and keep playing.' : 'Connect one or more folders for each system and your games become a console-style library.') : 'Pick a platform, browse the wall, and launch straight into a room.'}</p>
-          </div>
-          <div className="local-library-actions">
-            <span>Use a system’s cog to link PC folders or source URLs.</span>
-            <span>{visibleFolderCount ? `${visibleFolderCount} folder${visibleFolderCount === 1 ? '' : 's'} connected` : libraryLoading ? '' : 'No folders connected yet'}</span>
-            {!onboarding ? (
-              <form className="quick-join library-quick-join" onSubmit={handleJoinRoom}>
-                <label>
-                  <span>Join room</span>
-                  <input
-                    placeholder="ABC123"
-                    value={joinCode}
-                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                    maxLength={8}
-                  />
-                </label>
-                <button type="submit" disabled={!joinCode || loadingJoin}>
-                  {loadingJoin ? 'Joining...' : 'Join'}
-                </button>
-              </form>
-            ) : null}
-          </div>
-        </section>
+        {onboarding ? (
+          <section className="local-library-hero welcome-library-hero">
+            <div>
+              <p className="lobby-eyebrow">Welcome to Old Style Gaming</p>
+              <h1>Set up your game shelves</h1>
+              <p>{games.length ? 'Your browser already has a scanned library. Pick a platform and keep playing.' : 'Connect one or more folders for each system and your games become a console-style library.'}</p>
+            </div>
+            <div className="local-library-actions">
+              <span>Use a system’s cog to link PC folders or source URLs.</span>
+              <span>{visibleFolderCount ? `${visibleFolderCount} folder${visibleFolderCount === 1 ? '' : 's'} connected` : libraryLoading ? '' : 'No folders connected yet'}</span>
+            </div>
+          </section>
+        ) : null}
 
         {onboarding ? (
           <section className="setup-wizard library-overview-strip" aria-label="Library overview">
@@ -3596,7 +3602,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
           </div>
         ) : null}
 
-        <main className={`local-library-layout ${onboarding ? 'onboarding-library-layout' : ''}`}>
+        {onboarding ? (
+          <main className={`local-library-layout ${onboarding ? 'onboarding-library-layout' : ''}`}>
           <aside className="local-library-sidebar">
             <div className="local-library-panel">
               <div className="library-panel-head">
@@ -3713,113 +3720,34 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               )}
             </div>
           </aside>
+          </main>
+        ) : null}
 
-          {!onboarding ? (
-          <section className="local-library-main">
-            <div className="local-library-titlebar">
-              <div>
-                <p className="lobby-eyebrow">{activeSystem === 'favourites' ? 'Saved Picks' : activeSystemDetails?.shortLabel || 'All Platforms'}</p>
-                <h2>{activeSystem === 'favourites' ? 'Favourites' : activeSystemDetails?.label || 'All Games'}</h2>
-                <span>{visibleFilteredCount} shown from {visibleActiveCount} {activeLibraryCountLabel}</span>
-              </div>
-              {activeSystemDetails ? (
-                <div className="local-library-title-actions">
-                  <div className="platform-manage-card">
-                    <strong>Manage platform</strong>
-                    <span>{activeSystemFolders.length + activeSystemSources.length} sources linked</span>
-                    <small>{activeSystemFolders.reduce((total, folder) => total + (folder.gameCount || 0), 0) + activeSystemSources.reduce((total, source) => total + source.games.length, 0)} indexed files</small>
-                  </div>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => launchSystemRoom(activeSystemDetails)}
-                    disabled={launchingSystemId === activeSystemDetails.id}
-                  >
-                    {launchingSystemId === activeSystemDetails.id ? 'Opening...' : 'Open room'}
-                  </button>
-                  <button type="button" disabled={!sourcesReady} onClick={() => setSourceSystem(activeSystemDetails)}>
-                    Manage sources
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            <div className="local-library-toolbar">
-              <div className="library-filter-tabs" aria-label="Library filters">
-                <button type="button" className={activeSystem === 'all' ? 'active' : 'secondary'} onClick={() => setActiveSystem('all')}>
-                  All
-                </button>
-                <button type="button" className={activeSystem === 'favourites' ? 'active' : 'secondary'} onClick={() => setActiveSystem('favourites')}>
-                  Favourites
-                </button>
-              </div>
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search your games"
-              />
-              <select
-                value={genreFilter}
-                onChange={(event) => setGenreFilter(event.target.value)}
-                aria-label="Filter by genre"
-                title="Filter by genre"
-              >
-                <option value="all">All genres</option>
-                {genreCounts.map(([genre, count]) => (
-                  <option key={genre} value={genre}>{genre} ({count})</option>
-                ))}
-              </select>
-              {selectedSystems.includes('arcade') && hiddenArcadeCloneCount > 0 ? (
-                <label className="library-clone-toggle">
-                  <input
-                    type="checkbox"
-                    checked={showArcadeClones}
-                    onChange={(event) => setShowArcadeClones(event.target.checked)}
-                  />
-                  <span>Show clones/children</span>
-                </label>
-              ) : null}
-              <label className="library-clone-toggle">
-                <input
-                  type="checkbox"
-                  checked={showBoxArtOnly}
-                  onChange={(event) => setShowBoxArtOnly(event.target.checked)}
+        {!onboarding ? (
+          <div className="osg-lib">
+            <LibraryHeader
+              title="Library"
+              subtitle={libraryLoading && !shelfGames.length && !totalGames ? 'Loading your library…' : formatLibraryCount({ shown: visibleFilteredCount, total: visibleActiveCount, scopeLabel: activeSystem === 'favourites' ? 'favourites' : activeSystemDetails ? `${systemStyle(activeSystemDetails.id).label} games` : 'games' })}
+              onAddGames={() => setAddGamesOpen(true)}
+            />
+            {emptyState?.kind !== 'empty' ? (
+              <>
+                <SystemChips chips={systemChips} active={activeSystem} onSelect={setActiveSystem} />
+                <LibraryFilters
+                  query={query}
+                  onQuery={setQuery}
+                  genreFilter={genreFilter}
+                  onGenre={setGenreFilter}
+                  genres={genreCounts}
+                  showClonesAvailable={selectedSystems.includes('arcade') && hiddenArcadeCloneCount > 0}
+                  showClones={showArcadeClones}
+                  onShowClones={setShowArcadeClones}
+                  boxArtOnly={showBoxArtOnly}
+                  onBoxArtOnly={setShowBoxArtOnly}
                 />
-                <span>Box art only</span>
-              </label>
-              <button type="button" className="secondary download-media-button" onClick={downloadBoxArt} disabled={!filteredGames.length || Boolean(mediaProgress)}>
-                {mediaProgress ? `Box art ${mediaProgress.checked}/${mediaProgress.total}` : 'Download box art'}
-              </button>
-            </div>
-            <div className="library-alpha-strip" aria-label="Filter games by first letter">
-              <button
-                type="button"
-                className={letterFilter === 'all' ? 'active' : 'secondary'}
-                onClick={() => setLetterFilter('all')}
-              >
-                All
-              </button>
-              {LIBRARY_ALPHABET.map((letter) => {
-                const count = alphabetCounts[letter] || 0;
-                return (
-                  <button
-                    key={letter}
-                    type="button"
-                    className={letterFilter === letter ? 'active' : 'secondary'}
-                    onClick={() => setLetterFilter(letter)}
-                    disabled={!count}
-                    title={`${count} ${count === 1 ? 'game' : 'games'} beginning with ${letter}`}
-                  >
-                    {letter}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="library-summary-strip">
-              <strong>{visibleFilteredCount}</strong>
-              <span>shown from {visibleActiveCount} {activeLibraryCountLabel}{letterFilter !== 'all' ? ` - ${letterFilter}` : ''}{hiddenVariantCount ? ` - ${hiddenVariantCount} variants grouped` : ''}{showBoxArtOnly ? ' - box art only' : ''}{!showArcadeClones && hiddenArcadeCloneCount ? ` - ${hiddenArcadeCloneCount} MAME clones hidden` : ''}{mediaProgress ? ` - found ${mediaProgress.found}` : ''}</span>
-            </div>
+              </>
+            ) : null}
+            {status && status !== 'Your saved library' ? <p className="osg-lib-status" role="status">{status}</p> : null}
             {vipLoadProgress ? (
               <div className="vip-library-progress" role="status" aria-live="polite">
                 <div>
@@ -3841,120 +3769,51 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
               </div>
             ) : null}
             {mediaProgress ? (
-              <div className="media-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
+              <div className="media-progress-bar" role="progressbar" aria-label="Box art download progress" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
                 <span style={{ width: `${Math.round((mediaProgress.checked / mediaProgress.total) * 100)}%` }} />
               </div>
             ) : null}
-
-            {filteredGames.length ? (
-              <div className="local-game-grid">
-                {displayedGames.map((game) => {
-                  const system = SYSTEM_BY_ID[game.system];
-                  const favourite = game.variants.some((variant) => favouriteSet.has(variant.id));
-                  const hasBoxArt = Boolean(game.boxArtUrl) && !brokenBoxArtIds.has(game.id);
-                  const storedVariantId = selectedVariantIds[game.id];
-                  const storedSnesEntry = game.source === 'vip-snes-gameplay'
-                    ? snesEntryFromVariantId(game.id, storedVariantId)
-                    : '';
-                  const selectedVariant = game.variants.find((variant) => (
-                    variant.id === selectedVariantIds[game.id]
-                  )) || (storedSnesEntry ? {
-                    ...game,
-                    id: storedVariantId,
-                    archiveEntryName: storedSnesEntry,
-                  } : game);
-                  return (
-                    <article key={game.id} className={hasBoxArt ? 'local-game-card has-box-art' : 'local-game-card'}>
-                      <div className={hasBoxArt ? 'local-game-art has-art' : 'local-game-art'}>
-                        {hasBoxArt ? (
-                          <>
-                            <img
-                              src={shelfArtworkUrl(game.boxArtUrl)}
-                              alt=""
-                              loading="eager"
-                              decoding="async"
-                              referrerPolicy="no-referrer"
-                              onError={() => {
-                                setBrokenBoxArtIds((current) => {
-                                  if (current.has(game.id)) return current;
-                                  const next = new Set(current);
-                                  next.add(game.id);
-                                  return next;
-                                });
-                              }}
-                            />
-                            <div className="local-game-art-overlay">
-                              <strong>{game.title}</strong>
-                              <small>{system?.label || 'Unknown system'}</small>
-                            </div>
-                          </>
-                        ) : (
-                          <span>{system?.shortLabel || game.system}</span>
-                        )}
-                      </div>
-                      <div className="local-game-card-head">
-                        <span>{system?.shortLabel || game.system}</span>
-                        {game.variantCount > 1 || game.source === 'vip-snes-gameplay' ? (
-                          <button
-                            type="button"
-                            className="library-versions-button"
-                            onClick={() => (game.source === 'vip-snes-gameplay'
-                              ? openSnesVersionPicker(game)
-                              : setVersionPickerGame(game))}
-                            aria-haspopup="dialog"
-                          >
-                            {game.source === 'vip-snes-gameplay' && game.variantCount <= 1
-                              ? 'Versions'
-                              : `${game.variantCount} versions`}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          className={favourite ? 'active icon-button' : 'secondary icon-button'}
-                          onClick={() => toggleFavourite(game)}
-                          title={favourite ? 'Remove favourite' : 'Add favourite'}
-                          aria-label={favourite ? `Remove ${game.title} from favourites` : `Add ${game.title} to favourites`}
-                        >
-                          <i className={favourite ? 'bi bi-star-fill' : 'bi bi-star'} aria-hidden="true" />
-                        </button>
-                      </div>
-                      <h3>{game.title}</h3>
-                      <p>{system?.label || 'Unknown system'}</p>
-                      <small>{game.variantCount > 1 ? 'Preferred version ready' : 'Ready to play'}</small>
-                      <button type="button" onClick={() => launchGame(selectedVariant)} disabled={launchingId === selectedVariant.id}>
-                        {launchingId === selectedVariant.id ? 'Starting...' : 'Play'}
-                      </button>
-                    </article>
-                  );
-                })}
-                {canShowMoreGames ? <div className="library-scroll-status">More games load as you scroll</div> : null}
+            {emptyState?.kind === 'loading' ? (
+              <div className="osg-lib-grid osg-lib-grid-loading" aria-busy="true" aria-label="Loading your library">
+                {Array.from({ length: 16 }, (_, index) => <span key={index} className="osg-lib-skeleton" />)}
+              </div>
+            ) : emptyState ? (
+              <div className="osg-empty osg-lib-empty">
+                <strong>{emptyState.title}</strong>
+                <p>{emptyState.body}</p>
+                <div className="osg-empty-actions">
+                  {emptyState.kind === 'empty' || emptyState.kind === 'system-empty' ? (
+                    <button type="button" className="osg-btn coin" onClick={() => setAddGamesOpen(true)}>Add games</button>
+                  ) : null}
+                  {emptyState.kind === 'system-empty' && activeSystemDetails ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => launchSystemRoom(activeSystemDetails)}
+                      disabled={launchingSystemId === activeSystemDetails.id}
+                    >
+                      {launchingSystemId === activeSystemDetails.id ? 'Opening...' : `Open ${activeSystemDetails.label} room`}
+                    </button>
+                  ) : null}
+                  {emptyState.kind === 'no-results' ? (
+                    <button type="button" className="secondary" onClick={clearLibraryFilters}>Clear search and filters</button>
+                  ) : null}
+                </div>
               </div>
             ) : (
-              <div className="empty-local-library">
-                <strong>{libraryLoading || !sourcesReady ? '' : shelfGames.length ? 'No games match that filter' : 'No library linked yet'}</strong>
-                <span>
-                  {libraryLoading
-                    ? ''
-                    : games.length
-                    ? 'Try another system or search term.'
-                    : activeSystemDetails
-                      ? `Open a ${activeSystemDetails.label} room and upload one game, or add a folder when you are ready.`
-                      : 'Pick a system to open a room, or add folders when you are ready.'}
-                </span>
-                {activeSystemDetails ? (
-                  <button
-                    type="button"
-                    onClick={() => launchSystemRoom(activeSystemDetails)}
-                    disabled={launchingSystemId === activeSystemDetails.id}
-                  >
-                    {launchingSystemId === activeSystemDetails.id ? 'Opening...' : `Open ${activeSystemDetails.label} room`}
-                  </button>
-                ) : null}
-              </div>
+              <LibraryGrid
+                games={displayedGames}
+                favouriteSet={favouriteSet}
+                brokenIds={brokenBoxArtIds}
+                canShowMore={canShowMoreGames}
+                onOpen={openGameSheet}
+                onToggleFavourite={toggleFavourite}
+                onVersions={openVersionsFor}
+                onImageError={markBoxArtBroken}
+              />
             )}
-          </section>
-          ) : null}
-        </main>
+          </div>
+        ) : null}
     </div>
   );
 
@@ -4034,14 +3893,41 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     onClose={() => setSourceSystem(null)}
   />, document.body) : null;
 
-  if (embedded) return <>{content}{versionPicker}{remoteFallbackDialog}{sourceManager}</>;
+  const gameSheet = sheetItem ? (
+    <GameSheet item={sheetItem} games={shelfGames} onClose={() => setSheetItem(null)} />
+  ) : null;
+
+  const addGamesPanel = addGamesOpen && !onboarding ? (
+    <AddGamesPanel
+      systems={availableSystems}
+      counts={effectiveSystemCounts}
+      folders={folders}
+      sources={sources}
+      sourcesReady={sourcesReady}
+      status={status}
+      scanProgress={scanProgress}
+      mediaProgress={mediaProgress}
+      shownCount={filteredGames.length}
+      launchingSystemId={launchingSystemId}
+      suspended={Boolean(sourceSystem)}
+      onClose={() => setAddGamesOpen(false)}
+      onAddFolder={pickSystemFolder}
+      onOpenSources={setSourceSystem}
+      onOpenRoom={launchSystemRoom}
+      onRescanFolder={rescanLibraryFolder}
+      onRemoveFolder={clearLibraryFolder}
+      onDownloadBoxArt={downloadBoxArt}
+    />
+  ) : null;
+
+  const overlays = <>{versionPicker}{remoteFallbackDialog}{sourceManager}{gameSheet}{addGamesPanel}</>;
+
+  if (embedded) return <>{content}{overlays}</>;
 
   return (
-    <div className="page local-library-page">
+    <AppShell className="osg-lib-page">
       {content}
-      {versionPicker}
-      {remoteFallbackDialog}
-      {sourceManager}
-    </div>
+      {overlays}
+    </AppShell>
   );
 }

@@ -1,0 +1,393 @@
+.osg-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.osg-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(6, 9, 20, 0.8);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--osg-hair);
+}
+
+.osg-topbar-in {
+  max-width: var(--osg-shell-max);
+  margin: 0 auto;
+  padding: 12px 28px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.osg-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--osg-ink);
+  flex: none;
+}
+
+.osg-brand img {
+  width: 40px;
+  height: 40px;
+  filter: drop-shadow(0 4px 10px rgba(47, 134, 224, 0.35));
+}
+
+.osg-brand span {
+  font-family: var(--osg-font-display);
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.osg-brand em { font-style: normal; color: var(--osg-coin); }
+
+.osg-nav { display: flex; gap: 2px; }
+
+.osg-nav a {
+  position: relative;
+  padding: 9px 14px;
+  border-radius: 10px;
+  color: var(--osg-ink-2);
+  font-weight: 700;
+  font-size: 14.5px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.osg-nav a:hover { color: var(--osg-ink); background: var(--osg-deck-2); }
+.osg-nav a.active { color: var(--osg-ink); }
+
+.osg-nav a.active::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -13px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--osg-coin);
+}
+
+.osg-count {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--osg-red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.osg-top-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.osg-join { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: 14px; }
+
+.osg-account { position: relative; }
+
+.osg-account-button {
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  border-radius: 12px;
+}
+
+.osg-account-button:active { transform: none; box-shadow: none; }
+
+.osg-account-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 220px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  background: var(--osg-deck-2);
+  border: 1px solid var(--osg-hair-2);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55);
+  z-index: 50;
+}
+
+.osg-account-name {
+  padding: 8px 10px 6px;
+  font-weight: 800;
+  color: var(--osg-ink);
+  border-bottom: 1px solid var(--osg-hair);
+  margin-bottom: 4px;
+}
+
+.osg-account-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-start;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  color: var(--osg-ink-2);
+  font-weight: 700;
+  font-size: 14px;
+  text-align: left;
+}
+
+.osg-account-menu button:hover { background: var(--osg-deck-3); color: var(--osg-ink); }
+.osg-account-menu button:active { transform: none; }
+.osg-account-menu button.danger { color: #ff8d84; }
+
+.osg-shell-main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--osg-shell-max);
+  margin: 0 auto;
+  padding: 0 28px 56px;
+}
+
+.osg-tabbar { display: none; }
+
+/* Join dialog */
+.osg-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(2, 4, 10, 0.72);
+}
+
+.osg-dialog {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  border-radius: 18px;
+  background: var(--osg-deck);
+  border: 1px solid var(--osg-hair-2);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+}
+
+.osg-dialog h2 { margin: 0; font-size: 22px; font-weight: 900; }
+.osg-dialog p { margin: 0; color: var(--osg-ink-2); font-size: 14px; }
+.osg-dialog input { padding: 12px 14px; font-size: 15px; }
+.osg-dialog .error { color: #ff8d84; }
+.osg-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+@media (max-width: 1040px) {
+  .osg-nav a { padding: 9px 10px; }
+}
+
+@media (max-width: 720px) {
+  .osg-topbar-in { padding: 10px 16px; gap: 12px; }
+  .osg-brand img { width: 34px; height: 34px; }
+  .osg-brand span { font-size: 15px; }
+  .osg-nav { display: none; }
+  .osg-join span { display: none; }
+  .osg-join { padding: 9px 11px; }
+  .osg-shell-main { padding: 0 16px calc(var(--osg-tabbar-h) + 24px + env(safe-area-inset-bottom, 0px)); }
+
+  .osg-tabbar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    padding: 8px 6px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: rgba(8, 11, 24, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--osg-hair-2);
+  }
+
+  .osg-tabbar a {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    color: var(--osg-ink-3);
+    font-size: 11px;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  .osg-tabbar a i { font-size: 20px; line-height: 1; }
+  .osg-tabbar a.active { color: var(--osg-coin); }
+  .osg-tabbar .osg-count { position: absolute; top: -4px; left: 54%; font-size: 10px; padding: 0 5px; }
+}
+
+/* Feedback count on the account button and in its menu */
+.osg-account-button { position: relative; }
+.osg-account-pip {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--osg-red);
+  box-shadow: 0 0 0 2px var(--osg-night);
+}
+.osg-account-menu button .osg-count { margin-left: auto; }
+
+/* ---------- Older pages inside the shell ----------
+   These pages keep their own layouts; this only drops the full-screen centring,
+   the duplicate headers' spacing and the old green-grey surfaces so they sit on
+   the shell's night background with the shared tokens. */
+.osg-legacy-page .page {
+  min-height: 0;
+  display: block;
+  padding: 24px 0 0;
+}
+
+.osg-legacy-page .card,
+.osg-legacy-page .local-library-shell {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(16px, 2vw, 24px);
+  background: var(--osg-deck);
+  border: 1px solid var(--osg-hair-2);
+  border-radius: var(--osg-r-lg);
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.9);
+}
+
+.osg-legacy-page .panel,
+.osg-legacy-page .local-library-panel,
+.osg-legacy-page .local-library-hero,
+.osg-legacy-page .local-library-actions,
+.osg-legacy-page .recent-arcade-scores {
+  background: var(--osg-deck-2);
+  border-color: var(--osg-hair-2);
+  border-radius: var(--osg-r-md);
+}
+
+.osg-legacy-page .local-library-hero h1,
+.osg-legacy-page .lobby-intro h1,
+.osg-legacy-page .tournament-hero h1,
+.osg-legacy-page .profile-identity-copy h1 {
+  font-family: var(--osg-font-display);
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  color: var(--osg-ink);
+}
+
+.osg-legacy-page .lobby-eyebrow,
+.osg-legacy-page .eyebrow {
+  font-family: var(--osg-font-pixel);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  color: var(--osg-coin);
+}
+
+.osg-legacy-page .tournaments-page { min-height: 0; padding: 24px 0 0; }
+.osg-legacy-page .profile-page { padding: 24px 0 0; }
+.osg-legacy-page .profile-shell { width: 100%; }
+.osg-legacy-page .recent-arcade-heading span:first-child { font-family: var(--osg-font-pixel); font-weight: 400; color: var(--osg-coin); }
+.osg-legacy-page .recent-arcade-list strong { font-family: var(--osg-font-pixel); font-weight: 400; color: var(--osg-coin); }
+.osg-legacy-page .tournament-hero,
+.osg-legacy-page .tournament-card,
+.osg-legacy-page .tournament-list { background: var(--osg-deck); border-color: var(--osg-hair-2); }
+.osg-legacy-page .tournament-list a { background: var(--osg-deck-2); border-color: var(--osg-hair-2); }
+.osg-legacy-page .tournament-list a:hover { background: var(--osg-deck-3); border-color: var(--osg-coin); }
+.osg-legacy-page .osg-scores-slot { padding: 0; border: 0; background: none; }
+
+/* First-run onboarding: header above content, full width (was side by side). */
+.osg-onboarding .welcome-home-page {
+  display: block;
+  width: 100%;
+}
+.osg-onboarding .welcome-home-page .local-library-shell { width: 100%; }
+
+/* Friends page */
+.osg-page-head { margin: 26px 0 18px; display: grid; gap: 6px; }
+.osg-page-head h1 { margin: 0; font-family: var(--osg-font-display); font-weight: 400; font-size: clamp(26px, 3vw, 36px); line-height: 1; }
+.osg-page-head p { margin: 0; color: var(--osg-ink-2); }
+.osg-friends-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.osg-friends-layout .messages-card { max-width: none; }
+.osg-friends-side { display: grid; gap: 14px; }
+
+@media (max-width: 960px) {
+  .osg-friends-layout { grid-template-columns: minmax(0, 1fr); }
+  .osg-friends-side { order: -1; }
+}
+
+@media (max-width: 720px) {
+  .osg-legacy-page .page,
+  .osg-legacy-page .tournaments-page,
+  .osg-legacy-page .profile-page { padding-top: 14px; }
+  .osg-legacy-page .card,
+  .osg-legacy-page .local-library-shell { padding: 14px; border-radius: var(--osg-r-md); }
+}
+
+/* ---------- Library page inside the shell ----------
+   The old library was sized for the full window; fit it to the shell column,
+   drop the outer frame and the duplicate join box, and let rows wrap. */
+.osg-library-page .local-library-shell {
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.osg-library-page .local-library-hero {
+  display: block;
+  padding: 28px 0 8px;
+  background: none;
+  border: 0;
+}
+
+.osg-library-page .local-library-hero h1 { font-size: clamp(30px, 3.4vw, 44px); margin: 6px 0 4px; }
+.osg-library-page .local-library-hero p:last-child { color: var(--osg-ink-2); margin: 0; }
+.osg-library-page .local-library-actions { display: none; }
+
+.osg-library-page .local-library-layout {
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  margin-top: 18px;
+}
+
+.osg-library-page .local-library-main,
+.osg-library-page .local-library-sidebar { min-width: 0; }
+
+.osg-library-page .local-library-main > *,
+.osg-library-page .local-library-titlebar > * { min-width: 0; max-width: 100%; }
+
+.osg-library-page .local-library-titlebar,
+.osg-library-page .local-library-title-actions,
+.osg-library-page .local-library-toolbar,
+.osg-library-page .library-filter-tabs,
+.osg-library-page .library-alpha-strip { flex-wrap: wrap; }
+
+.osg-library-page .local-library-toolbar input[type="search"],
+.osg-library-page .local-library-toolbar input:not([type]) { min-width: 0; flex: 1 1 220px; }
+
+@media (max-width: 900px) {
+  .osg-library-page .local-library-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.osg-library-page .local-library-toolbar,
+.osg-library-page .local-library-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.osg-library-page .local-library-titlebar > :first-child { flex: 1 1 260px; }
+.osg-library-page .local-library-titlebar { border-color: var(--osg-hair-2); background: var(--osg-deck-2); }

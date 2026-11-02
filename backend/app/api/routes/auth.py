@@ -29,6 +29,8 @@ VERIFY_EMAIL = "verify_email"
 RESET_PASSWORD = "reset_password"
 REFRESH_SESSION = "refresh_session"
 REFRESH_COOKIE = "osg_refresh"
+RESEND_COOLDOWN_SECONDS = 60
+RESEND_COOLDOWN: dict[int, datetime] = {}
 
 
 def is_super_admin_user(user: User) -> bool:
@@ -90,6 +92,7 @@ def auth_response(user: User, db: Session) -> AuthResponse:
         is_tester=is_tester_user(user),
         plan=user.plan or "FREE",
         entitlements=sorted(entitlements_for(user, db)),
+        email_verified=bool(user.email_verified),
     )
 
 
@@ -185,8 +188,26 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
     return user
 
 
+EMAIL_NOT_VERIFIED_CODE = "email_not_verified"
+EMAIL_NOT_VERIFIED_MESSAGE = "Verify your email to play online and post scores."
+
+
+def ensure_email_verified(user: User | None) -> None:
+    """Raise a stable 403 when the account has not verified its email address."""
+    if user is None or not user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": EMAIL_NOT_VERIFIED_CODE, "message": EMAIL_NOT_VERIFIED_MESSAGE},
+        )
+
+
+def require_verified_user(user: User = Depends(get_current_user)) -> User:
+    ensure_email_verified(user)
+    return user
+
+
 @router.post("/register")
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+def register(payload: RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     existing_user = (
         db.query(User)
         .filter(or_(User.username == payload.username, User.email == payload.email))
@@ -205,14 +226,25 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.flush()
     verification_token = create_account_token(db, user, VERIFY_EMAIL, 24 * 60)
+    email_sent = True
     try:
         send_verification_email(user, verification_token)
     except Exception:
+        # Never block sign-up on SMTP problems; the player can resend later.
         logger.exception("Could not send verification email")
-        db.rollback()
-        raise HTTPException(status_code=503, detail="Could not send verification email. Please try again.")
+        email_sent = False
+    user.last_login_at = datetime.now(timezone.utc)
+    user.login_count = (user.login_count or 0) + 1
     db.commit()
-    return {"message": "Check your email to verify your account"}
+    db.refresh(user)
+
+    issue_refresh_session(db, user, response, request)
+    db.commit()
+    if email_sent:
+        message = "Account created. Check your email to verify your address."
+    else:
+        message = "Account created, but we could not send the verification email. You can resend it from the banner."
+    return {**auth_response(user, db).model_dump(), "message": message, "email_sent": email_sent}
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -220,8 +252,6 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
     user = db.query(User).filter(User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    if not user.email_verified:
-        raise HTTPException(status_code=403, detail="Please verify your email before signing in")
 
     user.last_login_at = datetime.now(timezone.utc)
     user.login_count = (user.login_count or 0) + 1
@@ -295,7 +325,7 @@ def verify_email(payload: TokenRequest, db: Session = Depends(get_db)):
     user.email_verified = True
     account_token.used_at = datetime.now(timezone.utc)
     db.commit()
-    return {"message": "Email verified. You can now sign in."}
+    return {"message": "Email verified. Thank you!"}
 
 
 @router.post("/resend-verification")
@@ -310,6 +340,26 @@ def resend_verification(payload: EmailRequest, db: Session = Depends(get_db)):
             logger.exception("Could not resend verification email")
             db.rollback()
     return {"message": "If that account needs verification, a new email has been sent."}
+
+
+@router.post("/resend-verification/me")
+def resend_verification_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user.email_verified:
+        return {"message": "Your email is already verified.", "email_verified": True, "email_sent": False}
+    now = datetime.now(timezone.utc)
+    last_sent = RESEND_COOLDOWN.get(user.id)
+    if last_sent and (now - last_sent).total_seconds() < RESEND_COOLDOWN_SECONDS:
+        raise HTTPException(status_code=429, detail="A verification email was just sent. Please wait a minute before trying again.")
+    token = create_account_token(db, user, VERIFY_EMAIL, 24 * 60)
+    try:
+        send_verification_email(user, token)
+        db.commit()
+    except Exception:
+        logger.exception("Could not resend verification email")
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not send the verification email right now. Please try again later.")
+    RESEND_COOLDOWN[user.id] = now
+    return {"message": "Verification email sent. Check your inbox and spam folder.", "email_verified": False, "email_sent": True}
 
 
 @router.post("/forgot-password")
@@ -345,4 +395,5 @@ def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)
         "is_tester": is_tester_user(user),
         "plan": user.plan or "FREE",
         "entitlements": sorted(entitlements_for(user, db)),
+        "email_verified": bool(user.email_verified),
     }

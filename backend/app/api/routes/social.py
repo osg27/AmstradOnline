@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user
+from app.api.routes.auth import get_current_user, require_verified_user
 from app.core.database import get_db
 from app.models.friendship import DirectMessage, Friendship, RoomInvite
 from app.models.room import Room
@@ -185,7 +185,7 @@ def get_direct_messages(
 def send_direct_message(
     payload: DirectMessagePayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ):
     message_text = payload.message.strip()
     if not message_text:
@@ -383,7 +383,7 @@ def get_social_overview(
 def send_friend_request(
     payload: FriendRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ):
     username = payload.username.strip()
     addressee = db.query(User).filter(func.lower(User.username) == username.lower()).first()
@@ -462,7 +462,7 @@ def invite_friend_to_room(
     user_id: int,
     room_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ):
     friendship = get_friendship(db, current_user.id, user_id)
     if not friendship or friendship.status != "accepted":

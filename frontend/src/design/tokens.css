@@ -1,0 +1,193 @@
+/* Old Style Gaming design tokens ("late-night arcade").
+   Loaded after styles.css so the shared base wins over older page styles. */
+:root {
+  color-scheme: dark;
+  --osg-night: #060914;
+  --osg-void: #03050b;
+  --osg-deck: #0c1122;
+  --osg-deck-2: #121a31;
+  --osg-deck-3: #1a2440;
+  --osg-hair: rgba(170, 190, 255, 0.09);
+  --osg-hair-2: rgba(170, 190, 255, 0.16);
+  --osg-ink: #f5f1e6;
+  --osg-ink-2: #aab0c8;
+  --osg-ink-3: #6e7592;
+  --osg-coin: #ffc82e;
+  --osg-coin-deep: #b98a00;
+  --osg-coin-ink: #1d1500;
+  --osg-red: #ea3a30;
+  --osg-blue: #2f86e0;
+  --osg-go: #3fdc8a;
+  --osg-ra: #ffb547;
+  --osg-font-display: "Bungee", "Arial Black", Impact, sans-serif;
+  --osg-font-ui: "Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --osg-font-pixel: "Silkscreen", "Courier New", monospace;
+  --osg-r-sm: 6px;
+  --osg-r-md: 12px;
+  --osg-r-lg: 18px;
+  --osg-shell-max: 1360px;
+  --osg-tabbar-h: 64px;
+
+  /* Older page styles read these; point them at the new palette. */
+  --bg: var(--osg-night);
+  --surface: var(--osg-deck);
+  --surface-strong: var(--osg-deck-2);
+  --panel: var(--osg-deck);
+  --line: var(--osg-hair-2);
+  --line-strong: rgba(170, 190, 255, 0.24);
+  --text: var(--osg-ink);
+  --muted: var(--osg-ink-2);
+  --green: #2f6fc0;
+  --green-bright: #8cc0ff;
+  --amber: var(--osg-coin);
+  --gold: var(--osg-coin);
+  --red: var(--osg-red);
+
+  font-family: var(--osg-font-ui);
+  color: var(--osg-ink);
+  background: var(--osg-night);
+}
+
+body {
+  font-family: var(--osg-font-ui);
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(1200px 520px at 18% -120px, rgba(47, 134, 224, 0.18), transparent 70%),
+    radial-gradient(900px 480px at 92% -160px, rgba(234, 58, 48, 0.12), transparent 70%),
+    var(--osg-night);
+  background-attachment: fixed;
+}
+
+a { color: #8cc0ff; }
+
+:focus-visible { outline: 2px solid var(--osg-coin); outline-offset: 2px; }
+
+/* Buttons: yellow is the one main action, everything else is quiet. */
+button,
+.button-like {
+  font-family: var(--osg-font-ui);
+  background: linear-gradient(180deg, #ffd65a, var(--osg-coin));
+  color: var(--osg-coin-ink);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-weight: 800;
+  box-shadow: 0 3px 0 var(--osg-coin-deep);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+button:active:not(:disabled),
+.button-like:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--osg-coin-deep); }
+
+button.secondary,
+.button-like.secondary {
+  background: var(--osg-deck-2);
+  color: var(--osg-ink);
+  border-color: var(--osg-hair-2);
+  box-shadow: none;
+}
+
+button.secondary:hover:not(:disabled),
+.button-like.secondary:hover { background: var(--osg-deck-3); }
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+input,
+select,
+textarea {
+  font-family: var(--osg-font-ui);
+  background: var(--osg-deck);
+  color: var(--osg-ink);
+  border: 1px solid var(--osg-hair-2);
+  border-radius: 10px;
+}
+
+input::placeholder,
+textarea::placeholder { color: var(--osg-ink-3); }
+
+.card,
+.lobby-shell {
+  background: var(--osg-deck);
+  border-color: var(--osg-hair-2);
+}
+
+/* Small shared pieces */
+.osg-eyebrow {
+  font-family: var(--osg-font-pixel);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--osg-coin);
+}
+
+.osg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--osg-ink-2);
+  white-space: nowrap;
+}
+
+.osg-chip i.osg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--osg-sys, var(--osg-ink-3));
+}
+
+.osg-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font: 700 10.5px var(--osg-font-ui);
+  color: var(--osg-ink-2);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom-width: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--osg-coin);
+  outline: 2px solid rgba(255, 200, 46, 0.22);
+  outline-offset: 0;
+}
+
+/* Sign-in, register, forgot / reset password and verify pages */
+.auth-page .card {
+  border-radius: var(--osg-r-lg);
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.9);
+}
+.auth-page .card::before {
+  border-top-color: var(--osg-coin);
+  border-radius: var(--osg-r-lg) var(--osg-r-lg) 0 0;
+}
+.auth-page .auth-heading h1 {
+  font-family: var(--osg-font-display);
+  font-weight: 400;
+  letter-spacing: 0.005em;
+}
+.auth-page .auth-heading p,
+.auth-page .auth-switch { color: var(--osg-ink-2); }
+.auth-page a:not(.button-like) { color: #8cc0ff; font-weight: 700; }
+.auth-page a:not(.button-like):hover { color: var(--osg-coin); }
+.auth-page .error { color: #ff8d84; }
+.auth-page .success { color: var(--osg-go); }

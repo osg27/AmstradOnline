@@ -12,7 +12,7 @@ from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user, is_admin_user
+from app.api.routes.auth import get_current_user, is_admin_user, require_verified_user
 from app.core.database import get_db
 from app.core.entitlements import require_entitlement
 from app.models.tournament import Tournament, TournamentEntry, TournamentNotification, TournamentScore
@@ -149,7 +149,7 @@ def create_tournament(
     duration_hours: int = Form(..., ge=1, le=24 * 30),
     is_public: bool = Form(True),
     rom_file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_user),
     db: Session = Depends(get_db),
 ):
     require_entitlement(user, db, "create_tournaments")
@@ -298,7 +298,7 @@ def delete_tournament(code: str, user: User = Depends(get_current_user), db: Ses
 
 
 @router.post("/{code}/join")
-def join_tournament(code: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def join_tournament(code: str, user: User = Depends(require_verified_user), db: Session = Depends(get_db)):
     tournament = get_tournament(code, db)
     try:
         db.add(TournamentEntry(tournament_id=tournament.id, user_id=user.id))
@@ -401,7 +401,7 @@ def extract_tournament_score(
     code: str,
     session_id: str,
     payload: TournamentScoreSubmit,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_user),
     db: Session = Depends(get_db),
 ):
     tournament = get_tournament(code, db)

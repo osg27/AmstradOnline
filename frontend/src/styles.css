@@ -5433,7 +5433,7 @@ ul {
   box-shadow: inset 0 0 0 3px rgba(0,0,0,.3), 0 7px 18px rgba(0,0,0,.34);
 }
 .player-avatar::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(0,0,0,.12) 3px 4px); pointer-events: none; }
-.player-avatar > span { position: relative; z-index: 1; padding: 0; border: 0; background: none; line-height: 1; filter: drop-shadow(0 3px 1px rgba(0,0,0,.45)); }
+.player-avatar > span { position: relative; z-index: 1; padding: 0; border: 0; background: none; line-height: 1; filter: drop-shadow(0 3px 1px rgba(0,0,0,.45)); font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol", "Twemoji Mozilla", sans-serif; font-variant-emoji: emoji; }
 .player-avatar-small { width: 46px; height: 46px; font-size: 1.65rem; }
 .player-avatar-medium { width: 70px; height: 70px; font-size: 2.4rem; }
 .player-avatar-hero { width: clamp(112px, 14vw, 156px); height: clamp(112px, 14vw, 156px); font-size: clamp(4rem, 8vw, 6rem); border-width: 3px; }

@@ -1,11 +1,11 @@
 import { SUPPORTER_UI_ENABLED } from '../config/supporterUi';
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
-import BrandMark from '../components/BrandMark';
+import AppShell from '../components/AppShell';
 import PlayerAvatar, { PLAYER_AVATARS } from '../components/PlayerAvatar';
 import SupporterLockModal from '../components/SupporterLockModal';
 import RetroAchievementsCard from '../components/RetroAchievementsCard';
+import '../features/profile/profile.css';
 
 const achievementIcons = {
   coin: '●', joystick: '🕹️', systems: '▦', flag: '⚑', bronze: '🥉', gold: '🏆', clock: '◷',
@@ -22,7 +22,6 @@ function roleLabel(role) {
 }
 
 export default function ProfilePage() {
-  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [status, setStatus] = useState('Loading player card…');
   const [savingAvatar, setSavingAvatar] = useState('');
@@ -59,14 +58,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="page profile-page">
-      <header className="profile-topbar">
-        <BrandMark />
-        <div>
-          <button type="button" className="secondary" onClick={() => navigate('/lobby')}>Lobby</button>
-          <button type="button" className="secondary" onClick={() => navigate('/tournaments')}>Tournaments</button>
-        </div>
-      </header>
+    <AppShell className="osg-legacy-page">
+    <div className="page profile-page prf-page">
 
       {status && !profile ? <section className="panel profile-loading">{status}</section> : null}
       {profile ? (
@@ -83,7 +76,7 @@ export default function ProfilePage() {
             <div className="profile-level-chip"><small>ACHIEVEMENTS</small><strong>{profile.stats.achievements_unlocked}/{profile.achievements.length}</strong></div>
           </section>
 
-          <section className="profile-stat-grid">
+          <section className="profile-stat-grid" aria-label="Your stats">
             <article><small>GAME ROOMS</small><strong>{profile.stats.games_played}</strong><span>played</span></article>
             <article><small>PLAY TIME</small><strong>{profile.stats.hours_played}</strong><span>hours</span></article>
             <article><small>SYSTEMS</small><strong>{profile.stats.systems_played}</strong><span>explored</span></article>
@@ -126,7 +119,7 @@ export default function ProfilePage() {
                 <div className="profile-section-heading"><div><p>PLAYER LOOK</p><h2>Avatar locker</h2></div></div>
                 <div className="avatar-options">
                   {profile.available_avatars.filter((avatarId) => SUPPORTER_UI_ENABLED || profile.avatar_options?.find((item) => item.id === avatarId)?.available !== false).map((avatarId) => (
-                    <button key={avatarId} type="button" className={profile.avatar_id === avatarId ? 'selected' : ''} onClick={() => chooseAvatar(avatarId)} disabled={Boolean(savingAvatar)} title={`${PLAYER_AVATARS[avatarId]?.label}${profile.avatar_options?.find((item) => item.id === avatarId)?.available === false ? ' — Supporter' : ''}`}>
+                    <button key={avatarId} type="button" className={profile.avatar_id === avatarId ? 'selected' : ''} onClick={() => chooseAvatar(avatarId)} aria-pressed={profile.avatar_id === avatarId} aria-label={PLAYER_AVATARS[avatarId]?.label || avatarId} disabled={Boolean(savingAvatar)} title={`${PLAYER_AVATARS[avatarId]?.label}${profile.avatar_options?.find((item) => item.id === avatarId)?.available === false ? ' — Supporter' : ''}`}>
                       <PlayerAvatar avatarId={avatarId} size="small" />
                       {profile.avatar_options?.find((item) => item.id === avatarId)?.available === false ? <span aria-label="Supporter avatar">🔒</span> : null}
                     </button>
@@ -140,5 +133,6 @@ export default function ProfilePage() {
       ) : null}
       <SupporterLockModal feature={supporterLock} onClose={() => setSupporterLock('')} />
     </div>
+    </AppShell>
   );
 }

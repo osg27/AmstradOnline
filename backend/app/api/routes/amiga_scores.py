@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import get_current_user
+from app.api.routes.auth import get_current_user, require_verified_user
 from app.core.database import get_db
 from app.models.amiga_leaderboard import AmigaHighScore
 from app.models.user import User
@@ -62,7 +62,7 @@ def resolve_supported_amiga_game(title: str = Query(min_length=1, max_length=512
 @router.post("/extract-score")
 def extract_amiga_score(
     payload: AmigaScoreExtractionRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_verified_user),
     db: Session = Depends(get_db),
 ):
     extractor = get_extractor(payload.game_key)

@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client';
-import BrandMark from '../components/BrandMark';
+import AppShell from '../components/AppShell';
 import LocalGameCard from '../features/localLibrary/components/LocalGameCard';
 import { useLocalLibrary } from '../features/localLibrary/hooks/useLocalLibrary';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
@@ -70,15 +70,9 @@ export default function MyLocalGamesPage() {
   }
 
   return (
+    <AppShell className="osg-legacy-page">
     <div className="page local-library-page">
       <div className="local-library-shell">
-        <header className="lobby-header local-library-header">
-          <BrandMark />
-          <div className="account-strip">
-            <button type="button" className="secondary" onClick={() => navigate('/library')}>My Library</button>
-            <button type="button" className="secondary" onClick={() => navigate('/lobby')}>Lobby</button>
-          </div>
-        </header>
         <section className="local-library-hero local-amiga-hero">
           <div>
             <p className="lobby-eyebrow">Private, browser-only library</p>
@@ -154,5 +148,6 @@ export default function MyLocalGamesPage() {
         </main>
       </div>
     </div>
+    </AppShell>
   );
 }

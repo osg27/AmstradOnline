@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { unzipSync, zipSync } from 'fflate';
 import { API_BASE_URL, apiFetch } from '../api/client';
-import BrandMark from '../components/BrandMark';
 import RoomChat from '../components/RoomChat';
 import SocialSidebar from '../components/SocialSidebar';
 import { getLocalLibraryFolder, getLocalLibraryGame, getLocalLibraryGames, getLocalLibraryGamesForRoomSystem, readLocalLibraryFile } from '../localLibraryDb';
@@ -34,10 +33,38 @@ import { getControllerMapping } from '../utils/controllerMappingStorage';
 import { applyCustomMapping } from '../utils/applyControllerMapping';
 import { supportsControllerMapping } from '../utils/defaultControllerMappings';
 import { copyText } from '../utils/clipboard';
+import { AMIGA_ROM_SOURCE, isExperimentalArosEnabled, resolveAmigaRomSource } from '../features/amiga/romSource';
 import { downloadKickstarts, KICKSTART_URL_KEY } from '../features/amiga/kickstartUrl';
 import GameRecorderControls from '../features/recording/GameRecorderControls';
 import RetroAchievementsPlay from '../components/RetroAchievementsPlay';
 import { getAdapterAudioStream, getEmulatorRecordingAdapter } from '../features/recording/emulatorRecordingAdapters';
+import useEntitlement from '../hooks/useEntitlement';
+import { SUPPORTER_UI_ENABLED } from '../config/supporterUi';
+import GameMenu from '../features/room-ui/GameMenu';
+import RoomTheatre from '../features/room-ui/RoomTheatre';
+import RoomTopBar, { PlayerAvatar } from '../features/room-ui/RoomTopBar';
+import RoomDock from '../features/room-ui/RoomDock';
+import RoomHud, { Pill } from '../features/room-ui/RoomHud';
+import TouchControls from '../features/room-ui/TouchControls';
+import StartHereCard from '../features/room-ui/StartHereCard';
+import Icon from '../features/room-ui/icons';
+import useRoomViewport from '../features/room-ui/useRoomViewport';
+import useGameMenuShortcuts from '../features/room-ui/useGameMenuShortcuts';
+import { MenuBlock, MenuGroup, MenuNote, MenuRow, Toggle, Value } from '../features/room-ui/menuPanels/MenuParts';
+import ArcadeRomBrowser from '../features/room-ui/menuPanels/ArcadeRomBrowser';
+import { ArcadeHostQueuePanel, C64PartyPanel, CpcPartyTurnPanel, GuestArcadeQueuePanel } from '../features/room-ui/menuPanels/PartyPanels';
+import ControlProfileDrawer from '../features/room-ui/menuPanels/ControlProfileDrawer';
+import DiagnosticsPanel from '../features/room-ui/menuPanels/DiagnosticsPanel';
+import LocalGamePicker from '../features/room-ui/menuPanels/LocalGamePicker';
+import Atari8Settings from '../features/room-ui/menuPanels/Atari8Settings';
+import {
+  CRT_STORAGE_KEY,
+  SYSTEM_COLORS,
+  deriveGameTitle,
+  isKeyboardSystem,
+  touchProfileFor,
+} from '../features/room-ui/roomUiConfig';
+import '../features/room-ui/room-ui.css';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
@@ -50,7 +77,9 @@ const ATARI_ST_TOS_KEY = 'atari-st-tos';
 const X68000_FIRMWARE_KEY = 'x68000-firmware';
 const CONTROL_MATCH_LIMIT = 6;
 const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
+const DEFAULT_HOST_VOLUME = 0.7;
 const PREFERRED_LIBRARY_VARIANTS_KEY = 'localLibraryPreferredVariants';
+const AMIGA_AROS_ENABLED = isExperimentalArosEnabled(import.meta.env.VITE_AMIGA_AROS_ENABLED);
 const GAME_RECORDING_ENABLED = String(import.meta.env.VITE_GAME_RECORDING_ENABLED || '').toLowerCase() === 'true';
 const BUILTIN_MAME_LEADERBOARD_ROMS = new Set([
   'dkong',
@@ -802,6 +831,7 @@ export default function RoomPage() {
   const [localReleaseFiles, setLocalReleaseFiles] = useState([]);
   const [currentLocalReleaseIndex, setCurrentLocalReleaseIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
+  const [amigaRomSource, setAmigaRomSource] = useState(AMIGA_ROM_SOURCE.ORIGINAL);
   const [amigaRequiredModel, setAmigaRequiredModel] = useState('');
   const [x68000FirmwareName, setX68000FirmwareName] = useState('');
   const [vipKickstartBusy, setVipKickstartBusy] = useState(false);
@@ -943,8 +973,10 @@ export default function RoomPage() {
   const [micDevices, setMicDevices] = useState([]);
   const [selectedMicDeviceId, setSelectedMicDeviceId] = useState('');
   const [hostVolume, setHostVolume] = useState(() => {
-    const storedVolume = Number(window.localStorage?.getItem(HOST_VOLUME_STORAGE_KEY));
-    return Number.isFinite(storedVolume) ? Math.min(1, Math.max(0, storedVolume)) : 1;
+    // Nothing stored (first visit) used to read as Number(null) === 0, i.e. muted.
+    const storedValue = window.localStorage?.getItem(HOST_VOLUME_STORAGE_KEY);
+    const storedVolume = storedValue === null || storedValue === undefined || storedValue === '' ? NaN : Number(storedValue);
+    return Number.isFinite(storedVolume) ? Math.min(1, Math.max(0, storedVolume)) : DEFAULT_HOST_VOLUME;
   });
   const [emulatorPaused, setEmulatorPaused] = useState(false);
   const [c64WarpEnabled, setC64WarpEnabled] = useState(false);
@@ -958,6 +990,41 @@ export default function RoomPage() {
   const [controlProfileMatches, setControlProfileMatches] = useState([]);
   const [selectedControlProfile, setSelectedControlProfile] = useState(null);
   const [controlProfileDrawerOpen, setControlProfileDrawerOpen] = useState(false);
+
+  // ---------- in-game room UI (theatre, menu, HUD) ----------
+  const viewport = useRoomViewport();
+  const canRecordEntitlement = useEntitlement('full_recording');
+  const [gameMenuOpen, setGameMenuOpen] = useState(false);
+  const [menuCategory, setMenuCategory] = useState('game');
+  const [menuInputType, setMenuInputType] = useState('keyboard');
+  const [padInfo, setPadInfo] = useState({ connected: false, name: '', kind: null });
+  const [crtEnabled, setCrtEnabled] = useState(() => {
+    try {
+      return window.localStorage?.getItem(CRT_STORAGE_KEY) === 'on';
+    } catch {
+      return false;
+    }
+  });
+  const [roomToasts, setRoomToasts] = useState([]);
+  const [chatUnread, setChatUnread] = useState(0);
+  const [raProgress, setRaProgress] = useState(null);
+  const [recordingActive, setRecordingActive] = useState(false);
+  const [recordingStartedAt, setRecordingStartedAt] = useState(0);
+  const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const [roomIdle, setRoomIdle] = useState(false);
+  const [browserFullscreen, setBrowserFullscreen] = useState(false);
+  const roomRootRef = useRef(null);
+  const gameMenuRef = useRef(null);
+  const gameMenuOpenRef = useRef(false);
+  const padNeutralGuardRef = useRef(false);
+  const menuPausedEmulatorRef = useRef(false);
+  const focusBeforeMenuRef = useRef(null);
+  const menuShortcutRef = useRef({});
+  const escTapHintCountRef = useRef(0);
+  const toastIdRef = useRef(0);
+  const seenChatCountRef = useRef(0);
+  // Registered before the room's own keyboard listeners so Esc can be consumed first.
+  useGameMenuShortcuts(menuShortcutRef);
 
   const userId = useMemo(() => {
     const token = localStorage.getItem('token');
@@ -1455,6 +1522,22 @@ export default function RoomPage() {
       && !event.metaKey
       && !event.altKey
     );
+  }
+
+  // While the game menu is open, key releases are still forwarded (so nothing
+  // stays held in the emulator) but must not preventDefault, or Space/Enter
+  // would stop activating the focused menu button.
+  function menuSafeKeyEvent(event) {
+    return {
+      key: event.key,
+      code: event.code,
+      keyCode: event.keyCode,
+      repeat: event.repeat,
+      target: event.target,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      preventDefault() {},
+    };
   }
 
   function getKeyboardKey(event) {
@@ -2231,7 +2314,7 @@ export default function RoomPage() {
           }
         }
 
-        if (isPuaeAmiga
+        if (isPuaeAmiga && amigaRomSource !== AMIGA_ROM_SOURCE.AROS
           && localStorage.getItem(KICKSTART_URL_KEY)
           && (!storedKickstart || (kickstartStorageKey === AMIGA_AGA_KICKSTART_KEY && !(await loadA500WHDLoadKickstart()).length))) {
           try {
@@ -2260,7 +2343,7 @@ export default function RoomPage() {
           await saveStoredKickstart(kickstartStorageKey, storedKickstart.fileName, storedKickstart.bytes);
         }
 
-        if (cancelled || !storedKickstart) return;
+        if (cancelled || !storedKickstart || (isPuaeAmiga && amigaRomSource === AMIGA_ROM_SOURCE.AROS)) return;
 
         const amigaSupportKickstarts = kickstartStorageKey === AMIGA_AGA_KICKSTART_KEY
           ? await loadA500WHDLoadKickstart()
@@ -2318,7 +2401,7 @@ export default function RoomPage() {
       window.clearTimeout(timer);
       timers.forEach((retryTimer) => window.clearTimeout(retryTimer));
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAtariSt, isDiscConsole, isHost, isPuaeAmiga, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
+  }, [addLog, amigaRomSource, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAtariSt, isDiscConsole, isHost, isPuaeAmiga, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -2651,19 +2734,18 @@ export default function RoomPage() {
       const pad = findGamepad(pads);
 
       if (pad) {
-        // Suppress input while controller configuration is capturing
-        if (controllerCapturingInput) {
-          if (lastMask !== 0) {
-            lastMask = 0;
-            sendLocalJoystickMask(0);
-          }
-        } else {
-          const mask = gamepadToJoystickMask(pad);
+        // Suppress input while controller configuration is capturing, while the
+        // game menu is open, and after it closes until every button is released
+        // (so the button that closed the menu doesn't leak into the game).
+        const rawMask = controllerCapturingInput || gameMenuOpenRef.current ? 0 : gamepadToJoystickMask(pad);
+        if (padNeutralGuardRef.current && !gameMenuOpenRef.current && rawMask === 0) {
+          padNeutralGuardRef.current = false;
+        }
+        const mask = padNeutralGuardRef.current || gameMenuOpenRef.current ? 0 : rawMask;
 
-          if (mask !== lastMask) {
-            lastMask = mask;
-            sendLocalJoystickMask(mask);
-          }
+        if (mask !== lastMask) {
+          lastMask = mask;
+          sendLocalJoystickMask(mask);
         }
       }
 
@@ -3974,6 +4056,7 @@ export default function RoomPage() {
     if (!canControlLocalEmulator) return undefined;
 
     function handleHostKeyDown(event) {
+      if (gameMenuOpenRef.current) return;
       if (!shouldHandleHostKey(event)) return;
 
       const key = getKeyboardKey(event);
@@ -4045,7 +4128,8 @@ export default function RoomPage() {
       }
     }
 
-    function handleHostKeyUp(event) {
+    function handleHostKeyUp(rawEvent) {
+      const event = gameMenuOpenRef.current ? menuSafeKeyEvent(rawEvent) : rawEvent;
       if (!shouldHandleHostKey(event)) return;
 
       const key = getKeyboardKey(event);
@@ -4128,6 +4212,7 @@ export default function RoomPage() {
     }
 
     function handleGuestKeyDown(event) {
+      if (gameMenuOpenRef.current) return;
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
@@ -4166,7 +4251,8 @@ export default function RoomPage() {
       }
     }
 
-    function handleGuestKeyUp(event) {
+    function handleGuestKeyUp(rawEvent) {
+      const event = gameMenuOpenRef.current ? menuSafeKeyEvent(rawEvent) : rawEvent;
       if (!shouldHandleKey(event)) return;
       if (!inputCaptured) return;
 
@@ -5608,7 +5694,7 @@ export default function RoomPage() {
         setMameScoreStatus('No MAME score data was available to save yet.');
       }
     } catch (err) {
-      setMameScoreStatus('Score could not be registered.');
+      setMameScoreStatus(/verify your email/i.test(err.message || '') ? err.message : 'Score could not be registered.');
       addLog(`MAME score save failed: ${err.message}`);
     } finally {
       setMameScoreBusy(false);
@@ -6287,7 +6373,23 @@ export default function RoomPage() {
           ? 'A1200'
           : isAmigaAga ? 'A1200' : 'A500')
         : '';
+      const resolvedRomSource = isPuaeAmiga && !isSwapDisk
+        ? resolveAmigaRomSource({
+          featureEnabled: AMIGA_AROS_ENABLED,
+          requestedSource: searchParams.get('amigaRom'),
+          media: loadedFiles,
+        })
+        : { source: amigaRomSource, reason: 'unchanged' };
       if (isPuaeAmiga && !isSwapDisk) {
+        setAmigaRomSource(resolvedRomSource.source);
+        if (searchParams.get('amigaRom')?.toLowerCase() === AMIGA_ROM_SOURCE.AROS) {
+          if (resolvedRomSource.source === AMIGA_ROM_SOURCE.AROS) {
+            setKickstartRomName('AROS (PUAE built-in, experimental)');
+            addLog('Using experimental built-in AROS ROM for this floppy launch');
+          } else {
+            addLog('AROS request ignored: the feature is disabled or this media type requires original Kickstart');
+          }
+        }
         setLoadedAgaDiskCount(0);
         setCurrentAgaDiskIndex(0);
         if (amigaModel === 'A1200') {
@@ -6298,7 +6400,7 @@ export default function RoomPage() {
       }
       if (amigaModel && amigaModel !== amigaRequiredModel) {
         setAmigaRequiredModel(amigaModel);
-        setKickstartRomName('');
+        if (resolvedRomSource.source !== AMIGA_ROM_SOURCE.AROS) setKickstartRomName('');
       }
       const cpcAutoloadCommand = isCpcSystem && !isSwapDisk
         ? detectCpcAutoloadCommand(bytes, loadedFiles[0].fileName)
@@ -6321,6 +6423,7 @@ export default function RoomPage() {
         disks: isPuaeAmiga && !isSwapDisk && !loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
         whdLoadFiles: isPuaeAmiga && loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
         profile: isPuaeAmiga ? { model: amigaModel } : undefined,
+        romSource: isPuaeAmiga ? resolvedRomSource.source : undefined,
         media: isC64 || isMsx || isAtariSt ? loadedFiles : undefined,
         autoloadCommand: cpcAutoloadCommand || undefined,
       };
@@ -7067,6 +7170,7 @@ export default function RoomPage() {
         : [];
       forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, file.name, bytes, supportKickstarts));
 
+      setAmigaRomSource(AMIGA_ROM_SOURCE.ORIGINAL);
       setKickstartRomName(file.name);
       addLog(`Loaded Kickstart ROM for this session: ${file.name}`);
       setStatus(`Kickstart loaded: ${file.name}`);
@@ -7166,661 +7270,916 @@ export default function RoomPage() {
     addLog(`Selected Amstrad instructions: ${profile.title}`);
   }
 
-  return (
-    <div className={`page room-page ${obsCaptureMode ? 'obs-capture-page' : ''}`}>
-      <div className={`page-social-layout room-social-layout ${supportsMameScoreboard && isSoloMode ? 'solo-arcade-layout' : ''}`}>
-        <div className="card room-card">
-        <div className="room-topbar">
-          <div className="room-title">
-            <BrandMark compact />
-            <div className="room-code-row">
-              <h1>{isArcade ? 'MAME Cabinet' : isSoloMode ? '1 Player' : `Room ${roomCode}`}</h1>
-              {(!isSoloMode || isArcade) ? (
-                <button className="secondary" type="button" onClick={copyRoomCode}>
-                  {roomCodeCopied ? 'Copied' : 'Copy code'}
-                </button>
-              ) : null}
-            </div>
-            <div className="room-identity">
-              <span>You are</span>
-              <strong>{username}</strong>
-              <small>{roleLabel} · {systemLabel}</small>
-            </div>
-          </div>
+  // ---------- in-game room UI: derived values ----------
+  const keyboardSystem = isKeyboardSystem(roomSystem);
+  const libraryGameCandidate = localGameId ? localRoomGames.find((game) => game.id === localGameId) || null : null;
+  const libraryGame = libraryGameCandidate && (
+    !loadedDiskName
+    || [libraryGameCandidate.fileName, libraryGameCandidate.title, ...(libraryGameCandidate.archiveFileNames || [])]
+      .filter(Boolean)
+      .includes(loadedDiskName)
+  ) ? libraryGameCandidate : null;
+  const arcadeGameTitle = isArcade && loadedDiskName ? getMameDisplayName(getArcadeRomKey(loadedDiskName), '') : '';
+  const gameTitle = deriveGameTitle({
+    libraryTitle: libraryGame?.title,
+    arcadeTitle: arcadeGameTitle,
+    loadedDiskName,
+    currentGame: room?.current_game,
+    systemLabel,
+  });
+  const gameCover = libraryGame?.boxArtUrl || '';
+  const systemColor = SYSTEM_COLORS[roomSystem] || '#6e7592';
+  const isOnlineRoom = Boolean(room) && !isSoloMode;
+  const supportsRetroAchievements = (isMegaDrive || isMasterSystem || isSnes || isNes || roomSystem === 'cpc') && isHost;
+  const recordingCategoryVisible = GAME_RECORDING_ENABLED && canControlLocalEmulator && (SUPPORTER_UI_ENABLED || canRecordEntitlement);
+  const recordingAvailable = Boolean(recordingAdapter.supported && hostStarted && loadedDiskName && typeof window.MediaRecorder === 'function');
+  const showHighScores = (supportsMameScoreboard && Boolean(loadedDiskName)) || supportsAmigaScoreboard;
+  const showPlayersCategory = !isSoloMode || !supportsMameScoreboard;
+  const showStartHere = Boolean(isHost && canControlLocalEmulator && (!loadedDiskName || (isPuaeAmiga && !kickstartRomName && amigaRomSource !== AMIGA_ROM_SOURCE.AROS)));
+  const menuAutoPauses = isSoloMode && canControlLocalEmulator;
+  const touchProfile = touchProfileFor(roomSystem);
+  const fullscreenActive = browserFullscreen || isScreenFullscreen;
+  const startSessionLabel = isPuaeAmiga && !loadedDiskName
+    ? 'Load Amiga file to start'
+    : isSoloMode
+      ? hostStarted ? 'Emulator running' : 'Start emulator'
+      : isAmigaLink
+        ? hostStarted ? 'Local Amiga running' : 'Start local Amiga'
+        : hostStarted ? 'Host session running' : 'Start host session';
+  const startSessionDisabled = hostStarted || (isPuaeAmiga && !loadedDiskName);
+  const mediaDisabled = !hostStarted && !isArcade && !isPuaeAmiga && !isAtariSt;
+  const micLabel = micEnabled ? (micMuted ? 'Mic muted' : 'Mic on') : 'Mic off';
+  const showMicControls = !isSharedCpcParty && !isSoloMode;
+  const inputPlayerTag = canSendPlayerInput ? `P${currentPartyPlayerNumber}` : 'Watching';
+  const menuShortcutNode = menuInputType === 'pad'
+    ? <span className="osg-glyph g-start">GUIDE</span>
+    : menuInputType === 'stick'
+      ? <span className="osg-glyph g-stick">HOLD START+SELECT</span>
+      : menuInputType === 'touch'
+        ? null
+        : <span className="osg-key">{keyboardSystem ? 'Hold Esc' : 'Esc'}</span>;
+  const menuShortcutText = menuInputType === 'pad' || menuInputType === 'stick'
+    ? 'Press Guide, or hold Start + Select for a second.'
+    : keyboardSystem
+      ? `Esc is a ${systemLabel} key, so a tap goes to the game and holding it opens the menu.`
+      : 'Press Esc. Works the same in every game.';
 
-          <div className="room-actions">
-            <Link className="button-like secondary" to={tournamentCode ? `/tournaments/${tournamentCode}` : '/library'}>
-              {tournamentCode ? 'Tournament' : 'Library'}
-            </Link>
-            {!isSoloMode && isHost ? (
-              <button type="button" className="secondary" onClick={copyRoomInvite}>
-                {inviteCopied ? 'Invite copied' : 'Copy invite'}
-              </button>
-            ) : null}
-            {isSoloMode && isHost && !isArcade ? (
-              <button type="button" className="secondary" onClick={invitePlayerFromSolo} disabled={soloInviteBusy}>
-                {soloInviteBusy ? 'Opening multiplayer...' : 'Invite player'}
-              </button>
-            ) : null}
-            <button className="secondary" onClick={leaveRoom}>
-              Leave
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setShowDiagnostics((value) => !value)}
-            >
-              {showDiagnostics ? 'Hide diagnostics' : 'Diagnostics'}
-            </button>
-          </div>
-        </div>
+  const pushRoomToast = useCallback((toast) => {
+    toastIdRef.current += 1;
+    const id = toastIdRef.current;
+    setRoomToasts((items) => [...items.slice(-2), { ...toast, id }]);
+    window.setTimeout(() => {
+      setRoomToasts((items) => items.filter((item) => item.id !== id));
+    }, toast.duration || 5000);
+  }, []);
 
-        {isArcade ? (
-          <div className="arcade-mode-strip">
-            <div>
-              <strong>{isSoloMode ? 'Single-player cabinet' : 'Multiplayer cabinet'}</strong>
-              <span>{isSoloMode
-                ? 'Play locally. Switch to multiplayer whenever you want to open the cabinet to friends.'
-                : `P1 belongs to the host. P2 belongs to the first player at the cabinet; everyone else can watch and put a 10p in the queue.`}</span>
-            </div>
-            {isHost ? (
-              <div className="arcade-mode-toggle" role="group" aria-label="Cabinet mode">
-                <button
-                  type="button"
-                  className={isSoloMode ? 'active' : 'secondary'}
-                  onClick={() => setArcadeCabinetMode(false)}
-                  disabled={switchingSystem}
-                >
-                  Single player
-                </button>
-                <button
-                  type="button"
-                  className={!isSoloMode ? 'active' : 'secondary'}
-                  onClick={() => setArcadeCabinetMode(true)}
-                  disabled={switchingSystem}
-                >
-                  Multiplayer
-                </button>
-              </div>
-            ) : null}
-          </div>
+  const dismissRoomToast = useCallback((id) => {
+    setRoomToasts((items) => items.filter((item) => item.id !== id));
+  }, []);
+
+  const handleRaUnlock = useCallback((item) => {
+    pushRoomToast({
+      kind: 'ra',
+      kicker: 'Achievement unlocked',
+      title: item.title,
+      detail: `${item.points} points · Softcore`,
+      icon: '◆',
+      duration: 7000,
+    });
+  }, [pushRoomToast]);
+
+  const handleRecordingActiveChange = useCallback((active) => {
+    setRecordingActive(active);
+    setRecordingStartedAt(active ? Date.now() : 0);
+    setRecordingElapsed(0);
+  }, []);
+
+  useEffect(() => {
+    if (!recordingActive || !recordingStartedAt) return undefined;
+    const timer = window.setInterval(() => {
+      setRecordingElapsed(Math.floor((Date.now() - recordingStartedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [recordingActive, recordingStartedAt]);
+
+  useEffect(() => {
+    try {
+      window.localStorage?.setItem(CRT_STORAGE_KEY, crtEnabled ? 'on' : 'off');
+    } catch {
+      // Storage can be unavailable (private mode); the toggle still works for this visit.
+    }
+  }, [crtEnabled]);
+
+  // Chat: toast + unread badge for messages from other players.
+  useEffect(() => {
+    const seen = seenChatCountRef.current;
+    if (!(seen instanceof Set)) {
+      seenChatCountRef.current = new Set(chatMessages.map((item) => item.id));
+      return;
+    }
+    const fresh = chatMessages.filter((item) => !seen.has(item.id));
+    fresh.forEach((item) => seen.add(item.id));
+    const incoming = fresh.filter((item) => !item.mine);
+    if (!incoming.length) return;
+    const chatVisible = gameMenuOpenRef.current && menuCategory === 'room';
+    if (!chatVisible) {
+      setChatUnread((count) => count + incoming.length);
+      const latest = incoming[incoming.length - 1];
+      pushRoomToast({
+        kind: 'chat',
+        title: latest.username,
+        detail: latest.message,
+        icon: String(latest.username || '?').charAt(0).toUpperCase(),
+        iconBackground: 'linear-gradient(140deg,#ff7a45,#ea3a30)',
+      });
+    }
+  }, [chatMessages]);
+
+  useEffect(() => {
+    if (gameMenuOpen && menuCategory === 'room') setChatUnread(0);
+  }, [gameMenuOpen, menuCategory]);
+
+  useEffect(() => {
+    if (mameScoreStatus === 'Score registered.') {
+      pushRoomToast({ kind: 'score', kicker: 'Score saved', title: gameTitle, detail: 'Your score is on the leaderboard.', icon: '🏆' });
+    }
+  }, [mameScoreStatus]);
+
+  useEffect(() => {
+    if (amigaScoreStatus === 'Personal best registered.') {
+      pushRoomToast({ kind: 'score', kicker: 'Score saved', title: gameTitle, detail: 'New personal best registered.', icon: '🏆' });
+    }
+  }, [amigaScoreStatus]);
+
+  // Fullscreen uses the browser Fullscreen API on the whole room so the menu and
+  // overlays stay available; isScreenFullscreen mirrors it for older logic.
+  useEffect(() => {
+    function handleFullscreenChange() {
+      const active = Boolean(document.fullscreenElement);
+      setBrowserFullscreen(active);
+      setIsScreenFullscreen(active);
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  async function toggleRoomFullscreen() {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen?.().catch(() => {});
+      return;
+    }
+    const root = roomRootRef.current;
+    if (root?.requestFullscreen) {
+      try {
+        await root.requestFullscreen();
+        return;
+      } catch {
+        // Not allowed here (no user gesture, iOS) — fall back to the in-page view.
+      }
+    }
+    setIsScreenFullscreen((value) => !value);
+  }
+
+  // Idle: top bar and dock fade after 3.5 s without pointer movement (desktop).
+  const idleAllowed = viewport === 'desktop' && !gameMenuOpen && !obsCaptureMode && !showStartHere
+    && (canControlLocalEmulator ? hostStarted : guestPrepared);
+  useEffect(() => {
+    const root = roomRootRef.current;
+    if (!idleAllowed || !root) {
+      setRoomIdle(false);
+      return undefined;
+    }
+    let timer = 0;
+    const wake = () => {
+      setRoomIdle(false);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setRoomIdle(true), 3500);
+    };
+    wake();
+    root.addEventListener('pointermove', wake);
+    root.addEventListener('pointerdown', wake);
+    root.addEventListener('focusin', wake);
+    return () => {
+      window.clearTimeout(timer);
+      root.removeEventListener('pointermove', wake);
+      root.removeEventListener('pointerdown', wake);
+      root.removeEventListener('focusin', wake);
+    };
+  }, [idleAllowed]);
+
+  function openGameMenu(categoryId = null) {
+    if (categoryId) setMenuCategory(categoryId);
+    if (gameMenuOpenRef.current) {
+      if (categoryId) gameMenuRef.current?.showCategory(categoryId);
+      return;
+    }
+    focusBeforeMenuRef.current = document.activeElement;
+    gameMenuOpenRef.current = true;
+    setGameMenuOpen(true);
+    setRoomIdle(false);
+    // Stop anything held from reaching the emulator while the menu is open.
+    sendLocalJoystickMask(0);
+    if (canControlLocalEmulator && isCpcSystem) {
+      forwardInputToEmulator({ type: 'amstrad_release_all' });
+    }
+    if (menuAutoPauses && hostStartedRef.current && !emulatorPausedRef.current) {
+      setHostPaused(true);
+      forwardInputToEmulator({ type: 'emulator_set_paused', paused: true });
+      menuPausedEmulatorRef.current = true;
+    }
+    if (categoryId && viewport !== 'desktop') {
+      window.setTimeout(() => gameMenuRef.current?.showCategory(categoryId), 60);
+    }
+  }
+
+  function closeGameMenu() {
+    if (!gameMenuOpenRef.current) return;
+    gameMenuOpenRef.current = false;
+    setGameMenuOpen(false);
+    padNeutralGuardRef.current = true;
+    if (menuPausedEmulatorRef.current) {
+      menuPausedEmulatorRef.current = false;
+      if (emulatorPausedRef.current && hostStartedRef.current) {
+        setHostPaused(false);
+        forwardInputToEmulator({ type: 'emulator_set_paused', paused: false });
+      }
+    }
+    // Hand focus back to the game: re-focus an interactive emulator iframe (MAME,
+    // Saturn) if it had focus, otherwise drop focus from menu/top-bar buttons so
+    // keys go to the emulator again.
+    const previous = focusBeforeMenuRef.current;
+    focusBeforeMenuRef.current = null;
+    if (previous && previous.isConnected && previous.tagName === 'IFRAME') {
+      previous.focus({ preventScroll: true });
+    } else if (document.activeElement && roomRootRef.current?.contains(document.activeElement)) {
+      document.activeElement.blur?.();
+    }
+  }
+
+  function toggleGameMenu() {
+    if (gameMenuOpenRef.current) closeGameMenu();
+    else openGameMenu();
+  }
+
+  const handleTouchMask = useCallback((mask) => {
+    sendLocalJoystickMask(mask);
+  }, [sendLocalJoystickMask]);
+
+  menuShortcutRef.current = {
+    enabled: Boolean(room) && !obsCaptureMode,
+    blocked: passwordPromptOpen || controllerSetupOpen,
+    keyboardSystem,
+    get menuOpen() {
+      return gameMenuOpenRef.current;
+    },
+    preferredPadIndex: gamepadIndexRef.current,
+    openMenu: () => openGameMenu(),
+    closeMenu: () => closeGameMenu(),
+    menuNavigate: (direction) => gameMenuRef.current?.navigate(direction),
+    menuActivate: () => gameMenuRef.current?.activate(),
+    menuBack: () => gameMenuRef.current?.back(),
+    onEscTap: () => {
+      if (escTapHintCountRef.current >= 2) return;
+      escTapHintCountRef.current += 1;
+      pushRoomToast({ kind: 'info', icon: '⎋', title: `Esc sent to the ${systemLabel}`, detail: 'Hold Esc to open the menu', duration: 2200 });
+    },
+    onInputType: (type) => setMenuInputType(type),
+    onPadChange: (info) => setPadInfo(info),
+  };
+
+  // ---------- HUD ----------
+  const captureHint = !inputCaptured
+    ? remotePlaybackBlocked
+      ? autoCaptureController ? 'Click the screen to start stream playback' : 'Tap Capture to start stream'
+      : autoCaptureController ? `${controlLabel} ready` : 'Click the screen or press Capture to play'
+    : '';
+  const inputIcon = menuInputType === 'pad' ? 'pad' : menuInputType === 'stick' ? 'stick' : menuInputType === 'touch' ? 'touch' : 'kb';
+  const inputName = menuInputType === 'pad' || menuInputType === 'stick'
+    ? padInfo.name || 'Controller'
+    : menuInputType === 'touch' ? 'Touch controls' : 'Keyboard';
+  const myMameEntry = mameLeaderboard.find((entry) => entry.username === username);
+  const myAmigaEntry = amigaLeaderboard.find((entry) => entry.username === username);
+  const scoresPill = supportsMameScoreboard && loadedDiskName && mameLeaderboardSupported && mameLeaderboard.length ? (
+    <Pill key="scores" onClick={() => openGameMenu('scores')}>
+      <Icon name="trophy" className="trophy" />
+      {myMameEntry ? <>Best <span className="num">{myMameEntry.score.toLocaleString()}</span> · </> : null}
+      Record <span className="num">{mameLeaderboard[0].score.toLocaleString()}</span>
+    </Pill>
+  ) : supportsAmigaScoreboard && amigaLeaderboard.length ? (
+    <Pill key="scores" onClick={() => openGameMenu('scores')}>
+      <Icon name="trophy" className="trophy" />
+      {myAmigaEntry ? <>Best <span className="num">{myAmigaEntry.score.toLocaleString()}</span> · </> : null}
+      Record <span className="num">{amigaLeaderboard[0].score.toLocaleString()}</span>
+    </Pill>
+  ) : null;
+  const raPill = supportsRetroAchievements ? (
+    !isSoloMode ? (
+      <Pill key="ra" className="ra" onClick={() => openGameMenu('ra')}><span className="gem">◆</span>Achievements pause in online play</Pill>
+    ) : raProgress?.total ? (
+      <Pill key="ra" className="ra" onClick={() => openGameMenu('ra')}><span className="gem">◆</span><span className="num">{raProgress.unlocked}/{raProgress.total}</span> achievements</Pill>
+    ) : null
+  ) : null;
+  const instructionsPill = isCpcSystem && (selectedControlProfile || controlProfileMatches.length > 0) ? (
+    <Pill key="instructions" onClick={() => setControlProfileDrawerOpen(true)}>
+      <Icon name="book" />
+      {selectedControlProfile ? `Instructions: ${selectedControlProfile.title}` : `Choose instructions (${controlProfileMatches.length})`}
+    </Pill>
+  ) : null;
+  const recPill = recordingActive ? (
+    <Pill key="rec" className="rec" onClick={() => openGameMenu('record')}>
+      <i /><b>REC</b> {String(Math.floor(recordingElapsed / 60)).padStart(2, '0')}:{String(recordingElapsed % 60).padStart(2, '0')}
+    </Pill>
+  ) : null;
+  const capturePill = captureHint ? (
+    <Pill key="capture" className="attention" onClick={() => captureInput()}>
+      <Icon name="play" />{captureHint}
+    </Pill>
+  ) : null;
+  const guestQueuePill = isArcadeParty && !isHost ? (
+    <Pill
+      key="queue"
+      className="attention"
+      onClick={() => {
+        if (!guestPrepared) return;
+        if (partyPlayerNumber) sendArcadeQueueAction('arcade_release_slot');
+        else sendArcadeQueueAction(arcadeQueueStatus.queued ? 'arcade_leave_queue' : 'arcade_join_queue');
+      }}
+    >
+      <Icon name="coin" />
+      {partyPlayerNumber ? 'Leave cabinet' : arcadeQueueStatus.queued ? `Queue #${arcadeQueueStatus.queuePosition || '?'} · Take back my 10p` : 'Put 10p on the cabinet'}
+    </Pill>
+  ) : null;
+  const leftPills = [
+    <Pill key="input" className="input" title={`${assignedControlLabel} · ${controlLabel}`}>
+      <Icon name={inputIcon} /><b>{inputPlayerTag}</b> {inputName}
+    </Pill>,
+    keyboardSystem && menuInputType === 'keyboard' && (canControlLocalEmulator || inputCaptured) ? (
+      <Pill key="kbhint">Keyboard goes to the {systemLabel} · <span className="osg-key">Hold Esc</span> for menu</Pill>
+    ) : null,
+    capturePill,
+    guestQueuePill,
+    recPill,
+  ].filter(Boolean);
+  const rightPills = [raPill, scoresPill, instructionsPill].filter(Boolean);
+  const stripPills = [capturePill, guestQueuePill, raPill, scoresPill, instructionsPill, recPill].filter(Boolean);
+  const coinKeys = menuInputType === 'pad' ? ['SELECT', 'START'] : menuInputType === 'stick' ? ['COIN', 'START'] : ['5', '1'];
+  const coinHint = isArcade && canSendPlayerInput && loadedDiskName ? (
+    <>
+      <Pill><Icon name="coin" className="trophy" />Insert coin <span className="osg-key">{coinKeys[0]}</span></Pill>
+      <Pill>Start <span className="osg-key">{coinKeys[1]}</span></Pill>
+    </>
+  ) : null;
+
+  // ---------- screen overlay (start / connect prompts) ----------
+  let screenOverlay = null;
+  if (showStartHere) {
+    screenOverlay = (
+      <StartHereCard
+        isPuaeAmiga={isPuaeAmiga}
+        isArcade={isArcade}
+        loadedDiskName={loadedDiskName}
+        amigaRequiredModel={amigaRequiredModel}
+        systemLabel={systemLabel}
+        hasLibraryGames={localRoomGames.length > 0}
+        onChooseLibrary={() => {
+          setLocalGamePickerOpen(true);
+          openGameMenu('game');
+        }}
+        onChooseFile={openDiskPicker}
+        onLoadKickstart={openKickstartPicker}
+        onChooseRomFolder={isArcade ? openArcadeRomFolder : null}
+        startButton={!isAtariSt && !isPuaeAmiga && !hostStarted ? (
+          <button type="button" className="secondary" onClick={startHostSession} disabled={startSessionDisabled}>
+            <span>▶</span>{startSessionLabel}
+          </button>
         ) : null}
+      />
+    );
+  } else if (canControlLocalEmulator && !hostStarted && !isAtariSt) {
+    screenOverlay = (
+      <div className="osg-screen-cta">
+        <button type="button" onClick={startHostSession} disabled={startSessionDisabled}>{startSessionLabel}</button>
+        <small>{loadedDiskName || systemLabel}</small>
+      </div>
+    );
+  } else if (!canControlLocalEmulator && room && !guestPrepared) {
+    screenOverlay = (
+      <div className="osg-screen-cta">
+        <button type="button" onClick={connectGuest} disabled={guestPrepared}>Prepare guest connection</button>
+        <small>Get ready to receive the host’s screen.</small>
+      </div>
+    );
+  } else if (!canControlLocalEmulator && remotePlaybackBlocked) {
+    screenOverlay = (
+      <div className="osg-screen-cta">
+        <button type="button" onClick={() => captureInput()}>Start stream playback</button>
+        <small>Your browser needs a click before it plays the host’s screen and sound.</small>
+      </div>
+    );
+  }
 
-        <div className="room-summary">
-          <div className="player-strip" aria-label="Players">
-            {displayedPlayers.map((player) => (
-              <div
-                key={player.playerNumber}
-                className={`player-card ${player.connected ? 'connected' : ''} ${player.playerNumber === currentPartyPlayerNumber ? 'you' : ''}`}
-              >
-                <span>{typeof player.playerNumber === 'number' ? `P${player.playerNumber}` : 'Watch'}</span>
-                <strong>{player.username}</strong>
-                <small>{player.role}</small>
-              </div>
-            ))}
-          </div>
+  // ---------- menu categories ----------
+  const playersList = (
+    <div className="player-strip" aria-label="Players">
+      {displayedPlayers.map((player, index) => (
+        <MenuRow
+          key={player.playerNumber}
+          icon={<PlayerAvatar name={player.username} index={index} connected={player.connected} />}
+          title={`${player.username || 'Player'} · ${typeof player.playerNumber === 'number' ? `P${player.playerNumber}` : 'Watch'}${player.playerNumber === currentPartyPlayerNumber ? ' (you)' : ''}`}
+          description={player.role}
+          control={<span className={`osg-chip ${player.connected ? 'live' : ''}`}><i className="osg-dot" />{player.connected ? 'Connected' : 'Waiting'}</span>}
+        />
+      ))}
+    </div>
+  );
 
-          <div className="health-strip" aria-label="Connection status">
-            {healthItems.map((item) => (
-              <span key={item.label} className={`health-item ${item.ok ? 'ok' : 'waiting'}`}>
-                <span className="health-dot" aria-hidden="true" />
-                {item.label}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {isHost && canControlLocalEmulator && (!loadedDiskName || (isPuaeAmiga && !kickstartRomName)) ? (
-          <section className="room-getting-started" aria-labelledby="room-getting-started-title">
-            <div className="room-getting-started-copy">
-              <span>Start here</span>
-              <strong id="room-getting-started-title">
-                {isPuaeAmiga && loadedDiskName
-                  ? `Now load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`
-                  : `Choose a ${systemLabel} game`}
-              </strong>
-              <small>
-                {isPuaeAmiga
-                  ? loadedDiskName
-                    ? `${amigaRequiredModel === 'A1200' ? 'This WHDLoad/A1200 game needs Kickstart 3.1.' : 'This A500/floppy game needs Kickstart 1.3.'} It is stored only in this browser for next time.`
-                    : 'Choose the game first. We will identify whether it needs Kickstart 1.3 or 3.1.'
-                  : localRoomGames.length
-                    ? 'Pick a game from your connected library, or choose a file from this device.'
-                    : 'Choose a game file from this device. You can connect a whole folder from the Library later.'}
-              </small>
-            </div>
-            <div className="room-getting-started-steps">
-              {isPuaeAmiga && loadedDiskName ? (
-                <button type="button" onClick={openKickstartPicker}>
-                  <span>2</span>{`Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
-                </button>
-              ) : null}
-              {!loadedDiskName && localRoomGames.length ? (
-                <button type="button" onClick={() => setLocalGamePickerOpen(true)}>
-                  <span>1</span>Choose from library
-                </button>
-              ) : null}
-              {!loadedDiskName ? (
-                <button type="button" className="secondary" onClick={openDiskPicker}>
-                  <span>1</span>Choose game file
-                </button>
-              ) : null}
-              <small>{loadedDiskName ? 'Once the correct Kickstart is ready, the game can boot.' : 'We check the game type before asking for a Kickstart ROM.'}</small>
-            </div>
-          </section>
-        ) : null}
-
-        {(loadedDiskName || isAmigaFamily || isDiscConsole || isAtariSt) ? (
-          <div className="session-strip">
-            {loadedDiskName ? <span>{loadedDiskName}</span> : null}
-            {isCpcSystem && selectedControlProfile ? (
-              <button type="button" className="secondary control-profile-pill" onClick={() => setControlProfileDrawerOpen(true)}>
-                Instructions: {selectedControlProfile.title}
-              </button>
-            ) : null}
-            {isCpcSystem && !selectedControlProfile && controlProfileMatches.length > 0 ? (
-              <button type="button" className="secondary control-profile-pill" onClick={() => setControlProfileDrawerOpen(true)}>
-                Choose instructions ({controlProfileMatches.length})
-              </button>
-            ) : null}
-            {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? loadedDiskName ? `ROM: ${amigaRequiredModel === 'A1200' ? 'A1200 Kickstart 3.1' : 'A500 Kickstart 1.3'} required` : 'ROM: chosen after game' : 'ROM: AROS'}</span> : null}
-            {isMsx ? <span>Powered by <a href="https://webmsx.org" target="_blank" rel="noreferrer">WebMSX</a></span> : null}
-            {isDiscConsole ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : isSaturn ? 'BIOS: load saturn_bios.bin locally' : 'BIOS: HLE fallback / load your own locally'}</span> : null}
-            {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
-            {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
-          </div>
-        ) : null}
-
-        {showDiagnostics ? (
-          <div className="session-strip diagnostics-summary">
-            <span>{status}</span>
-            {!isSharedCpcParty && !isSoloMode ? <span>{micStatus}</span> : null}
-            <span>{controlLabel}</span>
-          </div>
-        ) : null}
-
-        {error ? <p className="error">{error}</p> : null}
-
-        {(isMegaDrive || isMasterSystem || isSnes || isNes || roomSystem === 'cpc') && isHost ? <RetroAchievementsPlay system={roomSystem} frameRef={emulatorFrameRef} frameLoadCount={emulatorFrameLoadCount} roomCode={roomCode} solo={isSoloMode} /> : null}
-        <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
-
-        <div className={`room-layout ${localGamePickerOpen ? 'with-local-game-picker' : ''}`}>
-          <div className={`panel video-panel ${isScreenFullscreen ? 'fullscreen-screen' : ''} ${isScreenFullscreen && isArcade ? 'arcade-fullscreen' : ''} ${isScreenFullscreen && isSharedCpcParty ? 'party-fullscreen' : ''} ${isScreenFullscreen && !isSoloMode && !showFullscreenArcadeLeaderboard ? 'fullscreen-with-chat' : ''} ${showFullscreenArcadeLeaderboard ? 'fullscreen-with-score' : ''}`}>
-            {obsCaptureMode ? (
-              <button type="button" className="secondary obs-capture-exit" onClick={() => setObsCaptureMode(false)}>
-                Back to room
-              </button>
-            ) : null}
-            {isScreenFullscreen ? (
-              <aside className="fullscreen-control-rail" aria-label="Fullscreen controls">
-                <strong>Game controls</strong>
-                <button type="button" className="secondary" onClick={() => setIsScreenFullscreen(false)}>Back to room</button>
-                {!autoCaptureController ? (
-                  <button type="button" className={inputCaptured ? 'danger' : 'secondary'} onClick={inputCaptured ? releaseInputCapture : captureInput}>
-                    {inputCaptured ? 'Release input' : 'Capture input'}
-                  </button>
-                ) : null}
-                {supportsControllerMapping(roomSystem) ? (
-                  <button type="button" className="secondary" onClick={() => setControllerSetupOpen(true)}>Controller setup</button>
-                ) : null}
-                {!isSharedCpcParty && !isSoloMode ? (
-                  <button type="button" className={micEnabled && !micMuted ? 'active' : 'secondary'} onClick={toggleMicrophone}>
-                    {micEnabled ? (micMuted ? 'Mic muted' : 'Mic on') : 'Mic off'}
-                  </button>
-                ) : null}
-                {!canControlLocalEmulator && !guestPrepared ? (
-                  <button type="button" onClick={connectGuest}>Prepare guest</button>
-                ) : null}
-                {canControlLocalEmulator ? (
-                  <>
-                    <button type="button" onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isPuaeAmiga && !isAtariSt}>{mediaLabel}</button>
-                    {isHost && localRoomGames.length > 0 ? (
-                      <button type="button" className="secondary" onClick={() => setLocalGamePickerOpen((value) => !value)}>{localGamePickerOpen ? 'Hide games' : 'Change game'}</button>
-                    ) : null}
-                    <label className="host-volume-control">
-                      <span>Volume {Math.round(hostVolume * 100)}%</span>
-                      <input type="range" min="0" max="100" step="1" value={Math.round(hostVolume * 100)} onChange={handleHostVolumeChange} />
-                    </label>
-                    {!isPuaeAmiga ? (
-                      <button type="button" className={emulatorPaused ? 'active' : 'secondary'} onClick={toggleEmulatorPause} disabled={!hostStarted}>
-                        {emulatorPaused ? 'Resume' : 'Pause'}
-                      </button>
-                    ) : null}
-                    {!isPuaeAmiga ? <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>Reset</button> : null}
-                  </>
-                ) : null}
-                <button type="button" className="secondary" onClick={() => setObsCaptureMode(true)}>OBS view</button>
-              </aside>
-            ) : null}
-            <div className="play-header">
-              <h2>{isSoloMode || isAmigaLink ? 'Local screen' : isHost ? 'Host screen' : 'Remote screen'}</h2>
-
-              <div className="input-toolbar">
-                <div className="assigned-control" aria-label="Assigned control">
-                  {assignedControlLabel}
-                </div>
-
-                {!isSharedCpcParty && !isSoloMode ? (
-                  <div className="mic-controls">
-                    <button
-                      type="button"
-                      className={micEnabled && !micMuted ? 'active' : 'secondary'}
-                      onClick={toggleMicrophone}
-                    >
-                      {micEnabled ? (micMuted ? 'Mic muted' : 'Mic on') : 'Mic off'}
-                    </button>
-
-                    <select
-                      aria-label="Microphone"
-                      value={selectedMicDeviceId}
-                      onFocus={refreshMicrophoneDevices}
-                      onChange={(event) => {
-                        const nextDeviceId = event.target.value;
-                        setSelectedMicDeviceId(nextDeviceId);
-                        if (micEnabled) {
-                          openMicrophone(nextDeviceId);
-                        }
-                      }}
-                    >
-                      <option value="">Default mic</option>
-                      {micDevices.map((device) => (
-                        <option key={device.deviceId} value={device.deviceId}>
-                          {device.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-
-                {!autoCaptureController ? (
-                  <button
-                    type="button"
-                    className={inputCaptured ? 'danger' : 'secondary'}
-                    onClick={inputCaptured ? releaseInputCapture : captureInput}
-                  >
-                    {inputCaptured ? 'Release' : 'Capture'}
-                  </button>
-                ) : null}
-
-                {supportsControllerMapping(roomSystem) && (
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => setControllerSetupOpen(true)}
-                  >
-                    Controller Setup
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setIsScreenFullscreen((value) => !value)}
-                >
-                  {isScreenFullscreen ? 'Back to room' : 'Fullscreen'}
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setObsCaptureMode(true)}
-                >
-                  OBS view
-                </button>
-              </div>
-            </div>
-
-            <div className={`capture-state ${inputCaptured ? 'captured' : ''}`}>
-              {inputCaptured
-                ? `${controlLabel} active`
-                : remotePlaybackBlocked
-                  ? autoCaptureController ? 'Click the screen to start stream playback' : 'Tap Capture to start stream'
-                  : autoCaptureController ? `${controlLabel} ready` : 'Click the screen or press Capture to play'}
-            </div>
-
-            {GAME_RECORDING_ENABLED && canControlLocalEmulator ? (
-              <GameRecorderControls
-                key={`${roomSystem}:${emulatorSessionKey}:${loadedDiskName}`}
-                available={Boolean(recordingAdapter.supported && hostStarted && loadedDiskName && typeof window.MediaRecorder === 'function')}
-                unavailableReason={recordingAdapter.supported
-                  ? !loadedDiskName ? 'Load a game before recording.' : !hostStarted ? 'Start the local emulator before recording.' : 'MediaRecorder is unavailable in this browser.'
-                  : recordingAdapter.reason}
-                sourceFactory={createGameRecordingSource}
-                gameTitle={loadedDiskName || room?.current_game || 'Gameplay'}
-                systemLabel={recordingAdapter.label || systemLabel}
+  const menuCategories = [
+    {
+      id: 'game',
+      label: 'Game',
+      icon: 'game',
+      lead: loadedDiskName ? `${gameTitle} · ${loadedDiskName}` : `No game loaded yet · ${systemLabel}`,
+      content: (
+        <>
+          <MenuGroup>
+            {canControlLocalEmulator && !isAtariSt ? (
+              <MenuRow
+                icon="power"
+                title={startSessionLabel}
+                description={hostStarted ? 'The emulator is running.' : 'Boots the emulator. Loading a game also starts it.'}
+                onClick={startHostSession}
+                disabled={startSessionDisabled}
               />
             ) : null}
-
+            {!canControlLocalEmulator ? (
+              <MenuRow
+                icon="link"
+                title={guestPrepared ? 'Guest connection ready' : 'Prepare guest connection'}
+                description="Receives the host’s screen and sound."
+                onClick={connectGuest}
+                disabled={guestPrepared}
+              />
+            ) : null}
             {canControlLocalEmulator ? (
-              <>
-                {isArcade ? (
-                  <div className={`arcade-play-layout ${isScreenFullscreen ? 'fullscreen' : ''}`}>
-                    <div className="arcade-screen-stack">
-                      <iframe
-                        key={`${roomSystem}-${emulatorSessionKey}`}
-                        ref={emulatorFrameRef}
-                        className="arcade-emulator-frame"
-                        title={emulatorTitle}
-                        src={emulatorSrc}
-                        onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
-                        style={{
-                          position: 'relative',
-                          left: 'auto',
-                          top: 'auto',
-                          display: 'block',
-                          width: '640px',
-                          height: '480px',
-                          maxWidth: '100%',
-                          margin: '0 auto',
-                          border: '1px solid #1f2f4a',
-                          borderRadius: '6px',
-                          background: '#000',
-                          opacity: 1,
-                          pointerEvents: 'auto',
+              <MenuRow icon="reset" title="Reset" description="Restarts the machine. The game stays loaded." onClick={resetHostEmulator} disabled={!hostStarted} />
+            ) : null}
+            {isHost && localRoomGames.length > 0 ? (
+              <MenuRow
+                icon="lib"
+                title={localGamePickerOpen ? 'Hide games' : 'Change game'}
+                description={`Pick another ${systemLabel} game from your library`}
+                onClick={() => setLocalGamePickerOpen((value) => !value)}
+              />
+            ) : null}
+            {isHost && localGamePickerOpen ? (
+              <LocalGamePicker
+                systemLabel={systemLabel}
+                localGameSearch={localGameSearch}
+                setLocalGameSearch={setLocalGameSearch}
+                filteredLocalRoomGames={filteredLocalRoomGames}
+                localGameId={localGameId}
+                chooseLocalRoomGame={(game) => {
+                  closeGameMenu();
+                  chooseLocalRoomGame(game);
+                }}
+                onClose={() => setLocalGamePickerOpen(false)}
+              />
+            ) : null}
+            {canControlLocalEmulator ? (
+              <MenuRow
+                icon="file"
+                title={mediaLabel}
+                description={`Open a file from this device (${acceptedMedia})`}
+                onClick={() => {
+                  closeGameMenu();
+                  openDiskPicker();
+                }}
+                disabled={mediaDisabled}
+              />
+            ) : null}
+            {isCpcSystem && (selectedControlProfile || controlProfileMatches.length > 0) ? (
+              <MenuRow
+                icon="book"
+                title="Game instructions"
+                description={selectedControlProfile ? `Instructions: ${selectedControlProfile.title}` : `Choose instructions (${controlProfileMatches.length})`}
+                onClick={() => setControlProfileDrawerOpen(true)}
+              />
+            ) : null}
+          </MenuGroup>
+          <MenuGroup>
+            {isSoloMode && isHost && !isArcade ? (
+              <MenuRow
+                icon="people"
+                title={soloInviteBusy ? 'Opening multiplayer...' : 'Invite player'}
+                description="Turns this into an online room and copies the invite link. The game keeps running."
+                onClick={invitePlayerFromSolo}
+                disabled={soloInviteBusy}
+              />
+            ) : null}
+            {!isSoloMode || isArcade ? (
+              <MenuRow icon="link" title={roomCodeCopied ? 'Copied' : 'Copy code'} description={`Room ${roomCode}`} onClick={copyRoomCode} />
+            ) : null}
+            {!isSoloMode && isHost ? (
+              <MenuRow icon="link" title={inviteCopied ? 'Invite copied' : 'Copy invite'} description={`${window.location.origin}/room/${roomCode}`} onClick={copyRoomInvite} />
+            ) : null}
+            {tournamentCode ? (
+              <MenuRow icon="trophy" title="Tournament" description={tournamentTitle || tournamentCode} onClick={() => navigate(`/tournaments/${tournamentCode}`)} />
+            ) : null}
+            <MenuRow icon="exit" title={isOnlineRoom ? 'Leave room' : 'Quit to library'} danger onClick={leaveRoom} />
+          </MenuGroup>
+          <MenuNote>Save states aren’t available yet on any system, so leaving ends this session.</MenuNote>
+        </>
+      ),
+    },
+    {
+      id: 'controls',
+      label: 'Controls',
+      icon: 'pad',
+      lead: <>You are <b>{assignedControlLabel}</b></>,
+      content: (
+        <>
+          <MenuGroup title="Your setup">
+            {supportsControllerMapping(roomSystem) ? (
+              <MenuRow
+                icon="wiz"
+                title="Controller Setup"
+                description={`Press each button when asked. Saved for every ${systemLabel} game.`}
+                onClick={() => {
+                  closeGameMenu();
+                  setControllerSetupOpen(true);
+                }}
+              />
+            ) : null}
+            {!autoCaptureController ? (
+              <MenuRow
+                icon="kb"
+                title={inputCaptured ? 'Release input' : 'Capture input'}
+                description={isMouseComputer ? 'Controllers and the mouse go to the game while captured. Release to use the page.' : 'Controllers go to the game while captured. Release to use the page.'}
+                control={<Toggle on={inputCaptured} />}
+                onClick={inputCaptured ? () => releaseInputCapture() : () => captureInput()}
+              />
+            ) : null}
+            <MenuRow icon="more" title="Open this menu" description={menuShortcutText} control={<Value>{menuShortcutNode || 'Tap ☰'}</Value>} />
+          </MenuGroup>
+          <MenuGroup title="Layout">
+            <MenuRow icon={inputIcon} title="Controls" description={controlLabel} control={<Value>{inputName}</Value>} />
+            {menuInputType !== 'keyboard' && padInfo.connected ? null : (
+              <MenuRow icon="pad" title="Controller" description={padInfo.connected ? `${padInfo.name} connected` : 'No controller detected. Press any button on a connected controller.'} />
+            )}
+          </MenuGroup>
+        </>
+      ),
+    },
+    {
+      id: 'display',
+      label: 'Display & sound',
+      icon: 'display',
+      lead: canControlLocalEmulator ? `Sound and picture for ${systemLabel} games.` : 'Picture settings for this screen.',
+      content: (
+        <MenuGroup>
+          {canControlLocalEmulator ? (
+            <MenuRow
+              icon="vol"
+              title="Volume"
+              control={(
+                <span className="osg-slider">
+                  <input type="range" min="0" max="100" step="1" value={Math.round(hostVolume * 100)} onChange={handleHostVolumeChange} aria-label="Volume" />
+                  <Value>{Math.round(hostVolume * 100)}%</Value>
+                </span>
+              )}
+            />
+          ) : null}
+          <MenuRow icon="full" title="Fullscreen" control={<Toggle on={fullscreenActive} />} onClick={toggleRoomFullscreen} />
+          <MenuRow icon="display" title="CRT effect" description="Soft scanlines over the picture" isNew control={<Toggle on={crtEnabled} />} onClick={() => setCrtEnabled((value) => !value)} />
+          <MenuRow
+            icon="obs"
+            title="OBS view"
+            description="Clean full-window picture for capture software"
+            onClick={() => {
+              closeGameMenu();
+              setObsCaptureMode(true);
+            }}
+          />
+        </MenuGroup>
+      ),
+    },
+    recordingCategoryVisible ? {
+      id: 'record',
+      label: 'Record',
+      icon: 'rec',
+      badge: recordingActive ? '● REC' : '',
+      hot: recordingActive,
+      lead: 'Saves a video of your game to this device. Nothing is uploaded.',
+      content: (
+        <GameRecorderControls
+          key={`${roomSystem}:${emulatorSessionKey}:${loadedDiskName}`}
+          available={recordingAvailable}
+          unavailableReason={recordingAdapter.supported
+            ? !loadedDiskName ? 'Load a game before recording.' : !hostStarted ? 'Start the local emulator before recording.' : 'MediaRecorder is unavailable in this browser.'
+            : recordingAdapter.reason}
+          sourceFactory={createGameRecordingSource}
+          gameTitle={loadedDiskName || room?.current_game || 'Gameplay'}
+          systemLabel={recordingAdapter.label || systemLabel}
+          onActiveChange={handleRecordingActiveChange}
+        />
+      ),
+    } : null,
+    supportsRetroAchievements ? {
+      id: 'ra',
+      label: 'Achievements',
+      icon: 'gem',
+      badge: raProgress?.total ? `${raProgress.unlocked}/${raProgress.total}` : '',
+      titleExtra: <span className="osg-chip">Softcore</span>,
+      content: (
+        <>
+          {!isSoloMode ? <MenuNote tone="warn">Achievements are only earned in solo play. They’ll start again if you play this game on your own.</MenuNote> : null}
+          <RetroAchievementsPlay
+            system={roomSystem}
+            frameRef={emulatorFrameRef}
+            frameLoadCount={emulatorFrameLoadCount}
+            roomCode={roomCode}
+            solo={isSoloMode}
+            onProgress={setRaProgress}
+            onUnlock={handleRaUnlock}
+            showToast={false}
+          />
+        </>
+      ),
+    } : null,
+    showHighScores ? {
+      id: 'scores',
+      label: 'High scores',
+      icon: 'trophy',
+      lead: 'Scores are read from the game and saved in solo play.',
+      content: (
+        <>
+          {renderMameLeaderboardPanel('osg-menu-scores')}
+          {renderAmigaLeaderboardPanel()}
+        </>
+      ),
+    } : null,
+    showPlayersCategory ? {
+      id: 'room',
+      label: isSoloMode ? 'Friends' : 'Players & chat',
+      icon: 'people',
+      badge: chatUnread ? String(chatUnread) : '',
+      hot: chatUnread > 0,
+      lead: isSoloMode ? 'Friends and room invites.' : <>Room <b>{roomCode}</b> · {roleLabel}</>,
+      content: (
+        <>
+          {!isSoloMode ? (
+            <MenuGroup title="Players">
+              {playersList}
+              <div className="health-strip" aria-label="Connection status">
+                {healthItems.map((item) => (
+                  <span key={item.label} className={`health-item ${item.ok ? 'ok' : 'waiting'}`}>
+                    <span className="health-dot" aria-hidden="true" />
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+              <MenuRow icon="link" title={roomCodeCopied ? 'Copied' : 'Copy code'} description={`Room ${roomCode}`} onClick={copyRoomCode} />
+              {isHost ? (
+                <MenuRow icon="link" title={inviteCopied ? 'Invite copied' : 'Copy invite'} description={`${window.location.origin}/room/${roomCode}`} onClick={copyRoomInvite} />
+              ) : null}
+              {showMicControls ? (
+                <MenuRow
+                  className="osg-mic-row"
+                  icon={micEnabled && !micMuted ? 'mic' : 'micOff'}
+                  title="Microphone"
+                  description={micStatus}
+                  control={(
+                    <>
+                      <select
+                        aria-label="Microphone"
+                        value={selectedMicDeviceId}
+                        onFocus={refreshMicrophoneDevices}
+                        onChange={(event) => {
+                          const nextDeviceId = event.target.value;
+                          setSelectedMicDeviceId(nextDeviceId);
+                          if (micEnabled) {
+                            openMicrophone(nextDeviceId);
+                          }
                         }}
-                      />
-                      <canvas
-                        ref={mirrorCanvasRef}
-                        aria-hidden="true"
-                        width={768}
-                        height={576}
-                        style={{
-                          position: 'absolute',
-                          left: '-9999px',
-                          top: '0',
-                          width: '1px',
-                          height: '1px',
-                          opacity: 0,
-                          pointerEvents: 'none',
-                        }}
-                      />
-                    </div>
-                    {!isScreenFullscreen || showFullscreenArcadeLeaderboard
-                      ? renderMameLeaderboardPanel(showFullscreenArcadeLeaderboard ? 'fullscreen-score-panel' : 'side')
-                      : null}
-                  </div>
-                ) : (
-                  <div className={supportsAmigaScoreboard ? 'amiga-score-layout' : undefined}>
-                    <div className={supportsAmigaScoreboard ? 'amiga-score-screen' : undefined}>
-                    <iframe
-                      key={`${roomSystem}-${emulatorSessionKey}`}
-                      ref={emulatorFrameRef}
-                      className={isBeetleSaturn ? 'video emulator-frame' : 'emulator-frame'}
-                      title={emulatorTitle}
-                      src={emulatorSrc}
-                      onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
-                      style={{
-                        position: isBeetleSaturn ? 'relative' : 'absolute',
-                        left: '0',
-                        top: '0',
-                        display: isBeetleSaturn ? 'block' : 'inline',
-                        width: isBeetleSaturn ? '100%' : '768px',
-                        height: isBeetleSaturn ? 'auto' : '544px',
-                        aspectRatio: isBeetleSaturn ? '4 / 3' : undefined,
-                        border: isBeetleSaturn ? '1px solid #1f2f4a' : '0',
-                        borderRadius: isBeetleSaturn ? '8px' : '0',
-                        background: '#000',
-                        opacity: isBeetleSaturn ? 1 : 0,
-                        pointerEvents: isBeetleSaturn ? 'auto' : 'none',
-                      }}
-                    />
-
-                    <canvas
-                      ref={mirrorCanvasRef}
-                      className={`video ${isMasterSystem ? 'master-system-video' : ''}`}
-                      onClick={captureInput}
-                      onPointerDown={handleAmigaPointerDown}
-                      onPointerUp={handleAmigaPointerUp}
-                      onPointerMove={handleAmigaPointerMove}
-                      onContextMenu={(event) => {
-                        if (isMouseComputer) event.preventDefault();
-                      }}
-                      style={{
-                        width: '100%',
-                        aspectRatio: '4 / 3',
-                        border: '1px solid #1f2f4a',
-                        borderRadius: '8px',
-                        background: '#000',
-                        display: isBeetleSaturn ? 'none' : 'block',
-                      }}
-                      width={768}
-                      height={544}
-                    />
-                    </div>
-                    {renderAmigaLeaderboardPanel()}
-                  </div>
-                )}
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={acceptedMedia}
-                  multiple={isAmigaFamily || isDiscConsole || isC64 || isMsx || isAtariSt || isX68000}
-                  data-mode="load"
-                  onChange={handleDiskSelected}
-                  style={{ display: 'none' }}
-                />
-
-                {isAmigaFamily ? (
-                  <input
-                    ref={swapDiskInputRef}
-                    type="file"
-                    accept={acceptedMedia}
-                    data-mode="swap"
-                    onChange={handleDiskSelected}
-                    style={{ display: 'none' }}
-                  />
-                ) : null}
-
-                {isDiscConsole ? (
-                  <input
-                    ref={playstationBiosInputRef}
-                    type="file"
-                    accept=".bin,.rom"
-                    onChange={handlePlayStationBiosSelected}
-                    style={{ display: 'none' }}
-                  />
-                ) : null}
-
-                {isAmigaFamily ? (
-                  <input
-                    ref={kickstartInputRef}
-                    type="file"
-                    accept=".rom,.bin,.kick,.kickstart"
-                    onChange={handleKickstartSelected}
-                    style={{ display: 'none' }}
-                  />
-                ) : null}
-
-                {isAtariSt ? (
-                  <input
-                    ref={atariTosInputRef}
-                    type="file"
-                    accept=".img,.rom,.bin"
-                    onChange={handleAtariTosSelected}
-                    style={{ display: 'none' }}
-                  />
-                ) : null}
-
-                {isX68000 ? (
-                  <input
-                    ref={x68000FirmwareInputRef}
-                    type="file"
-                    accept=".dat,.zip"
-                    multiple
-                    onChange={handleX68000FirmwareSelected}
-                    style={{ display: 'none' }}
-                  />
-                ) : null}
-
-                <div
-                  className="host-control-bar"
-                  style={{
-                    display: 'flex',
-                    gap: '10px',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  {isHost && !isSoloMode ? (
-                    <div className="room-system-switch">
-                      <label>
-                        <span>System</span>
-                        <select
-                          value={selectedRoomSystem}
-                          onChange={(event) => setSelectedRoomSystem(event.target.value)}
-                          disabled={switchingSystem}
-                        >
-                          {ROOM_SYSTEM_OPTIONS.filter(([value]) => value !== 'msx' || isAdmin).map(([value, label]) => (
-                            <option key={value} value={value}>{label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={switchRoomSystem}
-                        disabled={switchingSystem || selectedRoomSystem === roomSystem}
                       >
-                        {switchingSystem ? 'Switching...' : 'Switch system'}
+                        <option value="">Default mic</option>
+                        {micDevices.map((device) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" className={micEnabled && !micMuted ? 'active' : 'secondary'} onClick={toggleMicrophone}>
+                        {micLabel}
                       </button>
-                    </div>
-                  ) : null}
-
-                  {isAtari8 && canControlLocalEmulator ? (
-                    <div className="room-system-switch atari8-machine-switch">
-                      <label>
-                        <span>Atari model</span>
-                        <select
-                          value={atari8Config.model}
-                          onChange={(event) => updateAtari8Config({ model: event.target.value })}
-                        >
-                          {ATARI8_MODEL_OPTIONS.map(([value, label]) => (
-                            <option key={value} value={value}>{label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>RAM</span>
-                        <select
-                          value={String(atari8Config.memory)}
-                          onChange={(event) => updateAtari8Config({ memory: Number(event.target.value) })}
-                        >
-                          {atari8RamOptions.map((memory) => (
-                            <option key={memory} value={memory}>{memory}K</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>BASIC</span>
-                        <select
-                          value={atari8Config.basicDisabled ? 'off' : 'on'}
-                          onChange={(event) => updateAtari8Config({ basicDisabled: event.target.value === 'off' })}
-                        >
-                          <option value="off">Off</option>
-                          <option value="on">On</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>TV</span>
-                        <select
-                          value={atari8Config.tv}
-                          onChange={(event) => updateAtari8Config({ tv: event.target.value })}
-                        >
-                          <option value="ntsc">NTSC</option>
-                          <option value="pal">PAL</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>OS</span>
-                        <select
-                          value={atari8Config.os}
-                          onChange={(event) => updateAtari8Config({ os: event.target.value })}
-                        >
-                          {ATARI8_OS_OPTIONS.map(([value, label]) => (
-                            <option key={value} value={value}>{label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      {atari8Config.memory > 64 ? (
-                        <label className="inline-toggle" title="Separate ANTIC access is only needed by some memory upgrades; leave off if a game corrupts after loading.">
-                          <span>ANTIC</span>
-                          <input
-                            type="checkbox"
-                            checked={atari8Config.separateAnticAccess}
-                            onChange={(event) => updateAtari8Config({ separateAnticAccess: event.target.checked })}
-                          />
-                        </label>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {!isAtariSt ? (
-                    <button type="button" onClick={startHostSession} disabled={hostStarted || (isPuaeAmiga && !loadedDiskName)}>
-                      {isPuaeAmiga && !loadedDiskName
-                        ? 'Load Amiga file to start'
-                        : isSoloMode
-                          ? hostStarted ? 'Emulator running' : 'Start emulator'
-                          : isAmigaLink
-                            ? hostStarted ? 'Local Amiga running' : 'Start local Amiga'
-                            : hostStarted ? 'Host session running' : 'Start host session'}
-                    </button>
-                  ) : null}
-
-                  <button onClick={openDiskPicker} disabled={!hostStarted && !isArcade && !isPuaeAmiga && !isAtariSt}>
-                    {mediaLabel}
+                    </>
+                  )}
+                />
+              ) : null}
+            </MenuGroup>
+          ) : null}
+          {canControlLocalEmulator && isSharedCpcParty ? (
+            <CpcPartyTurnPanel
+              activePartyPlayer={activePartyPlayer}
+              activePartyPlayerName={activePartyPlayerName}
+              partyMaxPlayers={partyMaxPlayers}
+              partyPlayerNameByNumber={partyPlayerNameByNumber}
+              partyRoster={partyRoster}
+              nextPartyTurn={nextPartyTurn}
+              setPartyTurn={setPartyTurn}
+            />
+          ) : null}
+          {canControlLocalEmulator && isArcadeParty ? (
+            <ArcadeHostQueuePanel partyRoster={partyRoster} isHost={isHost} releaseArcadePlayer={releaseArcadePlayer} />
+          ) : canControlLocalEmulator && isC64Party ? (
+            <C64PartyPanel partyRoster={partyRoster} />
+          ) : null}
+          {!canControlLocalEmulator && isArcadeParty ? (
+            <GuestArcadeQueuePanel
+              partyPlayerNumber={partyPlayerNumber}
+              arcadeQueueStatus={arcadeQueueStatus}
+              guestPrepared={guestPrepared}
+              sendArcadeQueueAction={sendArcadeQueueAction}
+            />
+          ) : null}
+          {!isSoloMode ? (
+            <MenuGroup title="Chat">
+              <RoomChat
+                messages={chatMessages}
+                onSend={sendChatMessage}
+                connected={signalingOpen}
+              />
+            </MenuGroup>
+          ) : null}
+          <MenuGroup title="Friends">
+            <SocialSidebar roomCode={roomCode} allowInvites={!isSoloMode} showOnline={false} />
+          </MenuGroup>
+        </>
+      ),
+    } : null,
+    isArcade ? {
+      id: 'cabinet',
+      label: 'Cabinet',
+      icon: 'coin',
+      lead: 'How other players can join this arcade machine, and where its ROMs come from.',
+      content: (
+        <>
+          <MenuGroup>
+            <MenuRow
+              icon="people"
+              title={isSoloMode ? 'Single-player cabinet' : 'Multiplayer cabinet'}
+              description={isSoloMode
+                ? 'Play locally. Switch to multiplayer whenever you want to open the cabinet to friends.'
+                : 'P1 belongs to the host. P2 belongs to the first player at the cabinet; everyone else can watch and put a 10p in the queue.'}
+              control={isHost ? (
+                <span className="arcade-mode-toggle" role="group" aria-label="Cabinet mode">
+                  <button type="button" className={isSoloMode ? 'active' : 'secondary'} onClick={() => setArcadeCabinetMode(false)} disabled={switchingSystem}>
+                    Single player
                   </button>
-
-                  {isHost && localRoomGames.length > 0 ? (
-                    <button type="button" className="secondary" onClick={() => setLocalGamePickerOpen((value) => !value)}>
-                      {localGamePickerOpen ? 'Hide games' : 'Change game'}
-                    </button>
-                  ) : null}
-
-                  {isArcade ? (
-                    <button type="button" className="secondary" onClick={openArcadeRomFolder} disabled={arcadeRomScanning}>
-                      {arcadeRomScanning ? 'Scanning ROMs...' : arcadeRomFolderName ? 'Change ROM folder' : 'Choose ROM folder'}
-                    </button>
-                  ) : null}
-
-                  {(isAmiga || isAmigaLink || isC64 || isAtariSt) ? (
+                  <button type="button" className={!isSoloMode ? 'active' : 'secondary'} onClick={() => setArcadeCabinetMode(true)} disabled={switchingSystem}>
+                    Multiplayer
+                  </button>
+                </span>
+              ) : null}
+            />
+            {canControlLocalEmulator ? (
+              <MenuRow
+                icon="folder"
+                title={arcadeRomScanning ? 'Scanning ROMs...' : arcadeRomFolderName ? 'Change ROM folder' : 'Choose ROM folder'}
+                description={arcadeRomFolderName || 'Pick a MAME 2003 / 2003-Plus romset folder on this device.'}
+                onClick={openArcadeRomFolder}
+                disabled={arcadeRomScanning}
+              />
+            ) : null}
+          </MenuGroup>
+          {canControlLocalEmulator ? (
+            <p className="arcade-romset-note">MAME Arcade needs a MAME 2003 / 2003-Plus romset. Choose the parent set folder to include samples.</p>
+          ) : null}
+          {canControlLocalEmulator ? (
+            <ArcadeRomBrowser
+              arcadeRomFolderName={arcadeRomFolderName}
+              arcadeRomEntries={arcadeRomEntries}
+              filteredArcadeRomEntries={filteredArcadeRomEntries}
+              arcadeParentRomCount={arcadeParentRomCount}
+              arcadeCloneRomCount={arcadeCloneRomCount}
+              arcadeSampleCount={arcadeSampleCount}
+              showArcadeCloneRoms={showArcadeCloneRoms}
+              setShowArcadeCloneRoms={setShowArcadeCloneRoms}
+              arcadeRomSearch={arcadeRomSearch}
+              setArcadeRomSearch={setArcadeRomSearch}
+              loadedDiskName={loadedDiskName}
+              loadArcadeRomEntry={(entry) => {
+                closeGameMenu();
+                loadArcadeRomEntry(entry);
+              }}
+            />
+          ) : null}
+        </>
+      ),
+    } : null,
+    {
+      id: 'system',
+      label: systemLabel,
+      icon: 'chip',
+      lead: 'Emulator settings and tools for this system.',
+      content: (
+        <>
+          {(loadedDiskName || isAmigaFamily || isDiscConsole || isAtariSt) ? (
+            <div className="session-strip">
+              {loadedDiskName ? <span>{loadedDiskName}</span> : null}
+              {isAmigaFamily ? <span>{amigaRomSource === AMIGA_ROM_SOURCE.AROS ? 'ROM: AROS (experimental)' : kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? loadedDiskName ? `ROM: ${amigaRequiredModel === 'A1200' ? 'A1200 Kickstart 3.1' : 'A500 Kickstart 1.3'} required` : 'ROM: chosen after game' : 'ROM: AROS'}</span> : null}
+              {isMsx ? <span>Powered by <a href="https://webmsx.org" target="_blank" rel="noreferrer">WebMSX</a></span> : null}
+              {isDiscConsole ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : isSaturn ? 'BIOS: load saturn_bios.bin locally' : 'BIOS: HLE fallback / load your own locally'}</span> : null}
+              {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
+              {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
+            </div>
+          ) : null}
+          {canControlLocalEmulator ? (
+            <MenuGroup title="Machine">
+              {isHost && !isSoloMode ? (
+                <MenuBlock>
+                  <div className="room-system-switch">
+                    <label>
+                      <span>System</span>
+                      <select
+                        value={selectedRoomSystem}
+                        onChange={(event) => setSelectedRoomSystem(event.target.value)}
+                        disabled={switchingSystem}
+                      >
+                        {ROOM_SYSTEM_OPTIONS.filter(([value]) => value !== 'msx' || isAdmin).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <button
                       type="button"
                       className="secondary"
-                      onClick={localReleaseFiles.length > 1 ? selectNextLocalReleaseDisk : openSwapDiskPicker}
-                      disabled={!hostStarted}
+                      onClick={switchRoomSystem}
+                      disabled={switchingSystem || selectedRoomSystem === roomSystem}
                     >
-                      {localReleaseFiles.length > 1
-                        ? `Next disk (${currentLocalReleaseIndex + 1}/${localReleaseFiles.length})`
-                        : isC64
-                        ? `Next C64 media${c64MediaCount > 1 ? ` (${c64MediaIndex + 1}/${c64MediaCount})` : ''}`
-                        : isAtariSt
-                          ? `Next ST disk${atariStMediaCount > 1 ? ` (${atariStMediaIndex + 1}/${atariStMediaCount})` : ''}`
-                          : 'Swap disk'}
+                      {switchingSystem ? 'Switching...' : 'Switch system'}
                     </button>
-                  ) : null}
+                  </div>
+                </MenuBlock>
+              ) : null}
 
-                  {isPuaeAmiga && loadedAgaDiskCount > 0
-                    && localReleaseFiles.length === 0
-                    ? loadedAgaDiskCount > 1 ? (
-                      <label className="compact-media-select">
-                        <span>Disk</span>
-                        <select
-                          value={currentAgaDiskIndex}
-                          onChange={(event) => selectAgaDisk(Number(event.target.value))}
-                          disabled={!hostStarted}
-                        >
-                          {Array.from({ length: loadedAgaDiskCount }, (_, index) => (
-                            <option key={`aga-disk-${index + 1}`} value={index}>Disk {index + 1}</option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null
-                    : null}
+              {isAtari8 ? (
+                <MenuBlock>
+                  <Atari8Settings
+                    atari8Config={atari8Config}
+                    updateAtari8Config={updateAtari8Config}
+                    atari8RamOptions={atari8RamOptions}
+                    modelOptions={ATARI8_MODEL_OPTIONS}
+                    osOptions={ATARI8_OS_OPTIONS}
+                  />
+                </MenuBlock>
+              ) : null}
 
-                  {localReleaseFiles.length > 1
-                    ? isPuaeAmiga ? (
+              {(isAmiga || isAmigaLink || isC64 || isAtariSt) ? (
+                <MenuRow
+                  icon="swap"
+                  title={localReleaseFiles.length > 1
+                    ? `Next disk (${currentLocalReleaseIndex + 1}/${localReleaseFiles.length})`
+                    : isC64
+                    ? `Next C64 media${c64MediaCount > 1 ? ` (${c64MediaIndex + 1}/${c64MediaCount})` : ''}`
+                    : isAtariSt
+                      ? `Next ST disk${atariStMediaCount > 1 ? ` (${atariStMediaIndex + 1}/${atariStMediaCount})` : ''}`
+                      : 'Swap disk'}
+                  description="Change the disk in the drive"
+                  onClick={localReleaseFiles.length > 1 ? selectNextLocalReleaseDisk : openSwapDiskPicker}
+                  disabled={!hostStarted}
+                />
+              ) : null}
+
+              {isPuaeAmiga && loadedAgaDiskCount > 1 && localReleaseFiles.length === 0 ? (
+                <MenuRow
+                  icon="file"
+                  title="Disk"
+                  control={(
+                    <label className="compact-media-select">
+                      <span className="osg-visually-hidden">Disk</span>
+                      <select
+                        value={currentAgaDiskIndex}
+                        onChange={(event) => selectAgaDisk(Number(event.target.value))}
+                        disabled={!hostStarted}
+                      >
+                        {Array.from({ length: loadedAgaDiskCount }, (_, index) => (
+                          <option key={`aga-disk-${index + 1}`} value={index}>Disk {index + 1}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                />
+              ) : null}
+
+              {localReleaseFiles.length > 1 ? (
+                isPuaeAmiga ? (
+                  <MenuRow
+                    icon="file"
+                    title="Disk"
+                    control={(
                       <label className="compact-media-select">
-                        <span>Disk</span>
+                        <span className="osg-visually-hidden">Disk</span>
                         <select
                           value={currentLocalReleaseIndex}
                           onChange={(event) => selectLocalReleaseDisk(Number(event.target.value))}
@@ -7833,7 +8192,13 @@ export default function RoomPage() {
                           ))}
                         </select>
                       </label>
-                    ) : localReleaseFiles.map((file, index) => (
+                    )}
+                  />
+                ) : (
+                  <MenuRow
+                    icon="file"
+                    title="Disks"
+                    control={localReleaseFiles.map((file, index) => (
                       <button
                         key={`local-release-disk-${index + 1}-${file.name}`}
                         type="button"
@@ -7844,582 +8209,426 @@ export default function RoomPage() {
                       >
                         Disk {index + 1}
                       </button>
-                    ))
-                    : null}
+                    ))}
+                  />
+                )
+              ) : null}
 
-                  {isMouseComputer && !isPuaeAmiga ? (
-                    <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>
-                      Left click
-                    </button>
-                  ) : null}
-
-                  {isMouseComputer && !isPuaeAmiga ? (
-                    <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>
-                      Right click
-                    </button>
-                  ) : null}
-
-                  {canControlLocalEmulator ? (
-                    <label className="host-volume-control">
-                      <span>Volume {Math.round(hostVolume * 100)}%</span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={Math.round(hostVolume * 100)}
-                        onChange={handleHostVolumeChange}
-                      />
-                    </label>
-                  ) : null}
-
-                  {canControlLocalEmulator && !isPuaeAmiga ? (
-                    <button
-                      type="button"
-                      className={emulatorPaused ? 'active' : 'secondary'}
-                      onClick={toggleEmulatorPause}
-                      disabled={!hostStarted}
-                    >
-                      {emulatorPaused ? 'Resume emulator' : 'Pause emulator'}
-                    </button>
-                  ) : null}
-
-                  {!isPuaeAmiga ? (
-                    <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>
-                      Reset emulator
-                    </button>
-                  ) : null}
-
-                  {isC64 ? (
-                    <button type="button" className="secondary" onClick={swapC64JoystickPorts} disabled={!hostStarted}>
-                      P1 port {c64JoystickPortsSwapped ? 1 : 2} / P2 port {c64JoystickPortsSwapped ? 2 : 1}
-                    </button>
-                  ) : null}
-
-                  {isC64 ? (
-                    <button type="button" className={c64WarpEnabled ? 'active' : 'secondary'} onClick={toggleC64Warp} disabled={!hostStarted}>
-                      {c64WarpEnabled ? 'Normal speed' : 'Warp loading'}
-                    </button>
-                  ) : null}
-
-                  {isAmigaFamily && !isPuaeAmiga ? (
-                    <button type="button" className="secondary" onClick={openKickstartPicker} disabled={(isPuaeAmiga && !amigaRequiredModel) || (hostStarted && !isPuaeAmiga)}>
-                      {kickstartRomName ? 'Change Kickstart ROM' : isPuaeAmiga && !amigaRequiredModel ? 'Choose game before Kickstart' : `Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
-                    </button>
-                  ) : null}
-
-                  {isPuaeAmiga && amigaRequiredModel === 'A1200' && !whdLoadSupportReady ? (
-                    <button type="button" onClick={openKickstartPicker}>
-                      Add WHDLoad Kickstart 1.3
-                    </button>
-                  ) : null}
-
-                  {isPuaeAmiga ? (
-                    <details className="amiga-room-options">
-                      <summary>Amiga options</summary>
-                      <div>
-                        <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>Left click</button>
-                        <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>Right click</button>
-                        <button type="button" className={emulatorPaused ? 'active' : 'secondary'} onClick={toggleEmulatorPause} disabled={!hostStarted}>
-                          {emulatorPaused ? 'Resume' : 'Pause'}
-                        </button>
-                        <button type="button" className="secondary" onClick={resetHostEmulator} disabled={!hostStarted}>Reset</button>
-                        <button type="button" className="secondary" onClick={openKickstartPicker} disabled={!amigaRequiredModel}>
-                          Change Kickstart ROM
-                        </button>
-                        {hasVipAccess ? (
-                          <button type="button" className="secondary" onClick={loadVipKickstart} disabled={vipKickstartBusy}>
-                            {vipKickstartBusy ? 'Downloading...' : `Use saved ${amigaRequiredModel === 'A1200' ? 'A1200 3.1' : 'A500 1.3'} ROM`}
-                          </button>
-                        ) : null}
-                      </div>
-                    </details>
-                  ) : null}
-
-                  {isDiscConsole ? (
-                    <button type="button" className="secondary" onClick={openPlayStationBiosPicker}>
-                      {playstationBiosName ? `Change local ${isSaturn ? 'Saturn' : 'PlayStation'} BIOS` : `Load local ${isSaturn ? 'Saturn' : 'PlayStation'} BIOS`}
-                    </button>
-                  ) : null}
-
-                  {isAtariSt ? (
-                    <button type="button" className="secondary" onClick={openAtariTosPicker}>
-                      {atariTosName ? 'Change local Atari TOS' : 'Load local Atari TOS'}
-                    </button>
-                  ) : null}
-
-                  {isX68000 ? (
-                    <button type="button" className="secondary" onClick={openX68000FirmwarePicker}>
-                      {x68000FirmwareName ? 'Change X68000 firmware' : 'Load X68000 firmware'}
-                    </button>
-                  ) : null}
-
-                </div>
-
-                {isArcade ? (
-                  <p className="arcade-romset-note">MAME Arcade needs a MAME 2003 / 2003-Plus romset. Choose the parent set folder to include samples.</p>
-                ) : null}
-
-                {isArcade && arcadeRomEntries.length > 0 ? (
-                  <div className="arcade-rom-browser">
-                    <div className="arcade-rom-browser-head">
-                      <div className="arcade-rom-browser-title">
-                        <strong>{arcadeRomFolderName || 'MAME ROMs'}</strong>
-                        <span>
-                          {showArcadeCloneRoms
-                            ? `${arcadeRomEntries.length} ROM archive${arcadeRomEntries.length === 1 ? '' : 's'} found`
-                            : `${arcadeParentRomCount} parent game${arcadeParentRomCount === 1 ? '' : 's'} shown${arcadeCloneRomCount ? ` (${arcadeCloneRomCount} clones hidden)` : ''}`}
-                          {arcadeSampleCount ? ` - ${arcadeSampleCount} sample zip${arcadeSampleCount === 1 ? '' : 's'} available` : ''}
-                        </span>
-                      </div>
-                      <div className="arcade-rom-browser-actions">
-                        <label className="arcade-rom-toggle">
-                          <input
-                            type="checkbox"
-                            checked={showArcadeCloneRoms}
-                            onChange={(event) => setShowArcadeCloneRoms(event.target.checked)}
-                          />
-                          <span>Show clones/children</span>
-                        </label>
-                        <input
-                          type="search"
-                          value={arcadeRomSearch}
-                          onChange={(event) => setArcadeRomSearch(event.target.value)}
-                          placeholder="Search games or zip names"
-                        />
-                      </div>
-                    </div>
-                    <div className="arcade-rom-list" aria-label="MAME ROM folder games">
-                      {filteredArcadeRomEntries.map((entry) => (
-                        <button
-                          key={entry.path}
-                          type="button"
-                          className={`${loadedDiskName === entry.name ? 'active' : 'secondary'}${entry.isClone ? ' clone-rom' : ''}`}
-                          onClick={() => loadArcadeRomEntry(entry)}
-                        >
-                          <span>{entry.displayName}</span>
-                          <small>{entry.path}{entry.isClone && entry.parentTitle ? ` - clone of ${entry.parentTitle}` : ''}</small>
-                        </button>
-                      ))}
-                    </div>
-                    {filteredArcadeRomEntries.length < arcadeRomEntries.length ? (
-                      <p className="muted">Showing {filteredArcadeRomEntries.length} of {arcadeRomEntries.length}. Use search to narrow the list.</p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {isSharedCpcParty ? (
-                  <div className="party-turn-panel">
-                    <div className="party-turn-header">
-                      <strong>Party turn</strong>
-                      <span>
-                        {activePartyPlayerName
-                          ? `P${activePartyPlayer}: ${activePartyPlayerName} controls the shared joystick`
-                          : `P${activePartyPlayer}: waiting for assigned player`}
-                      </span>
-                    </div>
-                    <div className="party-turn-controls">
-                      <button type="button" className="secondary" onClick={nextPartyTurn}>
-                        Next player
-                      </button>
-                      {Array.from({ length: partyMaxPlayers }, (_, index) => index + 1).map((playerNumber) => (
-                        <button
-                          key={playerNumber}
-                          type="button"
-                          className={activePartyPlayer === playerNumber ? 'active' : 'secondary'}
-                          onClick={() => setPartyTurn(playerNumber)}
-                        >
-                          <span>P{playerNumber}</span>
-                          {partyPlayerNameByNumber.get(playerNumber) ? <small>{partyPlayerNameByNumber.get(playerNumber)}</small> : null}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="party-roster" aria-label="Party players">
-                      {partyRoster.map((player) => (
-                        <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
-                          <strong>P{player.playerNumber}</strong>
-                          <span>{player.username}</span>
-                          <small>{player.role}{player.connected ? ' connected' : ' joining'}</small>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="muted">
-                      Guests appear here as they join, so the host can pick the right player turn before the game starts.
-                    </p>
-                  </div>
-                ) : null}
-
-                {isArcadeParty ? (
-                  <div className="party-turn-panel arcade-queue-panel">
-                    <div className="party-turn-header">
-                      <strong>10p queue</strong>
-                      <span>P1 always belongs to the host. P2 plays; everyone else watches until their coin reaches the front.</span>
-                    </div>
-                    <div className="party-roster" aria-label="Arcade cabinet players">
-                      {partyRoster
-                        .filter((player) => player.active)
-                        .map((player) => (
-                          <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
-                            <strong>{player.cabinetPlayerNumber ? `P${player.cabinetPlayerNumber}` : 'P1'}</strong>
-                            <span>{player.username}</span>
-                            <small>{player.role}{player.connected ? ' connected' : ' joining'}</small>
-                            {isHost && player.guestId ? (
-                              <span className="party-roster-actions">
-                                <button type="button" className="secondary" onClick={() => releaseArcadePlayer(player.guestId)}>
-                                  Release
-                                </button>
-                                <button type="button" className="secondary" onClick={() => releaseArcadePlayer(player.guestId, { requeue: true })}>
-                                  Requeue
-                                </button>
-                              </span>
-                            ) : null}
-                          </div>
-                        ))}
-                    </div>
-                    {partyRoster.some((player) => player.queued) ? (
-                      <>
-                        <div className="party-turn-header compact">
-                          <strong>Queue</strong>
-                        </div>
-                        <div className="party-roster" aria-label="Arcade queue">
-                          {partyRoster
-                            .filter((player) => player.queued)
-                            .map((player) => (
-                              <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
-                                <strong>#{player.queuePosition}</strong>
-                                <span>{player.username}</span>
-                                <small>Waiting for a cabinet slot</small>
-                              </div>
-                            ))}
-                        </div>
-                      </>
-                    ) : null}
-                    {partyRoster.some((player) => !player.active && !player.queued) ? (
-                      <>
-                        <div className="party-turn-header compact">
-                          <strong>Spectators</strong>
-                        </div>
-                        <div className="party-roster" aria-label="Arcade spectators">
-                          {partyRoster
-                            .filter((player) => !player.active && !player.queued)
-                            .map((player) => (
-                              <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
-                                <strong>Watch</strong>
-                                <span>{player.username}</span>
-                                <small>{player.connected ? 'Connected' : 'Joining'}</small>
-                              </div>
-                            ))}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                ) : isC64Party ? (
-                  <div className="party-turn-panel">
-                    <div className="party-turn-header">
-                      <strong>C64 players</strong>
-                      <span>Players are assigned as they join.</span>
-                    </div>
-                    <div className="party-roster" aria-label="C64 party players">
-                      {partyRoster.map((player) => (
-                        <div key={player.playerNumber} className={player.connected ? 'connected' : ''}>
-                          <strong>P{player.playerNumber}</strong>
-                          <span>{player.username}</span>
-                          <small>{player.role}{player.connected ? ' connected' : ' joining'}</small>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  muted={false}
-                  className="video"
-                  onClick={captureInput}
-                  onLoadedMetadata={playRemoteVideo}
-                  onCanPlay={playRemoteVideo}
-                  onPointerDown={handleAmigaPointerDown}
-                  onPointerUp={handleAmigaPointerUp}
-                  onPointerMove={handleAmigaPointerMove}
-                  onContextMenu={(event) => {
-                    if (isMouseComputer) event.preventDefault();
-                  }}
+              {isMouseComputer ? (
+                <MenuRow
+                  icon="mouse"
+                  title="Mouse buttons"
+                  description="Send a click to the emulated mouse"
+                  control={(
+                    <>
+                      <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(1)} disabled={!hostStarted}>Left click</button>
+                      <button type="button" className="secondary" onClick={() => sendAmigaMouseClick(3)} disabled={!hostStarted}>Right click</button>
+                    </>
+                  )}
                 />
+              ) : null}
 
-                <button className="guest-connect-button" onClick={connectGuest} disabled={guestPrepared}>
-                  {guestPrepared ? 'Guest connection ready' : 'Prepare guest connection'}
-                </button>
-                {isArcadeParty ? (
-                  <div className="party-turn-panel arcade-queue-panel guest-queue-panel">
-                    <div className="party-turn-header">
-                      <strong>{partyPlayerNumber ? `You are P${partyPlayerNumber}` : arcadeQueueStatus.queued ? `Queue #${arcadeQueueStatus.queuePosition || '?'}` : 'Spectator'}</strong>
-                      <span>{partyPlayerNumber ? 'You have cabinet controls.' : arcadeQueueStatus.queued ? 'Waiting for the next free cabinet slot.' : 'Watch the game or join the queue.'}</span>
-                    </div>
-                    <div className="party-turn-controls">
-                      {!partyPlayerNumber ? (
-                        <button
-                          type="button"
-                          className={arcadeQueueStatus.queued ? 'active' : 'secondary'}
-                          onClick={() => sendArcadeQueueAction(arcadeQueueStatus.queued ? 'arcade_leave_queue' : 'arcade_join_queue')}
-                          disabled={!guestPrepared}
-                        >
-                          {arcadeQueueStatus.queued ? 'Take back my 10p' : 'Put 10p on the cabinet'}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => sendArcadeQueueAction('arcade_release_slot')}
-                          disabled={!guestPrepared}
-                        >
-                          Leave cabinet
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            )}
-
-            {!isSoloMode && !showFullscreenArcadeLeaderboard ? (
-              <div className="fullscreen-room-chat">
-                <RoomChat
-                  messages={chatMessages}
-                  onSend={sendChatMessage}
-                  connected={signalingOpen}
+              {isC64 ? (
+                <MenuRow
+                  icon="swap"
+                  title={`P1 port ${c64JoystickPortsSwapped ? 1 : 2} / P2 port ${c64JoystickPortsSwapped ? 2 : 1}`}
+                  description="Swap the joystick ports if the game ignores your joystick"
+                  onClick={swapC64JoystickPorts}
+                  disabled={!hostStarted}
                 />
-              </div>
-            ) : null}
+              ) : null}
+              {isC64 ? (
+                <MenuRow
+                  icon="play"
+                  title={c64WarpEnabled ? 'Normal speed' : 'Warp loading'}
+                  description="Speeds up tape and disk loading"
+                  control={<Toggle on={c64WarpEnabled} />}
+                  onClick={toggleC64Warp}
+                  disabled={!hostStarted}
+                />
+              ) : null}
 
-          </div>
-          {isHost && localGamePickerOpen ? (
-            <aside className="panel local-room-game-picker" aria-label="Local library games">
-              <div className="local-room-game-picker-head">
-                <div>
-                  <span>Local library</span>
-                  <strong>{systemLabel}</strong>
-                </div>
-                <button type="button" className="secondary icon-button" onClick={() => setLocalGamePickerOpen(false)} aria-label="Close local game list">
-                  x
-                </button>
-              </div>
-              <input
-                type="search"
-                value={localGameSearch}
-                onChange={(event) => setLocalGameSearch(event.target.value)}
-                placeholder="Search games"
-              />
-              <div className="local-room-game-list">
-                {filteredLocalRoomGames.map((game) => (
-                  <button
-                    key={game.id}
-                    type="button"
-                    className={`local-room-game-item ${game.id === localGameId ? 'active' : ''}`}
-                    onClick={() => chooseLocalRoomGame(game)}
-                  >
-                    <span className={`local-room-game-thumb ${game.boxArtUrl ? 'has-art' : ''}`}>
-                      {game.boxArtUrl ? <img src={game.boxArtUrl} alt="" loading="lazy" /> : <em>{game.system?.toUpperCase?.() || 'ROM'}</em>}
-                    </span>
-                    <span>
-                      <strong>{game.title}</strong>
-                      <small>{game.fileName}</small>
-                    </span>
-                  </button>
-                ))}
-                {filteredLocalRoomGames.length === 0 ? (
-                  <p className="muted">No matching games in this system.</p>
-                ) : null}
-              </div>
-            </aside>
+              {isAmigaFamily && !isPuaeAmiga ? (
+                <MenuRow
+                  icon="chip"
+                  title={kickstartRomName ? 'Change Kickstart ROM' : isPuaeAmiga && !amigaRequiredModel ? 'Choose game before Kickstart' : `Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
+                  description={kickstartRomName || 'Stored only in this browser'}
+                  onClick={openKickstartPicker}
+                  disabled={(isPuaeAmiga && !amigaRequiredModel) || (hostStarted && !isPuaeAmiga)}
+                />
+              ) : null}
+
+              {isPuaeAmiga && amigaRequiredModel === 'A1200' && !whdLoadSupportReady ? (
+                <MenuRow icon="chip" title="Add WHDLoad Kickstart 1.3" description="WHDLoad games also need Kickstart 1.3" onClick={openKickstartPicker} />
+              ) : null}
+
+              {isPuaeAmiga ? (
+                <>
+                  <MenuRow
+                    icon="chip"
+                    title="Change Kickstart ROM"
+                    description={kickstartRomName || 'Choose the game first'}
+                    onClick={openKickstartPicker}
+                    disabled={!amigaRequiredModel}
+                  />
+                  {hasVipAccess ? (
+                    <MenuRow
+                      icon="chip"
+                      title={vipKickstartBusy ? 'Downloading...' : `Use saved ${amigaRequiredModel === 'A1200' ? 'A1200 3.1' : 'A500 1.3'} ROM`}
+                      description="VIP Kickstart"
+                      onClick={loadVipKickstart}
+                      disabled={vipKickstartBusy}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+
+              {isDiscConsole ? (
+                <MenuRow
+                  icon="chip"
+                  title={playstationBiosName ? `Change local ${isSaturn ? 'Saturn' : 'PlayStation'} BIOS` : `Load local ${isSaturn ? 'Saturn' : 'PlayStation'} BIOS`}
+                  description={playstationBiosName || (isSaturn ? 'saturn_bios.bin, 512 KB' : 'HLE fallback until you load your own')}
+                  onClick={openPlayStationBiosPicker}
+                />
+              ) : null}
+
+              {isAtariSt ? (
+                <MenuRow
+                  icon="chip"
+                  title={atariTosName ? 'Change local Atari TOS' : 'Load local Atari TOS'}
+                  description={atariTosName || 'EmuTOS 1.4 is built in'}
+                  onClick={openAtariTosPicker}
+                />
+              ) : null}
+
+              {isX68000 ? (
+                <MenuRow
+                  icon="chip"
+                  title={x68000FirmwareName ? 'Change X68000 firmware' : 'Load X68000 firmware'}
+                  description={x68000FirmwareName || 'IPL and CG ROM files'}
+                  onClick={openX68000FirmwarePicker}
+                />
+              ) : null}
+            </MenuGroup>
           ) : null}
-        </div>
-
-        {controlProfileDrawerOpen && isCpcSystem ? (
-          <aside className="control-profile-drawer" aria-label="Amstrad instructions">
-            <div className="control-profile-header">
-              <div>
-                <span>Amstrad instructions</span>
-                <h2>{selectedControlProfile ? selectedControlProfile.title : 'Choose profile'}</h2>
-              </div>
-              <button type="button" className="secondary" onClick={() => setControlProfileDrawerOpen(false)}>
-                Close
-              </button>
-            </div>
-
-            {controlProfileMatches.length > 1 ? (
-              <div className="control-match-list">
-                {controlProfileMatches.map((match) => (
-                  <button
-                    key={match.profile.gameSlug}
-                    type="button"
-                    className={selectedControlProfile?.gameSlug === match.profile.gameSlug ? 'active' : 'secondary'}
-                    onClick={() => chooseControlProfile(match.profile)}
-                  >
-                    <span>{match.profile.title}</span>
-                    <small>{match.score}% match</small>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {selectedControlProfile ? (
-              <>
-                <div className="control-profile-meta">
-                  <span>{selectedControlProfile.supportsJoystick ? 'Joystick supported' : 'Keyboard'}</span>
-                  <span>{selectedControlProfile.redefinableKeys ? 'Redefinable keys' : 'Fixed keys'}</span>
-                  {selectedControlProfile.confidence ? <span>{Math.round(selectedControlProfile.confidence * 100)}% confidence</span> : null}
-                </div>
-
-                <div className="control-profile-sections">
-                  {selectedControlPlayers.map((player) => (
-                    <section key={player.key} className="control-profile-section">
-                      <div className="control-player-heading">
-                        <h3>{player.label}</h3>
-                        <span>{player.hasInput ? 'Game profile' : 'No mapping'}</span>
-                      </div>
-
-                      {player.hasInput ? (
-                        <div className="control-visual-panel">
-                          <div className="control-stick" aria-label={`${player.label} joystick directions`}>
-                            {player.directionEntries.map((entry) => (
-                              <div
-                                key={`${player.key}-${entry.action}`}
-                                className={`control-stick-zone ${entry.action === 'fire1' ? 'fire' : ''} ${entry.key || entry.detail ? 'mapped' : 'empty'}`}
-                              >
-                                <span>{entry.label}</span>
-                                <strong>{entry.key || '-'}</strong>
-                                {entry.detail ? <small>{entry.detail}</small> : null}
-                              </div>
-                            ))}
-                          </div>
-
-                          {player.utilityEntries.length ? (
-                            <div className="control-key-row" aria-label={`${player.label} utility keys`}>
-                              {player.utilityEntries.map((entry) => (
-                                <div key={`${player.key}-${entry.action}`} className="control-keycap">
-                                  <span>{entry.label}</span>
-                                  <strong>{entry.key || '-'}</strong>
-                                  {entry.detail ? <small>{entry.detail}</small> : null}
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <p className="muted">No fixed key mapping in this profile.</p>
-                      )}
-
-                      {player.overlayEntries.length ? (
-                        <div className="control-overlay-list">
-                          {player.overlayEntries.map(([action, value]) => (
-                            <div key={`${player.key}-overlay-${action}`}>
-                              <strong>{action}</strong>
-                              <span>{value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </section>
-                  ))}
-                </div>
-
-                {selectedControlProfile.notes?.length ? (
-                  <section className="control-profile-section">
-                    <h3>Notes</h3>
-                    <ul className="control-notes-list">
-                      {selectedControlProfile.notes.map((note) => (
-                        <li key={note}>{note}</li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-
-                {selectedControlProfile.source ? (
-                  <div className="control-profile-source">
-                    <span>{selectedControlProfile.source.manualFile}</span>
-                    {selectedControlProfile.source.pages?.length ? (
-                      <small>Pages {selectedControlProfile.source.pages.join(', ')}</small>
-                    ) : null}
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <p className="muted">Default controls remain active until a profile is selected.</p>
-            )}
-          </aside>
-        ) : null}
-
-        {showDiagnostics ? (
-          <>
-            <div className="panel input-debug-panel">
-              <div className="play-header">
-                <h2>Input monitor</h2>
-                <div className="assigned-control">
-                  {inputDebug.source}
-                </div>
-              </div>
-
-              <div className="input-debug-grid">
-                {joystickMaskToLabels(inputDebug.mask).map(([label, active]) => (
-                  <div
-                    key={label}
-                    className={`input-bit ${active ? 'active' : ''}`}
-                  >
-                    {label}
-                  </div>
-                ))}
-              </div>
-
-              <div className="input-debug-meta">
-                <span>Mask {inputDebug.mask}</span>
-                <span>{dataChannelRef.current?.readyState || 'no channel'}</span>
-                <span>{inputCaptured ? 'captured' : 'released'}</span>
-              </div>
-
-              <div className="log-list input-debug-list">
-                {inputDebug.events.length === 0 ? (
-                  <div className="log-entry">No inputs seen yet.</div>
-                ) : inputDebug.events.map((event, index) => (
-                  <div key={`${event}-${index}`} className="log-entry">
-                    {event}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="panel log-panel">
-              <h2>Session log</h2>
-
-              {logs.length === 0 ? <p className="muted">No events yet.</p> : null}
-
-              <div className="log-list">
-                {logs.map((log, index) => (
-                  <div key={`${log}-${index}`} className="log-entry">
-                    {log}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        ) : null}
-        </div>
-        {supportsMameScoreboard && isSoloMode ? null : (
-          <div className="room-side-rail">
-            <SocialSidebar roomCode={roomCode} allowInvites={!isSoloMode} showOnline={false} />
-            {!isSoloMode ? (
-              <RoomChat
-                messages={chatMessages}
-                onSend={sendChatMessage}
-                connected={signalingOpen}
+          <MenuGroup title="Troubleshooting">
+            <MenuRow
+              icon="bug"
+              title={showDiagnostics ? 'Hide diagnostics' : 'Diagnostics'}
+              description="Input monitor, connection and session log"
+              control={<Toggle on={showDiagnostics} />}
+              onClick={() => setShowDiagnostics((value) => !value)}
+            />
+            {showDiagnostics ? (
+              <DiagnosticsPanel
+                status={status}
+                micStatus={micStatus}
+                showMicStatus={!isSharedCpcParty && !isSoloMode}
+                controlLabel={controlLabel}
+                healthItems={healthItems}
+                inputDebug={inputDebug}
+                inputLabels={joystickMaskToLabels(inputDebug.mask)}
+                channelState={dataChannelRef.current?.readyState || 'no channel'}
+                inputCaptured={inputCaptured}
+                logs={logs}
               />
             ) : null}
-          </div>
+          </MenuGroup>
+        </>
+      ),
+    },
+  ].filter(Boolean);
+  const activeMenuCategory = menuCategories.some((category) => category.id === menuCategory) ? menuCategory : 'game';
+
+  return (
+    <div
+      ref={roomRootRef}
+      className={`osg-room v-${viewport} ${roomIdle ? 'idle' : ''} ${obsCaptureMode ? 'obs-capture-page' : ''} ${gameMenuOpen ? 'menu-open' : ''}`}
+      data-system={roomSystem}
+    >
+      {obsCaptureMode ? (
+        <button type="button" className="secondary obs-capture-exit" onClick={() => setObsCaptureMode(false)}>
+          Back to room
+        </button>
+      ) : null}
+
+      <RoomTheatre
+        ambientImage={gameCover}
+        glowColor={`${systemColor}40`}
+        crt={crtEnabled}
+        paused={canControlLocalEmulator && emulatorPaused}
+        showPausedTag={!gameMenuOpen}
+        overlay={obsCaptureMode ? null : screenOverlay}
+      >
+        {canControlLocalEmulator ? (
+          isArcade ? (
+            <>
+              <iframe
+                key={`${roomSystem}-${emulatorSessionKey}`}
+                ref={emulatorFrameRef}
+                className="arcade-emulator-frame"
+                title={emulatorTitle}
+                src={emulatorSrc}
+                onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
+                style={{
+                  position: 'absolute',
+                  left: '0',
+                  top: '0',
+                  display: 'block',
+                  width: '100%',
+                  height: '100%',
+                  maxWidth: '100%',
+                  margin: '0',
+                  border: '0',
+                  borderRadius: '6px',
+                  background: '#000',
+                  opacity: 1,
+                  pointerEvents: 'auto',
+                }}
+              />
+              <canvas
+                ref={mirrorCanvasRef}
+                aria-hidden="true"
+                width={768}
+                height={576}
+                style={{
+                  position: 'absolute',
+                  left: '-9999px',
+                  top: '0',
+                  width: '1px',
+                  height: '1px',
+                  opacity: 0,
+                  pointerEvents: 'none',
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <iframe
+                key={`${roomSystem}-${emulatorSessionKey}`}
+                ref={emulatorFrameRef}
+                className={isBeetleSaturn ? 'video emulator-frame' : 'emulator-frame'}
+                title={emulatorTitle}
+                src={emulatorSrc}
+                onLoad={() => setEmulatorFrameLoadCount((count) => count + 1)}
+                style={{
+                  position: 'absolute',
+                  left: '0',
+                  top: '0',
+                  display: isBeetleSaturn ? 'block' : 'inline',
+                  width: isBeetleSaturn ? '100%' : '768px',
+                  height: isBeetleSaturn ? '100%' : '544px',
+                  border: '0',
+                  borderRadius: isBeetleSaturn ? '6px' : '0',
+                  background: '#000',
+                  opacity: isBeetleSaturn ? 1 : 0,
+                  pointerEvents: isBeetleSaturn ? 'auto' : 'none',
+                }}
+              />
+
+              <canvas
+                ref={mirrorCanvasRef}
+                className={`video ${isMasterSystem ? 'master-system-video' : ''}`}
+                onClick={captureInput}
+                onPointerDown={handleAmigaPointerDown}
+                onPointerUp={handleAmigaPointerUp}
+                onPointerMove={handleAmigaPointerMove}
+                onContextMenu={(event) => {
+                  if (isMouseComputer) event.preventDefault();
+                }}
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '6px',
+                  background: '#000',
+                  display: isBeetleSaturn ? 'none' : 'block',
+                }}
+                width={768}
+                height={544}
+              />
+            </>
+          )
+        ) : (
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            muted={false}
+            className="video"
+            onClick={captureInput}
+            onLoadedMetadata={playRemoteVideo}
+            onCanPlay={playRemoteVideo}
+            onPointerDown={handleAmigaPointerDown}
+            onPointerUp={handleAmigaPointerUp}
+            onPointerMove={handleAmigaPointerMove}
+            onContextMenu={(event) => {
+              if (isMouseComputer) event.preventDefault();
+            }}
+          />
         )}
-      </div>
+      </RoomTheatre>
+
+      {canControlLocalEmulator ? (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={acceptedMedia}
+            multiple={isAmigaFamily || isDiscConsole || isC64 || isMsx || isAtariSt || isX68000}
+            data-mode="load"
+            onChange={handleDiskSelected}
+            style={{ display: 'none' }}
+          />
+
+          {isAmigaFamily ? (
+            <input
+              ref={swapDiskInputRef}
+              type="file"
+              accept={acceptedMedia}
+              data-mode="swap"
+              onChange={handleDiskSelected}
+              style={{ display: 'none' }}
+            />
+          ) : null}
+
+          {isDiscConsole ? (
+            <input
+              ref={playstationBiosInputRef}
+              type="file"
+              accept=".bin,.rom"
+              onChange={handlePlayStationBiosSelected}
+              style={{ display: 'none' }}
+            />
+          ) : null}
+
+          {isAmigaFamily ? (
+            <input
+              ref={kickstartInputRef}
+              type="file"
+              accept=".rom,.bin,.kick,.kickstart"
+              onChange={handleKickstartSelected}
+              style={{ display: 'none' }}
+            />
+          ) : null}
+
+          {isAtariSt ? (
+            <input
+              ref={atariTosInputRef}
+              type="file"
+              accept=".img,.rom,.bin"
+              onChange={handleAtariTosSelected}
+              style={{ display: 'none' }}
+            />
+          ) : null}
+
+          {isX68000 ? (
+            <input
+              ref={x68000FirmwareInputRef}
+              type="file"
+              accept=".dat,.zip"
+              multiple
+              onChange={handleX68000FirmwareSelected}
+              style={{ display: 'none' }}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      <audio ref={remoteVoiceAudioRef} autoPlay playsInline />
+
+      <RoomTopBar
+        backLabel={tournamentCode ? 'Tournament' : isOnlineRoom ? 'Leave room' : 'Library'}
+        onBack={tournamentCode ? () => navigate(`/tournaments/${tournamentCode}`) : leaveRoom}
+        title={gameTitle}
+        cover={gameCover}
+        systemLabel={systemLabel}
+        systemColor={systemColor}
+        online={isOnlineRoom}
+        statusChip={!room ? 'Loading…' : isArcade ? (isSoloMode ? 'Solo cabinet' : 'Multiplayer cabinet') : roleLabel}
+        roomCodeChip={{ label: roomCodeCopied ? 'Copied' : `Room ${roomCode}`, onClick: copyRoomCode }}
+        players={displayedPlayers.map((player) => ({
+          name: player.username,
+          label: typeof player.playerNumber === 'number' ? `P${player.playerNumber}` : 'W',
+          connected: player.connected,
+        }))}
+        mic={showMicControls ? { on: micEnabled && !micMuted, label: micLabel, onClick: toggleMicrophone } : null}
+        chat={!isSoloMode ? { unread: chatUnread, onClick: () => openGameMenu('room') } : null}
+        invite={!isSoloMode && isHost
+          ? { label: inviteCopied ? 'Invite copied' : 'Copy invite', icon: 'link', onClick: copyRoomInvite }
+          : isSoloMode && isHost && !isArcade
+            ? { label: soloInviteBusy ? 'Opening multiplayer...' : 'Invite player', icon: 'people', onClick: invitePlayerFromSolo, disabled: soloInviteBusy }
+            : isSoloMode && isHost && isArcade
+              ? { label: 'Open to friends', icon: 'people', onClick: () => setArcadeCabinetMode(true), disabled: switchingSystem }
+              : null}
+        onOpenMenu={toggleGameMenu}
+        menuShortcut={menuShortcutNode}
+      />
+
+      <RoomHud
+        leftPills={leftPills}
+        rightPills={rightPills}
+        stripPills={stripPills}
+        toasts={roomToasts}
+        onDismissToast={dismissRoomToast}
+        coinHint={viewport === 'desktop' ? coinHint : null}
+        error={error}
+        onDismissError={() => setError('')}
+      />
+
+      <RoomDock
+        pause={canControlLocalEmulator ? { paused: emulatorPaused, onClick: toggleEmulatorPause, disabled: !hostStarted } : null}
+        volume={canControlLocalEmulator ? { value: Math.round(hostVolume * 100), onChange: handleHostVolumeChange } : null}
+        record={recordingCategoryVisible && recordingAvailable ? { active: recordingActive, onClick: () => openGameMenu('record') } : null}
+        fullscreen={{ active: fullscreenActive, onClick: toggleRoomFullscreen }}
+        onMore={() => openGameMenu()}
+        menuShortcut={menuShortcutNode}
+      />
+
+      {viewport !== 'desktop' && !obsCaptureMode ? (
+        <TouchControls
+          profile={touchProfile}
+          onMaskChange={handleTouchMask}
+          onFirstTouch={() => {
+            if (!inputCaptured) captureInput();
+          }}
+          padConnected={padInfo.connected}
+          padName={padInfo.name}
+          padKind={padInfo.kind}
+          disabled={gameMenuOpen || !canSendPlayerInput}
+          menuHint={padInfo.kind === 'stick' ? 'Hold Start + Select for the menu.' : 'Press the Guide button (or hold Start + Select) for the menu.'}
+        />
+      ) : null}
+
+      <GameMenu
+        ref={gameMenuRef}
+        open={gameMenuOpen}
+        viewport={viewport}
+        categories={menuCategories}
+        activeId={activeMenuCategory}
+        onSelect={setMenuCategory}
+        onClose={closeGameMenu}
+        header={{
+          title: gameTitle,
+          subtitle: `${systemLabel} · ${roleLabel}`,
+          cover: gameCover,
+          color: systemColor,
+          systemShort: systemLabel,
+          resumeLabel: menuAutoPauses ? 'Resume game' : 'Back to game',
+        }}
+        inputType={menuInputType}
+        menuShortcut={menuShortcutNode}
+      />
+
+      {controlProfileDrawerOpen && isCpcSystem ? (
+        <ControlProfileDrawer
+          controlProfileMatches={controlProfileMatches}
+          selectedControlProfile={selectedControlProfile}
+          selectedControlPlayers={selectedControlPlayers}
+          chooseControlProfile={chooseControlProfile}
+          onClose={() => setControlProfileDrawerOpen(false)}
+        />
+      ) : null}
 
       <ControllerSetupWizardAutomatic
         isOpen={controllerSetupOpen}
@@ -8450,3 +8659,4 @@ export default function RoomPage() {
     </div>
   );
 }
+

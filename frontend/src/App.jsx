@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { apiFetch, renewSession } from './api/client';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import LobbyPage from './pages/LobbyPage';
@@ -56,7 +57,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/experiments/mame-retroachievements" element={<PrivateRoute><MameAchievementsPreviewPage /></PrivateRoute>} />
-      <Route path="/" element={<Navigate to="/lobby" replace />} />
+      <Route path="/" element={localStorage.getItem('token') ? <Navigate to="/lobby" replace /> : <LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />

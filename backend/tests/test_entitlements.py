@@ -28,7 +28,7 @@ def db():
 
 
 def add_user(db, name, plan="FREE"):
-    user = User(username=name, email=f"{name}@example.com", password_hash="unused", plan=plan)
+    user = User(username=name, email=f"{name}@example.com", password_hash="unused", plan=plan, email_verified=True)
     db.add(user)
     db.commit()
     return user

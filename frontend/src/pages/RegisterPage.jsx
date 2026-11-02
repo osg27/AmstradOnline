@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { apiFetch } from '../api/client';
+import { apiFetch, storeAuthSession } from '../api/client';
 import BrandMark from '../components/BrandMark';
 
 export default function RegisterPage() {
@@ -20,7 +20,12 @@ export default function RegisterPage() {
         method: 'POST',
         body: JSON.stringify(form),
       });
-      setMessage(data.message);
+      storeAuthSession(data);
+      localStorage.setItem('emailVerified', 'false');
+      sessionStorage.setItem('osgWelcomeNote', data.email_sent === false
+        ? 'Account created. We could not send the verification email, so use Resend email in the banner.'
+        : 'Account created. We sent you a verification email.');
+      navigate('/lobby');
     } catch (err) {
       setError(err.message);
     } finally {

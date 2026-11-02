@@ -1,0 +1,88 @@
+/* Profile page: compact identity header, Silkscreen stat tiles, token-based cards. */
+.osg-legacy-page .prf-page { padding: 24px 0 40px; }
+.prf-page .profile-shell { gap: 14px; }
+
+.prf-page .profile-identity-card {
+  display: flex; align-items: center; gap: 18px; padding: 16px 20px; min-height: 0;
+  background: linear-gradient(120deg, rgba(47, 134, 224, .16), transparent 60%), var(--osg-deck);
+  border: 1px solid var(--osg-hair-2); border-radius: var(--osg-r-lg); box-shadow: none;
+}
+.prf-page .profile-scanlines { display: none; }
+.prf-page .profile-identity-copy { min-width: 0; flex: 1; }
+.prf-page .profile-identity-copy > span { font: 400 11px var(--osg-font-pixel); letter-spacing: .12em; color: var(--osg-ink-3); }
+.prf-page .profile-identity-copy h1 { margin: 4px 0 4px; font-family: var(--osg-font-display); font-weight: 400; font-size: clamp(24px, 3.4vw, 36px); line-height: 1; text-shadow: none; overflow-wrap: anywhere; }
+.prf-page .profile-identity-copy p { font-size: 13.5px; color: var(--osg-ink-2); }
+.prf-page .profile-supporter-badge { display: block; margin: 2px 0; font-size: 12.5px; color: var(--osg-coin); }
+.prf-page .profile-level-chip { min-width: 0; padding: 10px 16px; border: 1px solid var(--osg-hair-2); border-radius: var(--osg-r-md); background: rgba(0, 0, 0, .28); }
+.prf-page .profile-level-chip small { font: 400 10px var(--osg-font-pixel); letter-spacing: .1em; color: var(--osg-ink-3); }
+.prf-page .profile-level-chip strong { font: 400 22px var(--osg-font-pixel); color: var(--osg-ink); }
+
+.prf-page .profile-stat-grid { gap: 10px; }
+.prf-page .profile-stat-grid article { padding: 14px 16px; background: var(--osg-deck); border: 1px solid var(--osg-hair-2); border-radius: var(--osg-r-md); }
+.prf-page .profile-stat-grid small { font: 400 10px var(--osg-font-pixel); letter-spacing: .1em; color: var(--osg-ink-3); }
+.prf-page .profile-stat-grid strong { font: 400 clamp(22px, 3vw, 30px) var(--osg-font-pixel); color: var(--osg-ink); font-variant-numeric: tabular-nums; }
+.prf-page .profile-stat-grid span { color: var(--osg-ink-3); font-size: 12.5px; }
+
+.prf-page .profile-content-grid { gap: 14px; grid-template-columns: minmax(0, 1.6fr) minmax(300px, .8fr); }
+.prf-page .profile-main-column, .prf-page .profile-side-column { gap: 14px; }
+.prf-page .panel { padding: 18px; background: var(--osg-deck); border: 1px solid var(--osg-hair-2); border-radius: var(--osg-r-lg); box-shadow: none; }
+.prf-page .profile-section-heading { margin-bottom: 12px; }
+.prf-page .profile-section-heading p { font: 400 10.5px var(--osg-font-pixel); letter-spacing: .12em; color: var(--osg-ink-3); }
+.prf-page .profile-section-heading h2 { font-size: 18px; font-weight: 800; color: var(--osg-ink); letter-spacing: -.01em; }
+.prf-page .profile-section-heading > span { font: 400 11px var(--osg-font-pixel); color: var(--osg-ink-2); }
+
+/* Achievements */
+.prf-page .achievement-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.prf-page .achievement-grid article { min-height: 0; padding: 12px; border: 1px solid var(--osg-hair); border-radius: var(--osg-r-md); background: var(--osg-deck-2); grid-template-columns: 44px minmax(0, 1fr); }
+.prf-page .achievement-grid article.unlocked { border-color: rgba(63, 220, 138, .4); background: linear-gradient(130deg, rgba(63, 220, 138, .09), var(--osg-deck-2)); }
+.prf-page .achievement-grid article.locked { filter: grayscale(1); opacity: .55; }
+.prf-page .achievement-icon { width: 40px; height: 40px; font-size: 1.3rem; border: 1px solid var(--osg-hair-2); background: var(--osg-deck); color: var(--osg-coin); }
+.prf-page .achievement-grid article strong { font-size: 14px; }
+.prf-page .achievement-grid article p { font-size: 12.5px; color: var(--osg-ink-2); }
+.prf-page .achievement-grid article > span { font: 400 9.5px var(--osg-font-pixel); letter-spacing: .1em; color: var(--osg-go); }
+.prf-page .achievement-grid article.locked > span { color: var(--osg-ink-3); }
+
+/* Trophy case */
+.prf-page .medal-shelf { gap: 8px; }
+.prf-page .medal-shelf article { padding: 12px 4px; border: 1px solid var(--osg-hair); border-radius: var(--osg-r-md); background: var(--osg-deck-2); }
+.prf-page .medal-shelf article span { font-size: 1.7rem; }
+.prf-page .medal-shelf article strong { font: 400 22px var(--osg-font-pixel); }
+.prf-page .medal-shelf article small { font: 400 9.5px var(--osg-font-pixel); letter-spacing: .1em; color: var(--osg-ink-3); }
+.prf-page .podium-history > div { border-top: 1px solid var(--osg-hair); }
+.prf-page .podium-history small { color: var(--osg-ink-3); }
+.prf-page .podium-history b { font: 400 13px var(--osg-font-pixel); color: var(--osg-ink); }
+.prf-page .profile-empty { border: 1px dashed var(--osg-hair-2); color: var(--osg-ink-2); font-size: 13.5px; }
+
+/* Avatar locker */
+.prf-page .avatar-options { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.prf-page .avatar-options button { position: relative; display: grid; place-items: center; aspect-ratio: 1; padding: 6px; background: var(--osg-deck-2); border: 1px solid var(--osg-hair-2); border-radius: var(--osg-r-md); box-shadow: none; }
+.prf-page .avatar-options button:hover:not(:disabled) { border-color: var(--osg-ink-3); }
+.prf-page .avatar-options button.selected { border-color: var(--osg-coin); outline: 2px solid rgba(255, 200, 46, .25); }
+.prf-page .avatar-options button > span { position: absolute; right: 3px; bottom: 2px; font-size: 11px; }
+.prf-page .avatar-locker > small { color: var(--osg-ink-3); }
+
+/* RetroAchievements card */
+.prf-page .retroachievements-card { background: var(--osg-deck); }
+.prf-page .ra-intro, .prf-page .ra-notice { color: var(--osg-ink-2); font-size: 13.5px; }
+.prf-page .ra-player img { border-radius: var(--osg-r-md); border: 1px solid var(--osg-hair-2); }
+.prf-page .ra-stats strong { font: 400 20px var(--osg-font-pixel); color: var(--osg-ra); }
+.prf-page .ra-stats small, .prf-page .ra-unlocks small { color: var(--osg-ink-3); }
+.prf-page .ra-unlocks li { border-top: 1px solid var(--osg-hair); }
+.prf-page .ra-play-panel { border: 1px solid var(--osg-hair-2); background: var(--osg-deck-2); border-radius: var(--osg-r-md); }
+.prf-page .ra-public-settings summary { cursor: pointer; color: var(--osg-ink-2); font-weight: 700; }
+.prf-page .ra-error { color: #ff9c91; }
+
+@media (max-width: 960px) {
+  .prf-page .profile-content-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .osg-legacy-page .prf-page { padding-top: 14px; }
+  .prf-page .profile-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prf-page .profile-identity-card { flex-wrap: wrap; padding: 14px; gap: 12px; }
+  .prf-page .profile-level-chip { margin-left: auto; }
+  .prf-page .panel { padding: 14px; }
+  .prf-page .achievement-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmp-page *, .frd-page *, .prf-page * { animation: none !important; transition: none !important; }
+}

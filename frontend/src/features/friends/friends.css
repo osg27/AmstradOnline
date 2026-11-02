@@ -1,0 +1,84 @@
+/* Friends & messages page. Friends list left, conversation right; list-first on phones. */
+.osg-legacy-page .frd-page { padding-bottom: 32px; }
+.osg-legacy-page .frd-layout { grid-template-columns: 340px minmax(0, 1fr); gap: 18px; align-items: start; }
+.osg-legacy-page .frd-side { order: 0; min-width: 0; }
+.osg-legacy-page .frd-messages { padding: 0; overflow: hidden; background: var(--osg-deck); border: 1px solid var(--osg-hair-2); border-radius: var(--osg-r-lg); min-width: 0; }
+
+/* Friends / online list */
+.frd-side .social-sidebar { position: static; max-height: none; background: var(--osg-deck); border: 1px solid var(--osg-hair-2); border-radius: var(--osg-r-lg); overflow: visible; }
+.frd-side .social-sidebar-section { padding: 16px; gap: 10px; }
+.frd-side .social-sidebar-section + .social-sidebar-section { border-top: 1px solid var(--osg-hair); }
+.frd-side .room-invites { background: rgba(255, 200, 46, .05); border-radius: var(--osg-r-lg) var(--osg-r-lg) 0 0; }
+.frd-side .social-heading h2 { font-size: 15px; font-weight: 800; color: var(--osg-ink); }
+.frd-side .social-heading p, .frd-side .social-empty { color: var(--osg-ink-3); font-size: 13px; }
+.frd-side .social-player { grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; min-height: 44px; padding: 6px 10px; border: 1px solid var(--osg-hair); border-radius: 10px; background: var(--osg-deck-2); }
+.frd-side .social-player strong { font-size: 14px; font-weight: 700; color: var(--osg-ink); }
+.frd-side .social-player small { color: var(--osg-ink-3); font-size: 12px; }
+.frd-side .social-action { min-height: 34px; padding: 4px 12px; font-size: 12.5px; border-radius: 8px; }
+.frd-side .friend-requests { border: 1px solid rgba(255, 200, 46, .32); background: rgba(255, 200, 46, .05); border-radius: 10px; }
+.frd-side .friend-requests > strong { color: var(--osg-coin); font: 400 11px var(--osg-font-pixel); letter-spacing: .08em; }
+.frd-side .social-message { color: var(--osg-go); }
+.frd-side .friend-add input { padding: 8px 12px; }
+.frd-side .social-invite { grid-template-columns: minmax(0, 1fr) auto; }
+
+.online-dot { background: var(--osg-go); box-shadow: 0 0 0 3px rgba(63, 220, 138, .14); }
+.offline-dot { background: var(--osg-ink-3); }
+
+/* Conversation panel */
+.frd-messages .member-messages { border: 0; border-radius: 0; background: transparent; max-height: none; }
+.frd-messages .member-messages-page { height: min(720px, calc(100vh - 210px)); min-height: 480px; max-height: none; }
+.frd-messages .member-message-body { grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.frd-messages .member-message-sidebar { background: var(--osg-deck); border-right: 1px solid var(--osg-hair); border-bottom: 0; }
+.frd-messages .member-messages-head,
+.frd-messages .member-message-start,
+.frd-messages .member-thread-title { background: transparent; border-color: var(--osg-hair); }
+.frd-messages .member-messages-head h2 { color: var(--osg-ink); font-size: 16px; font-weight: 800; }
+.frd-messages .member-messages-head p { color: var(--osg-ink-3); }
+.frd-messages .member-message-start input { background: var(--osg-night); border-color: var(--osg-hair-2); color: var(--osg-ink); }
+.frd-messages .member-list-label { font: 400 10.5px var(--osg-font-pixel); letter-spacing: .1em; color: var(--osg-ink-3); }
+.frd-messages .member-conversation-list button,
+.frd-messages .member-person { background: transparent; border: 1px solid transparent; box-shadow: none; color: var(--osg-ink); border-radius: 10px; }
+.frd-messages .member-conversation-list button:hover,
+.frd-messages .member-person:hover { background: var(--osg-deck-2); }
+.frd-messages .member-conversation-list button.active { background: var(--osg-deck-3); border-color: var(--osg-hair-2); }
+.frd-messages .member-conversation-list strong,
+.frd-messages .member-person strong { color: var(--osg-ink); font-weight: 700; }
+.frd-messages .member-conversation-list small,
+.frd-messages .member-person small { color: var(--osg-ink-3); }
+/* Unread badge */
+.frd-messages .member-conversation-list em { background: var(--osg-red); color: #fff; font: 400 11px var(--osg-font-pixel); min-width: 1.5rem; padding: 3px 6px; }
+.frd-messages .member-thread-title { color: var(--osg-ink); }
+.frd-messages .member-thread-title strong { font-size: 16px; }
+.frd-messages .member-thread-title small { color: var(--osg-ink-3); }
+.frd-messages .room-chat-messages { background: transparent; }
+.frd-messages .room-chat-message { background: var(--osg-deck-2); border: 1px solid var(--osg-hair); border-radius: 12px; }
+.frd-messages .room-chat-message.mine { background: rgba(47, 134, 224, .16); border-color: rgba(47, 134, 224, .4); }
+.frd-messages .room-chat-message strong { color: var(--osg-ink); }
+.frd-messages .room-chat-message small, .frd-messages .room-chat-empty { color: var(--osg-ink-3); }
+.frd-messages .room-chat-form { border-top: 1px solid var(--osg-hair); }
+.member-thread-back { display: none; }
+
+@media (max-width: 1100px) {
+  .osg-legacy-page .frd-layout { grid-template-columns: 300px minmax(0, 1fr); }
+  .frd-messages .member-message-body { grid-template-columns: 210px minmax(0, 1fr); }
+}
+
+/* Phones and small tablets: friends list first, conversation as a drill-in. */
+@media (max-width: 899px) {
+  .osg-legacy-page .frd-layout { grid-template-columns: minmax(0, 1fr); }
+  .osg-legacy-page .frd-side { order: -1; }
+  .frd-layout:has(.thread-open) .frd-side { display: none; }
+  .frd-messages .member-messages-page { height: auto; min-height: 0; max-height: none; }
+  .frd-messages .member-messages-page.thread-open { height: calc(100dvh - var(--osg-tabbar-h) - 150px); min-height: 380px; }
+  .frd-messages .member-message-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .frd-messages .member-message-sidebar { border-right: 0; grid-template-rows: auto auto auto auto; }
+  .frd-messages .member-conversation-section, .frd-messages .member-search-results { overflow: visible; }
+  .frd-messages .member-messages-page:not(.thread-open) .member-thread { display: none; }
+  .frd-messages .member-messages-page.thread-open .member-message-sidebar { display: none; }
+  .member-thread-back { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 6px 12px; }
+}
+
+@media (max-width: 480px) {
+  .frd-side .social-sidebar-section { padding: 12px; }
+  .frd-side .social-player { grid-template-columns: auto minmax(0, 1fr) auto; }
+}

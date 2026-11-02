@@ -33,3 +33,4 @@ class AuthResponse(BaseModel):
     is_tester: bool = False
     plan: str = "FREE"
     entitlements: list[str] = []
+    email_verified: bool = False

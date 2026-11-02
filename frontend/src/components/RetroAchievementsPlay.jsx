@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
 
-export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCode, solo, system = 'megadrive' }) {
+export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCode, solo, system = 'megadrive', onProgress, onUnlock, showToast = true }) {
   const [connection, setConnection] = useState(null);
   const [signedIn, setSignedIn] = useState(false);
   const [status, setStatus] = useState('Checking your RetroAchievements connection…');
@@ -10,6 +10,11 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
   const [snapshot, setSnapshot] = useState(null);
   const [retry, setRetry] = useState(0);
   const toastTimer = useRef(null);
+  // Optional observers for the room HUD. Kept in refs so they never restart the session effect.
+  const onProgressRef = useRef(onProgress);
+  const onUnlockRef = useRef(onUnlock);
+  onProgressRef.current = onProgress;
+  onUnlockRef.current = onUnlock;
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -62,6 +67,7 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
           setStatus(item.result === 0 && item.id ? `${item.title}: ${item.points} achievement${item.points === 1 ? '' : 's'} loaded.` : item.message || 'No matching achievement set was found for this ROM.');
         } else if (item.kind === 'unlock') {
           setToast(item); clearTimeout(toastTimer.current);
+          onUnlockRef.current?.(item);
           toastTimer.current = setTimeout(() => setToast(null), 7000);
           setStatus(`Unlocked: ${item.title} (${item.points} points).`);
         } else if (item.kind === 'logout') {
@@ -96,6 +102,9 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
   const items = snapshot?.items || [];
   const unlocked = items.filter((item) => item.unlocked).length;
   const disabled = items.filter((item) => item.state === 3).length;
+  useEffect(() => {
+    onProgressRef.current?.(items.length ? { unlocked, total: items.length, signedIn } : { unlocked: 0, total: 0, signedIn });
+  }, [items.length, unlocked, signedIn]);
   return <section className="ra-play-panel">
     <div><strong>RetroAchievements</strong><span>Softcore · {{ cpc: 'Amstrad CPC', mastersystem: 'Master System', megadrive: 'Mega Drive', snes: 'SNES', nes: 'NES' }[system]}</span></div>
     {!solo ? <p>Achievement earning is available in solo play. Tracking is stopped while guests can join.</p> : <>
@@ -111,6 +120,6 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
       </details> : null}
       <small className="ra-play-note">Your Profile connection signs in automatically. ROM versions must match RetroAchievements’ supported hashes.</small>
     </>}
-    {toast ? <div className="ra-unlock-toast" role="status"><strong>Achievement unlocked</strong><b>{toast.title}</b><span>{toast.points} points · Softcore</span></div> : null}
+    {toast && showToast ? <div className="ra-unlock-toast" role="status"><strong>Achievement unlocked</strong><b>{toast.title}</b><span>{toast.points} points · Softcore</span></div> : null}
   </section>;
 }

@@ -2,6 +2,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Query, Header, HTTPException
 
+from app.api.routes.auth import require_verified_user
 from app.core.security import decode_access_token
 from app.highscores.amiga.registry import get_extractor
 from app.models.amiga_leaderboard import AmigaHighScore
@@ -88,7 +89,7 @@ def get_recent_scores(
 @router.post("/submit", response_model=ScoreResponse)
 def submit_score(
     score_data: ScoreSubmit,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: Session = Depends(get_db),
 ):
     """Submit a score for a game."""

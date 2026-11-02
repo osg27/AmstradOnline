@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { apiFetch } from '../api/client';
+import { apiFetch, setEmailVerified } from '../api/client';
 import BrandMark from '../components/BrandMark';
 
 export default function VerifyEmailPage() {
@@ -22,6 +22,7 @@ export default function VerifyEmailPage() {
           body: JSON.stringify({ token }),
         });
         setMessage(data.message);
+        if (localStorage.getItem('token')) setEmailVerified(true);
       } catch (err) {
         setMessage('');
         setError(err.message);

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
-import BrandMark from '../components/BrandMark';
+import AppShell from '../components/AppShell';
 import AdminPlayHistory from '../components/AdminPlayHistory';
 
 function formatDate(value) {
@@ -90,14 +89,9 @@ export default function AdminPage() {
   }
 
   return (
+    <AppShell className="osg-legacy-page">
     <div className="page admin-page">
       <div className="card admin-card">
-        <div className="lobby-header">
-          <BrandMark />
-          <div className="account-strip">
-            <Link className="button-like secondary" to="/lobby">Lobby</Link>
-          </div>
-        </div>
 
         <div className="lobby-intro">
           <h1>Admin dashboard</h1>
@@ -224,5 +218,6 @@ export default function AdminPage() {
         ) : null}
       </div>
     </div>
+    </AppShell>
   );
 }

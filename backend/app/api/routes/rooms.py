@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import can_use_preview_systems, is_admin_user, is_super_admin_user
+from app.api.routes.auth import can_use_preview_systems, ensure_email_verified, is_admin_user, is_super_admin_user
 from app.core.database import get_db
 from app.core.play_history import record_heartbeat, record_leave
 from app.core.security import decode_access_token, hash_password, verify_password
@@ -116,6 +116,8 @@ def create_room(
     require_system_access(db, user_id, system, creating=True)
     user = db.query(User).filter(User.id == user_id).with_for_update().first()
     hosting_mode = payload.hosting_mode if payload else "multiplayer"
+    if hosting_mode != "solo":
+        ensure_email_verified(user)
     if hosting_mode == "solo" and payload and (payload.is_private or payload.password or payload.arcade_multiplayer):
         raise HTTPException(status_code=400, detail="Solo rooms cannot be private or multiplayer")
     if hosting_mode == "solo" and system in {"cpc_party", "amiga_link"}:
@@ -172,6 +174,9 @@ def join_room(
     room = db.query(Room).filter(Room.room_code == payload.room_code.upper()).first()
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
+    # An owner re-entering their own solo room is solo play and stays open to everyone.
+    if not (room.hosting_mode == "solo" and room.owner_user_id == user_id):
+        ensure_email_verified(db.query(User).filter(User.id == user_id).first())
     require_system_access(db, user_id, room.system or "cpc")
     require_open_solo_room(db, room)
     if room.hosting_mode == "solo" and room.owner_user_id != user_id:
@@ -242,6 +247,7 @@ def open_multiplayer_room(
     if room.hosting_mode == "multiplayer":
         return serialize_room(room)
     user = db.query(User).filter(User.id == user_id).with_for_update().first()
+    ensure_email_verified(user)
     require_multiplayer_hosting_allowance(user, db)
     free_limit = FREE_ARCADE_SESSION_LIMIT if room.system == "arcade" else FREE_PARTY_PLAYER_LIMIT
     if (room.party_max_players or 2) > free_limit:
@@ -273,6 +279,7 @@ def update_arcade_mode(
 
     if payload.multiplayer and room.hosting_mode == "solo":
         user = db.query(User).filter(User.id == user_id).with_for_update().first()
+        ensure_email_verified(user)
         if (room.party_max_players or 8) > FREE_ARCADE_SESSION_LIMIT:
             require_entitlement(user, db, "larger_multiplayer_sessions")
         require_multiplayer_hosting_allowance(user, db)

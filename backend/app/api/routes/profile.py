@@ -3,15 +3,16 @@ import json
 import re
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.api.routes.auth import get_current_user
 from app.core.entitlements import has_entitlement, require_entitlement
 from app.core.database import get_db
+from app.models.play_session import PlaySession
 from app.models.room import Room, RoomActivity
 from app.models.tournament import Tournament, TournamentEntry, TournamentScore
 from app.models.user import User
@@ -235,3 +236,45 @@ def update_avatar(
     user.avatar_id = payload.avatar_id
     db.commit()
     return {"avatar_id": user.avatar_id}
+
+
+def recent_games_for_user(db: Session, user_id: int, limit: int = 6) -> list[dict]:
+    """The signed-in player's own most recent games, one row per system + game.
+
+    Built from the heartbeat-derived play_sessions history, so times are
+    attendance in a room with that game loaded rather than proof of active play.
+    """
+    last_played = func.max(PlaySession.last_seen_at)
+    rows = (
+        db.query(
+            PlaySession.system,
+            PlaySession.game,
+            last_played.label('last_played_at'),
+            func.coalesce(func.sum(PlaySession.duration_seconds), 0).label('total_seconds'),
+            func.count(PlaySession.id).label('sessions'),
+        )
+        .filter(PlaySession.user_id == user_id, PlaySession.game.isnot(None), PlaySession.game != '')
+        .group_by(PlaySession.system, PlaySession.game)
+        .order_by(last_played.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            'system': row.system,
+            'game': row.game,
+            'last_played_at': aware(row.last_played_at).isoformat(),
+            'total_seconds': int(row.total_seconds or 0),
+            'sessions': int(row.sessions or 0),
+        }
+        for row in rows
+    ]
+
+
+@router.get("/recent-games")
+def get_recent_games(
+    limit: int = Query(default=6, ge=1, le=20),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return recent_games_for_user(db, user.id, limit)

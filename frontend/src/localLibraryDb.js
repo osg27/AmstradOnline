@@ -48,6 +48,8 @@ function openLibraryDb() {
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    // Another tab holding an older connection would otherwise leave this pending forever.
+    request.onblocked = () => reject(new Error('The game library is open in another tab. Close other Old Style Gaming tabs and reload.'));
   });
 }
 

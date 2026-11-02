@@ -1,29 +1,33 @@
-import React from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import BrandMark from '../components/BrandMark';
+import React, { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import AppShell from '../components/AppShell';
 import MemberMessages from '../components/MemberMessages';
+import SocialSidebar from '../components/SocialSidebar';
+import '../features/friends/friends.css';
 
 export default function MessagesPage() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [openSignal, setOpenSignal] = useState(0);
   const targetUserId = Number(searchParams.get('user')) || null;
 
   return (
-    <div className="page messages-page">
-      <div className="card messages-card">
-        <div className="lobby-header">
-          <BrandMark compact />
-          <div className="room-actions">
-            <Link className="button-like secondary" to="/lobby">Lobby</Link>
-          </div>
+    <AppShell className="osg-legacy-page">
+      <div className="osg-friends-page frd-page">
+        <div className="osg-page-head frd-head">
+          <span className="osg-eyebrow">Friends</span>
+          <h1>Friends &amp; messages</h1>
+          <p>Room invites, friend requests, who’s online, and direct messages.</p>
         </div>
-
-        <div className="lobby-intro">
-          <h1>Messages</h1>
-          <p>Direct member-to-member messages.</p>
+        <div className="osg-friends-layout frd-layout">
+          <aside className="osg-friends-side frd-side" aria-label="Friends">
+            <SocialSidebar onMessagePlayer={(player) => { navigate(`/messages?user=${player.id}`); setOpenSignal((value) => value + 1); }} />
+          </aside>
+          <section className="card messages-card frd-messages" aria-label="Messages">
+            <MemberMessages targetUserId={targetUserId} openSignal={openSignal} layout="page" />
+          </section>
         </div>
-
-        <MemberMessages targetUserId={targetUserId} layout="page" />
       </div>
-    </div>
+    </AppShell>
   );
 }

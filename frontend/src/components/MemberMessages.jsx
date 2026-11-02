@@ -10,6 +10,7 @@ export default function MemberMessages({
   targetUserId = null,
   onTargetHandled = () => {},
   layout = 'panel',
+  openSignal = 0,
 }) {
   const [conversations, setConversations] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
@@ -19,6 +20,8 @@ export default function MemberMessages({
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
+  // Phones show the list first; the conversation is a drill-in opened by a deliberate choice.
+  const [threadOpen, setThreadOpen] = useState(false);
   const listRef = useRef(null);
 
   const activeUserId = activeUser?.id || null;
@@ -81,14 +84,16 @@ export default function MemberMessages({
   useEffect(() => {
     if (!targetUser) return;
     setActiveUser(targetUser);
+    setThreadOpen(true);
     setRecipientUsername('');
     onTargetHandled();
   }, [targetUser, onTargetHandled]);
 
   useEffect(() => {
     if (!targetUserId) return;
+    setThreadOpen(true);
     loadThread(targetUserId).catch((err) => setError(err.message));
-  }, [targetUserId]);
+  }, [targetUserId, openSignal]);
 
   useEffect(() => {
     if (activeUserId) {
@@ -123,6 +128,7 @@ export default function MemberMessages({
       const player = await apiFetch(`/auth/social/players/${encodeURIComponent(username)}`);
       setRecipientUsername('');
       setActiveUser(player);
+      setThreadOpen(true);
       await loadConversations();
       await loadThread(player.id);
     } catch (err) {
@@ -134,6 +140,7 @@ export default function MemberMessages({
 
   async function openPlayer(player) {
     setActiveUser(player);
+    setThreadOpen(true);
     setRecipientUsername('');
     await loadThread(player.id);
   }
@@ -179,7 +186,7 @@ export default function MemberMessages({
   }
 
   return (
-    <section className={`member-messages ${layout === 'page' ? 'member-messages-page' : ''}`} aria-label="Member messages">
+    <section className={`member-messages ${layout === 'page' ? 'member-messages-page' : ''}${threadOpen ? ' thread-open' : ''}`} aria-label="Member messages">
       <div className="member-message-body">
         <aside className="member-message-sidebar">
           <div className="member-messages-head">
@@ -209,7 +216,7 @@ export default function MemberMessages({
                     key={item.user.id}
                     type="button"
                     className={activeUserId === item.user.id ? 'active' : 'secondary'}
-                    onClick={() => setActiveUser(item.user)}
+                    onClick={() => { setActiveUser(item.user); setThreadOpen(true); }}
                   >
                     <span className={item.user.is_online ? 'online-dot' : 'offline-dot'} aria-label={item.user.is_online ? 'Online' : 'Offline'} />
                     <span>
@@ -250,6 +257,9 @@ export default function MemberMessages({
 
         <div className="member-thread">
           <div className="member-thread-title">
+            <button type="button" className="secondary member-thread-back" onClick={() => setThreadOpen(false)} aria-label="Back to friends and conversations">
+              <i className="bi bi-chevron-left" aria-hidden="true" /> Back
+            </button>
             <div>
               <strong>{activeUser?.username || 'Select a conversation'}</strong>
               <small>{activeUser ? (activeUser.is_online ? 'Online' : 'Offline') : 'Search members or choose a DM'}</small>

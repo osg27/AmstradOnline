@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.api.routes.auth import is_admin_user
+from app.api.routes.auth import is_admin_user, require_verified_user
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.mame_leaderboard import MameHighScore, MameLeaderboardGame
@@ -128,7 +128,7 @@ def get_mame_leaderboard(
 def extract_mame_session_scores(
     session_id: str,
     payload: MameScoreExtractionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: Session = Depends(get_db),
 ):
     target_user_id = payload.user_id or current_user.id
