@@ -10,18 +10,23 @@ import PlayHome from '../features/home/PlayHome';
  * shows the Play home. Room creation and launching live in features/home and reuse
  * the old lobby's request bodies and the Library's launch helper.
  */
+// Once setup is done it stays done, so return visits skip the "Loading your library…" step.
+let setupKnownComplete = false;
+
 export default function LobbyPage() {
   const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
   const [isSuperAdmin, setIsSuperAdmin] = useState(localStorage.getItem('isSuperAdmin') === 'true');
-  const [librarySetupComplete, setLibrarySetupComplete] = useState(null);
+  const [librarySetupComplete, setLibrarySetupComplete] = useState(() => (setupKnownComplete ? true : null));
   const roles = useMemo(() => ({ isAdmin, isSuperAdmin }), [isAdmin, isSuperAdmin]);
 
   useEffect(() => {
+    if (setupKnownComplete) return;
     async function loadLibrarySetup() {
       // If the browser's library store doesn't answer, show the Play home rather than spinning forever.
       const timeout = new Promise((resolve) => { window.setTimeout(() => resolve(true), 4000); });
       try {
         const complete = await Promise.race([getLocalLibrarySetting('librarySetupComplete', false), timeout]);
+        if (complete) setupKnownComplete = true;
         setLibrarySetupComplete(Boolean(complete));
       } catch {
         setLibrarySetupComplete(false);
@@ -63,7 +68,7 @@ export default function LobbyPage() {
     return (
       <AppShell className="osg-legacy-page osg-onboarding">
         <div className="page local-library-page welcome-home-page">
-          <LocalLibraryPage embedded onboarding onComplete={() => setLibrarySetupComplete(true)} />
+          <LocalLibraryPage embedded onboarding onComplete={() => { setupKnownComplete = true; setLibrarySetupComplete(true); }} />
         </div>
       </AppShell>
     );

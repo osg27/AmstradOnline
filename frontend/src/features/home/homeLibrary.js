@@ -38,9 +38,14 @@ export function readLibraryGameCount() {
   }
 }
 
-/** The user's local library (IndexedDB) plus their favourites. */
 let libraryCache = null;
 
+function sameGames(left, right) {
+  return left.length === right.length
+    && left.every((game, index) => game.id === right[index].id && game.boxArtUrl === right[index].boxArtUrl);
+}
+
+/** The user's local library (IndexedDB) plus their favourites. */
 export function useHomeLibrary() {
   // Reuse the last result so coming back from a game paints at once, then refresh quietly.
   const [state, setState] = useState(() => libraryCache || { loading: true, games: [], favourites: [] });
@@ -59,11 +64,11 @@ export function useHomeLibrary() {
       if (cancelled) return;
       const allowed = availableSystemIds();
       const sourceGames = enrichSourceEntries(prepareSourceEntries(Array.isArray(sources) ? sources : [], [...allowed].join(',')), artwork || {});
-      libraryCache = {
-        loading: false,
-        games: [...games, ...sourceGames].filter((game) => allowed.has(game.system) || (game.system === 'amiga_aga' && allowed.has('amiga'))),
-        favourites: Array.isArray(favourites) ? favourites : [],
-      };
+      const nextGames = [...games, ...sourceGames].filter((game) => allowed.has(game.system) || (game.system === 'amiga_aga' && allowed.has('amiga')));
+      const nextFavourites = Array.isArray(favourites) ? favourites : [];
+      // Keep the cached arrays when nothing changed, so the page doesn't redo its work.
+      if (libraryCache && sameGames(libraryCache.games, nextGames) && libraryCache.favourites.join('\0') === nextFavourites.join('\0')) return;
+      libraryCache = { loading: false, games: nextGames, favourites: nextFavourites };
       setState(libraryCache);
     });
     return () => { cancelled = true; };
@@ -91,11 +96,24 @@ function uniqueGroups(rawGames, limit) {
 }
 
 function byNewest(left, right) {
-  return String(right.indexedAt || '').localeCompare(String(left.indexedAt || ''));
+  // ISO timestamps sort as plain strings; localeCompare is far slower on big libraries.
+  const a = String(left.indexedAt || '');
+  const b = String(right.indexedAt || '');
+  return a < b ? 1 : a > b ? -1 : 0;
 }
+
+const picksCache = new WeakMap();
 
 /** The three small rows offered on the Play page. Empty tabs are dropped by the caller. */
 export function buildLibraryPicks(games, favourites) {
+  const cached = picksCache.get(games);
+  if (cached && cached.favourites === favourites) return cached.picks;
+  const picks = computeLibraryPicks(games, favourites);
+  picksCache.set(games, { favourites, picks });
+  return picks;
+}
+
+function computeLibraryPicks(games, favourites) {
   const favouriteSet = new Set(favourites);
   const favouriteGames = games.filter((game) => favouriteSet.has(game.id));
   const newest = [...games].sort(byNewest).slice(0, 80);
@@ -133,18 +151,60 @@ function romKey(value) {
   return playedKey(value).replace(/\.(zip|7z)$/i, '');
 }
 
+function titleKey(game) {
+  // libraryGroupKey is "<system>:<normalised title>"; the system part differs between room modes.
+  return libraryGroupKey(game).replace(/^[^:]*:/, '');
+}
+
+/** Rooms report "inner.sms from Archive.zip" for files unpacked from an archive. */
+function playedNames(value) {
+  return String(value || '').split(/[\/]/).pop().split(' from ').map((part) => part.trim()).filter(Boolean);
+}
+
+const titleIndexCache = new WeakMap();
+
+/** Title key -> first library game, per system family, built once per library array. */
+function titleIndexFor(games, family) {
+  let byFamily = titleIndexCache.get(games);
+  if (!byFamily) { byFamily = new Map(); titleIndexCache.set(games, byFamily); }
+  if (!byFamily.has(family)) {
+    const index = new Map();
+    games.forEach((game) => {
+      if (systemFamily(game.system) !== family) return;
+      const key = titleKey(game);
+      // Art is often saved on only one version of a game, so prefer a version that has it.
+      if (key && (!index.has(key) || (!index.get(key).boxArtUrl && game.boxArtUrl))) index.set(key, game);
+    });
+    byFamily.set(family, index);
+  }
+  return byFamily.get(family);
+}
+
+/** A version of the same game that has box art, when the matched one has none. */
+function withArt(games, game) {
+  if (!game || game.boxArtUrl) return game;
+  return titleIndexFor(games, systemFamily(game.system)).get(titleKey(game)) || game;
+}
+
 /** Finds the library game a recent-history row refers to (rooms report the loaded file name). */
 export function matchPlayedGame(games, entry) {
   const family = systemFamily(entry.system);
-  const fileKey = playedKey(entry.game);
   const candidates = games.filter((game) => systemFamily(game.system) === family);
   if (family === 'arcade') {
     const key = romKey(entry.game);
     return candidates.find((game) => (game.romKey || romKey(game.fileName)) === key) || null;
   }
-  return candidates.find((game) => playedKey(game.fileName) === fileKey)
-    || candidates.find((game) => playedKey(game.title) === fileKey)
-    || null;
+  const names = playedNames(entry.game);
+  const fileKeys = new Set(names.map((name) => name.toLowerCase()));
+  const byFile = candidates.find((game) => fileKeys.has(playedKey(game.fileName)));
+  if (byFile) return byFile;
+  // File names often differ (region tags, archive vs inner ROM), so fall back to the Library's title key.
+  const index = titleIndexFor(games, family);
+  for (const name of names) {
+    const match = index.get(titleKey({ system: family, fileName: name, title: '' }));
+    if (match) return match;
+  }
+  return null;
 }
 
 /**
@@ -162,6 +222,7 @@ export function buildRecentGames(entries, games) {
       continue;
     }
     const libraryGame = matchPlayedGame(games, entry);
+    const artGame = withArt(games, libraryGame);
     merged.set(key, {
       key,
       system: family,
@@ -170,26 +231,26 @@ export function buildRecentGames(entries, games) {
       lastPlayedAt: entry.last_played_at,
       totalSeconds: Number(entry.total_seconds) || 0,
       libraryGame,
-      boxArt: boxArtFor(libraryGame),
-      screenshot: screenshotFor(libraryGame),
+      boxArt: boxArtFor(artGame),
+      screenshot: screenshotFor(artGame),
     });
   }
   return [...merged.values()];
 }
 
 const restoredArtCache = new Map();
+const pendingArt = new Set();
 
 /**
- * Box art is normally linked to games when the Library page opens. Games the Library
- * has not enriched yet get their cached art looked up here, for only the games shown.
- * Returns a Map of game id -> game with art fields.
+ * Games the Library has not linked art to yet: check the server's art cache for just
+ * the games shown. Returns a Map of game id -> game with art fields, or null.
  */
 export async function restoreMissingArt(games) {
-  const missing = games.filter((game) => game && !game.boxArtUrl && game.id && game.system && !restoredArtCache.has(game.id));
-  if (missing.length) {
-    const restored = await restoreCachedBoxArt(missing).catch(() => missing);
-    restored.forEach((game) => restoredArtCache.set(game.id, game.boxArtUrl ? game : null));
-    missing.forEach((game) => { if (!restoredArtCache.has(game.id)) restoredArtCache.set(game.id, null); });
-  }
+  const missing = games.filter((game) => game && !game.boxArtUrl && game.id && game.system && !restoredArtCache.has(game.id) && !pendingArt.has(game.id));
+  if (!missing.length) return restoredArtCache;
+  missing.forEach((game) => pendingArt.add(game.id));
+  const restored = await restoreCachedBoxArt(missing).catch(() => missing);
+  restored.forEach((game) => restoredArtCache.set(game.id, game.boxArtUrl ? game : null));
+  missing.forEach((game) => pendingArt.delete(game.id));
   return restoredArtCache;
 }

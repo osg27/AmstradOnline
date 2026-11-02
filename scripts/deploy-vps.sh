@@ -39,9 +39,11 @@ install_html_cache_policy() {
 # The Vite HTML shell contains fingerprinted CSS/JS filenames and must never be
 # reused without validation. Other content types retain their existing cache
 # policy, including ROMs, artwork and immutable frontend bundles.
-map $sent_http_content_type $oldstylegaming_html_expires {
-    default     off;
-    ~*text/html epoch;
+# Vite's /assets/ files have a content hash in their name, so they can be kept for good.
+map "$sent_http_content_type|$uri" $oldstylegaming_html_expires {
+    default        off;
+    ~*^text/html   epoch;
+    ~*\|/assets/   max;
 }
 
 expires $oldstylegaming_html_expires;
@@ -50,6 +52,38 @@ EOF
   if ! nginx -t; then
     rm -f "$cache_policy"
     echo "Invalid nginx cache policy removed; existing nginx configuration was left unchanged."
+    return 1
+  fi
+}
+
+install_compression_policy() {
+  local nginx_conf_dir="/etc/nginx/conf.d"
+  local compression_policy="$nginx_conf_dir/oldstylegaming-compression.conf"
+
+  if ! command -v nginx >/dev/null 2>&1 || [ ! -d "$nginx_conf_dir" ]; then
+    return 0
+  fi
+
+  if [ ! -w "$nginx_conf_dir" ]; then
+    log "Cannot update nginx compression policy without write access to $nginx_conf_dir"
+    return 0
+  fi
+
+  log "Installing nginx compression policy"
+  # Ubuntu's nginx.conf turns gzip on but only for HTML; the app bundle and
+  # emulator cores were sent uncompressed. If nginx.conf already sets one of
+  # these, nginx -t fails and the file is removed again.
+  cat >"$compression_policy" <<'EOF'
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 5;
+gzip_min_length 1024;
+gzip_types text/css text/javascript application/javascript application/json application/wasm image/svg+xml text/plain application/xml;
+EOF
+
+  if ! nginx -t; then
+    rm -f "$compression_policy"
+    echo "Invalid nginx compression policy removed; existing nginx configuration was left unchanged."
     return 1
   fi
 }
@@ -121,6 +155,7 @@ log "Restarting known services"
 restarted=0
 
 install_html_cache_policy
+install_compression_policy || true
 install_upload_policy
 
 for service in \
