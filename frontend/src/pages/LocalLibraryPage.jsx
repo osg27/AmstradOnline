@@ -679,6 +679,7 @@ const LIBRETRO_BOXART_REPOS = {
   playstation: ['Sony_-_PlayStation'],
   amiga: ['Commodore_-_Amiga'],
   atarist: ['Atari_-_ST'],
+  x68000: ['Sharp_-_X68000'],
 };
 
 const boxArtIndexCache = new Map();
