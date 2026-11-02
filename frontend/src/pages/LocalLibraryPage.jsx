@@ -1728,7 +1728,10 @@ async function findBoxArtForGame(game) {
     }
   }
 
-  if (game.system === 'arcade') {
+  // The index lists every cover in the set, and it is matched with the same name
+  // candidates, so guessing URLs one by one (up to 7 s each) can't find anything more.
+  // Only guess when the index could not be loaded.
+  if (game.system === 'arcade' || index?.entries?.length) {
     return null;
   }
 
@@ -3450,7 +3453,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       }
     }
 
-    const workerCount = Math.min(8, targets.length);
+    const workerCount = Math.min(16, targets.length);
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
     await saveLocalLibraryGames(nextGames);
     await saveSourceArtwork(username, nextSourceArtwork);
