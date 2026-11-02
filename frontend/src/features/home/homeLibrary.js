@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { getLocalLibraryGames, getLocalLibrarySetting } from '../../localLibraryDb';
+import { loadCachedSourceCatalogues, loadSourceArtwork } from '../gameSources/sourceLibrary';
 import { shelfArtworkUrl } from '../gameSources/shelfArtwork';
 import {
   SUPPORTED_SYSTEMS,
   canonicalLibraryTitle,
+  enrichSourceEntries,
   getGroupedLibraryGames,
   isArcadeParentRom,
+  prepareSourceEntries,
   libraryGroupKey,
   readPreferredVariants,
 } from '../../pages/LocalLibraryPage';
@@ -40,15 +43,21 @@ export function useHomeLibrary() {
 
   useEffect(() => {
     let cancelled = false;
+    const username = localStorage.getItem('username') || '';
     Promise.all([
       getLocalLibraryGames().catch(() => []),
       getLocalLibrarySetting('favourites', []).catch(() => []),
-    ]).then(([games, favourites]) => {
+      // URL-linked "source" games and their artwork live beside the folder games.
+      // Only the copies already saved in this browser are read, so there is no network wait.
+      loadCachedSourceCatalogues(username).catch(() => []),
+      loadSourceArtwork(username).catch(() => ({})),
+    ]).then(([games, favourites, sources, artwork]) => {
       if (cancelled) return;
       const allowed = availableSystemIds();
+      const sourceGames = enrichSourceEntries(prepareSourceEntries(Array.isArray(sources) ? sources : [], [...allowed].join(',')), artwork || {});
       setState({
         loading: false,
-        games: games.filter((game) => allowed.has(game.system) || (game.system === 'amiga_aga' && allowed.has('amiga'))),
+        games: [...games, ...sourceGames].filter((game) => allowed.has(game.system) || (game.system === 'amiga_aga' && allowed.has('amiga'))),
         favourites: Array.isArray(favourites) ? favourites : [],
       });
     });

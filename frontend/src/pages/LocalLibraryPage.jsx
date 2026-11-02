@@ -691,7 +691,7 @@ const AMIGA_BOX_ART_REPAIR_KEY = 'oldstylegaming:amigaBoxArtRepair';
 const AMIGA_BOX_ART_REPAIR_VERSION = 'strict-amiga-v2';
 let librarySessionCache = null;
 const EMPTY_SHELF_GAMES = [];
-const prepareSourceEntries = memoizeLast((sources, systemIds) => sources.flatMap((source) => {
+export const prepareSourceEntries = memoizeLast((sources, systemIds) => sources.flatMap((source) => {
   const system = SUPPORTED_SYSTEMS.find((item) => systemIds.split(',').includes(item.id) && (item.roomSystem || item.id) === source.system);
   if (!system) return [];
   return source.games.map((entry) => ({
@@ -702,7 +702,7 @@ const prepareSourceEntries = memoizeLast((sources, systemIds) => sources.flatMap
     romKey: system.id === 'arcade' ? arcadeRomKey(entry.file_name) : '',
   }));
 }));
-const enrichSourceEntries = memoizeLast((entries, artwork) => entries.map((game) => ({ ...game, ...artwork[game.id] })));
+export const enrichSourceEntries = memoizeLast((entries, artwork) => entries.map((game) => ({ ...game, ...artwork[game.id] })));
 const combineShelfEntries = memoizeLast((local, remote) => [...local, ...remote]);
 const prepareGroupedShelf = memoizeLast((entries, clones) => getGroupedLibraryGames(entries.filter((game) => (
   !isLikelySupportRom(game) && (clones || game.system !== 'arcade' || isArcadeParentRom(game))
