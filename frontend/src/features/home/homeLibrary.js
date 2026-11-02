@@ -38,8 +38,11 @@ export function readLibraryGameCount() {
 }
 
 /** The user's local library (IndexedDB) plus their favourites. */
+let libraryCache = null;
+
 export function useHomeLibrary() {
-  const [state, setState] = useState({ loading: true, games: [], favourites: [] });
+  // Reuse the last result so coming back from a game paints at once, then refresh quietly.
+  const [state, setState] = useState(() => libraryCache || { loading: true, games: [], favourites: [] });
 
   useEffect(() => {
     let cancelled = false;
@@ -55,11 +58,12 @@ export function useHomeLibrary() {
       if (cancelled) return;
       const allowed = availableSystemIds();
       const sourceGames = enrichSourceEntries(prepareSourceEntries(Array.isArray(sources) ? sources : [], [...allowed].join(',')), artwork || {});
-      setState({
+      libraryCache = {
         loading: false,
         games: [...games, ...sourceGames].filter((game) => allowed.has(game.system) || (game.system === 'amiga_aga' && allowed.has('amiga'))),
         favourites: Array.isArray(favourites) ? favourites : [],
-      });
+      };
+      setState(libraryCache);
     });
     return () => { cancelled = true; };
   }, []);
@@ -121,7 +125,7 @@ export function buildLaunchGame(games, game) {
 }
 
 function playedKey(value) {
-  return String(value || '').split(/[\\/]/).pop().toLowerCase();
+  return String(value || '').split(/[\\/]/).pop().split(' from ')[0].trim().toLowerCase();
 }
 
 function romKey(value) {

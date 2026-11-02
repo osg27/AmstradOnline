@@ -439,3 +439,4 @@ html.osg-locked, html.osg-locked body { overflow: hidden; }
   .osg-cover-card:hover .osg-cover, .osg-snap-card:hover .osg-shot { transform: none; }
   .osg-crt { transform: none; }
 }
+.osg-route-loading{min-height:100vh;background:var(--osg-bg,#0b1020)}

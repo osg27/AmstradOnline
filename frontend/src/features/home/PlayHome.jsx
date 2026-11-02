@@ -21,6 +21,7 @@ import {
 import './home.css';
 
 const RECENT_RAIL_SIZE = 5;
+let historyCache = null;
 
 function itemFromLibraryGame(game, recent) {
   const played = recent.find((entry) => entry.libraryGame && game.variants?.some((variant) => variant.id === entry.libraryGame.id));
@@ -41,7 +42,7 @@ function itemFromLibraryGame(game, recent) {
 export default function PlayHome({ roles }) {
   const navigate = useNavigate();
   const library = useHomeLibrary();
-  const [history, setHistory] = useState({ loaded: false, entries: [] });
+  const [history, setHistory] = useState(() => historyCache || { loaded: false, entries: [] });
   const [sheet, setSheet] = useState(null);
   const [starting, setStarting] = useState(false);
   const [heroError, setHeroError] = useState('');
@@ -49,7 +50,7 @@ export default function PlayHome({ roles }) {
   useEffect(() => {
     let cancelled = false;
     apiFetch('/auth/profile/recent-games?limit=12')
-      .then((entries) => { if (!cancelled) setHistory({ loaded: true, entries: Array.isArray(entries) ? entries : [] }); })
+      .then((entries) => { if (!cancelled) { historyCache = { loaded: true, entries: Array.isArray(entries) ? entries : [] }; setHistory(historyCache); } })
       .catch(() => { if (!cancelled) setHistory({ loaded: true, entries: [] }); });
     return () => { cancelled = true; };
   }, []);

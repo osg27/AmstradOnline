@@ -35,7 +35,7 @@ export function isRecentScoreLive(value, now = Date.now()) {
 
 /** A readable title for a game we only know by the file name the room reported. */
 export function titleFromPlayedFile(fileName, system) {
-  const base = String(fileName || '').split(/[\\/]/).pop().replace(/\.[a-z0-9]{1,4}$/i, '');
+  const base = String(fileName || '').split(/[\\/]/).pop().split(' from ')[0].replace(/\.[a-z0-9]{1,4}$/i, '');
   if (system === 'arcade') return getMameDisplayName(base.toLowerCase(), base);
   const cleaned = base
     .replace(/[_]+/g, ' ')

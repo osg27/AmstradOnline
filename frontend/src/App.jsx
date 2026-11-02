@@ -1,23 +1,23 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { apiFetch, renewSession } from './api/client';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import LobbyPage from './pages/LobbyPage';
-import RoomPage from './pages/RoomPage';
-import AdminPage from './pages/AdminPage';
-import FeedbackPage from './pages/FeedbackPage';
-import MessagesPage from './pages/MessagesPage';
+const RoomPage = lazy(() => import('./pages/RoomPage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const FeedbackPage = lazy(() => import('./pages/FeedbackPage'));
+const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 import LocalLibraryPage from './pages/LocalLibraryPage';
-import MyLocalGamesPage from './pages/MyLocalGamesPage';
+const MyLocalGamesPage = lazy(() => import('./pages/MyLocalGamesPage'));
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ResendVerificationPage from './pages/ResendVerificationPage';
-import TournamentsPage from './pages/TournamentsPage';
-import ProfilePage from './pages/ProfilePage';
-import MameAchievementsPreviewPage from './pages/MameAchievementsPreviewPage';
+const TournamentsPage = lazy(() => import('./pages/TournamentsPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const MameAchievementsPreviewPage = lazy(() => import('./pages/MameAchievementsPreviewPage'));
 import TournamentNotifications from './components/TournamentNotifications';
 
 function PrivateRoute({ children }) {
@@ -55,6 +55,7 @@ function PrivateRoute({ children }) {
 
 export default function App() {
   return (
+    <Suspense fallback={<div className="osg-route-loading" role="status" aria-label="Loading" />}>
     <Routes>
       <Route path="/experiments/mame-retroachievements" element={<PrivateRoute><MameAchievementsPreviewPage /></PrivateRoute>} />
       <Route path="/" element={localStorage.getItem('token') ? <Navigate to="/lobby" replace /> : <LandingPage />} />
@@ -145,5 +146,6 @@ export default function App() {
         )}
       />
     </Routes>
+    </Suspense>
   );
 }
