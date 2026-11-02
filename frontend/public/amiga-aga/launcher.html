@@ -82,6 +82,7 @@
       let pendingWhdLoadFiles = [];
       let pendingKickstart = null;
       let pendingSupportKickstarts = [];
+      let pendingRomSource = "original";
       let started = false;
       let runtimeModule = null;
       let getDiskCount = null;
@@ -156,7 +157,9 @@
 
       function installRuntimeFiles() {
         PUAE_SYSTEM_DIRS.forEach((dir) => {
-          writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes);
+          if (pendingRomSource !== "aros") {
+            writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes);
+          }
           pendingSupportKickstarts.forEach((entry) => {
             writeRuntimeFile(`${dir}/${entry.fileName}`, entry.bytes);
             writeRuntimeFile(`${dir}/${entry.fileName.toLowerCase()}`, entry.bytes);
@@ -361,7 +364,7 @@
           setStatus("Choose an Amiga file first");
           return;
         }
-        if (!pendingKickstart?.bytes?.length) {
+        if (pendingRomSource !== "aros" && !pendingKickstart?.bytes?.length) {
           setStatus(`Waiting for your ${activeProfile.model} Kickstart ROM...`);
           return;
         }
@@ -510,6 +513,7 @@
         if (data.type === "amiga_aga_start" || data.type === "amiga_start") startEmulator();
 
         if (data.type === "amiga_aga_autoload" || data.type === "amiga_autoload") {
+          pendingRomSource = data.romSource === "aros" ? "aros" : "original";
           const model = String(data.profile?.model || "").toUpperCase().replace("+", "PLUS");
           if (model && PROFILES[model]) {
             activeProfile = PROFILES[model];
@@ -535,6 +539,7 @@
         }
 
         if (data.type === "amiga_kickstart") {
+          pendingRomSource = "original";
           pendingKickstart = {
             fileName: data.fileName || "kick.rom",
             bytes: new Uint8Array(data.bytes || []),

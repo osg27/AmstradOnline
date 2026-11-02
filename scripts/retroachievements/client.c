@@ -148,15 +148,17 @@ EMSCRIPTEN_KEEPALIVE int ra_pacman_softcore(int enabled) {
     return 1;
 }
 
-EMSCRIPTEN_KEEPALIVE int ra_load_pacman(void) {
+static int ra_load_arcade_archive(const char* archive) {
     ra_init();
     rc_client_unload_game(client);
     memory_reads = memory_failures = frames = 0;
     expected_console = RC_CONSOLE_ARCADE;
-    if (!rc_hash_generate_from_file(game_hash, RC_CONSOLE_ARCADE, "pacman.zip")) return 0;
+    if (!rc_hash_generate_from_file(game_hash, RC_CONSOLE_ARCADE, archive)) return 0;
     rc_client_begin_load_game(client, game_hash, game_done, NULL);
     return 1;
 }
+EMSCRIPTEN_KEEPALIVE int ra_load_pacman(void) { return ra_load_arcade_archive("pacman.zip"); }
+EMSCRIPTEN_KEEPALIVE int ra_load_sf2ce(void) { return ra_load_arcade_archive("sf2ce.zip"); }
 #endif
 
 EMSCRIPTEN_KEEPALIVE const char* ra_hash(const uint8_t* rom, int size) {

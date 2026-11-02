@@ -1,0 +1,20 @@
+diff --git a/libretro_core_options.h b/libretro_core_options.h
+index da17ed3..fed8ca0 100644
+--- a/libretro_core_options.h
++++ b/libretro_core_options.h
+@@ -51,6 +51,7 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
+          { "MSXturboR",   NULL },
+          { "MSX2",   NULL },
+          { "MSX2+",   NULL },
++         { "MSX2 - C-BIOS FDD",   NULL },
+          { "SEGA - SG-1000",   NULL },
+          { "SEGA - SC-3000",   NULL },
+          { "SEGA - SF-7000",   NULL },
+@@ -285,6 +286,7 @@ struct retro_core_option_definition option_defs_us[] = {
+          { "MSXturboR",   NULL },
+          { "MSX2",   NULL },
+          { "MSX2+",   NULL },
++         { "MSX2 - C-BIOS FDD",   NULL },
+          { "SEGA - SG-1000",   NULL },
+          { "SEGA - SC-3000",   NULL },
+          { "SEGA - SF-7000",   NULL },
