@@ -11,6 +11,7 @@ import {
   prepareSourceEntries,
   libraryGroupKey,
   readPreferredVariants,
+  restoreCachedBoxArt,
 } from '../../pages/LocalLibraryPage';
 import { systemFamily } from './systemCapabilities';
 import { titleFromPlayedFile } from './homeFormat';
@@ -174,4 +175,21 @@ export function buildRecentGames(entries, games) {
     });
   }
   return [...merged.values()];
+}
+
+const restoredArtCache = new Map();
+
+/**
+ * Box art is normally linked to games when the Library page opens. Games the Library
+ * has not enriched yet get their cached art looked up here, for only the games shown.
+ * Returns a Map of game id -> game with art fields.
+ */
+export async function restoreMissingArt(games) {
+  const missing = games.filter((game) => game && !game.boxArtUrl && game.id && game.system && !restoredArtCache.has(game.id));
+  if (missing.length) {
+    const restored = await restoreCachedBoxArt(missing).catch(() => missing);
+    restored.forEach((game) => restoredArtCache.set(game.id, game.boxArtUrl ? game : null));
+    missing.forEach((game) => { if (!restoredArtCache.has(game.id)) restoredArtCache.set(game.id, null); });
+  }
+  return restoredArtCache;
 }

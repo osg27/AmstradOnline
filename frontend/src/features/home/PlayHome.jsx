@@ -15,6 +15,7 @@ import {
   buildLibraryPicks,
   buildRecentGames,
   readLibraryGameCount,
+  restoreMissingArt,
   screenshotFor,
   useHomeLibrary,
 } from './homeLibrary';
@@ -22,6 +23,7 @@ import './home.css';
 
 const RECENT_RAIL_SIZE = 5;
 let historyCache = null;
+let artRestored = new Map();
 
 function itemFromLibraryGame(game, recent) {
   const played = recent.find((entry) => entry.libraryGame && game.variants?.some((variant) => variant.id === entry.libraryGame.id));
@@ -41,7 +43,14 @@ function itemFromLibraryGame(game, recent) {
 /** The signed-in Play page: last played + tournament, recent games, a row of library picks. */
 export default function PlayHome({ roles }) {
   const navigate = useNavigate();
-  const library = useHomeLibrary();
+  const baseLibrary = useHomeLibrary();
+  const [artVersion, setArtVersion] = useState(0);
+  const library = useMemo(() => {
+    const restored = artRestored;
+    if (!restored.size) return baseLibrary;
+    return { ...baseLibrary, games: baseLibrary.games.map((game) => restored.get(game.id) || game) };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseLibrary, artVersion]);
   const [history, setHistory] = useState(() => historyCache || { loaded: false, entries: [] });
   const [sheet, setSheet] = useState(null);
   const [starting, setStarting] = useState(false);
@@ -72,6 +81,24 @@ export default function PlayHome({ roles }) {
     const match = library.games.find((game) => game.system === 'arcade' && (game.romKey || '').toLowerCase() === key && game.boxArtUrl);
     return boxArtFor(match);
   }, [library.games]);
+
+  // Look up cached art for just the games on screen that the Library has not linked yet.
+  useEffect(() => {
+    const shown = [
+      ...recent.slice(0, 1 + RECENT_RAIL_SIZE).map((item) => item.libraryGame),
+      ...picks.added.flatMap((group) => group.variants || [group]),
+      ...picks.favourites.flatMap((group) => group.variants || [group]),
+      ...picks.arcade.flatMap((group) => group.variants || [group]),
+    ].filter(Boolean);
+    if (!shown.length) return undefined;
+    let cancelled = false;
+    restoreMissingArt(shown).then((cache) => {
+      if (cancelled) return;
+      const next = new Map([...cache].filter(([, game]) => game));
+      if (next.size !== artRestored.size) { artRestored = next; setArtVersion((value) => value + 1); }
+    });
+    return () => { cancelled = true; };
+  }, [recent, picks]);
 
   const featured = recent[0] || null;
   const rail = recent.slice(1, 1 + RECENT_RAIL_SIZE);

@@ -1605,7 +1605,7 @@ async function applyIndexedBoxArt(games, system) {
   });
 }
 
-async function restoreCachedBoxArt(games) {
+export async function restoreCachedBoxArt(games) {
   const gamesBySystem = new Map();
   games.forEach((game) => {
     if (!game?.system) return;
