@@ -2158,6 +2158,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const [libraryLoading, setLibraryLoading] = useState(!librarySessionCache);
   const [scanProgress, setScanProgress] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(null);
+  const boxArtStopRef = useRef(false);
   const [vipLoadProgress, setVipLoadProgress] = useState(null);
   const [launchingId, setLaunchingId] = useState(null);
   const [selectedVariantIds, setSelectedVariantIds] = useState(readPreferredVariants);
@@ -3399,19 +3400,21 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       return;
     }
 
+    const scopeLabel = activeSystemDetails?.label || (activeSystem === 'favourites' ? 'favourite' : 'all-system');
+    boxArtStopRef.current = false;
     let found = 0;
     let checked = 0;
     let nextGames = games;
     let nextSourceArtwork = { ...sourceArtwork };
     setMediaProgress({ checked: 0, total: targets.length, found: 0 });
-    setStatus(`Downloading box art for ${targets.length} shown game${targets.length === 1 ? '' : 's'}${skippedArcadeClones ? `, skipping ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'}` : ''}... fetching artwork index.`);
+    setStatus(`Downloading box art for ${targets.length} ${scopeLabel} game${targets.length === 1 ? '' : 's'}${skippedArcadeClones ? `, skipping ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'}` : ''}... fetching artwork index.`);
 
     await Promise.all([...new Set(targets.map((game) => game.system))].map((systemId) => getBoxArtIndex(systemId)));
-    setStatus(`Downloading box art for ${targets.length} shown parent game${targets.length === 1 ? '' : 's'}...`);
+    setStatus(`Downloading box art for ${targets.length} ${scopeLabel} game${targets.length === 1 ? '' : 's'}...`);
 
     let cursor = 0;
     async function worker() {
-      while (cursor < targets.length) {
+      while (cursor < targets.length && !boxArtStopRef.current) {
         const game = targets[cursor];
         cursor += 1;
         try {
@@ -3453,6 +3456,10 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     await saveSourceArtwork(username, nextSourceArtwork);
     setSourceArtwork(nextSourceArtwork);
     setMediaProgress(null);
+    if (boxArtStopRef.current) {
+      setStatus(`Box art stopped after ${checked} of ${targets.length}: ${found} found. What was found is saved.`);
+      return;
+    }
     setStatus(`Box art complete: ${found} found, ${targets.length - found} missing${skippedArcadeClones ? `, ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'} skipped` : ''}.`);
   }
 
@@ -3909,6 +3916,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       scanProgress={scanProgress}
       mediaProgress={mediaProgress}
       shownCount={filteredGames.length}
+      shownLabel={activeSystemDetails?.label || (activeSystem === 'favourites' ? 'favourite' : 'all-system')}
+      onStopBoxArt={() => { boxArtStopRef.current = true; }}
       launchingSystemId={launchingSystemId}
       suspended={Boolean(sourceSystem)}
       onClose={() => setAddGamesOpen(false)}

@@ -14,9 +14,9 @@ const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), selec
  * then ignores Esc and Tab so only the top dialog reacts.
  */
 export default function AddGamesPanel({
-  systems, counts, folders, sources, sourcesReady, status, scanProgress, mediaProgress, shownCount,
+  systems, counts, folders, sources, sourcesReady, status, scanProgress, mediaProgress, shownCount, shownLabel,
   launchingSystemId, suspended, onClose, onAddFolder, onOpenSources, onOpenRoom,
-  onRescanFolder, onRemoveFolder, onDownloadBoxArt,
+  onRescanFolder, onRemoveFolder, onDownloadBoxArt, onStopBoxArt,
 }) {
   const panelRef = useRef(null);
   const closeRef = useRef(null);
@@ -149,11 +149,16 @@ export default function AddGamesPanel({
 
           <section aria-labelledby="osg-addgames-art">
             <h3 id="osg-addgames-art">Box art</h3>
-            <p className="osg-lib-muted">Fetch missing covers for the {shownCount.toLocaleString('en-GB')} game{shownCount === 1 ? '' : 's'} currently shown. Change the system, search or filters first to download for fewer.</p>
+            <p className="osg-lib-muted">Fetch missing covers for the {shownCount.toLocaleString('en-GB')} {shownLabel} game{shownCount === 1 ? '' : 's'} currently shown. To download for one system, pick it in the Library first.</p>
             <button type="button" className="secondary" onClick={onDownloadBoxArt} disabled={!shownCount || Boolean(mediaProgress)}>
               <i className="bi bi-image" aria-hidden="true" />
-              {mediaProgress ? `Box art ${mediaProgress.checked}/${mediaProgress.total}` : 'Download box art'}
+              {mediaProgress ? `Box art ${mediaProgress.checked.toLocaleString('en-GB')}/${mediaProgress.total.toLocaleString('en-GB')}` : 'Download box art'}
             </button>
+            {mediaProgress ? (
+              <button type="button" className="secondary" onClick={onStopBoxArt}>
+                <i className="bi bi-stop-circle" aria-hidden="true" />Stop
+              </button>
+            ) : null}
             {mediaProgress ? (
               <div className="media-progress-bar" role="progressbar" aria-label="Box art download progress" aria-valuemin="0" aria-valuemax={mediaProgress.total} aria-valuenow={mediaProgress.checked}>
                 <span style={{ width: `${Math.round((mediaProgress.checked / mediaProgress.total) * 100)}%` }} />
