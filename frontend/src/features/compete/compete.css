@@ -7,7 +7,9 @@
 .cmp-head p { margin: 0; color: var(--osg-ink-2); max-width: 60ch; }
 .cmp-head-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .cmp-join { display: flex; gap: 6px; }
-.cmp-join input { width: 170px; min-width: 0; font-family: var(--osg-font-pixel); letter-spacing: .08em; }
+.cmp-join input { width: 190px; min-width: 0; font-family: var(--osg-font-pixel); letter-spacing: .08em; }
+/* The pixel font is too wide for the hint text, so only the typed code uses it. */
+.cmp-join input::placeholder { font-family: var(--osg-font-ui); letter-spacing: normal; }
 .cmp-status { grid-column: 1 / -1; margin: 0; }
 
 .cmp-main { display: grid; gap: 8px; }
