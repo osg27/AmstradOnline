@@ -14,6 +14,7 @@ export default function RoomDock({
   volume,
   record,
   fullscreen,
+  panels,
   onMore,
   menuShortcut,
 }) {
@@ -62,6 +63,18 @@ export default function RoomDock({
         <Icon name={fullscreen.active ? 'exitFull' : 'full'} />
         <span className="osg-tip">{fullscreen.active ? 'Exit fullscreen' : 'Fullscreen'}</span>
       </button>
+      {panels ? (
+        <button
+          className={`osg-dbtn ${panels.active ? 'on' : ''}`}
+          type="button"
+          onClick={blurAfter(panels.onClick)}
+          aria-label={panels.active ? 'Hide side panels' : 'Show side panels'}
+          aria-pressed={panels.active}
+        >
+          <Icon name="panels" />
+          <span className="osg-tip">{panels.active ? 'Hide side panels' : 'Show side panels'}</span>
+        </button>
+      ) : null}
       <button className="osg-dbtn" type="button" onClick={onMore} aria-label="Menu">
         <Icon name="more" />
         <span className="osg-tip">Menu {menuShortcut}</span>

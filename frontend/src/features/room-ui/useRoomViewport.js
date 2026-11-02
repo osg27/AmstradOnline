@@ -28,3 +28,14 @@ export default function useRoomViewport() {
 
   return viewport;
 }
+
+/** Window inner width, updated on resize. */
+export function useWindowWidth() {
+  const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 0 : window.innerWidth));
+  useEffect(() => {
+    const update = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  return width;
+}

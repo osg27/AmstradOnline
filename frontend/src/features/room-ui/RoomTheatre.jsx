@@ -4,7 +4,7 @@ import React from 'react';
  * Theatre: the game screen fills the available area at its aspect ratio, with
  * an ambient glow behind it. Emulator elements are passed as children unchanged.
  */
-export default function RoomTheatre({ ambientImage, glowColor, crt, paused, showPausedTag, overlay, children, screenClassName = '' }) {
+export default function RoomTheatre({ ambientImage, glowColor, crt, paused, showPausedTag, overlay, leftPanel, rightPanel, children, screenClassName = '' }) {
   return (
     <>
       <div
@@ -14,6 +14,8 @@ export default function RoomTheatre({ ambientImage, glowColor, crt, paused, show
           backgroundImage: ambientImage ? `url("${ambientImage}")` : undefined,
         }}
       />
+      {leftPanel}
+      {rightPanel}
       <div className="osg-screen-area">
         <div className={`osg-screen ${crt ? 'crt' : ''} ${screenClassName}`.trim()} style={{ '--osg-glow': glowColor }}>
           {children}

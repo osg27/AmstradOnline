@@ -5,6 +5,7 @@ import {
   dpadMaskFromOffset,
   isKeyboardSystem,
   prettifyFileName,
+  sideLayoutFor,
   touchProfileFor,
   withIndefiniteArticle,
 } from './roomUiConfig';
@@ -76,5 +77,28 @@ describe('detectPadKind', () => {
     expect(detectPadKind({ id: 'Xbox Wireless Controller', mapping: 'standard' })).toBe('pad');
     expect(detectPadKind({ id: '8BitDo Arcade Stick', mapping: 'standard' })).toBe('stick');
     expect(detectPadKind({ id: 'Generic USB Joystick', mapping: '' })).toBe('stick');
+  });
+});
+
+describe('sideLayoutFor', () => {
+  const base = { viewport: 'desktop', width: 1440, hasScores: true, hasAchievements: true, enabled: true };
+  it('shows both panels when wide and both have content', () => {
+    expect(sideLayoutFor(base)).toEqual({ available: true, showLeft: true, showRight: true });
+  });
+  it('only shows the side that has content', () => {
+    expect(sideLayoutFor({ ...base, hasScores: false })).toEqual({ available: true, showLeft: false, showRight: true });
+    expect(sideLayoutFor({ ...base, hasAchievements: false })).toEqual({ available: true, showLeft: true, showRight: false });
+  });
+  it('hides everything below the breakpoint, on phones and in OBS view', () => {
+    expect(sideLayoutFor({ ...base, width: 1279 }).available).toBe(false);
+    expect(sideLayoutFor({ ...base, viewport: 'phone' }).showLeft).toBe(false);
+    expect(sideLayoutFor({ ...base, viewport: 'land' }).showRight).toBe(false);
+    expect(sideLayoutFor({ ...base, obsCapture: true }).available).toBe(false);
+  });
+  it('respects the toggle but keeps it available', () => {
+    expect(sideLayoutFor({ ...base, enabled: false })).toEqual({ available: true, showLeft: false, showRight: false });
+  });
+  it('is unavailable when there is no content', () => {
+    expect(sideLayoutFor({ ...base, hasScores: false, hasAchievements: false }).available).toBe(false);
   });
 });

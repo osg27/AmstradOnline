@@ -1,20 +1,25 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/client';
+import { deriveAchievementsView } from '../features/retroachievements/achievementsView';
 
-export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCode, solo, system = 'megadrive', onProgress, onUnlock, showToast = true }) {
+export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCode, solo, system = 'megadrive', onProgress, onUnlock, onAchievements, showToast = true }) {
   const [connection, setConnection] = useState(null);
   const [signedIn, setSignedIn] = useState(false);
   const [status, setStatus] = useState('Checking your RetroAchievements connection…');
   const [toast, setToast] = useState(null);
   const [snapshot, setSnapshot] = useState(null);
   const [retry, setRetry] = useState(0);
+  // 'error' | 'nogame' | null: lets the room's side panel tell failures from "still loading".
+  const [problem, setProblem] = useState(null);
   const toastTimer = useRef(null);
   // Optional observers for the room HUD. Kept in refs so they never restart the session effect.
   const onProgressRef = useRef(onProgress);
   const onUnlockRef = useRef(onUnlock);
   onProgressRef.current = onProgress;
   onUnlockRef.current = onUnlock;
+  const onAchievementsRef = useRef(onAchievements);
+  onAchievementsRef.current = onAchievements;
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -23,7 +28,7 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
     let options;
     let requested = false;
     let loginTimer;
-    setSignedIn(false); setToast(null); setSnapshot(null); setConnection(null);
+    setSignedIn(false); setToast(null); setSnapshot(null); setConnection(null); setProblem(null);
     setStatus('Checking your RetroAchievements connection…');
     const send = (message) => frame?.contentWindow?.postMessage(message, location.origin);
     async function signIn() {
@@ -36,8 +41,8 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
         });
         if (!active) return;
         send({ type: 'ra_login_token', ...session });
-        loginTimer = setTimeout(() => { if (active) setStatus('RetroAchievements sign-in timed out. Retry, or reconnect in Profile.'); }, 30000);
-      } catch (error) { if (active) setStatus(error.message); }
+        loginTimer = setTimeout(() => { if (active) { setStatus('RetroAchievements sign-in timed out. Retry, or reconnect in Profile.'); setProblem('error'); } }, 30000);
+      } catch (error) { if (active) { setStatus(error.message); setProblem('error'); } }
     }
     const configure = () => { send({ type: 'ra_configure', enabled: solo }); send({ type: 'ra_probe' }); };
     async function onMessage(event) {
@@ -60,10 +65,10 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
         const item = message.event;
         if (!item) return;
         if (item.kind === 'login') {
-          clearTimeout(loginTimer); setSignedIn(item.result === 0);
+          clearTimeout(loginTimer); setSignedIn(item.result === 0); setProblem(item.result === 0 ? null : 'error');
           setStatus(item.result === 0 ? `Connected as ${item.title}. Waiting for the game’s achievement set…` : 'RetroAchievements sign-in failed. Reconnect your account in Profile.');
         } else if (item.kind === 'game') {
-          setSnapshot(null);
+          setSnapshot(null); setProblem(item.result === 0 && item.id ? null : 'nogame');
           setStatus(item.result === 0 && item.id ? `${item.title}: ${item.points} achievement${item.points === 1 ? '' : 's'} loaded.` : item.message || 'No matching achievement set was found for this ROM.');
         } else if (item.kind === 'unlock') {
           setToast(item); clearTimeout(toastTimer.current);
@@ -73,9 +78,9 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
         } else if (item.kind === 'logout') {
           clearTimeout(loginTimer); setSignedIn(false); setSnapshot(null);
         } else if (item.kind === 'media') {
-          setSnapshot(null); setStatus(item.message);
+          setSnapshot(null); setProblem('nogame'); setStatus(item.message);
         } else if (['error', 'pending', 'synced'].includes(item.kind)) {
-          clearTimeout(loginTimer); setStatus(item.message);
+          clearTimeout(loginTimer); setStatus(item.message); if (item.kind === 'error') setProblem('error');
         }
       }
     }
@@ -84,7 +89,7 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
       options = result; setConnection(result);
       if (!result.connected) setStatus('Add RetroAchievements in Profile to enable automatic sign-in.');
       signIn();
-    }).catch((error) => { if (active) setStatus(error.message); });
+    }).catch((error) => { if (active) { setStatus(error.message); setProblem('error'); } });
     const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('osg-retroachievements') : null;
     if (channel) channel.onmessage = () => setRetry((value) => value + 1);
     window.addEventListener('message', onMessage);
@@ -105,6 +110,17 @@ export default function RetroAchievementsPlay({ frameRef, frameLoadCount, roomCo
   useEffect(() => {
     onProgressRef.current?.(items.length ? { unlocked, total: items.length, signedIn } : { unlocked: 0, total: 0, signedIn });
   }, [items.length, unlocked, signedIn]);
+  // Share the full list with the room's side panel. Snapshots arrive every 3 s, so only
+  // report when something the panel shows has actually changed.
+  const signature = items.map((item) => `${item.id}:${item.unlocked ? 1 : 0}:${item.state}:${item.progress || ''}`).join('|');
+  const retryConnection = useCallback(() => setRetry((value) => value + 1), []);
+  useEffect(() => {
+    onAchievementsRef.current?.({
+      view: deriveAchievementsView({ solo, connected: connection ? Boolean(connection.connected) : null, signedIn, itemCount: items.length, problem }),
+      items, status, retry: retryConnection,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solo, connection, signedIn, signature, problem, status, retryConnection]);
   return <section className="ra-play-panel">
     <div><strong>RetroAchievements</strong><span>Softcore · {{ cpc: 'Amstrad CPC', mastersystem: 'Master System', megadrive: 'Mega Drive', snes: 'SNES', nes: 'NES' }[system]}</span></div>
     {!solo ? <p>Achievement earning is available in solo play. Tracking is stopped while guests can join.</p> : <>

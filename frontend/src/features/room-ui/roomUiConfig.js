@@ -148,3 +148,24 @@ export function dpadMaskFromOffset(dx, dy, deadzone = 14) {
 }
 
 export const CRT_STORAGE_KEY = 'osg-room-crt-effect';
+
+export const SIDE_PANELS_STORAGE_KEY = 'osg-room-side-panels';
+/** Below this window width the side panels are not shown (menu sections remain). */
+export const SIDE_PANELS_MIN_WIDTH = 1280;
+
+/**
+ * Which side panels to show beside the game.
+ * Left = high scores, right = achievements. Panels need a desktop viewport at
+ * least SIDE_PANELS_MIN_WIDTH wide, are never shown in OBS capture, and each
+ * only appears when it has something to show. `enabled` is the player's toggle.
+ */
+export function sideLayoutFor({ viewport, width, hasScores, hasAchievements, enabled = true, obsCapture = false }) {
+  const roomy = viewport === 'desktop' && Number(width) >= SIDE_PANELS_MIN_WIDTH && !obsCapture;
+  const available = roomy && (Boolean(hasScores) || Boolean(hasAchievements));
+  const active = available && enabled;
+  return {
+    available,
+    showLeft: active && Boolean(hasScores),
+    showRight: active && Boolean(hasAchievements),
+  };
+}

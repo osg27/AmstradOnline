@@ -48,7 +48,8 @@ import RoomHud, { Pill } from '../features/room-ui/RoomHud';
 import TouchControls from '../features/room-ui/TouchControls';
 import StartHereCard from '../features/room-ui/StartHereCard';
 import Icon from '../features/room-ui/icons';
-import useRoomViewport from '../features/room-ui/useRoomViewport';
+import useRoomViewport, { useWindowWidth } from '../features/room-ui/useRoomViewport';
+import { ScorePanel, AchievementsPanel } from '../features/room-ui/SidePanels';
 import useGameMenuShortcuts from '../features/room-ui/useGameMenuShortcuts';
 import { MenuBlock, MenuGroup, MenuNote, MenuRow, Toggle, Value } from '../features/room-ui/menuPanels/MenuParts';
 import ArcadeRomBrowser from '../features/room-ui/menuPanels/ArcadeRomBrowser';
@@ -59,9 +60,11 @@ import LocalGamePicker from '../features/room-ui/menuPanels/LocalGamePicker';
 import Atari8Settings from '../features/room-ui/menuPanels/Atari8Settings';
 import {
   CRT_STORAGE_KEY,
+  SIDE_PANELS_STORAGE_KEY,
   SYSTEM_COLORS,
   deriveGameTitle,
   isKeyboardSystem,
+  sideLayoutFor,
   touchProfileFor,
 } from '../features/room-ui/roomUiConfig';
 import '../features/room-ui/room-ui.css';
@@ -993,6 +996,11 @@ export default function RoomPage() {
 
   // ---------- in-game room UI (theatre, menu, HUD) ----------
   const viewport = useRoomViewport();
+  const windowWidth = useWindowWidth();
+  const [sidePanelsEnabled, setSidePanelsEnabled] = useState(() => {
+    try { return window.localStorage.getItem(SIDE_PANELS_STORAGE_KEY) !== 'off'; } catch { return true; }
+  });
+  const [raList, setRaList] = useState(null);
   const canRecordEntitlement = useEntitlement('full_recording');
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const [menuCategory, setMenuCategory] = useState('game');
@@ -7557,6 +7565,55 @@ export default function RoomPage() {
   const inputName = menuInputType === 'pad' || menuInputType === 'stick'
     ? padInfo.name || 'Controller'
     : menuInputType === 'touch' ? 'Touch controls' : 'Keyboard';
+  const hasSideScores = (supportsMameScoreboard && Boolean(loadedDiskName) && mameLeaderboardSupported) || supportsAmigaScoreboard;
+  const sideLayout = sideLayoutFor({
+    viewport,
+    width: windowWidth,
+    hasScores: hasSideScores,
+    hasAchievements: supportsRetroAchievements,
+    enabled: sidePanelsEnabled,
+    obsCapture: obsCaptureMode,
+  });
+  const toggleSidePanels = () => {
+    setSidePanelsEnabled((value) => {
+      try { window.localStorage.setItem(SIDE_PANELS_STORAGE_KEY, value ? 'off' : 'on'); } catch { /* storage unavailable */ }
+      return !value;
+    });
+  };
+  const sideScorePanel = sideLayout.showLeft ? (
+    supportsAmigaScoreboard ? (
+      <ScorePanel
+        kicker="Amiga leaderboard"
+        title={amigaScoreGame.title}
+        status={amigaScoreStatus || `Scores are verified from the WHDLoad ${amigaScoreGame.filename} file.`}
+        entries={amigaLeaderboard}
+        username={username}
+        saving={amigaScoreBusy}
+        saveLabel="Save score now"
+        onSave={isHost ? saveAmigaScoreNow : null}
+      />
+    ) : (
+      <ScorePanel
+        kicker={tournamentCode ? 'Tournament standings' : 'High scores'}
+        title={tournamentCode ? tournamentTitle || tournamentCode : getMameDisplayName(getArcadeLeaderboardKey(loadedDiskName))}
+        subtitle={tournamentCode ? `Code ${tournamentCode}` : ''}
+        status={mameScoreStatus || (tournamentCode ? 'Only your best tournament score counts.' : '')}
+        entries={mameLeaderboard}
+        username={username}
+        saving={mameScoreBusy}
+        saveLabel={tournamentCode ? 'Submit tournament score' : 'Save score now'}
+        onSave={isHost ? saveMameScoreNow : null}
+      />
+    )
+  ) : null;
+  const sideAchievementsPanel = sideLayout.showRight ? (
+    <AchievementsPanel
+      view={raList?.view || (isSoloMode ? 'loading' : 'online')}
+      items={raList?.items || []}
+      status={raList?.status}
+      onRetry={raList?.retry}
+    />
+  ) : null;
   const myMameEntry = mameLeaderboard.find((entry) => entry.username === username);
   const myAmigaEntry = amigaLeaderboard.find((entry) => entry.username === username);
   const scoresPill = supportsMameScoreboard && loadedDiskName && mameLeaderboardSupported && mameLeaderboard.length ? (
@@ -7620,7 +7677,7 @@ export default function RoomPage() {
     guestQueuePill,
     recPill,
   ].filter(Boolean);
-  const rightPills = [raPill, scoresPill, instructionsPill].filter(Boolean);
+  const rightPills = [sideLayout.showRight ? null : raPill, sideLayout.showLeft ? null : scoresPill, instructionsPill].filter(Boolean);
   const stripPills = [capturePill, guestQueuePill, raPill, scoresPill, instructionsPill, recPill].filter(Boolean);
   const coinKeys = menuInputType === 'pad' ? ['SELECT', 'START'] : menuInputType === 'stick' ? ['COIN', 'START'] : ['5', '1'];
   const coinHint = isArcade && canSendPlayerInput && loadedDiskName ? (
@@ -7900,6 +7957,7 @@ export default function RoomPage() {
             roomCode={roomCode}
             solo={isSoloMode}
             onProgress={setRaProgress}
+            onAchievements={setRaList}
             onUnlock={handleRaUnlock}
             showToast={false}
           />
@@ -8343,7 +8401,7 @@ export default function RoomPage() {
   return (
     <div
       ref={roomRootRef}
-      className={`osg-room v-${viewport} ${roomIdle ? 'idle' : ''} ${obsCaptureMode ? 'obs-capture-page' : ''} ${gameMenuOpen ? 'menu-open' : ''}`}
+      className={`osg-room v-${viewport} ${roomIdle ? 'idle' : ''} ${obsCaptureMode ? 'obs-capture-page' : ''} ${gameMenuOpen ? 'menu-open' : ''} ${sideLayout.showLeft ? 'side-l' : ''} ${sideLayout.showRight ? 'side-r' : ''}`}
       data-system={roomSystem}
     >
       {obsCaptureMode ? (
@@ -8359,6 +8417,8 @@ export default function RoomPage() {
         paused={canControlLocalEmulator && emulatorPaused}
         showPausedTag={!gameMenuOpen}
         overlay={obsCaptureMode ? null : screenOverlay}
+        leftPanel={sideScorePanel}
+        rightPanel={sideAchievementsPanel}
       >
         {canControlLocalEmulator ? (
           isArcade ? (
@@ -8581,6 +8641,7 @@ export default function RoomPage() {
         volume={canControlLocalEmulator ? { value: Math.round(hostVolume * 100), onChange: handleHostVolumeChange } : null}
         record={recordingCategoryVisible && recordingAvailable ? { active: recordingActive, onClick: () => openGameMenu('record') } : null}
         fullscreen={{ active: fullscreenActive, onClick: toggleRoomFullscreen }}
+        panels={sideLayout.available ? { active: sidePanelsEnabled, onClick: toggleSidePanels } : null}
         onMore={() => openGameMenu()}
         menuShortcut={menuShortcutNode}
       />
