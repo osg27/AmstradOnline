@@ -16,6 +16,11 @@
   let remoteMask = 0;
   let lastSimulatedMasks = [0, 0];
   let statusText = 'NES ready';
+  const achievements = window.OSGRetroAchievements?.create({
+    system: 'nes', getCore: () => window.EJS_emulator?.gameManager?.Module,
+  });
+  const ROM_RELOAD_CACHE = 'oldstylegaming-nes-rom-reload-v1';
+  const ROM_RELOAD_REQUEST = `${window.location.origin}/__nes-rom-reload__`;
 
   const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
   const nativeFetch = window.fetch.bind(window);
@@ -277,6 +282,9 @@
   }
 
   function clearGameContainer() {
+    achievements?.stop('Waiting for an NES game…');
+    const previousModule = window.EJS_emulator?.gameManager?.Module;
+    if (previousModule) previousModule.osgRAFrame = null;
     try {
       window.EJS_emulator?.gameManager?.clearEJSResetTimer?.();
       window.EJS_emulator?.gamepad?.terminate?.();
@@ -318,7 +326,15 @@
       'utils.js': '/emulatorjs/data/src/utils.js',
       'nipplejs.js': '/emulatorjs/data/src/vendor/nipplejs.js',
       'socket.io.min.js': '/emulatorjs/data/src/vendor/socket.io.min.js',
+      'fceumm-wasm.data': '/nes/fceumm-ra-wasm.data?v=2026-10-31-ra-1',
+      'fceumm-legacy-wasm.data': '/nes/fceumm-ra-legacy-wasm.data?v=2026-10-31-ra-1',
     };
+    window.EJS_paths = new Proxy(window.EJS_paths, {
+      get(target, key, receiver) {
+        const clean = typeof key === 'string' ? key.split('?')[0] : key;
+        return Object.hasOwn(target, clean) ? target[clean] : Reflect.get(target, key, receiver);
+      },
+    });
     window.EJS_startOnLoaded = true;
     window.EJS_threads = false;
     window.EJS_forceLegacyCores = false;
@@ -376,8 +392,15 @@
     window.EJS_onGameStart = () => {
       console.log('Old Style Gaming NES: game started');
       statusText = '';
+      const emulator = window.EJS_emulator;
+      if (window.OSGRetroAchievements?.attachEmulatorJsFrames(emulator?.gameManager?.Module, achievements, () => emulatorPaused || emulator.paused)) {
+        achievements?.started();
+      } else {
+        achievements?.stop('NES achievement memory is unavailable. Refresh the room to load the latest runtime.');
+      }
     };
     window.EJS_onExit = () => {
+      achievements?.stop('NES stopped. Load a game to resume achievements.');
       drawStatus('NES stopped', fileName);
     };
   }
@@ -398,6 +421,7 @@
     }
 
     clearGameContainer();
+    achievements?.romLoaded(currentRom.bytes);
     const gameBlob = new Blob([currentRom.bytes], { type: 'application/octet-stream' });
     gameUrl = URL.createObjectURL(gameBlob);
     configureEmulator(currentRom.fileName, gameUrl);
@@ -416,7 +440,8 @@
       '/emulatorjs/data/src/emulator.js',
       '/emulatorjs/data/src/compression.js',
       '/emulatorjs/data/compression/extractzip.js',
-      '/emulatorjs/data/cores/fceumm-wasm.data',
+      '/nes/fceumm-ra-wasm.data',
+      '/nes/fceumm-ra-legacy-wasm.data',
     ];
 
     for (const path of required) {
@@ -427,6 +452,24 @@
         throw new Error(`${path} returned ${response.status || 'HTML'}`);
       }
     }
+  }
+
+  async function saveRomForCleanReload(rom) {
+    if (!('caches' in window)) return false;
+    const cache = await caches.open(ROM_RELOAD_CACHE);
+    await cache.put(ROM_RELOAD_REQUEST, new Response(new Blob([rom.bytes]), {
+      headers: { 'Content-Type': 'application/octet-stream', 'X-OldStyle-File-Name': encodeURIComponent(rom.fileName) },
+    }));
+    return true;
+  }
+
+  async function takeRomAfterCleanReload() {
+    if (!('caches' in window)) return null;
+    const cache = await caches.open(ROM_RELOAD_CACHE);
+    const response = await cache.match(ROM_RELOAD_REQUEST);
+    if (!response) return null;
+    await cache.delete(ROM_RELOAD_REQUEST);
+    return { fileName: decodeURIComponent(response.headers.get('X-OldStyle-File-Name') || 'game.nes'), bytes: new Uint8Array(await response.arrayBuffer()) };
   }
 
   window.addEventListener('error', (event) => {
@@ -492,16 +535,30 @@
     }
 
     if (message.type === 'nes_autoload') {
-      currentRom = {
+      const nextRom = {
         fileName: message.fileName || 'game.nes',
         bytes: new Uint8Array(message.bytes || []),
       };
-      loadCurrentRom();
+      // A room can resend its media after the clean iframe reload. Do not
+      // start another reload (or another native loop) for identical content.
+      if (currentRom?.fileName === nextRom.fileName && currentRom.bytes.length === nextRom.bytes.length
+        && nextRom.bytes.every((byte, index) => byte === currentRom.bytes[index])) return;
+      if (loaderScript || window.EJS_emulator) {
+        achievements?.stop('Changing NES game…');
+        saveRomForCleanReload(nextRom).then(saved => {
+          if (saved) window.location.reload();
+          else drawStatus('Could not change NES game', 'Browser cache storage is unavailable');
+        }).catch(error => drawStatus('Could not change NES game', error.message));
+      } else { currentRom = nextRom; loadCurrentRom(); }
       return;
     }
 
     if (message.type === 'nes_reset') {
-      loadCurrentRom();
+      if (window.EJS_emulator?.started) {
+        achievements?.reset();
+        window.EJS_emulator.gameManager.restart();
+        setMask(1, 0); setMask(2, 0);
+      } else loadCurrentRom();
       return;
     }
 
@@ -536,5 +593,9 @@
   });
 
   drawStatus('NES ready', 'Load an NES ROM from the room');
+  takeRomAfterCleanReload().then(saved => {
+    if (!saved || currentRom) return;
+    currentRom = saved; loadCurrentRom();
+  }).catch(error => drawStatus('Could not restore NES game', error.message));
   mirrorEmulatorCanvas();
 })();
