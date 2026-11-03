@@ -21,15 +21,17 @@ const DIRECTIONS = ['up', 'down', 'left', 'right'];
 const TWO_BUTTON = [...DIRECTIONS, 'button1', 'button2', 'start'];
 const THREE_BUTTON = [...DIRECTIONS, 'button1', 'button2', 'button3', 'start'];
 const SIX_BUTTON = [...DIRECTIONS, 'button1', 'button2', 'button3', 'button4', 'select', 'shoulder1', 'shoulder2', 'start'];
+// NES and PC Engine Select uses the emulator's third-button bit (128), so it is mapped as button3.
+const SELECT_PAD = [...DIRECTIONS, 'button1', 'button2', 'button3', 'start'];
 const SNES_PAD = [...DIRECTIONS, 'button1', 'button2', 'button3', 'button4', 'shoulder1', 'shoulder2', 'select', 'start'];
 
 const SYSTEM_ACTIONS = {
   arcade: [...DIRECTIONS, 'button1', 'button2', 'button3', 'button4', 'button5', 'button6', 'button7', 'start', 'coin'],
   mastersystem: TWO_BUTTON,
   megadrive: THREE_BUTTON,
-  nes: TWO_BUTTON,
+  nes: SELECT_PAD,
   snes: SNES_PAD,
-  pcengine: TWO_BUTTON,
+  pcengine: SELECT_PAD,
   playstation: SIX_BUTTON,
   saturn: SIX_BUTTON,
   saturn_beetle: SIX_BUTTON,
@@ -55,6 +57,8 @@ export function supportsControllerMapping(system) {
 }
 
 const SYSTEM_LABELS = {
+  nes: { button1: 'B', button2: 'A', button3: 'Select', start: 'Start' },
+  pcengine: { button1: 'I', button2: 'II', button3: 'Select', start: 'Run' },
   snes: {
     button1: 'B',
     button2: 'Y',
@@ -97,7 +101,9 @@ export function getDefaultMapping(system) {
     start: { type: 'button', index: 9 },
     coin: { type: 'button', index: 8 },
   };
-  return Object.fromEntries(actions.map((action) => [action, defaults[action]]));
+  // Select sits on the standard pad's Back/Select button.
+  const selectOnButton3 = actions === SELECT_PAD ? { button3: defaults.select } : {};
+  return Object.fromEntries(actions.map((action) => [action, selectOnButton3[action] || defaults[action]]));
 }
 
 export const MAME_ACTIONS = Object.fromEntries(

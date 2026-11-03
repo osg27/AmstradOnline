@@ -16,7 +16,7 @@ describe('system controller mapping configuration', () => {
   });
 
   it('keeps mappings separate by exposing the controls supported by each system', () => {
-    expect(getSystemActions('nes')).toEqual(['up', 'down', 'left', 'right', 'button1', 'button2', 'start']);
+    expect(getSystemActions('nes')).toEqual(['up', 'down', 'left', 'right', 'button1', 'button2', 'button3', 'start']);
     expect(getSystemActions('arcade')).toContain('coin');
     expect(getSystemActions('playstation')).toContain('select');
     expect(getSystemActions('snes')).toEqual([
