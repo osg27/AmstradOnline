@@ -41,3 +41,14 @@ describe('system controller mapping configuration', () => {
     expect(getActionMask('coin')).toBe(4096);
   });
 });
+
+describe('NES and PC Engine Select', () => {
+  it('asks for Select and maps it to the third-button bit', () => {
+    for (const system of ['nes', 'pcengine']) {
+      expect(getSystemActions(system)).toContain('button3');
+      expect(getActionLabel(system, 'button3')).toBe('Select');
+      expect(getActionMask('button3')).toBe(128);
+      expect(getDefaultMapping(system).button3).toEqual({ type: 'button', index: 8 });
+    }
+  });
+});
