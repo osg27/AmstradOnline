@@ -28,6 +28,21 @@ import {
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
+import {
+  CPC_CONTROL_MODES,
+  EDITABLE_SLOTS,
+  PAD_BUTTON_LABELS,
+  bindingToText,
+  buildCpcControlPlan,
+  cpcMatrixMessage,
+  cpcOverrideKey,
+  formatCpcBinding,
+  loadCpcOverrides,
+  readCpcPadMask,
+  saveCpcOverrides,
+  summarisePlayer,
+} from '../features/cpcControls/cpcGamepadControls';
+import useCpcGamepads from '../features/cpcControls/useCpcGamepads';
 import { getMameDisplayName, getMameTitleDatabase } from '../data/mameTitleLookup';
 import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardAutomatic';
 import { getControllerMapping } from '../utils/controllerMappingStorage';
@@ -974,6 +989,9 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const roomSystem = room?.system || 'cpc';
   const isCpcParty = roomSystem === 'cpc_party';
+  // Regular CPC rooms translate gamepads into each game's documented CPC
+  // controls (features/cpcControls). Party rooms keep their shared-turn input.
+  const isCpcGamepadRoom = roomSystem === 'cpc';
   const isCpcSystem = roomSystem === 'cpc' || roomSystem === 'cpc_party';
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
@@ -1036,7 +1054,7 @@ export default function RoomPage() {
     ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-20-2`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-10-30-ra-4` : isNes ? '/nes/launcher.html?v=2026-10-31-ra-1' : isSnes ? '/snes/launcher.html?v=2026-10-31-ra-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-10-29-webx68k-2' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isMsx ? '/msx/launcher.html?v=2026-09-25-webmsx-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-10-30-ra-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-10-30-ra-4` : isNes ? '/nes/launcher.html?v=2026-10-31-ra-1' : isSnes ? '/snes/launcher.html?v=2026-10-31-ra-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-10-29-webx68k-2' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isMsx ? '/msx/launcher.html?v=2026-09-25-webmsx-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-11-05-pad-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.hdf,.lha,.zip,.7z'
@@ -1796,6 +1814,46 @@ export default function RoomPage() {
     targetWindow.postMessage(payload, window.location.origin);
   }, []);
 
+  const cpcOverrideStorageKey = isCpcGamepadRoom ? cpcOverrideKey(selectedControlProfile, loadedDiskName) : null;
+  const [cpcOverrides, setCpcOverrides] = useState({});
+  const [cpcControlsEditing, setCpcControlsEditing] = useState(false);
+
+  useEffect(() => {
+    setCpcOverrides(loadCpcOverrides(cpcOverrideStorageKey));
+  }, [cpcOverrideStorageKey]);
+
+  const updateCpcOverrides = useCallback((updater) => {
+    setCpcOverrides((previous) => {
+      const next = typeof updater === 'function' ? updater(previous) : updater;
+      saveCpcOverrides(cpcOverrideStorageKey, next);
+      return next;
+    });
+  }, [cpcOverrideStorageKey]);
+
+  const cpcControlPlan = useMemo(
+    () => (isCpcGamepadRoom ? buildCpcControlPlan(selectedControlProfile, cpcOverrides) : null),
+    [cpcOverrides, isCpcGamepadRoom, selectedControlProfile],
+  );
+  const cpcControlPlanRef = useRef(cpcControlPlan);
+  cpcControlPlanRef.current = cpcControlPlan;
+
+  const cpcPadMapping = useCallback((pad) => (
+    pad?.id && supportsControllerMapping(roomSystem) ? getControllerMapping(roomSystem, pad.id) : null
+  ), [roomSystem]);
+
+  // Guest (Player 2) pad/keyboard state arrives as a pad mask; translate it
+  // with the Player 2 plan on the host.
+  const forwardCpcRemoteMask = useCallback((mask) => {
+    forwardInputToEmulator(cpcMatrixMessage('remote-p2', mask, cpcControlPlanRef.current?.players[1]));
+  }, [forwardInputToEmulator]);
+
+  const cpcConnectedPads = useCpcGamepads({
+    enabled: isCpcGamepadRoom && isHost === true && inputCaptured && !controllerCapturingInput,
+    plan: cpcControlPlan,
+    forward: forwardInputToEmulator,
+    getMapping: cpcPadMapping,
+  });
+
   const reloadC64Frame = useCallback(async ({ start = false } = {}) => {
     const frame = emulatorFrameRef.current;
     if (!frame || !isC64) return;
@@ -2340,6 +2398,13 @@ export default function RoomPage() {
   }, [addInputDebug, forwardInputToEmulator]);
 
   const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
+    if (isCpcGamepadRoom) {
+      // Plain CPC rooms: this is always the guest (Player 2). Send its full
+      // state through the game's Player 2 plan instead of fixed Q/A/O/P keys.
+      addInputDebug(`P${player} pad state ${mask} -> CPC plan`, mask, 'guest remote');
+      forwardCpcRemoteMask(mask);
+      return;
+    }
     joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
       const wasActive = Boolean(previousMask & bit);
 
@@ -2355,7 +2420,7 @@ export default function RoomPage() {
         action,
       });
     });
-  }, [addInputDebug, forwardInputToEmulator]);
+  }, [addInputDebug, forwardCpcRemoteMask, forwardInputToEmulator, isCpcGamepadRoom]);
 
   const releaseCpcPartySharedInput = useCallback((previousMask = 63) => {
     if (!isSharedCpcParty) return;
@@ -2626,7 +2691,7 @@ export default function RoomPage() {
   }, [activePartyPlayer, partyMaxPlayers, setPartyTurn]);
 
   useEffect(() => {
-    if (!inputCaptured) {
+    if (!inputCaptured || (isCpcGamepadRoom && isHost === true)) {
       return undefined;
     }
 
@@ -2658,7 +2723,7 @@ export default function RoomPage() {
             sendLocalJoystickMask(0);
           }
         } else {
-          const mask = gamepadToJoystickMask(pad);
+          const mask = isCpcGamepadRoom ? readCpcPadMask(pad, cpcPadMapping(pad)) : gamepadToJoystickMask(pad);
 
           if (mask !== lastMask) {
             lastMask = mask;
@@ -2676,7 +2741,7 @@ export default function RoomPage() {
       cancelAnimationFrame(animationFrame);
       sendLocalJoystickMask(0);
     };
-  }, [controllerCapturingInput, inputCaptured, sendLocalJoystickMask]);
+  }, [controllerCapturingInput, cpcPadMapping, inputCaptured, isCpcGamepadRoom, isHost, sendLocalJoystickMask]);
 
   useEffect(() => {
     function handleGamepadConnected(event) {
@@ -2784,7 +2849,8 @@ export default function RoomPage() {
   }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isDirectJoystickSystem, isHost, isMultiPeerParty, isSharedCpcParty, releaseCpcPartySharedInput]);
 
   useEffect(() => {
-    if (isHost !== true || isDirectJoystickSystem) {
+    // CPC gamepad rooms hold state inside CPCBox, so no key re-pumping.
+    if (isHost !== true || isDirectJoystickSystem || isCpcGamepadRoom) {
       return undefined;
     }
 
@@ -2822,7 +2888,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
     };
-  }, [activePartyPlayer, forwardInputToEmulator, isDirectJoystickSystem, isHost, isSharedCpcParty]);
+  }, [activePartyPlayer, forwardInputToEmulator, isCpcGamepadRoom, isDirectJoystickSystem, isHost, isSharedCpcParty]);
 
   useEffect(() => {
     if (isHost !== false) {
@@ -7318,6 +7384,16 @@ export default function RoomPage() {
                 Instructions: {selectedControlProfile.title}
               </button>
             ) : null}
+            {isCpcGamepadRoom && isHost === true && cpcControlPlan ? (
+              <button
+                type="button"
+                className="secondary control-profile-pill"
+                title="Gamepad controls are set automatically from the game's manual. Click to view or change."
+                onClick={() => setControlProfileDrawerOpen(true)}
+              >
+                Gamepads: P1 {summarisePlayer(cpcControlPlan.players[0])} · P2 {summarisePlayer(cpcControlPlan.players[1])}
+              </button>
+            ) : null}
             {isCpcSystem && !selectedControlProfile && controlProfileMatches.length > 0 ? (
               <button type="button" className="secondary control-profile-pill" onClick={() => setControlProfileDrawerOpen(true)}>
                 Choose instructions ({controlProfileMatches.length})
@@ -8249,6 +8325,85 @@ export default function RoomPage() {
                 Close
               </button>
             </div>
+
+            {isCpcGamepadRoom && isHost === true && cpcControlPlan ? (
+              <section className="control-profile-section cpc-gamepad-section" aria-label="Gamepad controls">
+                <div className="control-player-heading">
+                  <h3>Gamepads</h3>
+                  <span>{cpcConnectedPads.length ? `${cpcConnectedPads.length} connected` : 'None connected'}</span>
+                </div>
+                {cpcControlPlan.players.map((playerPlan, slot) => {
+                  const playerKey = slot === 0 ? 'player1' : 'player2';
+                  const padSlot = cpcControlPlan.swap ? 1 - slot : slot;
+                  const pad = cpcConnectedPads[padSlot];
+                  const override = cpcOverrides[playerKey] || {};
+                  const setOverride = (patch) => updateCpcOverrides((previous) => ({
+                    ...previous,
+                    [playerKey]: { ...(previous[playerKey] || {}), ...patch },
+                  }));
+                  return (
+                    <div key={playerKey} className="cpc-gamepad-player">
+                      <div className="cpc-gamepad-player-title">
+                        <strong>Player {slot + 1}: {summarisePlayer(playerPlan)}</strong>
+                        <small>{pad ? pad.id.replace(/\s*\(.*\)\s*$/, '') : `Pad ${padSlot + 1} not connected`}</small>
+                      </div>
+                      <small className="muted">{playerPlan.reason}</small>
+                      {playerPlan.mode !== 'off' && playerPlan.mode !== 'shared' ? (
+                        <div className="cpc-gamepad-buttons">
+                          {PAD_BUTTON_LABELS.filter(([button]) => playerPlan.bindings[button]?.length).map(([button, label]) => (
+                            <span key={button}>
+                              <b>{label}</b> {formatCpcBinding(playerPlan.bindings[button])}
+                              {playerPlan.labels[button] ? <em> {playerPlan.labels[button]}</em> : null}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {cpcControlsEditing ? (
+                        <div className="cpc-gamepad-edit">
+                          <label>
+                            Mode
+                            <select
+                              value={override.mode || 'auto'}
+                              onChange={(event) => setOverride({ mode: event.target.value })}
+                            >
+                              {Object.entries(CPC_CONTROL_MODES)
+                                .filter(([mode]) => slot === 1 || mode !== 'shared')
+                                .map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
+                            </select>
+                          </label>
+                          {playerPlan.mode === 'keys' ? EDITABLE_SLOTS.map((editSlot) => (
+                            <label key={editSlot}>
+                              {editSlot === 'a' ? 'A' : editSlot === 'b' ? 'B' : editSlot.replace(/^./, (letter) => letter.toUpperCase())}
+                              <input
+                                type="text"
+                                spellCheck={false}
+                                placeholder="e.g. Q, SPACE, SHIFT+P"
+                                value={override.keys?.[editSlot] ?? bindingToText(playerPlan.bindings[editSlot])}
+                                onChange={(event) => setOverride({ keys: { ...(override.keys || {}), [editSlot]: event.target.value } })}
+                              />
+                            </label>
+                          )) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {cpcControlPlan.notes.map((note) => <small key={note} className="muted">{note}</small>)}
+                <div className="cpc-gamepad-actions">
+                  <button type="button" className="secondary" onClick={() => setCpcControlsEditing((editing) => !editing)}>
+                    {cpcControlsEditing ? 'Done' : 'Change mapping'}
+                  </button>
+                  <button type="button" className="secondary" onClick={() => updateCpcOverrides((previous) => ({ ...previous, swap: !previous.swap }))}>
+                    Swap pads
+                  </button>
+                  {cpcOverrides.player1 || cpcOverrides.player2 || cpcOverrides.swap ? (
+                    <button type="button" className="secondary" onClick={() => updateCpcOverrides({})}>
+                      Reset to manual
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
 
             {controlProfileMatches.length > 1 ? (
               <div className="control-match-list">

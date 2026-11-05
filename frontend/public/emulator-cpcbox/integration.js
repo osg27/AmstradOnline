@@ -337,8 +337,57 @@
     next.forEach((code) => heldJoystickKeys.add(code));
   }
 
+  // Gamepad input from the parent page, already translated to CPC keyboard
+  // matrix cells ([line, bit]; line 9 = joystick 1, line 6 = joystick 2).
+  // Each source (pad-p1, pad-p2, remote-p2) sends its full held state, so two
+  // players never release each other's keys and a resend can't stick a key.
+  const matrixSources = new Map();
+  let appliedMatrixCells = new Set();
+
+  function heldMatrixCells() {
+    const held = new Set();
+    matrixSources.forEach((cells) => cells.forEach((cell) => held.add(cell)));
+    return held;
+  }
+
+  function applyMatrixState() {
+    if (!window.pT?.hj) return;
+    const held = heldMatrixCells();
+    appliedMatrixCells.forEach((cell) => {
+      if (held.has(cell)) return;
+      const [row, bit] = cell.split(':').map(Number);
+      window.pT.hj[row] |= bit;
+    });
+    held.forEach((cell) => {
+      const [row, bit] = cell.split(':').map(Number);
+      window.pT.hj[row] = window.pT.hj[row] & ~bit & 255;
+    });
+    appliedMatrixCells = held;
+  }
+
+  function setMatrixSource(source, cells) {
+    const valid = new Set();
+    (Array.isArray(cells) ? cells : []).forEach((cell) => {
+      const row = Number(cell?.[0]);
+      const bit = Number(cell?.[1]);
+      if (Number.isInteger(row) && row >= 0 && row <= 9 && [1, 2, 4, 8, 16, 32, 64, 128].includes(bit)) {
+        valid.add(`${row}:${bit}`);
+      }
+    });
+    if (valid.size) matrixSources.set(String(source), valid);
+    else matrixSources.delete(String(source));
+    applyMatrixState();
+  }
+
+  function clearMatrixSources() {
+    matrixSources.clear();
+    applyMatrixState();
+  }
+
   function handlePhysicalKey(event) {
     if (!event.isTrusted) return;
+    // A physical key-up on a key a gamepad is holding must not release it.
+    if (event.type === 'keyup' && matrixSources.size) setTimeout(applyMatrixState, 0);
 
     const code = event.keyCode || event.which;
     const action = event.type === 'keydown' ? 'down' : 'up';
@@ -378,8 +427,11 @@
       }
     } else if (data.type === 'amstrad_remote_joystick') {
       applyJoystickMask(Number(data.mask) || 0);
+    } else if (data.type === 'amstrad_matrix_state') {
+      setMatrixSource(data.source || 'default', data.cells);
     } else if (data.type === 'amstrad_release_all') {
       releaseAllInput();
+      clearMatrixSources();
     }
   });
 
