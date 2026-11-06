@@ -68,10 +68,19 @@ describe('buildCpcControlPlan', () => {
     expect(resolveCpcKeys(PAD.up, plan.players[0])).toEqual(['Q']);
   });
 
-  it('joystick game with only Player 1 documented uses native CPC joystick 1', () => {
+  it('joystick game with documented keys presses both the keys and joystick 1 (Gryzor)', () => {
+    const plan = buildCpcControlPlan(profile('gryzor'));
+    expect(plan.players[0].mode).toBe('hybrid');
+    expect(resolveCpcKeys(PAD.up, plan.players[0]).sort()).toEqual(['JOY1_UP', 'Q']);
+    expect(resolveCpcKeys(PAD.left | PAD.a, plan.players[0]).sort()).toEqual(['JOY1_FIRE1', 'JOY1_LEFT', 'O', 'SPACE']);
+    expect(resolveCpcKeys(PAD.b, plan.players[0]).sort()).toEqual(['JOY1_FIRE1', 'SPACE']);
+    expect(summarisePlayer(plan.players[0])).toBe('Q A O P · Space + Joy 1');
+  });
+
+  it('joystick game with only Player 1 documented', () => {
     const plan = buildCpcControlPlan(profile('007-the-living-daylights'));
-    expect(plan.players[0].mode).toBe('joystick1');
-    expect(resolveCpcKeys(PAD.up | PAD.a, plan.players[0]).sort()).toEqual(['JOY1_FIRE1', 'JOY1_UP']);
+    expect(plan.players[0].mode).toBe('hybrid');
+    expect(resolveCpcKeys(PAD.up | PAD.a, plan.players[0]).sort()).toEqual(['JOY1_FIRE1', 'JOY1_UP', 'Q', 'SPACE']);
     // Start falls back to the documented pause key (ESC), not a guessed key.
     expect(resolveCpcKeys(PAD.start, plan.players[0])).toEqual(['ESC']);
     expect(plan.players[1].mode).toBe('shared');
@@ -119,7 +128,7 @@ describe('buildCpcControlPlan', () => {
 
   it('manual saying each player has a joystick uses CPC joysticks 1 and 2 (Crack Down)', () => {
     const plan = buildCpcControlPlan(profile('crack-down'));
-    expect(plan.players[0].mode).toBe('joystick1');
+    expect(plan.players[0].mode).toBe('hybrid');
     expect(plan.players[1].mode).toBe('joystick2');
     expect(resolveCpcKeys(PAD.up | PAD.a, plan.players[1]).sort()).toEqual(['JOY2_FIRE1', 'JOY2_UP']);
   });
@@ -206,7 +215,7 @@ describe('gamepad reading', () => {
     const plan = buildCpcControlPlan(profile('crack-down'));
     const p1 = cpcMatrixMessage('pad-p1', PAD.right | PAD.a, plan.players[0]).cells;
     const p2 = cpcMatrixMessage('pad-p2', PAD.left | PAD.a, plan.players[1]).cells;
-    expect(p1).toEqual([[9, 8], [9, 16]]);
+    expect(p1).toEqual([[3, 8], [9, 8], [5, 128], [9, 16]]);
     expect(p2).toEqual([[6, 4], [6, 16]]);
   });
 });

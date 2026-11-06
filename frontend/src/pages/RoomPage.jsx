@@ -1939,7 +1939,8 @@ export default function RoomPage() {
   }, [forwardInputToEmulator]);
 
   const cpcConnectedPads = useCpcGamepads({
-    enabled: isCpcGamepadRoom && isHost === true && inputCaptured && !controllerCapturingInput,
+    // No capture needed: gamepads aren't keyboard/mouse, so they work as soon as the game is running.
+    enabled: isCpcGamepadRoom && isHost === true && !controllerCapturingInput,
     plan: cpcControlPlan,
     forward: forwardInputToEmulator,
     getMapping: cpcPadMapping,

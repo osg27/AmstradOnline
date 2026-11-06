@@ -119,6 +119,7 @@ const NON_EXTRA_ACTIONS = new Set([...DIRECTIONS, ...Object.keys(DIAGONALS), 'fi
 
 export const CPC_CONTROL_MODES = {
   auto: 'Automatic',
+  hybrid: 'Manual keys + CPC joystick 1',
   joystick1: 'CPC joystick 1',
   joystick2: 'CPC joystick 2',
   keys: 'Keyboard keys',
@@ -261,6 +262,24 @@ function buildModePlan(mode, { doc, system }) {
       labels: { a: doc?.overlay.fire1 || 'Fire', b: documentedFire2 ? doc.overlay.fire2 || 'Fire 2' : 'Fire 2', ...system.labels },
     };
   }
+  if (mode === 'hybrid') {
+    // The manual's keys AND the native joystick, so the pad works whether the
+    // game is in its keyboard or its joystick mode (many CPC games start in
+    // keyboard mode and only read the joystick once it is picked on a menu).
+    const keys = doc ? keyBindingsFromDocumented(doc) : {};
+    const joystick = joystickBindings(1);
+    const bindings = {};
+    for (const direction of DIRECTIONS) bindings[direction] = [...(keys[direction] || []), ...joystick[direction]];
+    for (const [diagonal, [first, second]] of Object.entries(DIAGONALS)) {
+      if (keys[diagonal]) bindings[diagonal] = [...keys[diagonal], ...joystick[first], ...joystick[second]];
+    }
+    bindings.a = [...(keys.a || []), ...joystick.a];
+    if (keys.b) bindings.b = keys.b;
+    return {
+      bindings: { ...bindings, ...system.bindings },
+      labels: { ...(doc ? documentedLabels(doc) : {}), ...system.labels },
+    };
+  }
   if (mode === 'keys') {
     const keys = doc ? keyBindingsFromDocumented(doc) : {};
     return {
@@ -294,9 +313,13 @@ export function buildCpcControlPlan(profile, overrides = {}) {
   } else if (doc1.hasDirections && doc2?.usesJoystick1) {
     auto1 = { mode: 'keys', origin: 'manual', reason: 'Player 2 uses the joystick, so Player 1 uses the documented keys.' };
   } else if (twoJoysticks) {
-    auto1 = { mode: 'joystick1', origin: 'manual', reason: 'Manual says each player can use their own joystick.' };
+    auto1 = doc1.hasDirections
+      ? { mode: 'hybrid', origin: 'manual', reason: "Pad presses the manual's keys and CPC joystick 1; Player 2 has joystick 2." }
+      : { mode: 'joystick1', origin: 'manual', reason: 'Manual says each player can use their own joystick.' };
   } else if (doc1.hasDirections && doc2?.hasDirections) {
     auto1 = { mode: 'keys', origin: 'manual', reason: 'Manual gives separate keys for both players.' };
+  } else if (profile.supportsJoystick && doc1.hasDirections) {
+    auto1 = { mode: 'hybrid', origin: 'manual', reason: "Pad presses the manual's keys and the CPC joystick, so it works in either game mode." };
   } else if (profile.supportsJoystick) {
     auto1 = { mode: 'joystick1', origin: 'manual', reason: 'Manual confirms joystick support.' };
   } else if (doc1.hasDirections) {
@@ -550,9 +573,11 @@ export function summarisePlayer(plan) {
   if (joystick) {
     return `Joystick ${bindings.up[0][3]}`;
   }
-  const keys = directions.map((keys) => formatCpcBinding(keys) || '–').join(' ');
-  const fire = formatCpcBinding(bindings.a);
-  return fire ? `${keys} · ${fire}` : keys;
+  const withoutJoystick = (keys) => (keys || []).filter((key) => !/^JOY[12]_/.test(key));
+  const keys = directions.map((keys) => formatCpcBinding(withoutJoystick(keys)) || '–').join(' ');
+  const fire = formatCpcBinding(withoutJoystick(bindings.a));
+  const summary = fire ? `${keys} · ${fire}` : keys;
+  return plan.mode === 'hybrid' ? `${summary} + Joy 1` : summary;
 }
 
 export const PAD_BUTTON_LABELS = [
