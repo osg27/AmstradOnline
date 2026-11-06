@@ -1675,7 +1675,9 @@ async function cacheBoxArtUrl(game, sourceUrl) {
       body: JSON.stringify({
         url: sourceUrl,
         system: game.system === 'spectrum' ? 'spectrum-front' : game.system,
-        title: game.title,
+        // Same title the lookup sends, so art saved here is found for every
+        // player with this game, whatever their file is called.
+        title: canonicalLibraryTitle(game),
         rom_name: boxArtLookupKey(game),
       }),
     });

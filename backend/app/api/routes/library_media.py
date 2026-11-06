@@ -165,6 +165,24 @@ def _index_box_art(target: Path, system: str, rom_name: str | None) -> None:
     temp.replace(indexed_target)
 
 
+def _index_box_art_title(target: Path, system: str, title: str | None) -> None:
+    # Also file downloaded art under the game's title, so players whose file
+    # is named differently (another region, .zip vs .dsk, another device) get
+    # it from the lookup's title fallback instead of downloading it again.
+    # Never replaces existing title art, which includes curated sets.
+    title_key = _slug(title) if title and title.strip() else ""
+    if not title_key or title_key == "unknown":
+        return
+    title_dir = MEDIA_ROOT / "boxart" / _slug(system) / "by-title"
+    if any((title_dir / f"{title_key}{extension}").is_file() for extension in set(CONTENT_TYPE_EXTENSIONS.values())):
+        return
+    title_dir.mkdir(parents=True, exist_ok=True)
+    indexed_target = title_dir / f"{title_key}{target.suffix}"
+    temp = indexed_target.with_suffix(f"{indexed_target.suffix}.tmp")
+    shutil.copyfile(target, temp)
+    temp.replace(indexed_target)
+
+
 @router.post("/boxart")
 def cache_box_art(payload: BoxArtCacheRequest):
     parsed = urlparse(payload.url)
@@ -182,6 +200,7 @@ def cache_box_art(payload: BoxArtCacheRequest):
         existing = target_dir / f"{key}{extension}"
         if existing.is_file():
             _index_box_art(existing, system, payload.rom_name)
+            _index_box_art_title(existing, system, payload.title)
             return {"url": _response_url(existing), "cached": True,
                     "bytes": existing.stat().st_size,
                     "content_type": mimetypes.guess_type(existing.name)[0]}
@@ -193,6 +212,7 @@ def cache_box_art(payload: BoxArtCacheRequest):
             target = target_dir / f"{key}{extension}"
             if target.is_file():
                 _index_box_art(target, system, payload.rom_name)
+                _index_box_art_title(target, system, payload.title)
                 return {
                     "url": _response_url(target),
                     "cached": True,
@@ -208,6 +228,7 @@ def cache_box_art(payload: BoxArtCacheRequest):
             temp.write_bytes(data)
             temp.replace(target)
             _index_box_art(target, system, payload.rom_name)
+            _index_box_art_title(target, system, payload.title)
     except HTTPException:
         raise
     except HTTPError as exc:
