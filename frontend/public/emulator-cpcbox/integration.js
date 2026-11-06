@@ -437,6 +437,39 @@
 
   window.addEventListener('blur', releaseAllInput);
 
+  // Browsers give live gamepad data to the focused frame. Once the player
+  // clicks the game, that is this frame, so report the pads to the parent
+  // page, which does the mapping (on change, plus a heartbeat while focused).
+  let lastPadSignature = '';
+  let lastPadReport = 0;
+  function reportGamepadsToParent() {
+    try {
+      if (navigator.getGamepads && document.hasFocus()) {
+        const pads = Array.from(navigator.getGamepads() || [])
+          .filter((pad) => pad && pad.connected)
+          .map((pad) => ({
+            index: pad.index,
+            id: pad.id,
+            connected: true,
+            mapping: pad.mapping,
+            axes: Array.from(pad.axes, (value) => Math.round(value * 100) / 100),
+            buttons: Array.from(pad.buttons, (button) => ({ pressed: button.pressed, value: button.value })),
+          }));
+        const signature = JSON.stringify(pads.map((pad) => [pad.index, pad.axes, pad.buttons.map((button) => (button.pressed ? 1 : 0))]));
+        const now = performance.now();
+        if (signature !== lastPadSignature || now - lastPadReport > 250) {
+          lastPadSignature = signature;
+          lastPadReport = now;
+          window.parent.postMessage({ type: 'amstrad_gamepads', pads }, location.origin);
+        }
+      }
+    } catch (error) {
+      // Gamepad access can be blocked by permissions policy; the parent page still polls.
+    }
+    requestAnimationFrame(reportGamepadsToParent);
+  }
+  requestAnimationFrame(reportGamepadsToParent);
+
   const readinessTimer = setInterval(() => {
     const canvas = document.getElementById('screen');
     if (typeof window.qH !== 'object' || !window.qz?.display || !window.pG?.eq || !canvas) return;

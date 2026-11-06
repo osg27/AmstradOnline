@@ -41,7 +41,7 @@ import {
   saveCpcOverrides,
   summarisePlayer,
 } from '../features/cpcControls/cpcGamepadControls';
-import useCpcGamepads from '../features/cpcControls/useCpcGamepads';
+import useCpcGamepads, { describePadInput } from '../features/cpcControls/useCpcGamepads';
 import { getMameDisplayName, getMameTitleDatabase } from '../data/mameTitleLookup';
 import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardAutomatic';
 import { getControllerMapping } from '../utils/controllerMappingStorage';
@@ -1129,7 +1129,7 @@ export default function RoomPage() {
     ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-20-2`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-10-30-ra-4` : isNes ? '/nes/launcher.html?v=2026-10-31-ra-1' : isSnes ? '/snes/launcher.html?v=2026-10-31-ra-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-10-29-webx68k-2' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isMsx ? '/msx/launcher.html?v=2026-09-25-webmsx-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-11-05-pad-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-10-30-ra-4` : isNes ? '/nes/launcher.html?v=2026-10-31-ra-1' : isSnes ? '/snes/launcher.html?v=2026-10-31-ra-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-10-29-webx68k-2' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isMsx ? '/msx/launcher.html?v=2026-09-25-webmsx-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-11-06-pad-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.hdf,.lha,.zip,.7z'
@@ -1938,7 +1938,7 @@ export default function RoomPage() {
     forwardInputToEmulator(cpcMatrixMessage('remote-p2', mask, cpcControlPlanRef.current?.players[1]));
   }, [forwardInputToEmulator]);
 
-  const cpcConnectedPads = useCpcGamepads({
+  const { pads: cpcConnectedPads, live: cpcPadLive } = useCpcGamepads({
     // No capture needed: gamepads aren't keyboard/mouse, so they work as soon as the game is running.
     enabled: isCpcGamepadRoom && isHost === true && !controllerCapturingInput,
     plan: cpcControlPlan,
@@ -1946,6 +1946,7 @@ export default function RoomPage() {
     getMapping: cpcPadMapping,
     menuOpenRef: gameMenuOpenRef,
     neutralGuardRef: padNeutralGuardRef,
+    frameRef: emulatorFrameRef,
   });
 
   const reloadC64Frame = useCallback(async ({ start = false } = {}) => {
@@ -7743,6 +7744,13 @@ export default function RoomPage() {
                         <small>{pad ? pad.id.replace(/\s*\(.*\)\s*$/, '') : `Pad ${padSlot + 1} not connected`}</small>
                       </div>
                       <small className="muted">{playerPlan.reason}</small>
+                      <small className="cpc-gamepad-live">
+                        {pad
+                          ? cpcPadLive.suspended
+                            ? 'Pad input paused while the menu is open'
+                            : `Pad ${padSlot + 1} (${cpcPadLive.source}) now: ${describePadInput(cpcPadLive.masks[slot], playerPlan) || 'nothing pressed'}`
+                          : null}
+                      </small>
                       {playerPlan.mode !== 'off' && playerPlan.mode !== 'shared' ? (
                         <div className="cpc-gamepad-buttons">
                           {PAD_BUTTON_LABELS.filter(([button]) => playerPlan.bindings[button]?.length).map(([button, label]) => (
