@@ -41,7 +41,7 @@ import {
   saveCpcOverrides,
   summarisePlayer,
 } from '../features/cpcControls/cpcGamepadControls';
-import useCpcGamepads, { describePadInput } from '../features/cpcControls/useCpcGamepads';
+import useCpcGamepads from '../features/cpcControls/useCpcGamepads';
 import { getMameDisplayName, getMameTitleDatabase } from '../data/mameTitleLookup';
 import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardAutomatic';
 import { getControllerMapping } from '../utils/controllerMappingStorage';
@@ -1938,7 +1938,7 @@ export default function RoomPage() {
     forwardInputToEmulator(cpcMatrixMessage('remote-p2', mask, cpcControlPlanRef.current?.players[1]));
   }, [forwardInputToEmulator]);
 
-  const { pads: cpcConnectedPads, live: cpcPadLive } = useCpcGamepads({
+  const cpcConnectedPads = useCpcGamepads({
     // No capture needed: gamepads aren't keyboard/mouse, so they work as soon as the game is running.
     enabled: isCpcGamepadRoom && isHost === true && !controllerCapturingInput,
     plan: cpcControlPlan,
@@ -7744,13 +7744,6 @@ export default function RoomPage() {
                         <small>{pad ? pad.id.replace(/\s*\(.*\)\s*$/, '') : `Pad ${padSlot + 1} not connected`}</small>
                       </div>
                       <small className="muted">{playerPlan.reason}</small>
-                      <small className="cpc-gamepad-live">
-                        {pad
-                          ? cpcPadLive.suspended
-                            ? 'Pad input paused while the menu is open'
-                            : `Pad ${padSlot + 1} (${cpcPadLive.source}) now: ${describePadInput(cpcPadLive.masks[slot], playerPlan) || 'nothing pressed'}`
-                          : null}
-                      </small>
                       {playerPlan.mode !== 'off' && playerPlan.mode !== 'shared' ? (
                         <div className="cpc-gamepad-buttons">
                           {PAD_BUTTON_LABELS.filter(([button]) => playerPlan.bindings[button]?.length).map(([button, label]) => (

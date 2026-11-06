@@ -3883,12 +3883,6 @@ button.recent-score-game:hover:not(:disabled) {
   white-space: nowrap;
 }
 
-.cpc-gamepad-live {
-  color: #9fe3b0;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 0.78rem;
-}
-
 .cpc-gamepad-buttons {
   display: flex;
   flex-wrap: wrap;

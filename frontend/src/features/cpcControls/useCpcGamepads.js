@@ -1,20 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { PAD, assignPadsToPlayers, cpcMatrixMessage, formatCpcKey, readCpcPadMask, resolveCpcKeys } from './cpcGamepadControls';
+import { assignPadsToPlayers, cpcMatrixMessage, readCpcPadMask } from './cpcGamepadControls';
 
 const SOURCES = ['pad-p1', 'pad-p2'];
 // After the game menu closes, input waits for all buttons to be released,
 // but never longer than this (a resting analogue trigger can read as held).
 const NEUTRAL_GUARD_MAX_MS = 1000;
-const PAD_NAMES = { up: 'Up', down: 'Down', left: 'Left', right: 'Right', a: 'A', b: 'B', x: 'X', y: 'Y', lb: 'LB', rb: 'RB', start: 'Start', select: 'Select' };
-
-/** Readable "Up, A → 2, Joy 1 up, M" line for the on-screen input readout. */
-export function describePadInput(mask, playerPlan) {
-  if (!mask) return '';
-  const pressed = Object.keys(PAD_NAMES).filter((name) => mask & PAD[name]).map((name) => PAD_NAMES[name]);
-  const keys = resolveCpcKeys(mask, playerPlan).map(formatCpcKey);
-  return `${pressed.join(', ')} → ${keys.length ? keys.join(', ') : 'nothing mapped'}`;
-}
-
 function listPads() {
   try {
     return navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
@@ -26,15 +16,14 @@ function listPads() {
 /**
  * Polls up to two local gamepads and sends each player's held CPC matrix
  * cells to CPCBox. Only runs while `enabled`, so it never doubles up with the
- * generic single-pad loop in RoomPage. Returns the connected pads and the
- * live pad state (only updated when it changes) for the on-screen readout.
+ * generic single-pad loop in RoomPage. Returns the connected pads for display.
+ * Pad presses never update React state, so playing doesn't re-render the page.
  * While `menuOpenRef` is set, and afterwards until every button is released
  * (`neutralGuardRef`), pads send nothing, so closing the game menu with a
  * button doesn't leak that press into the game.
  */
 export default function useCpcGamepads({ enabled, plan, forward, getMapping, menuOpenRef = null, neutralGuardRef = null, frameRef = null }) {
   const [connectedPads, setConnectedPads] = useState([]);
-  const [live, setLive] = useState({ masks: [0, 0], suspended: false, source: 'page' });
   // Callbacks and frame-reported pads live in refs so a re-render never
   // restarts the polling loop or drops the frame's latest pad report.
   const callbacksRef = useRef({ forward, getMapping });
@@ -69,16 +58,15 @@ export default function useCpcGamepads({ enabled, plan, forward, getMapping, men
 
     let frame = 0;
     const lastSent = ['', ''];
-    let lastLive = '';
     let guardSince = 0;
     // Pads reported by the CPCBox frame (see integration.js) while it has focus.
     function currentPads() {
       const frameFocused = frameRef?.current && document.activeElement === frameRef.current;
       const reported = framePadsRef.current;
       if (frameFocused && reported.pads && performance.now() - reported.at < 1000) {
-        return { pads: reported.pads, source: 'game' };
+        return reported.pads;
       }
-      return { pads: listPads(), source: 'page' };
+      return listPads();
     }
 
     function send(slot, message) {
@@ -93,7 +81,7 @@ export default function useCpcGamepads({ enabled, plan, forward, getMapping, men
     }
 
     function poll() {
-      const { pads, source } = currentPads();
+      const pads = currentPads();
       const slots = assignPadsToPlayers(pads, plan.swap);
       // A missing/disconnected pad reads as 0, which releases its keys.
       const masks = slots.map((pad) => (pad ? readCpcPadMask(pad, callbacksRef.current.getMapping?.(pad) || null) : 0));
@@ -106,11 +94,6 @@ export default function useCpcGamepads({ enabled, plan, forward, getMapping, men
       }
       if (!neutralGuardRef?.current) guardSince = 0;
       const suspended = menuOpen || Boolean(neutralGuardRef?.current);
-      const liveSignature = `${masks.join(',')}:${suspended}:${source}`;
-      if (liveSignature !== lastLive) {
-        lastLive = liveSignature;
-        setLive({ masks, suspended, source });
-      }
       masks.forEach((mask, slot) => {
         send(slot, cpcMatrixMessage(SOURCES[slot], suspended ? 0 : mask, plan.players[slot]));
       });
@@ -131,5 +114,5 @@ export default function useCpcGamepads({ enabled, plan, forward, getMapping, men
     };
   }, [enabled, frameRef, menuOpenRef, neutralGuardRef, plan]);
 
-  return { pads: connectedPads, live };
+  return connectedPads;
 }
