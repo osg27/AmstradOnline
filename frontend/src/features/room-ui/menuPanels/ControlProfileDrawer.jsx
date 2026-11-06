@@ -7,6 +7,7 @@ export default function ControlProfileDrawer({
   selectedControlPlayers,
   chooseControlProfile,
   onClose,
+  children = null,
 }) {
   return (
     <aside className="control-profile-drawer osg-control-profile-drawer" aria-label="Amstrad instructions">
@@ -19,6 +20,8 @@ export default function ControlProfileDrawer({
           Close
         </button>
       </div>
+
+      {children}
 
       {controlProfileMatches.length > 1 ? (
         <div className="control-match-list">
