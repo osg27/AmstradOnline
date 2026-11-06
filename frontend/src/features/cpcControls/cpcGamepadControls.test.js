@@ -77,6 +77,13 @@ describe('buildCpcControlPlan', () => {
     expect(summarisePlayer(plan.players[0])).toBe('Q A O P · Space + Joy 1');
   });
 
+  it('Commando uses the corrected manual keys (0 not O; fire Z, grenade M)', () => {
+    const [p1] = buildCpcControlPlan(profile('commando')).players;
+    expect(resolveCpcKeys(PAD.right, p1).sort()).toEqual(['0', 'JOY1_RIGHT']);
+    expect(resolveCpcKeys(PAD.a, p1).sort()).toEqual(['JOY1_FIRE1', 'Z']);
+    expect(resolveCpcKeys(PAD.b, p1)).toEqual(['M']);
+  });
+
   it('joystick game with only Player 1 documented', () => {
     const plan = buildCpcControlPlan(profile('007-the-living-daylights'));
     expect(plan.players[0].mode).toBe('hybrid');
