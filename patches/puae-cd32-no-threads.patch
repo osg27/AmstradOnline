@@ -1,0 +1,510 @@
+diff --git a/sources/src/akiko.c b/sources/src/akiko.c
+index 0f99f30..1677cfa 100644
+--- a/sources/src/akiko.c
++++ b/sources/src/akiko.c
+@@ -495,6 +495,16 @@ static bool akiko_inited;
+ static volatile int mediachanged, mediacheckcounter;
+ static volatile int frame2counter;
+ 
++
++#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
++#define UAE_NO_THREADS 1
++#endif
++
++#ifdef UAE_NO_THREADS
++extern void cdimage_cdda_tick(void);
++#endif
++static void akiko_thread_step (void);
++
+ static smp_comm_pipe requests;
+ static volatile int akiko_thread_running;
+ static uae_sem_t akiko_sem, sub_sem, cda_sem;
+@@ -1513,12 +1523,22 @@ static void AKIKO_hsync_handler (void)
+ 	if (mediacheckcounter > 0)
+ 		mediacheckcounter--;
+ 
++#ifdef UAE_NO_THREADS
++	{
++		static int akiko_step_counter;
++		if (--akiko_step_counter <= 0) {
++			akiko_step_counter = maxvpos > 2 ? maxvpos / 2 : 1;
++			if (akiko_thread_running > 0)
++				akiko_thread_step ();
++		}
++	}
++#endif
+ 	akiko_internal ();
+ 	akiko_handler (framesync);
+ }
+ 
+ /* cdrom data buffering thread */
+-static void akiko_thread (void *null)
++static void akiko_thread_step (void)
+ {
+ 	int secnum;
+ 	uae_u8 *tmp1;
+@@ -1526,9 +1546,13 @@ static void akiko_thread (void *null)
+ 	int tmp3;
+ 	int sector;
+ 
+-	while (akiko_thread_running || comm_pipe_has_data (&requests)) {
++	{
+ 
++#ifdef UAE_NO_THREADS
++		while (comm_pipe_has_data (&requests)) {
++#else
+ 		if (comm_pipe_has_data (&requests)) {
++#endif
+ 			uae_u32 b = read_comm_pipe_u32_blocking (&requests);
+ 			switch (b)
+ 			{
+@@ -1637,10 +1661,22 @@ static void akiko_thread (void *null)
+ 			}
+ 		}
+ 		uae_sem_post (&akiko_sem);
++	}
++#ifdef UAE_NO_THREADS
++	cdimage_cdda_tick ();
++#endif
++}
++
++#ifndef UAE_NO_THREADS
++static void akiko_thread (void *null)
++{
++	while (akiko_thread_running || comm_pipe_has_data (&requests)) {
++		akiko_thread_step ();
+ 		sleep_millis (10);
+ 	}
+ 	akiko_thread_running = -1;
+ }
++#endif
+ 
+ STATIC_INLINE uae_u8 akiko_get_long (uae_u32 v, int offset)
+ {
+@@ -2080,9 +2116,13 @@ static int akiko_thread_do(int start)
+ 	if (!start) {
+ 		if (akiko_thread_running > 0) {
+ 			cdaudiostop();
++#ifdef UAE_NO_THREADS
++			akiko_thread_step();
++#else
+ 			akiko_thread_running = 0;
+ 			while (akiko_thread_running == 0)
+ 				sleep_millis(10);
++#endif
+ 			akiko_thread_running = 0;
+ 			destroy_comm_pipe(&requests);
+ 			return 1;
+@@ -2091,7 +2131,9 @@ static int akiko_thread_do(int start)
+ 		if (!akiko_thread_running) {
+ 			akiko_thread_running = 1;
+ 			init_comm_pipe(&requests, 100, 1);
++#ifndef UAE_NO_THREADS
+ 			uae_start_thread(_T("akiko"), akiko_thread, 0, NULL);
++#endif
+ 			return 1;
+ 		}
+ 	}
+@@ -2315,7 +2357,11 @@ void restore_akiko_final(void)
+ 		write_comm_pipe_u32(&requests, last_play_end, 0);
+ 		write_comm_pipe_u32(&requests, 0, 1);
+ 		if (!cdrom_paused) {
++#ifdef UAE_NO_THREADS
++			akiko_thread_step();
++#else
+ 			uae_sem_wait(&cda_sem);
++#endif
+ 		} else {
+ 			write_comm_pipe_u32(&requests, 0x0102, 1); // pause
+ 		}
+diff --git a/sources/src/blkdev_cdimage.c b/sources/src/blkdev_cdimage.c
+index a34d5cf..b957a6a 100644
+--- a/sources/src/blkdev_cdimage.c
++++ b/sources/src/blkdev_cdimage.c
+@@ -25,6 +25,15 @@
+ #include "gui.h"
+ #include "fsdb.h"
+ #include "threaddep/thread.h"
++#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
++#define UAE_NO_THREADS 1
++#endif
++#ifdef UAE_NO_THREADS
++#define UAE_NO_THREADS_ACTIVE 1
++#else
++#define UAE_NO_THREADS_ACTIVE 0
++#endif
++
+ #include "scsidev.h"
+ #ifdef WITH_MP3
+ #include "mp3decoder.h"
+@@ -109,6 +118,12 @@ struct cdunit {
+ 	play_status_callback cdda_statusfunc;
+ 	int cdda_delay, cdda_delay_frames;
+ 	bool thread_active;
++#ifdef UAE_NO_THREADS
++	/* state of the cooperative CDDA player (replaces cdda_play_func2's locals) */
++	bool tk_active;
++	int tk_pos, tk_bufnum, tk_oldplay, tk_idleframes, tk_silentframes, tk_oldtrack;
++	bool tk_first;
++#endif
+ 
+ 	TCHAR imgname_in[MAX_DPATH];
+ 	TCHAR imgname_out[MAX_DPATH];
+@@ -458,6 +473,16 @@ static void cdda_unpack_func (void *v)
+ 
+ static void audio_unpack(struct cdunit *cdu, struct cdtoc *t)
+ {
++#ifdef UAE_NO_THREADS
++	if (t->handle) {
++		uae_s64 pos = zfile_ftell (t->handle);
++		zfile_fseek (t->handle, -1, SEEK_END);
++		uae_u8 b;
++		zfile_fread (&b, 1, 1, t->handle);
++		zfile_fseek (t->handle, pos, SEEK_SET);
++	}
++	return;
++#endif
+ 	// do this even if audio is not compressed, t->handle also could be
+ 	// compressed and we want to unpack it in background too
+ 	while (cdimage_unpack_active == 1)
+@@ -491,6 +516,131 @@ static void next_cd_audio_buffer_callback(int bufnum, void *params)
+ 	uae_sem_post(&play_sem);
+ }
+ 
++static void cdda_fill_buffer (struct cdunit *cdu, int bufnum, int *cdda_pos_p, int *idleframes_p, int *silentframes_p, int *oldtrack_p, bool *first_p)
++{
++	int cdda_pos = *cdda_pos_p;
++	int idleframes = *idleframes_p;
++	int silentframes = *silentframes_p;
++	int oldtrack = *oldtrack_p;
++	struct cdtoc *t;
++	int sector, cnt;
++	int dofinish = 0;
++
++	gui_flicker_led (LED_CD, cdu->di.unitnum - 1, LED_CD_AUDIO);
++
++	cdu_setstate(cdu, AUDIO_STATUS_IN_PROGRESS, cdda_pos);
++
++#ifdef __LIBRETRO__
++	memset (cda_audio_buffers[bufnum], 0, CDDA_BUFFERS * 2352);
++#else
++	memset (cdu->cda->buffers[bufnum], 0, CDDA_BUFFERS * 2352);
++#endif
++
++	for (cnt = 0; cnt < CDDA_BUFFERS && cdu->cdda_play > 0; cnt++) {
++#ifdef __LIBRETRO__
++		uae_u8 *dst = cda_audio_buffers[bufnum] + cnt * 2352;
++#else
++		uae_u8 *dst = cdu->cda->buffers[bufnum] + cnt * 2352;
++#endif
++		uae_u8 subbuf[SUB_CHANNEL_SIZE];
++		sector = cdda_pos;
++
++		memset (subbuf, 0, SUB_CHANNEL_SIZE);
++
++		t = findtoc (cdu, &sector, false);
++		if (t) {
++			if (t->track != oldtrack) {
++				oldtrack = t->track;
++				write_log (_T("IMAGE CDDA: track %d ('%s', offset %lld, secoffset %d (%d))\n"),
++					t->track, t->fname, t->offset, sector, t->index1);
++				audio_unpack (cdu, t);
++			}
++			if (!(t->ctrl & 4)) {
++				if (t->enctype == ENC_CHD) {
++#ifdef WITH_CHD
++					do_read (cdu, t, dst, sector, 0, t->size, true);
++					for (int i = 0; i < 2352; i+=2) {
++						uae_u8 p;
++						p = dst[i + 0];
++						dst[i + 0] = dst[i + 1];
++						dst[i +1] = p;
++					}
++#endif
++				} else if (t->handle) {
++					int totalsize = t->size + t->skipsize;
++					int offset = (int)t->offset;
++					if (offset >= 0) {
++						if ((t->enctype == AUDENC_MP3 || t->enctype == AUDENC_FLAC) && t->data) {
++							if (t->filesize >= sector * totalsize + offset + t->size)
++								memcpy (dst, t->data + sector * totalsize + offset, t->size);
++						} else if (t->enctype == AUDENC_PCM) {
++							if (sector * totalsize + offset + totalsize < t->filesize) {
++								zfile_fseek (t->handle, (uae_u64)sector * totalsize + offset, SEEK_SET);
++								zfile_fread (dst, t->size, 1, t->handle);
++							}
++						}
++					}
++				}
++			}
++			getsub_deinterleaved (subbuf, cdu, t, cdda_pos);
++		}
++
++		if (idleframes > 0 || silentframes > 0) {
++			if (idleframes > 0) {
++				idleframes--;
++				memset (subbuf, 0, SUB_CHANNEL_SIZE);
++			}
++			if (silentframes > 0)
++				silentframes--;
++			memset (dst, 0, 2352);
++		}
++
++		if (cdda_pos < cdu->cdda_start && cdu->cdda_scan == 0)
++			memset (dst, 0, 2352);
++
++		dosub (cdu, subbuf);
++
++		if (cdu->cdda_scan) {
++			cdda_pos += cdu->cdda_scan;
++			if (cdda_pos < 0)
++				cdda_pos = 0;
++		} else  {
++			cdda_pos++;
++		}
++
++		if (cdda_pos - CDDA_BUFFERS < cdu->cdda_end && cdda_pos >= cdu->cdda_end)
++			dofinish = 1;
++
++	}
++
++	if (idleframes <= 0)
++		cdu->cd_last_pos = cdda_pos;
++
++	if (cdu->cda_bufon[0] == 0 && cdu->cda_bufon[1] == 0) {
++		cdu->cda_bufon[bufnum] = 1;
++		next_cd_audio_buffer_callback(1 - bufnum, cdu);
++	}
++	audio_cda_volume(&cdu->cas, cdu->cdda_volume[0], cdu->cdda_volume[1]);
++	cdu->cda_bufon[bufnum] = 1;
++
++	if (*first_p) {
++		*first_p = false;
++		cdu_setstate(cdu, -3, -1);
++	}
++
++	if (dofinish) {
++		cdda_pos = cdu->cdda_end + 1;
++		if (cdu->cdda_play >= 0)
++			cdu_setstate (cdu, AUDIO_STATUS_PLAY_COMPLETE, cdda_pos);
++		cdu->cdda_play = -1;
++	}
++
++	*cdda_pos_p = cdda_pos;
++	*idleframes_p = idleframes;
++	*silentframes_p = silentframes;
++	*oldtrack_p = oldtrack;
++}
++
+ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
+ {
+ 	int cdda_pos = cdu->cdda_start;
+@@ -639,6 +789,10 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
+ 		}
+ 
+ 		if ((cdda_pos < cdu->cdda_end || cdu->cdda_end == 0xffffffff) && !cdu->cdda_paused && cdu->cdda_play > 0) {
++			cdda_fill_buffer (cdu, bufnum, &cdda_pos, &idleframes, &silentframes, &oldtrack, &first);
++		}
++#if 0
++		{
+ 			struct cdtoc *t;
+ 			int sector, cnt;
+ 			int dofinish = 0;
+@@ -753,6 +907,7 @@ static bool cdda_play_func2 (struct cdunit *cdu, int *outpos)
+ 			}
+ 
+ 		}
++#endif
+ 
+ 		if (cdu->cda_bufon[0] == 0 && cdu->cda_bufon[1] == 0) {
+ 			while (cdu->cdda_paused && cdu->cdda_play == oldplay)
+@@ -809,8 +964,144 @@ static void cdda_play_func (void *v)
+ 	cdu->thread_active = false;
+ }
+ 
++#ifdef UAE_NO_THREADS
++static void cdda_tick_end (struct cdunit *cdu)
++{
++	if (!cdu->tk_active)
++		return;
++	next_cd_audio_buffer_callback(-1, cdu);
++	if (cd_audio_mode_changed)
++		audio_cda_new_buffer(&cdu->cas, NULL, -1, -1, NULL, NULL);
++#ifdef __LIBRETRO__
++	cda_delete();
++#else
++	delete cdu->cda;
++#endif
++	cdu->tk_active = false;
++	cd_audio_mode_changed = false;
++	write_log (_T("IMAGE CDDA: cooperative player stopped\n"));
++}
++
++static void cdda_tick_unit (struct cdunit *cdu)
++{
++	if (!cdu->tk_active) {
++		if (cdu->cdda_play <= 0)
++			return;
++		cdu->tk_active = true;
++		memset(&cdu->cas, 0, sizeof(struct cd_audio_state));
++		cdu->cda_bufon[0] = cdu->cda_bufon[1] = 0;
++		cdu->tk_bufnum = 0;
++		cdu->tk_oldplay = -1;
++		cdu->tk_oldtrack = -1;
++		cdu->tk_first = true;
++		cdu->tk_pos = cdu->cdda_start;
++		cd_audio_mode_changed = false;
++#ifdef __LIBRETRO__
++		cda_new (CDDA_BUFFERS, 2352, 44100);
++#else
++		cdu->cda = new cda_audio (CDDA_BUFFERS, 2352, 44100);
++#endif
++	}
++
++	if (cd_audio_mode_changed && cdu->cdda_play > 0) {
++		/* audio mode changed: restart from the current position */
++		int pos = cdu->tk_pos;
++		cdda_tick_end (cdu);
++		cdu->cdda_start = pos;
++		if (cdu->cdda_start + 150 >= cdu->cdda_end) {
++			cdu_setstate (cdu, AUDIO_STATUS_PLAY_COMPLETE, cdu->cdda_end + 1);
++			cdu->cdda_play = 0;
++		}
++		return;
++	}
++	if (cdu->cdda_play <= 0) {
++		cdda_tick_end (cdu);
++		cdu->cdda_play = 0;
++		return;
++	}
++
++	if (cdu->tk_oldplay != cdu->cdda_play) {
++		struct cdtoc *t;
++		int sector;
++		if (cdu->cdda_paused)
++			return;
++		cdu->tk_idleframes = 0;
++		cdu->tk_silentframes = 0;
++		cdu->tk_pos = cdu->cdda_start;
++		cdu->tk_oldplay = cdu->cdda_play;
++		sector = cdu->cd_last_pos = cdu->tk_pos;
++		t = findtoc (cdu, &sector, false);
++		if (!t) {
++			sector = cdu->cd_last_pos = cdu->tk_pos + 2 * 75;
++			t = findtoc (cdu, &sector, false);
++			if (!t) {
++				write_log (_T("IMAGE CDDA: illegal sector number %d\n"), cdu->cdda_start);
++				cdu_setstate (cdu, AUDIO_STATUS_PLAY_ERROR, -1);
++			} else {
++				audio_unpack (cdu, t);
++			}
++		} else {
++			cdu->tk_oldtrack = t->track;
++			audio_unpack (cdu, t);
++		}
++		cdu->tk_idleframes = cdu->cdda_delay_frames;
++		cdu->tk_pos -= cdu->tk_idleframes;
++		cdu_setstate (cdu, AUDIO_STATUS_IN_PROGRESS, cdu->tk_pos);
++
++		sector = cdu->tk_pos;
++		struct cdtoc *t1 = findtoc (cdu, &sector, false);
++		int tsector = cdu->tk_pos + 2 * 75;
++		struct cdtoc *t2 = findtoc (cdu, &tsector, false);
++		if (t1 != t2) {
++			for (sector = cdu->tk_pos; sector < cdu->tk_pos + 2 * 75; sector++) {
++				int sec = sector;
++				t = findtoc (cdu, &sec, false);
++				if (t == t2)
++					break;
++				cdu->tk_silentframes++;
++			}
++		}
++	}
++
++	/* fill every free buffer (double buffered, like the threaded player) */
++	for (int n = 0; n < 2 && cdu->cdda_play > 0; n++) {
++		int bufnum = cdu->tk_bufnum;
++		if (cdu->cda_bufon[bufnum] || cdu->cdda_paused)
++			break;
++		if (cdu->tk_idleframes <= 0 && cdu->tk_pos >= cdu->cdda_start && !isaudiotrack (&cdu->di.toc, cdu->tk_pos)) {
++			cdu_setstate (cdu, AUDIO_STATUS_PLAY_ERROR, -1);
++			write_log (_T("IMAGE CDDA: attempted to play data track %d\n"), cdu->tk_pos);
++			cdu->cdda_play = -1;
++			break;
++		}
++		if (cdu->tk_pos < cdu->cdda_end || cdu->cdda_end == 0xffffffff)
++			cdda_fill_buffer (cdu, bufnum, &cdu->tk_pos, &cdu->tk_idleframes, &cdu->tk_silentframes, &cdu->tk_oldtrack, &cdu->tk_first);
++		cdu->tk_bufnum = 1 - bufnum;
++	}
++}
++
++void cdimage_cdda_tick (void)
++{
++	for (int i = 0; i < MAX_TOTAL_SCSI_DEVICES; i++) {
++		struct cdunit *cdu = &cdunits[i];
++		if (cdu->open && (cdu->tk_active || cdu->cdda_play > 0))
++			cdda_tick_unit (cdu);
++	}
++}
++#endif
++
+ static void cdda_stop (struct cdunit *cdu)
+ {
++#ifdef UAE_NO_THREADS
++	if (cdu->cdda_play != 0) {
++		cdu->cdda_play = -1;
++		cdda_tick_end (cdu);
++		cdu->cdda_play = 0;
++	}
++	cdu->cdda_paused = 0;
++	cdu->cdda_play_state = 0;
++	return;
++#endif
+ 	if (cdu->cdda_play != 0) {
+ 		cdu->cdda_play = -1;
+ 		while (cdu->cdda_play && cdu->thread_active) {
+@@ -850,8 +1141,12 @@ static int command_play (int unitnum, int startlsn, int endlsn, int scan, play_s
+ 		return 0;
+ 	if (cdu->cdda_play) {
+ 		cdu->cdda_play = -1;
++#ifdef UAE_NO_THREADS
++		cdda_tick_end (cdu);
++#else
+ 		while (cdu->thread_active)
+ 			sleep_millis (10);
++#endif
+ 		cdu->cdda_play = 0;
+ 	}
+ 	cdu->cd_last_pos = startlsn;
+@@ -867,11 +1162,13 @@ static int command_play (int unitnum, int startlsn, int endlsn, int scan, play_s
+ 		cdu_setstate (cdu, AUDIO_STATUS_PLAY_ERROR, -1);
+ 		return 0;
+ 	}
++#ifndef UAE_NO_THREADS
+ 	if (!cdu->thread_active) {
+ 		uae_start_thread (_T("cdimage_cdda_play"), cdda_play_func, cdu, NULL);
+ 		while (!cdu->thread_active)
+ 			sleep_millis (10);
+ 	}
++#endif
+ 	cdu->cdda_play++;
+ 	return 1;
+ }
+@@ -2400,7 +2697,7 @@ static int open_device (int unitnum, const TCHAR *ident, int flags)
+ 		cdu->enabled = true;
+ 		cdu->cdda_volume[0] = 0x7fff;
+ 		cdu->cdda_volume[1] = 0x7fff;
+-		if (cdimage_unpack_thread == 0) {
++		if (cdimage_unpack_thread == 0 && !UAE_NO_THREADS_ACTIVE) {
+ 			init_comm_pipe (&unpack_pipe, 10, 1);
+ 			uae_start_thread (_T("cdimage_unpack"), cdda_unpack_func, NULL, NULL);
+ 			while (cdimage_unpack_thread == 0)
+@@ -2418,7 +2715,7 @@ static void close_device (int unitnum)
+ 	if (cdu->open) {
+ 		cdda_stop (cdu);
+ 		cdu->open = false;
+-		if (cdimage_unpack_thread) {
++		if (cdimage_unpack_thread && !UAE_NO_THREADS_ACTIVE) {
+ 			cdimage_unpack_thread = 0;
+ 			write_comm_pipe_u32 (&unpack_pipe, -1, 0);
+ 			write_comm_pipe_u32 (&unpack_pipe, -1, 1);

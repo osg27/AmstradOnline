@@ -36,7 +36,7 @@
     <canvas id="game" width="768" height="576" tabindex="0"></canvas>
     <div id="status">Load an Amiga file to start PUAE</div>
 
-    <script src="/puae-wasm/puae_libretro.js"></script>
+    <script src="/puae-wasm/puae_libretro.js?v=2026-11-10-cd32-2"></script>
     <script>
       const statusElement = document.getElementById("status");
       const gameElement = document.getElementById("game");
@@ -444,7 +444,7 @@
             parent: document.body,
             print: (message) => console.log(message),
             printErr: (message) => console.error(message),
-            locateFile: (fileName) => fileName.endsWith(".wasm") ? "/puae-wasm/puae_libretro.wasm" : fileName,
+            locateFile: (fileName) => fileName.endsWith(".wasm") ? "/puae-wasm/puae_libretro.wasm?v=2026-11-10-cd32-2" : fileName,
             getSavExt: () => ".nvr",
           });
 
