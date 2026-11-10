@@ -52,7 +52,9 @@
         A500PLUS: { model: "A500+", kickstart: "kick37175.A500", chipset: "ECS", cpu: "68000", chipMemory: "2", fastMemory: "0" },
         A600: { model: "A600", kickstart: "kick40063.A600", chipset: "ECS", cpu: "68000", chipMemory: "2", fastMemory: "0" },
         A1200: { model: "A1200", kickstart: "kick40068.A1200", chipset: "AGA", cpu: "68020", chipMemory: "4", fastMemory: "8" },
+        CD32: { model: "CD32", kickstart: "kick40060.CD32", extendedRom: "kick40060.CD32.ext", chipset: "AGA", cpu: "68020", chipMemory: "2", fastMemory: "0" },
       };
+      const CD32_ROM_HALF = 512 * 1024;
       const requestedModel = new URLSearchParams(window.location.search).get("model")?.toUpperCase().replace("+", "PLUS") || "A1200";
       let activeProfile = PROFILES[requestedModel] || PROFILES.A1200;
       let coreOptions = "";
@@ -63,6 +65,7 @@
         `puae_model = "${activeProfile.model}"`,
         `puae_model_fd = "${activeProfile.model}"`,
         `puae_model_hd = "${activeProfile.model === "A1200" ? "A1200" : "A600"}"`,
+        'puae_model_cd = "CD32"',
         `puae_kickstart = "${activeProfile.kickstart}"`,
         `puae_chipset = "${activeProfile.chipset}"`,
         `puae_cpu_model = "${activeProfile.cpu}"`,
@@ -80,6 +83,7 @@
       let pendingGame = null;
       let pendingDisks = [];
       let pendingWhdLoadFiles = [];
+      let pendingCdFiles = [];
       let pendingKickstart = null;
       let pendingSupportKickstarts = [];
       let pendingRomSource = "original";
@@ -157,7 +161,12 @@
 
       function installRuntimeFiles() {
         PUAE_SYSTEM_DIRS.forEach((dir) => {
-          if (pendingRomSource !== "aros") {
+          if (pendingRomSource !== "aros" && activeProfile.extendedRom) {
+            // The room stores CD32 firmware as one 1 MB image: extended ROM
+            // first, Kickstart 40.060 second. PUAE wants them as two files.
+            writeRuntimeFile(`${dir}/${activeProfile.extendedRom}`, pendingKickstart.bytes.subarray(0, CD32_ROM_HALF));
+            writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes.subarray(CD32_ROM_HALF));
+          } else if (pendingRomSource !== "aros") {
             writeRuntimeFile(`${dir}/${activeProfile.kickstart}`, pendingKickstart.bytes);
           }
           pendingSupportKickstarts.forEach((entry) => {
@@ -180,6 +189,22 @@
           pendingContentPath = paths.find((entry) => /\.slave$/i.test(entry.fileName))?.path || paths[0].path;
         }
 
+        if (pendingCdFiles.length) {
+          // CUE/CCD/MDS sheets reference their tracks by name, so the files
+          // keep their original names inside one directory.
+          const paths = pendingCdFiles.map((entry) => {
+            const path = `/cd/${entry.fileName}`;
+            writeRuntimeFile(path, entry.bytes);
+            return path;
+          });
+          const contentIndex = [".cue", ".chd", ".iso", ".ccd", ".mds", ".nrg"]
+            .map((extension) => pendingCdFiles.findIndex((entry) => entry.fileName.toLowerCase().endsWith(extension)))
+            .find((index) => index >= 0);
+          pendingContentPath = paths[contentIndex ?? 0];
+          writeRetroArchConfig();
+          return;
+        }
+
         const disks = pendingDisks.length
           ? pendingDisks
           : [{ fileName: pendingGame.fileName || "game.adf", bytes: pendingGame.bytes }];
@@ -194,6 +219,10 @@
           pendingContentPath = isWHDLoad ? diskPaths[0] : "/game.m3u";
           if (!isWHDLoad) writeRuntimeFile("/game.m3u", encoder.encode(`${diskPaths.join("\n")}\n`));
         }
+        writeRetroArchConfig();
+      }
+
+      function writeRetroArchConfig() {
         writeRuntimeFile(
           "/home/web_user/.config/retroarch/retroarch.cfg",
           encoder.encode([
@@ -215,7 +244,7 @@
       function postDiskStatus(message = "") {
         // PUAE exposes a fixed bank of internal drive slots. Only report the
         // actual game media or the room renders a row of phantom disk buttons.
-        const count = pendingWhdLoadFiles.length ? 0 : pendingDisks.length;
+        const count = pendingWhdLoadFiles.length || pendingCdFiles.length ? 0 : pendingDisks.length;
         const current = count ? Math.min(count - 1, getCurrentDisk?.() || 0) : 0;
         window.parent.postMessage({
           type: "amiga_aga_disk_status",
@@ -283,6 +312,13 @@
         simulateInput(runtimePlayer, 0, joystickMask & 16 ? 1 : 0);
         simulateInput(runtimePlayer, 8, joystickMask & 32 ? 1 : 0);
         simulateInput(runtimePlayer, 3, joystickMask & 64 ? 1 : 0);
+        if (activeProfile.model === "CD32") {
+          // CD32 pad: B=Red, A=Blue, Y=Green, X=Yellow, L/R=shoulders, Start=Play.
+          simulateInput(runtimePlayer, 1, joystickMask & 128 ? 1 : 0);
+          simulateInput(runtimePlayer, 9, joystickMask & 256 ? 1 : 0);
+          simulateInput(runtimePlayer, 10, joystickMask & 1024 ? 1 : 0);
+          simulateInput(runtimePlayer, 11, joystickMask & 2048 ? 1 : 0);
+        }
       }
 
       function pulseInput(button) {
@@ -366,6 +402,12 @@
         }
         if (pendingRomSource !== "aros" && !pendingKickstart?.bytes?.length) {
           setStatus(`Waiting for your ${activeProfile.model} Kickstart ROM...`);
+          return;
+        }
+        const needsCd32Rom = Boolean(activeProfile.extendedRom);
+        if (pendingRomSource !== "aros" && needsCd32Rom !== (pendingKickstart.bytes.length === CD32_ROM_HALF * 2)) {
+          // A ROM for a different model can arrive first while the room swaps games.
+          setStatus(needsCd32Rom ? "Waiting for your CD32 Kickstart + extended ROM..." : `Waiting for your ${activeProfile.model} Kickstart ROM...`);
           return;
         }
         if (
@@ -521,6 +563,11 @@
           }
           const disks = Array.isArray(data.disks) ? data.disks : [];
           const whdLoadFiles = Array.isArray(data.whdLoadFiles) ? data.whdLoadFiles : [];
+          const cdFiles = Array.isArray(data.cdFiles) ? data.cdFiles : [];
+          pendingCdFiles = cdFiles.map((entry) => ({
+            fileName: String(entry.fileName || "disc.iso").split(/[\\/]/).pop() || "disc.iso",
+            bytes: entry.bytes instanceof Uint8Array ? entry.bytes : new Uint8Array(entry.bytes || []),
+          })).filter((entry) => entry.bytes.length);
           pendingWhdLoadFiles = whdLoadFiles.map((entry) => ({
             fileName: entry.fileName || "game.slave",
             archiveEntryName: entry.archiveEntryName || entry.fileName || "game.slave",
@@ -533,7 +580,7 @@
           pendingGame = {
             fileName: pendingWhdLoadFiles.find((entry) => /\.slave$/i.test(entry.fileName))?.fileName
               || pendingDisks[0]?.fileName || data.fileName || "game.adf",
-            bytes: pendingWhdLoadFiles[0]?.bytes || pendingDisks[0]?.bytes || new Uint8Array(data.bytes || []),
+            bytes: pendingWhdLoadFiles[0]?.bytes || pendingCdFiles[0]?.bytes || pendingDisks[0]?.bytes || new Uint8Array(data.bytes || []),
           };
           startEmulator();
         }

@@ -15,7 +15,10 @@ export default function StartHereCard({
   onChooseRomFolder,
   startButton,
 }) {
-  const kickstartLabel = amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3';
+  const kickstartLabel = amigaRequiredModel === 'CD32' ? 'CD32 ROMs' : amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3';
+  const kickstartNeed = amigaRequiredModel === 'CD32'
+    ? 'This CD32 disc needs the CD32 Kickstart 40.060 and extended ROMs (select both files, a zip, or one 1 MB combined ROM).'
+    : amigaRequiredModel === 'A1200' ? 'This WHDLoad/A1200 game needs Kickstart 3.1.' : 'This A500/floppy game needs Kickstart 1.3.';
   const gameNoun = isArcade ? 'an arcade game' : `${withIndefiniteArticle(systemLabel)} game`;
 
   return (
@@ -28,8 +31,8 @@ export default function StartHereCard({
         <small>
           {isPuaeAmiga
             ? loadedDiskName
-              ? `${amigaRequiredModel === 'A1200' ? 'This WHDLoad/A1200 game needs Kickstart 3.1.' : 'This A500/floppy game needs Kickstart 1.3.'} It is stored only in this browser for next time.`
-              : 'Choose the game first. We will identify whether it needs Kickstart 1.3 or 3.1.'
+              ? `${kickstartNeed} It is stored only in this browser for next time.`
+              : 'Choose the game first: floppies, WHDLoad, or a CD32 disc. We will identify which Kickstart it needs.'
             : hasLibraryGames
               ? 'Pick a game from your connected library, or choose a file from this device.'
               : 'Choose a game file from this device. You can connect a whole folder from the Library later.'}
