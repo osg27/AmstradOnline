@@ -440,3 +440,8 @@ html.osg-locked, html.osg-locked body { overflow: hidden; }
   .osg-crt { transform: none; }
 }
 .osg-route-loading{min-height:100vh;background:var(--osg-bg,#0b1020)}
+
+/* Mouse users can't wheel a hidden-scrollbar strip sideways, so wrap the chips instead. */
+@media (hover: hover) and (pointer: fine) {
+  .osg-filters { flex-wrap: wrap; overflow-x: visible; }
+}
