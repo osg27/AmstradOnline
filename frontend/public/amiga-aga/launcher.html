@@ -52,7 +52,7 @@
         A500PLUS: { model: "A500+", kickstart: "kick37175.A500", chipset: "ECS", cpu: "68000", chipMemory: "2", fastMemory: "0" },
         A600: { model: "A600", kickstart: "kick40063.A600", chipset: "ECS", cpu: "68000", chipMemory: "2", fastMemory: "0" },
         A1200: { model: "A1200", kickstart: "kick40068.A1200", chipset: "AGA", cpu: "68020", chipMemory: "4", fastMemory: "8" },
-        CD32: { model: "CD32", kickstart: "kick40060.CD32", extendedRom: "kick40060.CD32.ext", chipset: "AGA", cpu: "68020", chipMemory: "2", fastMemory: "0" },
+        CD32: { model: "CD32", kickstart: "kick40060.CD32", extendedRom: "kick40060.CD32.ext", chipset: "AGA", cpu: "68020", chipMemory: "4", fastMemory: "0" },
       };
       const CD32_ROM_HALF = 512 * 1024;
       const requestedModel = new URLSearchParams(window.location.search).get("model")?.toUpperCase().replace("+", "PLUS") || "A1200";
