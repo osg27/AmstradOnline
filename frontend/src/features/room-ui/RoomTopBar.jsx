@@ -36,6 +36,7 @@ export default function RoomTopBar({
   mic,
   chat,
   invite,
+  pass,
   onOpenMenu,
   menuShortcut,
 }) {
@@ -83,6 +84,12 @@ export default function RoomTopBar({
           <button className="osg-tbtn osg-hide-ph" type="button" onClick={chat.onClick} aria-label={`Room chat${chat.unread ? `, ${chat.unread} unread` : ''}`}>
             <Icon name="chat" />
             {chat.unread ? <span className="osg-badge">{chat.unread}</span> : null}
+          </button>
+        ) : null}
+        {pass ? (
+          <button className="osg-tbtn osg-hide-ph" type="button" onClick={pass.onClick} title="Pass the shared controller to the next player">
+            <Icon name="swap" />
+            {pass.label}
           </button>
         ) : null}
         {invite ? (

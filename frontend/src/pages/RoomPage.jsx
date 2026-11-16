@@ -8844,6 +8844,9 @@ export default function RoomPage() {
             : isSoloMode && isHost && isArcade
               ? { label: 'Open to friends', icon: 'people', onClick: () => setArcadeCabinetMode(true), disabled: switchingSystem }
               : null}
+        pass={isSharedCpcParty && isHost && !isSoloMode
+          ? { label: `Pass controller (P${activePartyPlayer})`, onClick: nextPartyTurn }
+          : null}
         onOpenMenu={toggleGameMenu}
         menuShortcut={menuShortcutNode}
       />
