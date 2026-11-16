@@ -1,4 +1,4 @@
-/* Isolated Pac-Man-only MAME 2003-Plus host. Never used by normal Arcade rooms. */
+/* Isolated hardware adapters. Never used by normal Arcade rooms. */
 #include <emscripten.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -8,7 +8,9 @@
 #include "libretro.h"
 
 extern uint8_t cpunum_read_byte(int cpu, uint32_t address);
+#ifndef OSG_CPS1_RA
 extern uint8_t *videoram, *colorram, *spriteram_2;
+#endif
 static bool initialized, loaded;
 static unsigned pixel_format, rotation, width, height;
 static uint16_t input_mask;
@@ -115,7 +117,7 @@ static int16_t input_state(unsigned port, unsigned device, unsigned index, unsig
     return id == RETRO_DEVICE_ID_JOYPAD_MASK ? input_mask : (id < 16 && (input_mask & (1 << id))) ? 1 : 0;
 }
 
-EMSCRIPTEN_KEEPALIVE int probe_load(void) {
+static int load_game(bool legacy) {
     struct retro_game_info game = {0}; struct retro_system_av_info av;
     if (!initialized) {
         retro_set_environment(environment); retro_set_video_refresh(video);
@@ -124,28 +126,58 @@ EMSCRIPTEN_KEEPALIVE int probe_load(void) {
     }
     if (loaded) retro_unload_game();
     loaded = false; input_mask = 0;
+#ifdef OSG_CPS1_RA
+    game.path = legacy ? "/roms/sf2ceold.zip" : "/roms/sf2ce.zip";
+#else
     game.path = "/roms/pacman.zip";
+#endif
     if (!retro_load_game(&game)) return 0;
+#ifdef OSG_CPS1_RA
+    /* Explicit six-button layout; default classic pad order differs. */
+    retro_set_controller_port_device(0, RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 2));
+    retro_set_controller_port_device(1, RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 2));
+#endif
     loaded = true; retro_get_system_av_info(&av);
     sample_rate = av.timing.sample_rate; fps = av.timing.fps;
     return 1;
 }
+EMSCRIPTEN_KEEPALIVE int probe_load(void) { return load_game(false); }
+#ifdef OSG_CPS1_RA
+EMSCRIPTEN_KEEPALIVE int probe_load_legacy(void) { return load_game(true); }
+#endif
 EMSCRIPTEN_KEEPALIVE void probe_step(unsigned mask) { if (loaded) { input_mask = mask; retro_run(); } }
 EMSCRIPTEN_KEEPALIVE void probe_reset(void) { if (loaded) { input_mask = 0; retro_reset(); } }
 EMSCRIPTEN_KEEPALIVE uint32_t* probe_pixels(void) { return pixels; }
 EMSCRIPTEN_KEEPALIVE unsigned probe_width(void) { return width; }
 EMSCRIPTEN_KEEPALIVE unsigned probe_height(void) { return height; }
 EMSCRIPTEN_KEEPALIVE double probe_fps(void) { return fps; }
+#ifdef OSG_CPS1_RA
+/* Read-only input diagnostics for native control regression tests. */
+EMSCRIPTEN_KEEPALIVE int probe_cps1_input(unsigned index) {
+    static const uint32_t ports[] = {0x800019, 0x800000, 0x800001, 0x800176, 0x800177};
+    return loaded && index < 5 ? cpunum_read_byte(0, ports[index]) : -1;
+}
+#endif
 EMSCRIPTEN_KEEPALIVE int probe_cpu_byte(uint32_t address) {
+#ifdef OSG_CPS1_RA
+    if (!loaded || address < 0xff0000 || address > 0xffffff) return -1;
+#else
     if (!loaded || !((address >= 0x4000 && address <= 0x47ff) || (address >= 0x4c00 && address <= 0x4fff))) return -1;
+#endif
     return cpunum_read_byte(0, address);
 }
 /* FBNeo's verified Pac-Man AllRam offsets. Unmapped/unused fields fail closed. */
 EMSCRIPTEN_KEEPALIVE int probe_ra_byte(uint32_t address) {
     if (!loaded) return -1;
+#ifdef OSG_CPS1_RA
+    /* FBNeo exposes only CpsRamFF to RA. Sek's byte reads XOR 1 on
+     * little-endian hosts; expose the same raw, word-swapped RAM order. */
+    if (address < 0x10000) return cpunum_read_byte(0, 0xff0000 + (address ^ 1));
+#else
     if (address >= 0x400 && address < 0x800) return cpunum_read_byte(0, address + 0x4800);
     if (address >= 0x1000 && address < 0x1010 && spriteram_2) return spriteram_2[address - 0x1000];
     if (address >= 0x1010 && address < 0x1410 && colorram) return colorram[address - 0x1010];
     if (address >= 0x1410 && address < 0x1810 && videoram) return videoram[address - 0x1410];
+#endif
     return -1;
 }

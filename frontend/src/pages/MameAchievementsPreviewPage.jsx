@@ -1,45 +1,56 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { createMamePreview } from '../features/retroachievements/mamePreview';
+import { MAME_PREVIEW_GAMES } from '../features/retroachievements/mamePreviewGames';
 
 const keys = { ArrowUp: 4, ArrowDown: 5, ArrowLeft: 6, ArrowRight: 7, Digit5: 2, Digit1: 3, Enter: 3 };
 export default function MameAchievementsPreviewPage() {
+  const [params, setParams] = useSearchParams();
+  const [game, setGame] = useState(params.get('game') === 'sf2ce' ? 'sf2ce' : 'pacman');
+  const profile = MAME_PREVIEW_GAMES[game];
   const canvas = useRef(null), preview = useRef(null);
-  const [message, setMessage] = useState('Choose your own pacman.zip to begin.'), [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('Choose your own complete ROM archive to begin.'), [busy, setBusy] = useState(false);
   const [paused, setPaused] = useState(false), [data, setData] = useState(null), [hits, setHits] = useState([]);
   const [controller, setController] = useState('');
+  const [romInfo, setRomInfo] = useState('');
   const [softcore, setSoftcore] = useState(false), [confirmed, setConfirmed] = useState([]);
   useEffect(() => () => preview.current?.stop(), []);
   async function start(event) {
     const file = event.target.files?.[0]; if (!file) return;
-    preview.current?.stop(); setBusy(true); setData(null); setHits([]); setPaused(false); setController(''); setConfirmed([]);
+    preview.current?.stop(); setBusy(true); setData(null); setHits([]); setPaused(false); setController(''); setConfirmed([]); setRomInfo('');
     const instance = createMamePreview({ canvas: canvas.current, status: setMessage, snapshot: setData,
       hit: event => setHits(previous => previous.some(item => item.id === event.id) ? previous : [...previous, event]),
       submitted: id => setConfirmed(previous => previous.includes(id) ? previous : [...previous, id]),
-      controller: setController, softcore });
+      controller: setController, romInfo: setRomInfo, softcore, game });
     preview.current = instance;
     try { await instance.start(file); }
     catch (error) { instance.stop(); setMessage(error.message); setBusy(false); }
   }
   function key(event, down) {
-    const bit = keys[event.code]; if (bit === undefined) return;
+    const attacks = { KeyA: 1, KeyS: 9, KeyD: 10, KeyZ: 0, KeyX: 8, KeyC: 11 };
+    const bit = keys[event.code] ?? (profile.sixButtons ? attacks[event.code] : undefined); if (bit === undefined) return;
     event.preventDefault(); preview.current?.input(bit, down);
   }
   return <main style={{ maxWidth: 1000, margin: '2rem auto', padding: '1rem', display: 'block' }}>
-    <h1>{softcore ? 'Pac-Man softcore test' : 'Pac-Man achievement preview'}</h1>
-    <p>Isolated MAME 2003-Plus experiment. Choose local preview or submit Pac-Man softcore achievements using your saved Profile connection. Hardcore is unavailable on this emulator.</p>
+    <h1>{profile.title} {softcore ? 'softcore test' : 'achievement preview'}</h1>
+    <p>Isolated MAME 2003-Plus experiment. Choose local preview or submit softcore achievements using your saved Profile connection. Hardcore is unavailable on this emulator.</p>
     <p><Link to="/profile">Connect RetroAchievements in Profile</Link> · <Link to="/library?system=arcade">Back to Arcade</Link></p>
+    <label style={{ display: 'block', marginBottom: '1rem' }}>Game <select value={game} disabled={busy} onChange={event => {
+      setGame(event.target.value); setParams({ game: event.target.value }); setData(null); setHits([]); setConfirmed([]); setController(''); setRomInfo(''); setMessage('Choose your own complete ROM archive to begin.');
+    }}>{Object.entries(MAME_PREVIEW_GAMES).map(([slug, item]) => <option key={slug} value={slug}>{item.title}</option>)}</select></label>
     <label style={{ display: 'block', marginBottom: '1rem' }}><input type="checkbox" checked={softcore} disabled={busy}
-      onChange={event => { setSoftcore(event.target.checked); setData(null); setHits([]); setConfirmed([]); }} /> Submit Pac-Man softcore achievements to RetroAchievements</label>
-    <p>{softcore ? 'A new session will record Pac-Man activity and newly earned softcore unlocks. Previous local preview hits are not submitted.' : 'Local preview: no points, unlocks or played-game activity are submitted.'}</p>
-    <label>Pac-Man ROM archive <input type="file" accept=".zip" onChange={start} disabled={busy} /></label>
+      onChange={event => { setSoftcore(event.target.checked); setData(null); setHits([]); setConfirmed([]); }} /> Submit {profile.title} softcore achievements to RetroAchievements</label>
+    <p>{softcore ? 'A new session will record game activity and newly earned softcore unlocks. Previous local preview hits are not submitted.' : 'Local preview: no points, unlocks or played-game activity are submitted.'}</p>
+    <label>ROM archive ({profile.filename}) <input key={game} type="file" accept=".zip" onChange={start} disabled={busy} /></label>
     <p role="status">{message}</p>
+    {romInfo && <p>{romInfo}</p>}
     <p>Click the screen, then use arrows to move, 5 for a coin and 1 or Enter to start.</p>
-    <p>Controller: D-pad or left stick to move, Back/Select or B to insert a coin, Start or A to start. Click the screen to enable controls.</p>
+    {profile.sixButtons && <p>Let the title animation finish after inserting a coin, then press Start. Submissions require the World 920513 revision; older World 920313 sets can be previewed locally.</p>}
+    <p>{profile.sixButtons ? 'Keyboard: A/S/D = light/medium/heavy punch; Z/X/C = light/medium/heavy kick. Controller: D-pad/stick to move, Back/Select for a coin, Start to start. Xbox X/Y/LB = punches; A/B/RB = kicks.' : 'Controller: D-pad or left stick to move, Back/Select or B to insert a coin, Start or A to start.'} Click the screen to enable controls.</p>
     {busy && <p role="status">{controller ? `Controller detected: ${controller}` : 'Press a button on your controller to connect it. Standard browser gamepads are supported.'}</p>}
-    <canvas ref={canvas} tabIndex={0} aria-label="Pac-Man preview. Arrow keys or controller move, 5 inserts a coin, 1 starts."
+    <canvas ref={canvas} tabIndex={0} aria-label={`${profile.title} preview. Arrow keys or controller move, 5 inserts a coin, 1 starts.`}
       onKeyDown={event => key(event, true)} onKeyUp={event => key(event, false)} onBlur={() => preview.current?.release()}
-      style={{ background: '#000', width: 'min(100%, 448px)', aspectRatio: '224 / 288', imageRendering: 'pixelated', display: 'block' }} />
+      style={{ background: '#000', width: `min(100%, ${profile.width}px)`, aspectRatio: profile.aspect, imageRendering: 'pixelated', display: 'block' }} />
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '1rem 0' }}>
       {[[2, 'Insert coin'], [3, 'Start']].map(([bit, label]) => <button key={bit} disabled={!busy}
         onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); preview.current?.input(bit, true); }}

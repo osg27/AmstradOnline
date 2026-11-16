@@ -28,13 +28,30 @@ import {
 import useSignaling from '../hooks/useSignaling';
 import { buildRtcConfig, waitForIceGatheringComplete } from '../utils/webrtc';
 import amstradControlProfiles from '../data/amstradControlProfiles.json';
+import {
+  CPC_CONTROL_MODES,
+  EDITABLE_SLOTS,
+  PAD_BUTTON_LABELS,
+  bindingToText,
+  buildCpcControlPlan,
+  cpcMatrixMessage,
+  cpcOverrideKey,
+  formatCpcBinding,
+  loadCpcOverrides,
+  readCpcPadMask,
+  saveCpcOverrides,
+  summarisePlayer,
+} from '../features/cpcControls/cpcGamepadControls';
+import useCpcGamepads from '../features/cpcControls/useCpcGamepads';
 import { getMameDisplayName, getMameTitleDatabase } from '../data/mameTitleLookup';
 import ControllerSetupWizardAutomatic from '../components/ControllerSetupWizardAutomatic';
 import { getControllerMapping } from '../utils/controllerMappingStorage';
 import { applyCustomMapping } from '../utils/applyControllerMapping';
 import { supportsControllerMapping } from '../utils/defaultControllerMappings';
 import { copyText } from '../utils/clipboard';
+import { AMIGA_ROM_SOURCE, isExperimentalArosEnabled, resolveAmigaRomSource } from '../features/amiga/romSource';
 import { downloadKickstarts, KICKSTART_URL_KEY } from '../features/amiga/kickstartUrl';
+import { buildCd32Rom, CD32_MEDIA_EXTENSIONS, findMissingCueTracks, isCd32Media, isCd32TrackOnly } from '../features/amiga/cd32';
 import GameRecorderControls from '../features/recording/GameRecorderControls';
 import RetroAchievementsPlay from '../components/RetroAchievementsPlay';
 import { getAdapterAudioStream, getEmulatorRecordingAdapter } from '../features/recording/emulatorRecordingAdapters';
@@ -44,6 +61,13 @@ const KICKSTART_STORE_NAME = 'roms';
 // Fresh slots prevent ROMs selected during the abandoned folder experiment being restored.
 const AMIGA_KICKSTART_KEY = 'amiga-a500-kickstart-clean';
 const AMIGA_AGA_KICKSTART_KEY = 'amiga-aga-a1200-kickstart-clean';
+const AMIGA_CD32_KICKSTART_KEY = 'amiga-cd32-kickstart-clean';
+const AMIGA_KICKSTART_LABELS = {
+  A500: { short: 'Kickstart 1.3', rom: 'A500 Kickstart 1.3', need: 'This A500/floppy game needs Kickstart 1.3.' },
+  A1200: { short: 'Kickstart 3.1', rom: 'A1200 Kickstart 3.1', need: 'This WHDLoad/A1200 game needs Kickstart 3.1.' },
+  CD32: { short: 'CD32 ROMs', rom: 'CD32 Kickstart + extended ROM', need: 'This CD32 disc needs the CD32 Kickstart 40.060 and extended ROMs (select both files, a zip, or one 1 MB combined ROM).' },
+};
+const amigaKickstartLabel = (model) => AMIGA_KICKSTART_LABELS[model] || AMIGA_KICKSTART_LABELS.A500;
 const PLAYSTATION_BIOS_KEY = 'playstation-bios';
 const SATURN_BIOS_KEY = 'saturn-bios';
 const ATARI_ST_TOS_KEY = 'atari-st-tos';
@@ -51,6 +75,7 @@ const X68000_FIRMWARE_KEY = 'x68000-firmware';
 const CONTROL_MATCH_LIMIT = 6;
 const HOST_VOLUME_STORAGE_KEY = 'host-emulator-volume';
 const PREFERRED_LIBRARY_VARIANTS_KEY = 'localLibraryPreferredVariants';
+const AMIGA_AROS_ENABLED = isExperimentalArosEnabled(import.meta.env.VITE_AMIGA_AROS_ENABLED);
 const GAME_RECORDING_ENABLED = String(import.meta.env.VITE_GAME_RECORDING_ENABLED || '').toLowerCase() === 'true';
 const BUILTIN_MAME_LEADERBOARD_ROMS = new Set([
   'dkong',
@@ -217,8 +242,8 @@ const ROM_ZIP_EXTENSIONS = {
   cpc: ['.dsk'],
   cpc_party: ['.dsk'],
   spectrum: ['.tap', '.tzx', '.z80', '.sna', '.szx'],
-  amiga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
-  amiga_aga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf'],
+  amiga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf', ...CD32_MEDIA_EXTENSIONS],
+  amiga_aga: ['.lha', '.slave', '.hdf', '.adf', '.adz', '.dms', '.ipf', ...CD32_MEDIA_EXTENSIONS],
   c64: ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt'],
   msx: ['.rom', '.mx1', '.mx2', '.dsk', '.cas', '.m3u'],
   mastersystem: ['.sms'],
@@ -802,7 +827,10 @@ export default function RoomPage() {
   const [localReleaseFiles, setLocalReleaseFiles] = useState([]);
   const [currentLocalReleaseIndex, setCurrentLocalReleaseIndex] = useState(0);
   const [kickstartRomName, setKickstartRomName] = useState('');
+  const [amigaRomSource, setAmigaRomSource] = useState(AMIGA_ROM_SOURCE.ORIGINAL);
   const [amigaRequiredModel, setAmigaRequiredModel] = useState('');
+  const amigaCd32PadRef = useRef(false);
+  amigaCd32PadRef.current = amigaRequiredModel === 'CD32';
   const [x68000FirmwareName, setX68000FirmwareName] = useState('');
   const [vipKickstartBusy, setVipKickstartBusy] = useState(false);
   const [playstationBiosName, setPlaystationBiosName] = useState('');
@@ -974,6 +1002,9 @@ export default function RoomPage() {
   const isHost = room ? room.owner_user_id === userId : null;
   const roomSystem = room?.system || 'cpc';
   const isCpcParty = roomSystem === 'cpc_party';
+  // Regular CPC rooms translate gamepads into each game's documented CPC
+  // controls (features/cpcControls). Party rooms keep their shared-turn input.
+  const isCpcGamepadRoom = roomSystem === 'cpc';
   const isCpcSystem = roomSystem === 'cpc' || roomSystem === 'cpc_party';
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
@@ -1003,7 +1034,7 @@ export default function RoomPage() {
   const supportsMameScoreboard = isArcade && isSoloMode;
   const supportsAmigaScoreboard = isPuaeAmiga && Boolean(amigaScoreGame);
   const kickstartStorageKey = isPuaeAmiga
-    ? amigaRequiredModel === 'A1200' ? AMIGA_AGA_KICKSTART_KEY : amigaRequiredModel === 'A500' ? AMIGA_KICKSTART_KEY : ''
+    ? amigaRequiredModel === 'CD32' ? AMIGA_CD32_KICKSTART_KEY : amigaRequiredModel === 'A1200' ? AMIGA_AGA_KICKSTART_KEY : amigaRequiredModel === 'A500' ? AMIGA_KICKSTART_KEY : ''
     : isAmigaLink ? AMIGA_KICKSTART_KEY
     : isPlayStation ? PLAYSTATION_BIOS_KEY
     : isAtariSt ? ATARI_ST_TOS_KEY
@@ -1033,12 +1064,14 @@ export default function RoomPage() {
   }, [atari8Config]);
 
   const emulatorSrc = isPuaeAmiga
-    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-08-20-2`
+    ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-11-10-cd32-3`
     : isAmigaLink
     ? '/amiga/launcher.html?v=2026-07-07-1'
-    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-10-30-ra-4` : isNes ? '/nes/launcher.html?v=2026-10-31-ra-1' : isSnes ? '/snes/launcher.html?v=2026-10-31-ra-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-10-29-webx68k-2' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isMsx ? '/msx/launcher.html?v=2026-09-25-webmsx-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-10-30-ra-1' : '/emulator/index.html?v=2026-06-01-1';
+    : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-10-30-ra-4` : isNes ? '/nes/launcher.html?v=2026-10-31-ra-1' : isSnes ? '/snes/launcher.html?v=2026-10-31-ra-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-10-29-webx68k-2' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isMsx ? '/msx/launcher.html?v=2026-09-25-webmsx-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-08-03-3' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-11-05-pad-1' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
-  const acceptedMedia = isAmigaFamily
+  const acceptedMedia = isPuaeAmiga
+    ? `.adf,.adz,.dms,.ipf,.hdf,.lha,.zip,.7z,${CD32_MEDIA_EXTENSIONS.join(',')}`
+    : isAmigaFamily
     ? '.adf,.adz,.dms,.ipf,.hdf,.lha,.zip,.7z'
     : isMasterSystem ? '.sms,.zip,.7z' : isMegaDrive ? '.bin,.gen,.md,.smd,.zip,.7z' : isNes ? '.nes,.zip,.7z' : isSnes ? '.sfc,.smc,.fig,.swc,.bsx,.gd3,.gd7,.dx2,.zip,.7z' : isPcEngine ? '.pce,.sgx,.zip,.7z' : isX68000 ? '.dim,.img,.d88,.88d,.hdm,.dup,.2hd,.xdf,.hdf,.cmd,.m3u,.zip' : isPlayStation ? '.cue,.bin,.chd,.pbp,.iso,.zip,.7z' : isSaturn ? '.cue,.bin,.chd,.iso,.zip,.7z' : isC64 ? '.d64,.t64,.tap,.prg,.crt,.zip,.7z' : isMsx ? '.rom,.mx1,.mx2,.dsk,.cas,.m3u,.zip,.7z' : isAtari8 ? '.atr,.xfd,.atx,.xex,.com,.car,.rom,.bin,.cas,.zip,.7z' : isAtariSt ? '.st,.msa,.stx,.ipf,.zip,.7z' : isArcade ? '.zip,.7z' : isSpectrum ? '.tap,.tzx,.z80,.sna,.szx,.zip,.7z' : '.dsk';
   const mediaLabel = isAmigaAga ? 'Load Amiga AGA file' : isAmiga || isAmigaLink ? 'Load Amiga file' : isMasterSystem ? 'Load Master System ROM' : isMegaDrive ? 'Load Mega Drive ROM' : isNes ? 'Load NES ROM' : isSnes ? 'Load SNES ROM' : isPcEngine ? loadedDiskName ? 'Change PC Engine game' : 'Load PC Engine ROM' : isX68000 ? loadedDiskName ? 'Change X68000 game' : 'Load X68000 game' : isPlayStation ? loadedDiskName ? 'Change PlayStation game' : 'Load PlayStation game' : isSaturn ? loadedDiskName ? 'Change Saturn game' : 'Load Saturn game' : isC64 ? 'Load C64 file' : isMsx ? loadedDiskName ? 'Change MSX game' : 'Load MSX game' : isAtari8 ? loadedDiskName ? 'Change Atari 8-bit file' : 'Load Atari 8-bit file' : isAtariSt ? 'Load Atari ST disk' : isArcade ? 'Load MAME ROM' : isSpectrum ? 'Load Spectrum file' : 'Load .dsk';
@@ -1577,6 +1610,16 @@ export default function RoomPage() {
       if ((pad.axes[2] ?? 0) < -deadzone) mask |= 32768;
       if ((pad.axes[2] ?? 0) > deadzone) mask |= 65536;
     }
+    if ((system === 'amiga' || system === 'amiga_aga') && amigaCd32PadRef.current) {
+      // CD32 pad: Red, Blue, Green, Yellow, shoulders and Play are separate buttons.
+      mask &= ~(16 | 32);
+      if (pad.buttons[0]?.pressed) mask |= 16;
+      if (pad.buttons[1]?.pressed) mask |= 32;
+      if (pad.buttons[2]?.pressed) mask |= 128;
+      if (pad.buttons[3]?.pressed) mask |= 256;
+      if (pad.buttons[4]?.pressed) mask |= 1024;
+      if (pad.buttons[5]?.pressed) mask |= 2048;
+    }
     if (system === 'playstation' || system === 'saturn' || system === 'saturn_beetle') {
       if (pad.buttons[3]?.pressed) mask |= 256;
       if (pad.buttons[8]?.pressed) mask |= 512;
@@ -1796,6 +1839,46 @@ export default function RoomPage() {
     targetWindow.postMessage(payload, window.location.origin);
   }, []);
 
+  const cpcOverrideStorageKey = isCpcGamepadRoom ? cpcOverrideKey(selectedControlProfile, loadedDiskName) : null;
+  const [cpcOverrides, setCpcOverrides] = useState({});
+  const [cpcControlsEditing, setCpcControlsEditing] = useState(false);
+
+  useEffect(() => {
+    setCpcOverrides(loadCpcOverrides(cpcOverrideStorageKey));
+  }, [cpcOverrideStorageKey]);
+
+  const updateCpcOverrides = useCallback((updater) => {
+    setCpcOverrides((previous) => {
+      const next = typeof updater === 'function' ? updater(previous) : updater;
+      saveCpcOverrides(cpcOverrideStorageKey, next);
+      return next;
+    });
+  }, [cpcOverrideStorageKey]);
+
+  const cpcControlPlan = useMemo(
+    () => (isCpcGamepadRoom ? buildCpcControlPlan(selectedControlProfile, cpcOverrides) : null),
+    [cpcOverrides, isCpcGamepadRoom, selectedControlProfile],
+  );
+  const cpcControlPlanRef = useRef(cpcControlPlan);
+  cpcControlPlanRef.current = cpcControlPlan;
+
+  const cpcPadMapping = useCallback((pad) => (
+    pad?.id && supportsControllerMapping(roomSystem) ? getControllerMapping(roomSystem, pad.id) : null
+  ), [roomSystem]);
+
+  // Guest (Player 2) pad/keyboard state arrives as a pad mask; translate it
+  // with the Player 2 plan on the host.
+  const forwardCpcRemoteMask = useCallback((mask) => {
+    forwardInputToEmulator(cpcMatrixMessage('remote-p2', mask, cpcControlPlanRef.current?.players[1]));
+  }, [forwardInputToEmulator]);
+
+  const cpcConnectedPads = useCpcGamepads({
+    enabled: isCpcGamepadRoom && isHost === true && inputCaptured && !controllerCapturingInput,
+    plan: cpcControlPlan,
+    forward: forwardInputToEmulator,
+    getMapping: cpcPadMapping,
+  });
+
   const reloadC64Frame = useCallback(async ({ start = false } = {}) => {
     const frame = emulatorFrameRef.current;
     if (!frame || !isC64) return;
@@ -1854,7 +1937,7 @@ export default function RoomPage() {
     startMirrorLoop(emulatorCanvas);
   }, [emulatorSrc, isAtariSt, isSoloMode]);
 
-  const reloadAmigaAgaFrame = useCallback(async () => {
+  const reloadAmigaAgaFrame = useCallback(async (storageKeyOverride) => {
     const frame = emulatorFrameRef.current;
     if (!frame || !isPuaeAmiga) return null;
 
@@ -1866,9 +1949,10 @@ export default function RoomPage() {
       frame.src = `${emulatorSrc}${separator}runtime=${Date.now()}`;
     });
 
-    const storedKickstart = await loadStoredKickstart(kickstartStorageKey);
+    const frameKickstartKey = storageKeyOverride ?? kickstartStorageKey;
+    const storedKickstart = frameKickstartKey ? await loadStoredKickstart(frameKickstartKey) : null;
     if (storedKickstart) {
-      const supportKickstarts = kickstartStorageKey === AMIGA_AGA_KICKSTART_KEY
+      const supportKickstarts = frameKickstartKey === AMIGA_AGA_KICKSTART_KEY
         ? await loadA500WHDLoadKickstart()
         : [];
       frame.contentWindow?.postMessage(
@@ -2231,7 +2315,7 @@ export default function RoomPage() {
           }
         }
 
-        if (isPuaeAmiga
+        if (isPuaeAmiga && amigaRomSource !== AMIGA_ROM_SOURCE.AROS
           && localStorage.getItem(KICKSTART_URL_KEY)
           && (!storedKickstart || (kickstartStorageKey === AMIGA_AGA_KICKSTART_KEY && !(await loadA500WHDLoadKickstart()).length))) {
           try {
@@ -2260,7 +2344,7 @@ export default function RoomPage() {
           await saveStoredKickstart(kickstartStorageKey, storedKickstart.fileName, storedKickstart.bytes);
         }
 
-        if (cancelled || !storedKickstart) return;
+        if (cancelled || !storedKickstart || (isPuaeAmiga && amigaRomSource === AMIGA_ROM_SOURCE.AROS)) return;
 
         const amigaSupportKickstarts = kickstartStorageKey === AMIGA_AGA_KICKSTART_KEY
           ? await loadA500WHDLoadKickstart()
@@ -2318,7 +2402,7 @@ export default function RoomPage() {
       window.clearTimeout(timer);
       timers.forEach((retryTimer) => window.clearTimeout(retryTimer));
     };
-  }, [addLog, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAtariSt, isDiscConsole, isHost, isPuaeAmiga, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
+  }, [addLog, amigaRomSource, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAtariSt, isDiscConsole, isHost, isPuaeAmiga, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -2340,6 +2424,13 @@ export default function RoomPage() {
   }, [addInputDebug, forwardInputToEmulator]);
 
   const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
+    if (isCpcGamepadRoom) {
+      // Plain CPC rooms: this is always the guest (Player 2). Send its full
+      // state through the game's Player 2 plan instead of fixed Q/A/O/P keys.
+      addInputDebug(`P${player} pad state ${mask} -> CPC plan`, mask, 'guest remote');
+      forwardCpcRemoteMask(mask);
+      return;
+    }
     joystickMaskToKeys(mask, player).forEach(([key, bit, active]) => {
       const wasActive = Boolean(previousMask & bit);
 
@@ -2355,7 +2446,7 @@ export default function RoomPage() {
         action,
       });
     });
-  }, [addInputDebug, forwardInputToEmulator]);
+  }, [addInputDebug, forwardCpcRemoteMask, forwardInputToEmulator, isCpcGamepadRoom]);
 
   const releaseCpcPartySharedInput = useCallback((previousMask = 63) => {
     if (!isSharedCpcParty) return;
@@ -2626,7 +2717,7 @@ export default function RoomPage() {
   }, [activePartyPlayer, partyMaxPlayers, setPartyTurn]);
 
   useEffect(() => {
-    if (!inputCaptured) {
+    if (!inputCaptured || (isCpcGamepadRoom && isHost === true)) {
       return undefined;
     }
 
@@ -2658,7 +2749,7 @@ export default function RoomPage() {
             sendLocalJoystickMask(0);
           }
         } else {
-          const mask = gamepadToJoystickMask(pad);
+          const mask = isCpcGamepadRoom ? readCpcPadMask(pad, cpcPadMapping(pad)) : gamepadToJoystickMask(pad);
 
           if (mask !== lastMask) {
             lastMask = mask;
@@ -2676,7 +2767,7 @@ export default function RoomPage() {
       cancelAnimationFrame(animationFrame);
       sendLocalJoystickMask(0);
     };
-  }, [controllerCapturingInput, inputCaptured, sendLocalJoystickMask]);
+  }, [controllerCapturingInput, cpcPadMapping, inputCaptured, isCpcGamepadRoom, isHost, sendLocalJoystickMask]);
 
   useEffect(() => {
     function handleGamepadConnected(event) {
@@ -2784,7 +2875,8 @@ export default function RoomPage() {
   }, [addInputDebug, forwardInputToEmulator, forwardJoystickMaskAsKeys, isDirectJoystickSystem, isHost, isMultiPeerParty, isSharedCpcParty, releaseCpcPartySharedInput]);
 
   useEffect(() => {
-    if (isHost !== true || isDirectJoystickSystem) {
+    // CPC gamepad rooms hold state inside CPCBox, so no key re-pumping.
+    if (isHost !== true || isDirectJoystickSystem || isCpcGamepadRoom) {
       return undefined;
     }
 
@@ -2822,7 +2914,7 @@ export default function RoomPage() {
     return () => {
       window.clearInterval(pumpRemoteHeldKeys);
     };
-  }, [activePartyPlayer, forwardInputToEmulator, isDirectJoystickSystem, isHost, isSharedCpcParty]);
+  }, [activePartyPlayer, forwardInputToEmulator, isCpcGamepadRoom, isDirectJoystickSystem, isHost, isSharedCpcParty]);
 
   useEffect(() => {
     if (isHost !== false) {
@@ -6194,7 +6286,7 @@ export default function RoomPage() {
 
       const isSwapDisk = isAmigaFamily && event.target.dataset.mode === 'swap';
       const allowedExtensions = isPuaeAmiga
-        ? ['.adf', '.adz', '.dms', '.ipf', '.hdf', '.lha', '.slave', '.zip', '.7z']
+        ? ['.adf', '.adz', '.dms', '.ipf', '.hdf', '.lha', '.slave', '.zip', '.7z', ...(isSwapDisk ? [] : CD32_MEDIA_EXTENSIONS)]
         : isAmigaLink
         ? ['.adf', '.adz', '.dms', '.ipf', '.zip', '.7z']
         : isMasterSystem ? ['.sms', '.zip', '.7z'] : isMegaDrive ? ['.bin', '.gen', '.md', '.smd', '.zip', '.7z'] : isNes ? ['.nes', '.zip', '.7z'] : isSnes ? ['.sfc', '.smc', '.fig', '.swc', '.bsx', '.gd3', '.gd7', '.dx2', '.zip', '.7z'] : isPcEngine ? ['.pce', '.sgx', '.zip', '.7z'] : isX68000 ? ['.dim', '.img', '.d88', '.88d', '.hdm', '.dup', '.2hd', '.xdf', '.hdf', '.cmd', '.m3u', '.zip'] : isPlayStation ? ['.cue', '.bin', '.chd', '.pbp', '.iso', '.zip', '.7z'] : isSaturn ? ['.cue', '.bin', '.chd', '.iso', '.zip', '.7z'] : isC64 ? ['.d64', '.g64', '.f64', '.t64', '.p00', '.p01', '.tap', '.prg', '.crt', '.zip', '.7z'] : isMsx ? ['.rom', '.mx1', '.mx2', '.dsk', '.cas', '.m3u', '.zip', '.7z'] : isAtari8 ? ['.atr', '.xfd', '.atx', '.xex', '.com', '.car', '.rom', '.bin', '.cas', '.zip', '.7z'] : isAtariSt ? ['.st', '.msa', '.stx', '.ipf', '.zip', '.7z'] : isArcade ? ['.zip', '.7z'] : isSpectrum ? ['.tap', '.tzx', '.z80', '.sna', '.szx', '.zip', '.7z'] : ['.dsk', '.zip'];
@@ -6211,7 +6303,7 @@ export default function RoomPage() {
           event.target.value = '';
           return;
         }
-        setError(isPuaeAmiga ? 'Amiga PUAE rooms support .adf, .adz, .dms, .ipf, .hdf, .lha, .slave, .zip, and .7z files' : isAmigaLink ? 'Amiga Link rooms support .adf, .adz, .dms, .ipf, .zip, and .7z files' : isMasterSystem ? 'Master System rooms support .sms, .zip, and .7z ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, .smd, .zip, and .7z ROM files' : isNes ? 'NES rooms support .nes, .zip, and .7z ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, .dx2, .zip, and .7z ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, .zip, and .7z files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, .crt, .zip, and .7z files' : isMsx ? 'MSX rooms support .rom, .mx1, .mx2, .dsk, .cas, .m3u, .zip, and .7z files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, .zip, and .7z files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, .ipf, .zip, and .7z disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, .zip, and .7z files' : 'Only .dsk files are supported right now');
+        setError(isPuaeAmiga ? 'Amiga PUAE rooms support .adf, .adz, .dms, .ipf, .hdf, .lha, .slave, .zip, and .7z files, plus CD32 discs (.cue with its tracks, .chd, .iso, .ccd, .mds, .nrg)' : isAmigaLink ? 'Amiga Link rooms support .adf, .adz, .dms, .ipf, .zip, and .7z files' : isMasterSystem ? 'Master System rooms support .sms, .zip, and .7z ROM files' : isMegaDrive ? 'Mega Drive rooms support .bin, .gen, .md, .smd, .zip, and .7z ROM files' : isNes ? 'NES rooms support .nes, .zip, and .7z ROM files' : isSnes ? 'SNES rooms support .sfc, .smc, .fig, .swc, .bsx, .gd3, .gd7, .dx2, .zip, and .7z ROM files' : isPcEngine ? 'PC Engine rooms support .pce, .sgx, .zip, and .7z files' : isPlayStation ? 'PlayStation rooms support .cue/.bin, .chd, .pbp, .iso, .zip, and .7z files' : isC64 ? 'C64 rooms support .d64, .t64, .tap, .prg, .crt, .zip, and .7z files' : isMsx ? 'MSX rooms support .rom, .mx1, .mx2, .dsk, .cas, .m3u, .zip, and .7z files' : isAtari8 ? 'Atari 8-bit rooms support .atr, .xex, .car, .rom, .bin, .cas, .zip, and .7z files' : isAtariSt ? 'Atari ST rooms support .st, .msa, .stx, .ipf, .zip, and .7z disk images' : isArcade ? 'Arcade rooms support MAME .zip and .7z ROM files' : isSpectrum ? 'Spectrum rooms support .tap, .tzx, .z80, .sna, .szx, .zip, and .7z files' : 'Only .dsk files are supported right now');
         addLog(`Rejected file: ${invalidFile.name}`);
         event.target.value = '';
         return;
@@ -6275,6 +6367,22 @@ export default function RoomPage() {
           fileName: selectedFile.name,
           bytes: new Uint8Array(await selectedFile.arrayBuffer()),
         })));
+      const isCd32Disc = isPuaeAmiga && !isSwapDisk && isCd32Media(loadedFiles);
+      if (isPuaeAmiga && !isCd32Disc) {
+        // Track files are only meaningful next to a CUE/CCD/MDS sheet.
+        const floppyFiles = loadedFiles.filter((loadedFile) => !isCd32TrackOnly(loadedFile.fileName));
+        if (!floppyFiles.length) {
+          throw new Error('CD32 track files need their .cue (or .ccd/.mds) sheet. Select the sheet and all of its track files together, or use a .chd/.iso image.');
+        }
+        loadedFiles.splice(0, loadedFiles.length, ...floppyFiles);
+      }
+      if (isCd32Disc) {
+        const missingTracks = findMissingCueTracks(loadedFiles);
+        if (missingTracks.length) {
+          throw new Error(`This CD32 .cue sheet needs these track files too: ${missingTracks.join(', ')}. Select the .cue and all of its tracks together, or load a zip containing them.`);
+        }
+        loadedFiles.sort((left, right) => Number(isCd32TrackOnly(left.fileName)) - Number(isCd32TrackOnly(right.fileName)));
+      }
       if (isPuaeAmiga && loadedFiles.some((loadedFile) => loadedFile.fileName.toLowerCase().endsWith('.ipf'))) {
         throw new Error(
           'This is an IPF disk image. Desktop FS-UAE can load IPF through the CAPS/SPS library, but that library is not available in this browser PUAE build. Use an ADF release or the WHDLoad .lha release of this game.',
@@ -6282,12 +6390,28 @@ export default function RoomPage() {
       }
       const bytes = loadedFiles[0].bytes;
       const amigaModel = isPuaeAmiga
-        ? (loadedFiles[0]?.whdLoadArchive
+        ? isCd32Disc ? 'CD32' : (loadedFiles[0]?.whdLoadArchive
           || loadedFiles.some((loadedFile) => /\.(lha|slave)$/i.test(loadedFile.fileName))
           ? 'A1200'
           : isAmigaAga ? 'A1200' : 'A500')
         : '';
+      const resolvedRomSource = isPuaeAmiga && !isSwapDisk
+        ? resolveAmigaRomSource({
+          featureEnabled: AMIGA_AROS_ENABLED,
+          requestedSource: searchParams.get('amigaRom'),
+          media: loadedFiles,
+        })
+        : { source: amigaRomSource, reason: 'unchanged' };
       if (isPuaeAmiga && !isSwapDisk) {
+        setAmigaRomSource(resolvedRomSource.source);
+        if (searchParams.get('amigaRom')?.toLowerCase() === AMIGA_ROM_SOURCE.AROS) {
+          if (resolvedRomSource.source === AMIGA_ROM_SOURCE.AROS) {
+            setKickstartRomName('AROS (PUAE built-in, experimental)');
+            addLog('Using experimental built-in AROS ROM for this floppy launch');
+          } else {
+            addLog('AROS request ignored: the feature is disabled or this media type requires original Kickstart');
+          }
+        }
         setLoadedAgaDiskCount(0);
         setCurrentAgaDiskIndex(0);
         if (amigaModel === 'A1200') {
@@ -6298,7 +6422,7 @@ export default function RoomPage() {
       }
       if (amigaModel && amigaModel !== amigaRequiredModel) {
         setAmigaRequiredModel(amigaModel);
-        setKickstartRomName('');
+        if (resolvedRomSource.source !== AMIGA_ROM_SOURCE.AROS) setKickstartRomName('');
       }
       const cpcAutoloadCommand = isCpcSystem && !isSwapDisk
         ? detectCpcAutoloadCommand(bytes, loadedFiles[0].fileName)
@@ -6318,9 +6442,11 @@ export default function RoomPage() {
         fileName: loadedFiles[0].fileName,
         bytes: isDiscConsole ? undefined : bytes,
         files: isDiscConsole || isX68000 ? loadedFiles : undefined,
-        disks: isPuaeAmiga && !isSwapDisk && !loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
+        disks: isPuaeAmiga && !isSwapDisk && !isCd32Disc && !loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
+        cdFiles: isCd32Disc ? loadedFiles : undefined,
         whdLoadFiles: isPuaeAmiga && loadedFiles[0]?.whdLoadArchive ? loadedFiles : undefined,
         profile: isPuaeAmiga ? { model: amigaModel } : undefined,
+        romSource: isPuaeAmiga ? resolvedRomSource.source : undefined,
         media: isC64 || isMsx || isAtariSt ? loadedFiles : undefined,
         autoloadCommand: cpcAutoloadCommand || undefined,
       };
@@ -6332,7 +6458,9 @@ export default function RoomPage() {
       let reloadedAmigaFrame = null;
       if (isPuaeAmiga && loadedDiskName) {
         setStatus('Preparing a clean Amiga PUAE runtime');
-        reloadedAmigaFrame = await reloadAmigaAgaFrame();
+        reloadedAmigaFrame = await reloadAmigaAgaFrame(
+          amigaModel === 'CD32' ? AMIGA_CD32_KICKSTART_KEY : amigaModel === 'A1200' ? AMIGA_AGA_KICKSTART_KEY : AMIGA_KICKSTART_KEY,
+        );
       }
       if (isPcEngine && loadedDiskName) {
         setStatus('Preparing a clean PC Engine runtime');
@@ -6409,7 +6537,7 @@ export default function RoomPage() {
         }
       }
       if (isPuaeAmiga && !isSwapDisk) {
-        setLoadedAgaDiskCount(loadedFiles.length);
+        setLoadedAgaDiskCount(isCd32Disc ? 0 : loadedFiles.length);
         setCurrentAgaDiskIndex(0);
       }
       if (isC64) {
@@ -6425,7 +6553,7 @@ export default function RoomPage() {
       const loadedLabel = expandedZipFile
         ? `${loadedFiles[0].fileName} from ${file.name}`
         : loadedFiles.length > 1
-        ? `${loadedFiles[0].fileName} + ${loadedFiles.length - 1} disk${loadedFiles.length === 2 ? '' : 's'}`
+        ? `${loadedFiles[0].fileName} + ${loadedFiles.length - 1} ${isCd32Disc ? 'CD32 file' : 'disk'}${loadedFiles.length === 2 ? '' : 's'}`
         : file.name;
       if (snesZipFile) {
         addLog(`Selected SNES ROM from zip: ${loadedFiles[0].archiveEntryName || loadedFiles[0].fileName}`);
@@ -7023,12 +7151,34 @@ export default function RoomPage() {
 
       if (!file) return;
 
-      const lowerName = file.name.toLowerCase();
-      const allowedExtensions = ['.rom', '.bin', '.kick', '.kickstart'];
+      const isCd32Rom = isPuaeAmiga && amigaRequiredModel === 'CD32';
+      const pickedFiles = Array.from(event.target.files || []);
+      const allowedExtensions = ['.rom', '.bin', '.kick', '.kickstart', ...(isCd32Rom ? ['.ext', '.zip'] : [])];
+      const rejectedFile = pickedFiles.find((picked) => !allowedExtensions.some((extension) => picked.name.toLowerCase().endsWith(extension)));
 
-      if (!allowedExtensions.some((extension) => lowerName.endsWith(extension))) {
-        setError('Kickstart must be a .rom or .bin file');
-        addLog(`Rejected Kickstart ROM: ${file.name}`);
+      if (rejectedFile) {
+        setError(isCd32Rom ? 'CD32 ROMs must be .rom, .bin, .ext, or a .zip containing them' : 'Kickstart must be a .rom or .bin file');
+        addLog(`Rejected Kickstart ROM: ${rejectedFile.name}`);
+        event.target.value = '';
+        return;
+      }
+
+      if (isCd32Rom) {
+        const rom = buildCd32Rom(await Promise.all(pickedFiles.map(async (picked) => ({
+          fileName: picked.name,
+          bytes: new Uint8Array(await picked.arrayBuffer()),
+        }))));
+        savedSystemMediaRef.current.set(AMIGA_CD32_KICKSTART_KEY, rom);
+        try {
+          await saveStoredKickstart(AMIGA_CD32_KICKSTART_KEY, rom.fileName, rom.bytes);
+          addLog(`Saved CD32 ROMs for next time: ${rom.fileName}`);
+        } catch (err) {
+          addLog(`Could not save CD32 ROMs: ${err.message}`);
+        }
+        forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, rom.fileName, rom.bytes));
+        setAmigaRomSource(AMIGA_ROM_SOURCE.ORIGINAL);
+        setKickstartRomName(rom.fileName);
+        setStatus(`CD32 ROMs loaded: ${rom.fileName}`);
         event.target.value = '';
         return;
       }
@@ -7067,6 +7217,7 @@ export default function RoomPage() {
         : [];
       forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, file.name, bytes, supportKickstarts));
 
+      setAmigaRomSource(AMIGA_ROM_SOURCE.ORIGINAL);
       setKickstartRomName(file.name);
       addLog(`Loaded Kickstart ROM for this session: ${file.name}`);
       setStatus(`Kickstart loaded: ${file.name}`);
@@ -7280,20 +7431,20 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {isHost && canControlLocalEmulator && (!loadedDiskName || (isPuaeAmiga && !kickstartRomName)) ? (
+        {isHost && canControlLocalEmulator && (!loadedDiskName || (isPuaeAmiga && !kickstartRomName && amigaRomSource !== AMIGA_ROM_SOURCE.AROS)) ? (
           <section className="room-getting-started" aria-labelledby="room-getting-started-title">
             <div className="room-getting-started-copy">
               <span>Start here</span>
               <strong id="room-getting-started-title">
                 {isPuaeAmiga && loadedDiskName
-                  ? `Now load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`
+                  ? `Now load ${amigaKickstartLabel(amigaRequiredModel).short}`
                   : `Choose a ${systemLabel} game`}
               </strong>
               <small>
                 {isPuaeAmiga
                   ? loadedDiskName
-                    ? `${amigaRequiredModel === 'A1200' ? 'This WHDLoad/A1200 game needs Kickstart 3.1.' : 'This A500/floppy game needs Kickstart 1.3.'} It is stored only in this browser for next time.`
-                    : 'Choose the game first. We will identify whether it needs Kickstart 1.3 or 3.1.'
+                    ? `${amigaKickstartLabel(amigaRequiredModel).need} It is stored only in this browser for next time.`
+                    : 'Choose the game first: floppies, WHDLoad, or a CD32 disc. We will identify which Kickstart it needs.'
                   : localRoomGames.length
                     ? 'Pick a game from your connected library, or choose a file from this device.'
                     : 'Choose a game file from this device. You can connect a whole folder from the Library later.'}
@@ -7302,7 +7453,7 @@ export default function RoomPage() {
             <div className="room-getting-started-steps">
               {isPuaeAmiga && loadedDiskName ? (
                 <button type="button" onClick={openKickstartPicker}>
-                  <span>2</span>{`Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
+                  <span>2</span>{`Load ${amigaKickstartLabel(amigaRequiredModel).short}`}
                 </button>
               ) : null}
               {!loadedDiskName && localRoomGames.length ? (
@@ -7328,12 +7479,22 @@ export default function RoomPage() {
                 Instructions: {selectedControlProfile.title}
               </button>
             ) : null}
+            {isCpcGamepadRoom && isHost === true && cpcControlPlan ? (
+              <button
+                type="button"
+                className="secondary control-profile-pill"
+                title="Gamepad controls are set automatically from the game's manual. Click to view or change."
+                onClick={() => setControlProfileDrawerOpen(true)}
+              >
+                Gamepads: P1 {summarisePlayer(cpcControlPlan.players[0])} · P2 {summarisePlayer(cpcControlPlan.players[1])}
+              </button>
+            ) : null}
             {isCpcSystem && !selectedControlProfile && controlProfileMatches.length > 0 ? (
               <button type="button" className="secondary control-profile-pill" onClick={() => setControlProfileDrawerOpen(true)}>
                 Choose instructions ({controlProfileMatches.length})
               </button>
             ) : null}
-            {isAmigaFamily ? <span>{kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? loadedDiskName ? `ROM: ${amigaRequiredModel === 'A1200' ? 'A1200 Kickstart 3.1' : 'A500 Kickstart 1.3'} required` : 'ROM: chosen after game' : 'ROM: AROS'}</span> : null}
+            {isAmigaFamily ? <span>{amigaRomSource === AMIGA_ROM_SOURCE.AROS ? 'ROM: AROS (experimental)' : kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? loadedDiskName ? `ROM: ${amigaKickstartLabel(amigaRequiredModel).rom} required` : 'ROM: chosen after game' : 'ROM: AROS'}</span> : null}
             {isMsx ? <span>Powered by <a href="https://webmsx.org" target="_blank" rel="noreferrer">WebMSX</a></span> : null}
             {isDiscConsole ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : isSaturn ? 'BIOS: load saturn_bios.bin locally' : 'BIOS: HLE fallback / load your own locally'}</span> : null}
             {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
@@ -7636,7 +7797,8 @@ export default function RoomPage() {
                   <input
                     ref={kickstartInputRef}
                     type="file"
-                    accept=".rom,.bin,.kick,.kickstart"
+                    accept={amigaRequiredModel === 'CD32' ? '.rom,.bin,.ext,.zip' : '.rom,.bin,.kick,.kickstart'}
+                    multiple={amigaRequiredModel === 'CD32'}
                     onChange={handleKickstartSelected}
                     style={{ display: 'none' }}
                   />
@@ -7914,7 +8076,7 @@ export default function RoomPage() {
 
                   {isAmigaFamily && !isPuaeAmiga ? (
                     <button type="button" className="secondary" onClick={openKickstartPicker} disabled={(isPuaeAmiga && !amigaRequiredModel) || (hostStarted && !isPuaeAmiga)}>
-                      {kickstartRomName ? 'Change Kickstart ROM' : isPuaeAmiga && !amigaRequiredModel ? 'Choose game before Kickstart' : `Load ${amigaRequiredModel === 'A1200' ? 'Kickstart 3.1' : 'Kickstart 1.3'}`}
+                      {kickstartRomName ? 'Change Kickstart ROM' : isPuaeAmiga && !amigaRequiredModel ? 'Choose game before Kickstart' : `Load ${amigaKickstartLabel(amigaRequiredModel).short}`}
                     </button>
                   ) : null}
 
@@ -7937,7 +8099,7 @@ export default function RoomPage() {
                         <button type="button" className="secondary" onClick={openKickstartPicker} disabled={!amigaRequiredModel}>
                           Change Kickstart ROM
                         </button>
-                        {hasVipAccess ? (
+                        {hasVipAccess && amigaRequiredModel !== 'CD32' ? (
                           <button type="button" className="secondary" onClick={loadVipKickstart} disabled={vipKickstartBusy}>
                             {vipKickstartBusy ? 'Downloading...' : `Use saved ${amigaRequiredModel === 'A1200' ? 'A1200 3.1' : 'A500 1.3'} ROM`}
                           </button>
@@ -8259,6 +8421,85 @@ export default function RoomPage() {
                 Close
               </button>
             </div>
+
+            {isCpcGamepadRoom && isHost === true && cpcControlPlan ? (
+              <section className="control-profile-section cpc-gamepad-section" aria-label="Gamepad controls">
+                <div className="control-player-heading">
+                  <h3>Gamepads</h3>
+                  <span>{cpcConnectedPads.length ? `${cpcConnectedPads.length} connected` : 'None connected'}</span>
+                </div>
+                {cpcControlPlan.players.map((playerPlan, slot) => {
+                  const playerKey = slot === 0 ? 'player1' : 'player2';
+                  const padSlot = cpcControlPlan.swap ? 1 - slot : slot;
+                  const pad = cpcConnectedPads[padSlot];
+                  const override = cpcOverrides[playerKey] || {};
+                  const setOverride = (patch) => updateCpcOverrides((previous) => ({
+                    ...previous,
+                    [playerKey]: { ...(previous[playerKey] || {}), ...patch },
+                  }));
+                  return (
+                    <div key={playerKey} className="cpc-gamepad-player">
+                      <div className="cpc-gamepad-player-title">
+                        <strong>Player {slot + 1}: {summarisePlayer(playerPlan)}</strong>
+                        <small>{pad ? pad.id.replace(/\s*\(.*\)\s*$/, '') : `Pad ${padSlot + 1} not connected`}</small>
+                      </div>
+                      <small className="muted">{playerPlan.reason}</small>
+                      {playerPlan.mode !== 'off' && playerPlan.mode !== 'shared' ? (
+                        <div className="cpc-gamepad-buttons">
+                          {PAD_BUTTON_LABELS.filter(([button]) => playerPlan.bindings[button]?.length).map(([button, label]) => (
+                            <span key={button}>
+                              <b>{label}</b> {formatCpcBinding(playerPlan.bindings[button])}
+                              {playerPlan.labels[button] ? <em> {playerPlan.labels[button]}</em> : null}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {cpcControlsEditing ? (
+                        <div className="cpc-gamepad-edit">
+                          <label>
+                            Mode
+                            <select
+                              value={override.mode || 'auto'}
+                              onChange={(event) => setOverride({ mode: event.target.value })}
+                            >
+                              {Object.entries(CPC_CONTROL_MODES)
+                                .filter(([mode]) => slot === 1 || mode !== 'shared')
+                                .map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
+                            </select>
+                          </label>
+                          {playerPlan.mode === 'keys' ? EDITABLE_SLOTS.map((editSlot) => (
+                            <label key={editSlot}>
+                              {editSlot === 'a' ? 'A' : editSlot === 'b' ? 'B' : editSlot.replace(/^./, (letter) => letter.toUpperCase())}
+                              <input
+                                type="text"
+                                spellCheck={false}
+                                placeholder="e.g. Q, SPACE, SHIFT+P"
+                                value={override.keys?.[editSlot] ?? bindingToText(playerPlan.bindings[editSlot])}
+                                onChange={(event) => setOverride({ keys: { ...(override.keys || {}), [editSlot]: event.target.value } })}
+                              />
+                            </label>
+                          )) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {cpcControlPlan.notes.map((note) => <small key={note} className="muted">{note}</small>)}
+                <div className="cpc-gamepad-actions">
+                  <button type="button" className="secondary" onClick={() => setCpcControlsEditing((editing) => !editing)}>
+                    {cpcControlsEditing ? 'Done' : 'Change mapping'}
+                  </button>
+                  <button type="button" className="secondary" onClick={() => updateCpcOverrides((previous) => ({ ...previous, swap: !previous.swap }))}>
+                    Swap pads
+                  </button>
+                  {cpcOverrides.player1 || cpcOverrides.player2 || cpcOverrides.swap ? (
+                    <button type="button" className="secondary" onClick={() => updateCpcOverrides({})}>
+                      Reset to manual
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
 
             {controlProfileMatches.length > 1 ? (
               <div className="control-match-list">

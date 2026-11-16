@@ -3856,6 +3856,75 @@ button.recent-score-game:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+.cpc-gamepad-section {
+  gap: 0.6rem;
+}
+
+.cpc-gamepad-player {
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+}
+
+.cpc-gamepad-player-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.cpc-gamepad-player-title small {
+  color: var(--muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpc-gamepad-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.cpc-gamepad-buttons span {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.2rem 0.45rem;
+  color: #d9e7dc;
+  font-size: 0.8rem;
+}
+
+.cpc-gamepad-buttons b {
+  color: #fff7dd;
+}
+
+.cpc-gamepad-buttons em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.cpc-gamepad-edit {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.4rem;
+}
+
+.cpc-gamepad-edit label {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.cpc-gamepad-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .control-profile-drawer {
   position: fixed;
   z-index: 80;

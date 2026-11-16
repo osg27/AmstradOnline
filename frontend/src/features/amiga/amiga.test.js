@@ -5,6 +5,7 @@ import { identifyKickstart, resolveKickstart } from './kickstarts';
 import { createAmigaLaunchManifest } from './manifest';
 import { decodeHashMatches, groupIdentifiedMedia, inspectAmigaFile } from './openretro';
 import { canonicalAmigaPlatform, selectAmigaRuntime } from './runtime';
+import { AMIGA_ROM_SOURCE, isExperimentalArosEnabled, resolveAmigaRomSource } from './romSource';
 
 describe('Amiga OpenRetro identification', () => {
   it('decodes compact SHA-1 matches and preserves multi-disk order', () => {
@@ -63,5 +64,31 @@ describe('Kickstart and manifest', () => {
     const manifest = createAmigaLaunchManifest({ gameId: 'g', releaseId: 'r', media: [{ sha1: 'b', diskNumber: 2 }, { sha1: 'a', diskNumber: 1 }], config, kickstart: { sha1: 'k' } });
     expect(manifest.media.map((item) => item.diskNumber)).toEqual([1, 2]);
     expect(JSON.stringify(manifest)).not.toMatch(/path|handle|bytes/i);
+  });
+});
+
+describe('experimental AROS ROM selection', () => {
+  it('is disabled unless the feature flag is explicitly true', () => {
+    expect(isExperimentalArosEnabled('true')).toBe(true);
+    expect(isExperimentalArosEnabled('false')).toBe(false);
+    expect(isExperimentalArosEnabled(undefined)).toBe(false);
+  });
+
+  it('uses AROS only for an explicit floppy launch', () => {
+    expect(resolveAmigaRomSource({
+      featureEnabled: true,
+      requestedSource: 'aros',
+      media: [{ fileName: 'Game.adf' }],
+    }).source).toBe(AMIGA_ROM_SOURCE.AROS);
+    expect(resolveAmigaRomSource({
+      featureEnabled: true,
+      requestedSource: 'aros',
+      media: [{ fileName: 'Game.lha' }],
+    })).toEqual({ source: AMIGA_ROM_SOURCE.ORIGINAL, reason: 'unsupported-media' });
+    expect(resolveAmigaRomSource({
+      featureEnabled: false,
+      requestedSource: 'aros',
+      media: [{ fileName: 'Game.adf' }],
+    }).source).toBe(AMIGA_ROM_SOURCE.ORIGINAL);
   });
 });

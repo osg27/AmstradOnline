@@ -110,3 +110,35 @@ class MamePreviewTests(unittest.TestCase):
             preview.softcore_request(preview.PreviewRequest(post_data=self.softcore_data('ping')), self.user)
         self.assertEqual(error.exception.status_code, 429)
         forward.assert_not_called()
+
+    def test_sf2ce_profile_has_exact_game_hash_and_35_core_achievements(self):
+        self.assertEqual(preview.SF2CE.game_id, '11772')
+        self.assertEqual(len(preview.SF2CE.achievements), 35)
+        self.assertEqual(preview.SF2CE.game_hash, '48165021fdb6d258a054008f3ee85bdf')
+        data = f'r=achievementsets&u=FixtureUser&t=fixture-token&m={preview.SF2CE.game_hash}'
+        with patch.object(preview, 'forward_rpc', return_value={'status': 200, 'body': '{"Success":true}'}) as forward:
+            response = preview.sf2ce_preview_request(preview.PreviewRequest(post_data=data), self.user)
+            forward.assert_called_once_with(data)
+            self.assertEqual(response.headers['cache-control'], 'no-store')
+
+    def test_sf2ce_softcore_reuses_validator_but_cannot_submit_pacman_awards(self):
+        from urllib.parse import urlencode
+        params = {'r': 'awardachievement', 'u': 'FixtureUser', 't': 'fixture-token',
+                  'a': '277637', 'h': '0', 'm': preview.SF2CE.game_hash, 'v': 'a' * 32}
+        data = urlencode(params)
+        with patch.object(preview, 'forward_rpc', return_value={'status': 200, 'body': '{"Success":true}'}) as forward:
+            result = preview.sf2ce_softcore_request(preview.PreviewRequest(post_data=data), self.user)
+            forward.assert_called_once_with(data, user_agent=preview.PACMAN_USER_AGENT)
+            self.assertEqual(result.headers['cache-control'], 'no-store')
+        for changes in [{'a': '127619'}, {'m': preview.PACMAN_HASH}, {'h': '1'}, {'a': '277649'}, {'a': '100000001'}, {'t': 'other'}]:
+            with self.subTest(changes=changes), patch.object(preview, 'forward_rpc') as forward:
+                with self.assertRaises(HTTPException):
+                    preview.sf2ce_softcore_request(preview.PreviewRequest(post_data=urlencode({**params, **changes})), self.user)
+                forward.assert_not_called()
+        # The existing Pac-Man endpoint must never accept an SF2 award (or vice versa).
+        with self.assertRaises(HTTPException):
+            preview.validate_softcore(data, self.session)
+        with self.assertRaises(HTTPException):
+            preview.validate_softcore(self.softcore_data('awardachievement'), self.session, preview.SF2CE)
+        with self.assertRaises(HTTPException):
+            preview.validate_preview(data, self.session, preview.SF2CE)

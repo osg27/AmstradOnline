@@ -1,8 +1,10 @@
 import { apiFetch } from '../../api/client';
 import { readPreviewGamepad } from './mamePreviewControls';
+import { MAME_PREVIEW_GAMES } from './mamePreviewGames';
+import { inspectCps1Rom } from './cps1Rom';
 
 const assets = '/experiments/mame-ra/';
-const assetFile = name => `${assets}${name}?v=pacman-softcore-1`;
+const assetFile = name => `${assets}${name}?v=cps1-1`;
 const scripts = new Map();
 function loadScript(name) {
   if (!scripts.has(name)) scripts.set(name, new Promise((resolve, reject) => {
@@ -26,11 +28,13 @@ export function readPacmanMemory(core, address, length) {
   return bytes;
 }
 
-export function createMamePreview({ canvas, status, snapshot, hit, controller = () => {}, submitted = () => {}, softcore = false }) {
+export function createMamePreview({ canvas, status, snapshot, hit, controller = () => {}, submitted = () => {}, romInfo = () => {}, softcore = false, game = 'pacman' }) {
+  const profile = MAME_PREVIEW_GAMES[game];
+  if (!profile) throw new Error('Unsupported Arcade experiment.');
   let disposed = false, core, client, timer, audio, audioTime = 0, mask = 0, paused = false, tracking = false;
   let gameReady = !softcore;
   const abort = new AbortController();
-  const post = (path, data) => apiFetch(`/auth/retroachievements/mame-preview/${softcore ? 'softcore/' : ''}${path}`, {
+  const post = (path, data) => apiFetch(`/auth/retroachievements/mame-preview/${profile.apiPath}${softcore ? 'softcore/' : ''}${path}`, {
     method: 'POST', body: JSON.stringify(data), signal: abort.signal,
   });
   const reply = (callback, userdata, code, data) => {
@@ -51,14 +55,18 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
     pause(value) { paused = value; mask = 0; },
     reset() { core?._probe_reset(); client?._ra_reset(); mask = 0; },
     async start(file) {
-      if (file.name.toLowerCase() !== 'pacman.zip' || file.size > 4 * 1024 * 1024) throw new Error('Choose your MAME Pac-Man set named pacman.zip (up to 4 MB).');
-      status('Loading the isolated Pac-Man preview…');
+      if (file.name.toLowerCase() !== profile.filename || file.size > profile.maxBytes) throw new Error(`Choose your complete MAME set named ${profile.filename} (up to ${profile.maxBytes / 1024 / 1024} MB).`);
+      status(`Loading the isolated ${profile.title} test…`);
       // Create audio during the file-selection gesture. Browsers may require a control click to resume.
       const Audio = window.AudioContext || window.webkitAudioContext;
       if (Audio) audio = new Audio();
-      await Promise.all([loadScript('mame-pacman.js'), loadScript('rc-client.js')]);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const revision = game === 'sf2ce' ? await inspectCps1Rom(bytes, softcore) : null;
       if (disposed) return;
-      core = await window.OSGMamePacman({ locateFile: assetFile, print() {}, printErr() {},
+      romInfo(revision?.description || '');
+      await Promise.all([loadScript(profile.coreFile), loadScript('rc-client.js')]);
+      if (disposed) return;
+      core = await window[profile.coreFactory]({ locateFile: assetFile, print() {}, printErr() {},
         onAudio(samples, rate) {
           if (disposed || paused || !audio || audio.state !== 'running') return;
           if (audioTime > audio.currentTime + 0.15) return;
@@ -73,13 +81,13 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
       });
       if (disposed) return;
       core.FS.mkdir('/roms'); core.FS.mkdir('/saves');
-      core.FS.writeFile('/roms/pacman.zip', new Uint8Array(await file.arrayBuffer()));
+      core.FS.writeFile(`/roms/${revision?.legacy ? 'sf2ceold.zip' : profile.filename}`, bytes);
       if (disposed) return;
-      if (!core._probe_load()) throw new Error('MAME could not load this Pac-Man set. Check that the archive contains the required ROM files.');
+      if (!(revision?.legacy ? core._probe_load_legacy() : core._probe_load())) throw new Error(`MAME could not load ${profile.filename}. Check that the archive contains the required ROM files.`);
       let ticks = 0, controllerName;
       timer = setInterval(() => {
         if (disposed || paused || document.hidden) return;
-        const pad = readPreviewGamepad(navigator.getGamepads?.());
+        const pad = readPreviewGamepad(navigator.getGamepads?.(), profile.sixButtons);
         if (pad.name !== controllerName) { controllerName = pad.name; controller(pad.name); }
         const padMask = document.activeElement === canvas ? pad.mask : 0;
         if (padMask && audio?.state === 'suspended') audio.resume().catch(() => {});
@@ -94,7 +102,7 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
         }
         if (++ticks % 60 === 0 && tracking) client._ra_snapshot();
       }, 1000 / core._probe_fps());
-      status('Pac-Man loaded. Connecting the read-only achievement preview…');
+      status(`${profile.title} loaded. Connecting RetroAchievements…`);
       client = await window.OSGMameRA({ locateFile: assetFile,
         readMemory: (address, length) => readPacmanMemory(core, address, length),
         onSnapshot: value => { if (!disposed) snapshot(value); },
@@ -102,11 +110,11 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
           if (disposed) return;
           if (event.kind === 'login') {
             if (event.result !== 0) { status('RetroAchievements sign-in failed. Reconnect in Profile.'); return; }
-            if (!client._ra_load_pacman()) status('Could not identify Pac-Man.');
+            if (!client[profile.loadFunction]()) status(`Could not identify ${profile.title}.`);
           } else if (event.kind === 'game') {
-            tracking = event.result === 0 && event.id === 12192;
+            tracking = event.result === 0 && event.id === profile.id;
             if (tracking && softcore) { core._probe_reset(); mask = 0; gameReady = true; }
-            status(tracking ? `${event.title}: ${event.points} achievement${event.points === 1 ? '' : 's'} loaded. ${softcore ? 'Softcore submissions enabled. Game restarted for this new session.' : 'Local preview only — nothing is submitted.'}` : 'Pac-Man achievements could not load.');
+            status(tracking ? `${event.title}: ${event.points} achievement${event.points === 1 ? '' : 's'} loaded. ${softcore ? 'Softcore submissions enabled. Game restarted for this new session.' : 'Local preview only — nothing is submitted.'}` : `${profile.title} achievements could not load.`);
             if (!tracking) client._ra_unload();
           } else if (event.kind === 'unlock') hit(event);
           else if (event.kind === 'pending') status('An unlock is waiting to sync. Keep this page open.');
@@ -130,7 +138,7 @@ export function createMamePreview({ canvas, status, snapshot, hit, controller = 
         }, print() {}, printErr() {},
       });
       if (disposed) { client._ra_logout(); return; }
-      if (!client._ra_pacman_softcore(softcore ? 1 : 0)) throw new Error('Could not start a fresh Pac-Man achievement session.');
+      if (!client._ra_pacman_softcore(softcore ? 1 : 0)) throw new Error('Could not start a fresh achievement session.');
       const connection = await post('session', {});
       if (disposed) return;
       client.cwrap('ra_login_token', null, ['string', 'string'])(connection.username, connection.token);
