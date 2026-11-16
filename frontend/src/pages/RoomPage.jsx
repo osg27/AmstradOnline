@@ -7202,6 +7202,16 @@ export default function RoomPage() {
                 {soloInviteBusy ? 'Opening multiplayer...' : 'Invite player'}
               </button>
             ) : null}
+            {isSharedCpcParty && isHost && !isSoloMode ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={nextPartyTurn}
+                title="Pass the shared controller to the next player"
+              >
+                Pass controller (P{activePartyPlayer})
+              </button>
+            ) : null}
             <button className="secondary" onClick={leaveRoom}>
               Leave
             </button>
