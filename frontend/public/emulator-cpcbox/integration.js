@@ -137,6 +137,7 @@
     ')': 48,
     '.': 190,
     '\\': 220,
+    '/': 191,
   };
 
   const heldJoystickKeys = new Set();
@@ -315,14 +316,6 @@
     }, 300);
   }
 
-  // Joystick directions also hold the keyboard cursor line. Games such as
-  // Pinball Dreams read the plunger from the cursor keys, which the joystick
-  // matrix line does not satisfy, so party guests need both.
-  function dispatchJoystickCode(code, action) {
-    dispatchKey(code, action);
-    if (CURSOR_KEY_CODES.has(code)) applyMatrixKey(code, action, { forceKeyboard: true });
-  }
-
   function applyJoystickMask(mask) {
     setJoystickMode(true);
     const next = new Set();
@@ -335,10 +328,10 @@
     if (mask & 64) next.add(13);
 
     heldJoystickKeys.forEach((code) => {
-      if (!next.has(code)) dispatchJoystickCode(code, 'up');
+      if (!next.has(code)) dispatchKey(code, 'up');
     });
     next.forEach((code) => {
-      if (!heldJoystickKeys.has(code)) dispatchJoystickCode(code, 'down');
+      if (!heldJoystickKeys.has(code)) dispatchKey(code, 'down');
     });
 
     heldJoystickKeys.clear();

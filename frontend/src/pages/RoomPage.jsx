@@ -1685,6 +1685,11 @@ export default function RoomPage() {
     if (customMask !== null) return mask;
     if (fire) mask |= 16;
     if (extra) mask |= 32;
+    if (system === 'cpc_party') {
+      // Party Pinball: the triggers are the flippers. LT = left (z), RT = right (/).
+      if (pad.buttons[6]?.pressed) mask |= 32;
+      if (pad.buttons[7]?.pressed) mask |= 128;
+    }
     if (start) mask |= 64;
     if (third) mask |= 128;
     if (system === 'arcade') {
@@ -2515,6 +2520,24 @@ export default function RoomPage() {
     });
   }, [addInputDebug, forwardInputToEmulator]);
 
+  // Party rooms: the right trigger (mask bit 128) presses the right flipper key.
+  // The left trigger uses the extra bit (32), which already sends z.
+  const forwardRightFlipperAsKey = useCallback((mask, previousMask) => {
+    const active = Boolean(mask & 128);
+    const wasActive = Boolean(previousMask & 128);
+
+    if (active === wasActive) return;
+
+    const action = active ? 'down' : 'up';
+    addInputDebug(`forward P1 right flipper key / ${action}`, mask, 'shared joystick');
+    forwardInputToEmulator({
+      type: 'amstrad_remote_control',
+      player: 1,
+      key: '/',
+      action,
+    });
+  }, [addInputDebug, forwardInputToEmulator]);
+
   const forwardJoystickMaskAsKeys = useCallback((mask, player, previousMask) => {
     if (isCpcGamepadRoom) {
       // Plain CPC rooms: this is always the guest (Player 2). Send its full
@@ -2544,6 +2567,7 @@ export default function RoomPage() {
     if (!isSharedCpcParty) return;
 
     forwardJoystickMaskAsKeys(0, 1, previousMask);
+    forwardRightFlipperAsKey(0, previousMask);
     forwardInputToEmulator({
       type: 'amstrad_remote_joystick',
       player: 1,
@@ -2600,6 +2624,7 @@ export default function RoomPage() {
           mask: joystickMask,
         });
         forwardExtraButtonAsKey(mask, 1, previousMask);
+        forwardRightFlipperAsKey(mask, previousMask);
         localJoystickMaskRef.current = mask;
         return;
       }
@@ -2795,6 +2820,7 @@ export default function RoomPage() {
     }
 
     releaseCpcPartySharedInput();
+    forwardInputToEmulator({ type: 'amstrad_release_all' });
     setActivePartyPlayer(nextPlayer);
     sendSignalRef.current({
       type: 'party-turn',
@@ -2802,7 +2828,7 @@ export default function RoomPage() {
     });
     addInputDebug(`party turn switched to P${nextPlayer}`, 0, 'party turn');
     addLog(`Party turn switched to player ${nextPlayer}`);
-  }, [addInputDebug, addLog, isHost, isSharedCpcParty, partyMaxPlayers, releaseCpcPartySharedInput]);
+  }, [addInputDebug, addLog, forwardInputToEmulator, isHost, isSharedCpcParty, partyMaxPlayers, releaseCpcPartySharedInput]);
 
   const nextPartyTurn = useCallback(() => {
     setPartyTurn(activePartyPlayer >= partyMaxPlayers ? 1 : activePartyPlayer + 1);
@@ -3125,7 +3151,7 @@ export default function RoomPage() {
 
         forwardInputToEmulator({
           type: 'amstrad_remote_control',
-          key: parsed.key,
+          key: isSharedCpcParty ? (hostKeyToCpcKeyboardKey(parsed.key) || parsed.key) : parsed.key,
           action: parsed.action,
           player: isSharedCpcParty ? 1 : player,
         });
@@ -3220,6 +3246,7 @@ export default function RoomPage() {
             mask: mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
+          forwardRightFlipperAsKey(mask, previousMask);
         } else if (isDirectJoystickSystem) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
@@ -3256,6 +3283,7 @@ export default function RoomPage() {
             mask: mask & 31,
           });
           forwardExtraButtonAsKey(mask, 1, previousMask);
+          forwardRightFlipperAsKey(mask, previousMask);
         } else if (isDirectJoystickSystem) {
           forwardInputToEmulator({
             type: 'amstrad_remote_joystick',
@@ -4318,7 +4346,7 @@ export default function RoomPage() {
       if (!inputCaptured) return;
 
       const key = getKeyboardKey(event);
-      const joyBit = keyToJoystickBit(key);
+      const joyBit = isSharedCpcParty ? 0 : keyToJoystickBit(key);
 
       if (joyBit) {
         if (event.repeat) {
@@ -4336,7 +4364,7 @@ export default function RoomPage() {
         return;
       }
 
-      if (isGuestKeyboardKey(key)) {
+      if (isGuestKeyboardKey(key) || (isSharedCpcParty && hostKeyToCpcKeyboardKey(key))) {
         const payload = {
           type: 'key',
           player: 2,
@@ -4358,7 +4386,7 @@ export default function RoomPage() {
       if (!inputCaptured) return;
 
       const key = getKeyboardKey(event);
-      const joyBit = keyToJoystickBit(key);
+      const joyBit = isSharedCpcParty ? 0 : keyToJoystickBit(key);
 
       if (joyBit) {
         guestJoystickMask &= ~joyBit;
@@ -4370,7 +4398,7 @@ export default function RoomPage() {
         return;
       }
 
-      if (isGuestKeyboardKey(key)) {
+      if (isGuestKeyboardKey(key) || (isSharedCpcParty && hostKeyToCpcKeyboardKey(key))) {
         const payload = {
           type: 'key',
           player: 2,
@@ -4393,7 +4421,7 @@ export default function RoomPage() {
       window.removeEventListener('keydown', handleGuestKeyDown);
       window.removeEventListener('keyup', handleGuestKeyUp);
     };
-  }, [addInputDebug, isAmigaLink, isHost, inputCaptured, sendLocalJoystickMask]);
+  }, [addInputDebug, isAmigaLink, isHost, inputCaptured, isSharedCpcParty, sendLocalJoystickMask]);
 
   function startMirrorLoop(sourceCanvas) {
     const mirrorCanvas = mirrorCanvasRef.current;
