@@ -65,7 +65,7 @@ import TouchControls from '../features/room-ui/TouchControls';
 import StartHereCard from '../features/room-ui/StartHereCard';
 import Icon from '../features/room-ui/icons';
 import useRoomViewport, { useWindowWidth } from '../features/room-ui/useRoomViewport';
-import { ScorePanel, AchievementsPanel } from '../features/room-ui/SidePanels';
+import { ScorePanel, AchievementsPanel, ChatPanel } from '../features/room-ui/SidePanels';
 import useGameMenuShortcuts from '../features/room-ui/useGameMenuShortcuts';
 import { MenuBlock, MenuGroup, MenuNote, MenuRow, Toggle, Value } from '../features/room-ui/menuPanels/MenuParts';
 import ArcadeRomBrowser from '../features/room-ui/menuPanels/ArcadeRomBrowser';
@@ -80,6 +80,7 @@ import {
   SYSTEM_COLORS,
   deriveGameTitle,
   isKeyboardSystem,
+  SIDE_PANELS_MIN_WIDTH,
   sideLayoutFor,
   touchProfileFor,
 } from '../features/room-ui/roomUiConfig';
@@ -1103,6 +1104,8 @@ export default function RoomPage() {
   const isMouseComputer = isAmigaFamily || isAtariSt || isX68000;
   const isArcade = roomSystem === 'arcade';
   const isSoloMode = isArcade ? !Boolean(room?.arcade_multiplayer) : room?.hosting_mode === 'solo';
+  // Online rooms show the chat beside the game on roomy desktop screens (the Achievements panel is solo-only).
+  const sideChatShown = !isSoloMode && viewport === 'desktop' && windowWidth >= SIDE_PANELS_MIN_WIDTH && !obsCaptureMode;
   const supportsMameScoreboard = isArcade && isSoloMode;
   const supportsAmigaScoreboard = isPuaeAmiga && Boolean(amigaScoreGame);
   const kickstartStorageKey = isPuaeAmiga
@@ -7551,7 +7554,7 @@ export default function RoomPage() {
     fresh.forEach((item) => seen.add(item.id));
     const incoming = fresh.filter((item) => !item.mine);
     if (!incoming.length) return;
-    const chatVisible = gameMenuOpenRef.current && menuCategory === 'room';
+    const chatVisible = sideChatShown || (gameMenuOpenRef.current && menuCategory === 'room');
     if (!chatVisible) {
       setChatUnread((count) => count + incoming.length);
       const latest = incoming[incoming.length - 1];
@@ -7732,7 +7735,7 @@ export default function RoomPage() {
     viewport,
     width: windowWidth,
     hasScores: hasSideScores,
-    hasAchievements: supportsRetroAchievements,
+    hasAchievements: supportsRetroAchievements && isSoloMode,
     enabled: sidePanelsEnabled,
     obsCapture: obsCaptureMode,
   });
@@ -7776,6 +7779,15 @@ export default function RoomPage() {
       onRetry={raList?.retry}
     />
   ) : null;
+  const sideChatPanel = sideChatShown ? (
+    <ChatPanel>
+      <RoomChat
+        messages={chatMessages}
+        onSend={sendChatMessage}
+        connected={signalingOpen}
+      />
+    </ChatPanel>
+  ) : null;
   const myMameEntry = mameLeaderboard.find((entry) => entry.username === username);
   const myAmigaEntry = amigaLeaderboard.find((entry) => entry.username === username);
   const scoresPill = supportsMameScoreboard && loadedDiskName && mameLeaderboardSupported && mameLeaderboard.length ? (
@@ -7791,12 +7803,9 @@ export default function RoomPage() {
       Record <span className="num">{amigaLeaderboard[0].score.toLocaleString()}</span>
     </Pill>
   ) : null;
-  const raPill = supportsRetroAchievements ? (
-    !isSoloMode ? (
-      <Pill key="ra" className="ra" onClick={() => openGameMenu('ra')}><span className="gem">◆</span>Achievements pause in online play</Pill>
-    ) : raProgress?.total ? (
-      <Pill key="ra" className="ra" onClick={() => openGameMenu('ra')}><span className="gem">◆</span><span className="num">{raProgress.unlocked}/{raProgress.total}</span> achievements</Pill>
-    ) : null
+  // RetroAchievements is solo-only: no pill in online rooms.
+  const raPill = supportsRetroAchievements && isSoloMode && raProgress?.total ? (
+    <Pill key="ra" className="ra" onClick={() => openGameMenu('ra')}><span className="gem">◆</span><span className="num">{raProgress.unlocked}/{raProgress.total}</span> achievements</Pill>
   ) : null;
   const instructionsPill = isCpcSystem && (selectedControlProfile || controlProfileMatches.length > 0) ? (
     <Pill key="instructions" onClick={() => setControlProfileDrawerOpen(true)}>
@@ -8310,7 +8319,7 @@ export default function RoomPage() {
               sendArcadeQueueAction={sendArcadeQueueAction}
             />
           ) : null}
-          {!isSoloMode ? (
+          {!isSoloMode && !sideChatShown ? (
             <MenuGroup title="Chat">
               <RoomChat
                 messages={chatMessages}
@@ -8651,7 +8660,7 @@ export default function RoomPage() {
   return (
     <div
       ref={roomRootRef}
-      className={`osg-room v-${viewport} ${roomIdle ? 'idle' : ''} ${obsCaptureMode ? 'obs-capture-page' : ''} ${gameMenuOpen ? 'menu-open' : ''} ${sideLayout.showLeft ? 'side-l' : ''} ${sideLayout.showRight ? 'side-r' : ''}`}
+      className={`osg-room v-${viewport} ${roomIdle ? 'idle' : ''} ${obsCaptureMode ? 'obs-capture-page' : ''} ${gameMenuOpen ? 'menu-open' : ''} ${sideLayout.showLeft ? 'side-l' : ''} ${sideLayout.showRight || sideChatShown ? 'side-r' : ''}`}
       data-system={roomSystem}
     >
       {obsCaptureMode ? (
@@ -8668,7 +8677,7 @@ export default function RoomPage() {
         showPausedTag={!gameMenuOpen}
         overlay={obsCaptureMode ? null : screenOverlay}
         leftPanel={sideScorePanel}
-        rightPanel={sideAchievementsPanel}
+        rightPanel={sideChatPanel || sideAchievementsPanel}
       >
         {canControlLocalEmulator ? (
           isArcade ? (

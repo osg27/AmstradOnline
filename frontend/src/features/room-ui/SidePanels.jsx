@@ -55,6 +55,11 @@ export function ScorePanel({ kicker, title, subtitle, status, entries = [], user
 const ONLINE_MESSAGE = 'Achievements are only earned in solo play. They start again when you play this game on your own.';
 const UNSUPPORTED_MESSAGE = 'This game was not recognised by RetroAchievements. The ROM version must match a supported hash.';
 
+/** Right panel in online rooms: the room chat, kept beside the game. */
+export function ChatPanel({ children }) {
+  return <PanelShell side="right" label="Room chat">{children}</PanelShell>;
+}
+
 /** Right panel: the game's full RetroAchievements list, ticked off live. */
 export function AchievementsPanel({ view, items = [], status, onRetry }) {
   const { unlocked, total, points, totalPoints } = summariseAchievements(items);
