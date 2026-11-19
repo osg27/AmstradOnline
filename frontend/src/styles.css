@@ -928,6 +928,11 @@ input:focus {
     grid-template-columns: 1fr;
   }
 
+  /* Keep the room chat beside the game on mid-width screens; only stack it below the game on narrow ones. */
+  .room-social-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+  }
+
   .arcade-play-layout {
     grid-template-columns: 1fr;
   }
@@ -945,7 +950,7 @@ input:focus {
 
   .room-side-rail {
     position: static;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     max-height: none;
   }
 
@@ -3150,7 +3155,8 @@ button.recent-score-game:hover:not(:disabled) {
     grid-template-columns: 1fr;
   }
 
-  .page-social-layout {
+  .page-social-layout,
+  .room-social-layout {
     grid-template-columns: 1fr;
   }
 
