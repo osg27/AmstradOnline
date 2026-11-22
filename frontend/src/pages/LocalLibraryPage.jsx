@@ -3274,11 +3274,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const previous = { folders, games, favourites };
     const next = libraryStateWithoutFolder(previous, folderId);
 
-    // Update the screen straight away; storage is written in the background and
-    // the previous state is restored if the write fails.
-    setFolders(next.folders);
-    setGames(next.games);
-    setFavourites(next.favourites);
+    // Write storage before changing the screen. IndexedDB can only start a write once
+    // the event loop is free, and re-rendering a large library keeps it busy, so a
+    // screen-first update left the folder linked after a refresh.
     setStatus(`Removing ${folder.name}...`);
     try {
       await Promise.all([
@@ -3286,13 +3284,14 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         deleteLocalLibraryGamesForFolder(folderId),
         saveLocalLibrarySetting('favourites', next.favourites),
       ]);
-      setStatus(`${folder.name} removed from ${system?.label || folder.systemLabel || 'your library'}. Your ROM files were not changed.`);
     } catch (err) {
-      setFolders(previous.folders);
-      setGames(previous.games);
-      setFavourites(previous.favourites);
       setStatus(`Could not remove ${folder.name}: ${err.message}`);
+      return;
     }
+    setFolders(next.folders);
+    setGames(next.games);
+    setFavourites(next.favourites);
+    setStatus(`${folder.name} removed from ${system?.label || folder.systemLabel || 'your library'}. Your ROM files were not changed.`);
   }
 
   async function openSnesVersionPicker(game) {
