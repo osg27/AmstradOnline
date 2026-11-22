@@ -51,6 +51,10 @@
   <body>
     <canvas id="arcade-screen" class="emscripten" width="640" height="480" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
     <div id="mame-container"></div>
-    <script src="./launcher.js?v=2026-08-03-3"></script>
+    <script type="module">
+      import * as samplePaths from './samplePaths.js?v=2026-11-22-1';
+      window.OSGArcadePaths = samplePaths;
+    </script>
+    <script src="./launcher.js?v=2026-11-22-1"></script>
   </body>
 </html>

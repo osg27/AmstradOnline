@@ -27,6 +27,39 @@
   const nativeFetch = window.fetch.bind(window);
   const coreCacheVersion = '2026-06-22-1';
 
+  // Set by the module script in launcher.html; null if it failed to load.
+  function samplePaths() {
+    return window.OSGArcadePaths || null;
+  }
+
+  // Confirms from the running core's filesystem and option file that the samples
+  // are where the core will look, rather than trusting what was staged.
+  function verifyArcadeSamples() {
+    if (!currentSampleFiles.length) return;
+    const paths = samplePaths();
+    const fs = window.EJS_emulator?.gameManager?.FS;
+    if (!paths || !fs) {
+      postArcadeLog(`MAME samples not verified: ${paths ? 'filesystem not ready' : 'sample layout module missing'}`, 'error');
+      return;
+    }
+    paths.describeSampleFiles(fs, currentSampleFiles).forEach((entry) => {
+      if (entry.atCorePath) {
+        postArcadeLog(`MAME sample ${entry.name} verified at ${entry.locations[0].path} (${entry.expectedSize} bytes)`);
+      } else {
+        postArcadeLog(`MAME sample ${entry.name} is missing from the core sample path ${entry.locations[0].path}`, 'error');
+      }
+    });
+    try {
+      const values = paths.parseCoreOptionFile(fs.readFile(paths.ARCADE_CORE_OPTION_FILE, { encoding: 'utf8' }));
+      const problems = paths.missingRequiredCoreOptions(values);
+      if (problems.length) {
+        postArcadeLog(`MAME core did not apply sample options: ${problems.map((p) => `${p.key}=${p.actual} (expected ${p.expected})`).join(', ')}`, 'error');
+      }
+    } catch (error) {
+      postArcadeLog(`Could not read MAME core options: ${error.message}`, 'error');
+    }
+  }
+
   function postArcadeLog(message, level = 'info') {
     window.parent?.postMessage({
       type: 'arcade_log',
@@ -65,6 +98,47 @@
     }
   }
 
+  // The core's RetroArch WebAudio driver schedules every frame's buffer just in
+  // time: each start() is placed at the previous buffer's end, or re-anchored
+  // slightly later when the core has fallen behind. A hole between one buffer's
+  // end and the next buffer's start is silence, and it is heard as a click.
+  // These counters measure those holes in the real browser without changing
+  // playback, so the room log shows how often the audio actually glitches.
+  const audioScheduleStats = { buffers: 0, gaps: 0, gapSeconds: 0, minLead: Infinity, lastEnd: 0, reportedAt: 0 };
+
+  function recordAudioSchedule(when, duration, now) {
+    const stats = audioScheduleStats;
+    stats.buffers += 1;
+    const lead = when - now;
+    if (lead < stats.minLead) stats.minLead = lead;
+    if (stats.lastEnd && when - stats.lastEnd > 0.0005) {
+      stats.gaps += 1;
+      stats.gapSeconds += when - stats.lastEnd;
+    }
+    stats.lastEnd = when + duration;
+    if (now - stats.reportedAt >= 10) {
+      stats.reportedAt = now;
+      const minLeadMs = Number.isFinite(stats.minLead) ? (stats.minLead * 1000).toFixed(1) : 'n/a';
+      postArcadeLog(
+        `Audio schedule: ${stats.buffers} buffers, ${stats.gaps} gap(s) totalling ${(stats.gapSeconds * 1000).toFixed(1)} ms, minimum lead ${minLeadMs} ms`,
+        stats.gaps ? 'error' : 'info',
+      );
+    }
+  }
+
+  function trackAudioScheduling() {
+    const proto = window.AudioBufferSourceNode?.prototype;
+    if (!proto || proto.__oldStyleScheduleTracked) return;
+    const originalStart = proto.start;
+    proto.start = function trackedStart(when, ...rest) {
+      if (this.context === sharedAudioContext && typeof when === 'number' && when > 0) {
+        recordAudioSchedule(when, this.buffer?.duration || 0, sharedAudioContext.currentTime);
+      }
+      return originalStart.call(this, when, ...rest);
+    };
+    proto.__oldStyleScheduleTracked = true;
+  }
+
   function ensureAudio() {
     if (!OriginalAudioContext) return null;
     if (!sharedAudioContext) {
@@ -75,6 +149,7 @@
       }
     }
     if (!audioDestination) {
+      trackAudioScheduling();
       audioDestination = sharedAudioContext.createMediaStreamDestination();
       audioCaptureGain = sharedAudioContext.createGain();
       audioCaptureGain.gain.value = emulatorVolume;
@@ -852,16 +927,17 @@
     window.EJS_disableAutoLang = false;
     window.EJS_disableLocalStorage = true;
     window.EJS_saveDirectory = saveDirectory;
+    // Pinned so the core's sample options never depend on its built-in defaults.
     window.EJS_defaultOptions = {
       'mame2003-plus_autosave_hiscore': 'recursively',
+      ...(samplePaths()?.REQUIRED_SAMPLE_CORE_OPTIONS || {}),
     };
     window.EJS_rawFiles = {};
-    currentSampleFiles.forEach((sample) => {
-      if (!sample?.fileName || !sample?.bytes?.length) return;
-      const safeName = String(sample.fileName).split(/[\\/]/).pop();
-      if (!/\.zip$/i.test(safeName)) return;
-      window.EJS_rawFiles[`/home/web_user/retroarch/system/mame2003-plus/samples/${safeName}`] = sample.bytes;
-    });
+    const sampleRawFiles = samplePaths() ? samplePaths().buildSampleRawFiles(currentSampleFiles) : {};
+    if (currentSampleFiles.length && !samplePaths()) {
+      postArcadeLog('MAME sample layout module failed to load; samples were not staged', 'error');
+    }
+    Object.assign(window.EJS_rawFiles, sampleRawFiles);
     const romKey = normaliseRomKey(fileName);
     const entrantSaveFiles = loadLocalMameSaveFiles(fileName);
     if (entrantSaveFiles.length) {
@@ -993,6 +1069,7 @@
       statusText = '';
       screen.style.display = 'none';
       startScoreFileWatch();
+      verifyArcadeSamples();
     };
     window.EJS_onExit = () => {
       drawStatus('MAME stopped', fileName);

@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import AppShell from '../components/AppShell';
 import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
+import { assertAccountSourcesReady } from '../features/gameSources/sourceManagerState';
 import GameSheet from '../features/home/GameSheet';
 import { boxArtFor, screenshotFor } from '../features/home/homeLibrary';
 import { systemFamily, systemStyle } from '../features/home/systemCapabilities';
@@ -2898,6 +2899,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   const shelfGames = useMemo(() => combineShelfEntries(games.length ? games : EMPTY_SHELF_GAMES, sourceGames), [games, sourceGames]);
 
   async function persistSources(next) {
+    // Saving before the account list has loaded would overwrite it with a partial list.
+    assertAccountSourcesReady(sourcesReady);
     await saveSourceCatalogues(username, next);
     setSources(next);
   }
@@ -3663,7 +3666,6 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
                         }}
                         title={`Configure ${system.label}`}
                         aria-label={`Configure ${system.label}`}
-                        disabled={!sourcesReady}
                       >
                         <i className="bi bi-gear-fill" aria-hidden="true" />
                       </button>
@@ -3899,7 +3901,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
   ) : null;
 
   const sourceManager = sourceSystem ? createPortal(<ConnectedSourcesPanel
-    key={sourceSystem.id} system={sourceSystem} sources={sources}
+    key={sourceSystem.id} system={sourceSystem} sources={sources} sourcesReady={sourcesReady}
     folders={folders.filter((folder) => folder.system === sourceSystem.id)}
     onSave={persistSources} onAddFolder={() => pickSystemFolder(sourceSystem.id)}
     onRescanFolder={rescanLibraryFolder} onUnlinkFolder={clearLibraryFolder}

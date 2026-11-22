@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../../api/client';
 import { SOURCE_SYSTEMS, unlinkSourceCatalogue } from './sourceLibrary';
 import { KICKSTART_URL_KEY, saveKickstartSource } from '../amiga/kickstartUrl';
+import { sourceManagerState } from './sourceManagerState';
 import './connectedSources.css';
 
-export default function ConnectedSourcesPanel({ system, sources, folders, onSave, onAddFolder, onRescanFolder, onUnlinkFolder, onClose }) {
+export default function ConnectedSourcesPanel({ system, sources, sourcesReady = true, folders, onSave, onAddFolder, onRescanFolder, onUnlinkFolder, onClose }) {
   const [url, setUrl] = useState('');
   const [kickstartUrl, setKickstartUrl] = useState(() => localStorage.getItem(KICKSTART_URL_KEY) || '');
   const [busy, setBusy] = useState(false);
@@ -15,6 +16,7 @@ export default function ConnectedSourcesPanel({ system, sources, folders, onSave
   const roomSystem = system.roomSystem || system.id;
   const isAmiga = ['amiga', 'amiga500', 'amiga1200', 'amiga-aga', 'amiga_aga'].includes(roomSystem);
   const linked = sources.filter((source) => source.system === roomSystem);
+  const gate = sourceManagerState({ sourcesReady, busy });
   useEffect(() => {
     const previous = document.activeElement;
     dialog.current?.focus();
@@ -23,6 +25,7 @@ export default function ConnectedSourcesPanel({ system, sources, folders, onSave
 
   async function link(event, existing) {
     event?.preventDefault();
+    if (!sourcesReady) { setError('Account URL sources are still loading. Try again in a moment.'); return; }
     setBusy(true); setError(''); setStatus('Scanning file links…');
     const abort = new AbortController(); controller.current = abort;
     try {
@@ -55,10 +58,11 @@ export default function ConnectedSourcesPanel({ system, sources, folders, onSave
     }}>
       <div className="library-version-dialog-head"><h2 id="platform-sources-title">{system.label} sources</h2><button type="button" disabled={busy} onClick={onClose}>Done</button></div>
       <p>Link folders on your PC or a public source URL. Their games appear together on this system’s shelf and stay linked until you unlink them.</p>
-      <button type="button" disabled={busy} onClick={() => change(onAddFolder)}>Add folder on your PC</button>
+      <button type="button" disabled={!gate.folderActionsEnabled} onClick={() => change(onAddFolder)}>Add folder on your PC</button>
+      {gate.notice ? <p role="note">{gate.notice}</p> : null}
       {SOURCE_SYSTEMS.has(roomSystem) ? <form className="source-form" onSubmit={link}>
-        <label>{isAmiga ? 'Games URL' : 'Source URL'}<input type="url" required maxLength={4096} value={url} disabled={busy} placeholder="https://…" onChange={(event) => setUrl(event.target.value)} /></label>
-        <button type="submit" disabled={busy || !url.trim()}>Link source URL</button>
+        <label>{isAmiga ? 'Games URL' : 'Source URL'}<input type="url" required maxLength={4096} value={url} disabled={!gate.urlActionsEnabled} placeholder="https://…" onChange={(event) => setUrl(event.target.value)} /></label>
+        <button type="submit" disabled={!gate.urlActionsEnabled || !url.trim()}>Link source URL</button>
         <small>URL sources are saved to your account on all devices. PC folders stay on this device. Only the game you choose is downloaded.</small>
       </form> : <p>URL sources are not available for this system yet.</p>}
       {isAmiga ? <form className="source-form" onSubmit={(event) => {
@@ -85,15 +89,15 @@ export default function ConnectedSourcesPanel({ system, sources, folders, onSave
         {folders.map((folder) => <div className="library-folder-row" key={folder.id}>
           <div><strong>{folder.name}</strong><small>PC folder · {folder.gameCount || 0} files</small></div>
           <div className="library-folder-actions">
-            {folder.handle ? <button type="button" disabled={busy} onClick={() => change(() => onRescanFolder(folder))}>Rescan</button> : null}
-            <button type="button" disabled={busy} onClick={() => change(() => onUnlinkFolder(folder.id))}>Unlink</button>
+            {folder.handle ? <button type="button" disabled={!gate.folderActionsEnabled} onClick={() => change(() => onRescanFolder(folder))}>Rescan</button> : null}
+            <button type="button" disabled={!gate.folderActionsEnabled} onClick={() => change(() => onUnlinkFolder(folder.id))}>Unlink</button>
           </div>
         </div>)}
         {linked.map((source) => <div className="library-folder-row" key={source.id}>
           <div><strong className="source-address">{source.url}</strong><small>URL · {source.games.length.toLocaleString()} files</small></div>
           <div className="library-folder-actions">
-            <button type="button" disabled={busy} onClick={() => link(null, source)}>Rescan</button>
-            <button type="button" disabled={busy} onClick={() => change(async () => { await unlinkSourceCatalogue(source.id); await onSave(sources.filter((item) => item.id !== source.id)); })}>Unlink</button>
+            <button type="button" disabled={!gate.urlActionsEnabled} onClick={() => link(null, source)}>Rescan</button>
+            <button type="button" disabled={!gate.urlActionsEnabled} onClick={() => change(async () => { await unlinkSourceCatalogue(source.id); await onSave(sources.filter((item) => item.id !== source.id)); })}>Unlink</button>
           </div>
         </div>)}
       </div>
