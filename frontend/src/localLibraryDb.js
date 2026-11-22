@@ -157,6 +157,30 @@ export async function migrateLegacyVipLibraryGames(games) {
   return true;
 }
 
+// Removes one folder's game rows. Unlinking used to clear and re-store every game
+// in the library, which is slow for large folders.
+export async function deleteLocalLibraryGamesForFolder(folderId) {
+  const db = await openLibraryDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(GAMES_STORE, 'readwrite');
+    const request = transaction.objectStore(GAMES_STORE).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      if (cursor.value?.folderId === folderId) cursor.delete();
+      cursor.continue();
+    };
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+}
+
 export async function getLocalLibraryGames() {
   const db = await openLibraryDb();
   return new Promise((resolve, reject) => {

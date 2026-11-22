@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL, apiFetch } from '../api/client';
 import AppShell from '../components/AppShell';
 import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
+import { libraryStateWithoutFolder } from '../features/localLibrary/folderRemoval';
 import { assertAccountSourcesReady } from '../features/gameSources/sourceManagerState';
 import GameSheet from '../features/home/GameSheet';
 import { boxArtFor, screenshotFor } from '../features/home/homeLibrary';
@@ -42,6 +43,7 @@ import {
   readLocalLibraryFile,
   registerRuntimeLocalFile,
   saveLocalLibraryFolders,
+  deleteLocalLibraryGamesForFolder,
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
@@ -3267,27 +3269,26 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     const folder = folders.find((item) => item.id === folderId);
     if (!folder) return;
     const system = SYSTEM_BY_ID[folder.system];
+    const previous = { folders, games, favourites };
+    const next = libraryStateWithoutFolder(previous, folderId);
 
-    const removedGameIds = new Set(
-      games
-        .filter((game) => game.folderId === folderId)
-        .map((game) => game.id),
-    );
-    const nextFolders = folders.filter((item) => item.id !== folderId);
-    const nextGames = games.filter((game) => game.folderId !== folderId);
-    const nextFavourites = favourites.filter((id) => !removedGameIds.has(id));
-
+    // Update the screen straight away; storage is written in the background and
+    // the previous state is restored if the write fails.
+    setFolders(next.folders);
+    setGames(next.games);
+    setFavourites(next.favourites);
+    setStatus(`Removing ${folder.name}...`);
     try {
       await Promise.all([
-        saveLocalLibraryFolders(nextFolders),
-        saveLocalLibraryGames(nextGames),
-        saveLocalLibrarySetting('favourites', nextFavourites),
+        saveLocalLibraryFolders(next.folders),
+        deleteLocalLibraryGamesForFolder(folderId),
+        saveLocalLibrarySetting('favourites', next.favourites),
       ]);
-      setFolders(nextFolders);
-      setGames(nextGames);
-      setFavourites(nextFavourites);
       setStatus(`${folder.name} removed from ${system?.label || folder.systemLabel || 'your library'}. Your ROM files were not changed.`);
     } catch (err) {
+      setFolders(previous.folders);
+      setGames(previous.games);
+      setFavourites(previous.favourites);
       setStatus(`Could not remove ${folder.name}: ${err.message}`);
     }
   }
