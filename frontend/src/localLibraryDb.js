@@ -181,6 +181,31 @@ export async function deleteLocalLibraryGamesForFolder(folderId) {
   });
 }
 
+// Writes box-art fields onto rows that still exist. Unlike saveLocalLibraryGames this
+// never clears the store and never recreates a game removed after a job started.
+export async function patchLocalLibraryGames(patches) {
+  if (!patches.size) return;
+  const db = await openLibraryDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(GAMES_STORE, 'readwrite');
+    const store = transaction.objectStore(GAMES_STORE);
+    for (const [id, fields] of patches) {
+      const request = store.get(id);
+      request.onsuccess = () => {
+        if (request.result) store.put({ ...request.result, ...fields });
+      };
+    }
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+}
+
 export async function getLocalLibraryGames() {
   const db = await openLibraryDb();
   return new Promise((resolve, reject) => {

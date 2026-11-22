@@ -6,6 +6,7 @@ import { API_BASE_URL, apiFetch } from '../api/client';
 import AppShell from '../components/AppShell';
 import ConnectedSourcesPanel from '../features/gameSources/ConnectedSourcesPanel';
 import { libraryStateWithoutFolder } from '../features/localLibrary/folderRemoval';
+import { applyGameMediaPatches } from '../features/localLibrary/boxArtPatches';
 import { assertAccountSourcesReady } from '../features/gameSources/sourceManagerState';
 import GameSheet from '../features/home/GameSheet';
 import { boxArtFor, screenshotFor } from '../features/home/homeLibrary';
@@ -44,6 +45,7 @@ import {
   registerRuntimeLocalFile,
   saveLocalLibraryFolders,
   deleteLocalLibraryGamesForFolder,
+  patchLocalLibraryGames,
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
@@ -3413,7 +3415,9 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     boxArtStopRef.current = false;
     let found = 0;
     let checked = 0;
-    let nextGames = games;
+    // Box-art results are merged into the live list and written as patches. Replacing
+    // the list from a snapshot taken at start would revive games unlinked meanwhile.
+    const pendingPatches = new Map();
     let nextSourceArtwork = { ...sourceArtwork };
     setMediaProgress({ checked: 0, total: targets.length, found: 0 });
     setStatus(`Downloading box art for ${targets.length} ${scopeLabel} game${targets.length === 1 ? '' : 's'}${skippedArcadeClones ? `, skipping ${skippedArcadeClones} MAME clone${skippedArcadeClones === 1 ? '' : 's'}` : ''}... fetching artwork index.`);
@@ -3433,7 +3437,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
             if (game.source === 'public-url') {
               nextSourceArtwork[game.id] = media;
             } else {
-              nextGames = nextGames.map((item) => item.id === game.id ? { ...item, ...media } : item);
+              pendingPatches.set(game.id, { ...pendingPatches.get(game.id), ...media });
             }
             setBrokenBoxArtIds((current) => {
               if (!current.has(game.id)) return current;
@@ -3447,12 +3451,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         }
         checked += 1;
         if (checked % 50 === 0 || checked === targets.length) {
-          setGames(nextGames);
+          if (pendingPatches.size) setGames((current) => applyGameMediaPatches(current, pendingPatches));
           setSourceArtwork({ ...nextSourceArtwork });
         }
         setMediaProgress({ checked, total: targets.length, found });
         if (checked % 500 === 0 || checked === targets.length) {
-          await saveLocalLibraryGames(nextGames);
+          await patchLocalLibraryGames(new Map(pendingPatches));
+          pendingPatches.clear();
           await saveSourceArtwork(username, { ...nextSourceArtwork });
         }
         await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -3461,7 +3466,8 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
     const workerCount = Math.min(16, targets.length);
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
-    await saveLocalLibraryGames(nextGames);
+    await patchLocalLibraryGames(new Map(pendingPatches));
+    pendingPatches.clear();
     await saveSourceArtwork(username, nextSourceArtwork);
     setSourceArtwork(nextSourceArtwork);
     setMediaProgress(null);
