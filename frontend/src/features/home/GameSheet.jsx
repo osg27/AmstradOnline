@@ -47,9 +47,9 @@ export function buildModes(caps, inLibrary) {
       id: 'link',
       icon: LinkIcon,
       title: 'Link Play',
-      desc: inLibrary ? 'Connect two machines. Pick the game in the room' : 'Connect two machines',
+      desc: inLibrary ? 'Both players load this game from their own library' : 'Connect two machines',
       testing: caps.link.testing,
-      emptyRoom: true,
+      emptyRoom: !inLibrary,
     });
   }
   return modes;
@@ -80,7 +80,8 @@ export default function GameSheet({ item, games, onClose }) {
       if (inLibrary && !mode.emptyRoom) {
         await launchLibraryGame(buildLaunchGame(games, item.libraryGame), {
           navigate,
-          hostingMode: mode.id === 'hosted' ? 'multiplayer' : 'solo',
+          hostingMode: mode.id === 'hosted' || mode.id === 'link' ? 'multiplayer' : 'solo',
+          linkPlay: mode.id === 'link',
           onStatus: setStatus,
         });
         return;

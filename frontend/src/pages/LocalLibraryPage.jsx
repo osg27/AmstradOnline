@@ -1,3 +1,4 @@
+import { prepareLinkDisks } from '../features/amiga/linkLibrary';
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { unzipSync } from 'fflate';
@@ -49,7 +50,7 @@ import {
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
 } from '../localLibraryDb';
-import { inspectPrepared7zFiles, prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMastersystemFile, prepareVipMegadriveFile, prepareVipNesFile, prepareVipPcengineFile, prepareVipSnesFile, prepareVipSpectrumFile, storePreparedVipGameFile, takePreparedVipSnesFile } from '../vipMameCache';
+import { extractPrepared7zFile, inspectPrepared7zFiles, prepareVipAmigaFile, prepareVipAmstradFile, prepareVipC64File, prepareVipMameFile, prepareVipMastersystemFile, prepareVipMegadriveFile, prepareVipNesFile, prepareVipPcengineFile, prepareVipSnesFile, prepareVipSpectrumFile, storePreparedVipGameFile, takePreparedVipSnesFile } from '../vipMameCache';
 import { scanFiles as scanReleaseFiles } from '../features/localLibrary/core/scanner';
 import { groupGames as groupReleaseFiles } from '../features/localLibrary/core/group';
 import { prepareLocalGameLaunch } from '../features/localLibrary/services/localGameLaunchAdapter';
@@ -122,9 +123,37 @@ export async function launchLibraryGame(game, {
   navigate,
   returnTo = '/library',
   hostingMode = 'solo',
+  linkPlay = false,
   onStatus = () => {},
   onPreparation = () => {},
 } = {}) {
+  if (linkPlay) {
+    onStatus(`Preparing ${game.title} for Link Play...`);
+    const files = [];
+    if (game.source === 'public-url') {
+      files.push(await downloadSourceGame(game.sourceEntry, game.roomSystem));
+    } else {
+      for (const variant of game.variants || [game]) {
+        if (!/\.(adf|adz|dms|zip|7z)$/i.test(variant.fileName || '')) continue;
+        if (!variant.handle && !variant.runtimeFileKey) continue;
+        if (variant.handle?.queryPermission && await variant.handle.queryPermission({ mode: 'read' }) !== 'granted') {
+          if (await variant.handle.requestPermission?.({ mode: 'read' }) !== 'granted') {
+            throw new Error('Allow access to your Amiga library folder to start Link Play.');
+          }
+        }
+        files.push(await readLocalLibraryFile(variant));
+      }
+    }
+    if (!files.length) throw new Error('Link Play needs a floppy release from your library (ADF, ADZ or DMS).');
+    const disks = await prepareLinkDisks(files[0], extractPrepared7zFile);
+    const room = await apiFetch('/rooms/create', {
+      method: 'POST', body: JSON.stringify({ system: 'amiga_link', hosting_mode: 'multiplayer', party_max_players: 2 }),
+    });
+    const launchId = `link:${crypto.randomUUID()}`;
+    registerRuntimeRelease(launchId, { title: game.title, files: [...disks, ...files.slice(1)], roomSystem: 'amiga_link' });
+    navigate(`/room/${room.room_code}?${new URLSearchParams({ localRelease: launchId, returnTo })}`);
+    return;
+  }
   if (game.source === 'public-url') {
     const file = await downloadSourceGame(game.sourceEntry, game.roomSystem, {
       onProgress: (loaded, total) => onStatus(`Downloading ${game.title}: ${total ? `${Math.round(loaded / total * 100)}%` : `${(loaded / 1048576).toFixed(1)} MB`}`),

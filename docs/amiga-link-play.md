@@ -184,3 +184,50 @@ lacked `python-multipart`; after adding that dependency locally, all tests pass.
 These were environment failures, with no backend source changes required.
 `git diff --check` reports whitespace on context lines inside the saved upstream
 patch; the patch is retained as supplied and its header uses `--ignore-whitespace`.
+
+## Automatic library loading (2026-11-24)
+
+Selecting **Link Play** on a library game now creates an `amiga_link` room with
+that game prepared, rather than an empty room. The host can also choose from local
+folder games and connected Amiga sources inside an empty Link Play room.
+
+Each browser loads its own saved A500 Kickstart 1.3, or downloads it from its own
+configured library Kickstart URL when the cached copy is missing. The emulator
+waits for a verified A500 ROM; this path does not silently boot AROS. The room's
+existing PUAE behavior for normal Amiga and AGA is unchanged.
+
+The host sends the selected floppy name and SHA-256 over the established serial
+DataChannel, including when the other player first connects after game selection.
+No game bytes, firmware, local paths, tokens or source URLs are shared. The guest
+checks its local Amiga library and its own connected sources, and automatically
+loads an identical disk. ZIP floppy archives and gzip ADZ disks are unpacked;
+7z uses the existing extraction worker. An unrelated disk with the same title is
+not silently substituted. WHDLoad/LHA, IPF, hard disks and CD/AGA-only releases
+still require the normal Amiga player rather than this A500 floppy path.
+
+When a game or Kickstart is missing, the game screen explains what is required,
+with Retry library and a file fallback. Adding the missing Kickstart resumes the
+pending game without a separate start click. Saved-folder permission may require
+a browser confirmation after restarting Chrome; Retry library requests permission
+for matching saved folder entries. Browser prompts cannot be bypassed.
+
+`run-library-autoload.mjs <tokens.json>` tests two fresh Chrome instances against
+the local backend and Vite, using an emulator stub and synthetic fixtures. It
+verifies host library launch, WebRTC selection delivery, missing-game and
+missing-Kickstart prompts, and automatic resume with firmware delivered once
+before the game. It neither uses a real ROM nor proves game execution; the earlier
+manual emulator test remains separate evidence. Example setup uses the existing
+`local-backend.py` tester accounts and Vite on 4173 with API/WS URLs on 8000.
+Tokens and generated databases must stay in an ignored `.tmp-*` directory.
+
+A separate smoke experiment reconnecting a new guest browser to an already-used
+serial room exposed the existing connection-recreation limitation: the new guest
+can remain waiting for the host. This change covers initial room joins; it does
+not rebuild a closed serial peer connection. Start a fresh Link Play room for
+that case. Frame timing and unpropagated RS-232 handshake limitations above also
+remain unchanged.
+
+Pass `--available` to the browser smoke test to check that both players with saved
+game/firmware copies start without file prompts. The default run instead verifies
+the missing-game, missing-Kickstart and retry sequence. Frontend unit tests cover
+checksum-safe selection and source resolution independently of the stub.

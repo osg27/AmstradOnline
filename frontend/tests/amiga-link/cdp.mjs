@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function launchBrowser(label, { width = 1400, height = 1000 } = {}) {
+export async function launchBrowser(label, { width = 1400, height = 1000, onEvent } = {}) {
   const chrome = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
   const port = 9400 + Math.floor(Math.random() * 500);
   // A fresh profile per browser: no shared storage, cookies or IndexedDB.
@@ -33,6 +33,7 @@ export async function launchBrowser(label, { width = 1400, height = 1000 } = {})
     } else if (m.method === 'Runtime.exceptionThrown') {
       consoleLines.push(`[${label}] EXCEPTION ` + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text));
     }
+    if (m.method && onEvent) onEvent(m, call);
   };
   await new Promise((r) => { ws.onopen = r; });
   const call = (method, params = {}) => new Promise((resolve, reject) => {

@@ -85,6 +85,9 @@ import {
   touchProfileFor,
 } from '../features/room-ui/roomUiConfig';
 import '../features/room-ui/room-ui.css';
+import { describeLinkDisk, findLinkLibraryDisk, linkLibraryEntries, prepareLinkDisks, resolveLinkKickstart, validLinkSelection } from '../features/amiga/linkLibrary';
+import { downloadSourceGame, loadCachedSourceCatalogues, loadSourceCatalogues } from '../features/gameSources/sourceLibrary';
+import { identifyKickstartDownload } from '../features/amiga/kickstartUrl';
 import { decodeAmigaSerialPacket, encodeAmigaSerialPacket } from '../features/amiga/amigaSerialPacket';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
@@ -935,6 +938,17 @@ export default function RoomPage() {
   // so serial traffic never re-renders the room per byte or per packet.
   const serialStatsRef = useRef({ sent: 0, received: 0, dropped: 0, sentPackets: 0, receivedPackets: 0 });
   const serialLogRef = useRef([]);
+  const linkSelectionRef = useRef(null);
+  const linkIsHostRef = useRef(false);
+  const [linkSelection, setLinkSelection] = useState(null);
+  const [linkMissingKickstart, setLinkMissingKickstart] = useState(false);
+  const [linkLoadError, setLinkLoadError] = useState('');
+  const [linkRetry, setLinkRetry] = useState(0);
+  const linkPendingFilesRef = useRef(null);
+  const linkKickstartPromiseRef = useRef(null);
+  const linkKickstartSentRef = useRef(null);
+  const linkLoadGenerationRef = useRef(0);
+  const linkLoadDiskRef = useRef(null);
 
   useEffect(() => {
     if (!tournamentCode) {
@@ -1109,6 +1123,7 @@ export default function RoomPage() {
   const isSpectrum = roomSystem === 'spectrum';
   const isAmiga = roomSystem === 'amiga';
   const isAmigaLink = roomSystem === 'amiga_link';
+  linkIsHostRef.current = isHost;
   const isAmigaAga = roomSystem === 'amiga_aga';
   const isPuaeAmiga = isAmiga || isAmigaAga;
   const isAmigaFamily = isAmiga || isAmigaLink || isAmigaAga;
@@ -1316,7 +1331,7 @@ export default function RoomPage() {
   }, []);
 
   useEffect(() => {
-    if (!isHost || !roomSystem) {
+    if ((!isHost && !isAmigaLink) || !roomSystem) {
       setLocalRoomGames([]);
       return undefined;
     }
@@ -1325,7 +1340,9 @@ export default function RoomPage() {
 
     async function loadLocalRoomGames() {
       try {
-        const games = await getLocalLibraryGamesForRoomSystem(roomSystem);
+        const games = isAmigaLink
+          ? await getAmigaLinkLibrary()
+          : await getLocalLibraryGamesForRoomSystem(roomSystem);
         if (cancelled) return;
         const matchingGames = games;
         const roomGames = roomSystem === 'amiga_aga' || roomSystem === 'amiga'
@@ -1344,7 +1361,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [addLog, isHost, roomSystem]);
+  }, [addLog, isHost, isAmigaLink, roomSystem]);
 
   const playRemoteVideo = useCallback(() => {
     const video = remoteVideoRef.current;
@@ -2248,6 +2265,9 @@ export default function RoomPage() {
     channel.onopen = () => {
       addLog('Amiga serial link connected');
       setStatus('Amiga serial link connected');
+      if (linkIsHostRef.current && linkSelectionRef.current) {
+        channel.send(JSON.stringify(linkSelectionRef.current));
+      }
     };
     channel.onclose = () => {
       addLog('Amiga serial link closed');
@@ -2264,6 +2284,20 @@ export default function RoomPage() {
       forwardInputToEmulator({ type: 'amiga_serial_in', words });
     };
     channel.onmessage = (event) => {
+      if (typeof event.data === 'string' && event.data.startsWith('{')) {
+        if (event.data.length > 1024) return;
+        try {
+          const selection = JSON.parse(event.data);
+          if (!linkIsHostRef.current && validLinkSelection(selection)
+            && linkSelectionRef.current?.sha256 !== selection.sha256) {
+            linkSelectionRef.current = selection;
+            linkPendingFilesRef.current = null;
+            linkLoadGenerationRef.current += 1;
+            setLinkSelection((previous) => previous?.sha256 === selection.sha256 ? previous : selection);
+          }
+        } catch { /* Ignore malformed metadata; it is never serial input. */ }
+        return;
+      }
       if (event.data instanceof ArrayBuffer) {
         deliver(new Uint8Array(event.data));
       } else if (event.data instanceof Blob) {
@@ -2453,7 +2487,7 @@ export default function RoomPage() {
   }, [addLog, isPuaeAmiga]);
 
   useEffect(() => {
-    if (!isHost || !emulatorFrameLoadCount || !kickstartStorageKey) return undefined;
+    if (isAmigaLink || !isHost || !emulatorFrameLoadCount || !kickstartStorageKey) return undefined;
     if (sentStoredKickstartFrameRef.current === emulatorFrameLoadCount) return undefined;
 
     let cancelled = false;
@@ -2556,7 +2590,7 @@ export default function RoomPage() {
       window.clearTimeout(timer);
       timers.forEach((retryTimer) => window.clearTimeout(retryTimer));
     };
-  }, [addLog, amigaRomSource, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAtariSt, isDiscConsole, isHost, isPuaeAmiga, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
+  }, [addLog, amigaRomSource, emulatorFrameLoadCount, forwardInputToEmulator, hasVipAccess, isAmigaLink, isAtariSt, isDiscConsole, isHost, isPuaeAmiga, isSaturn, isX68000, kickstartStorageKey, emulatorSessionKey, roomSystem]);
 
   const forwardExtraButtonAsKey = useCallback((mask, player, previousMask) => {
     const extraBit = 32;
@@ -5211,6 +5245,8 @@ export default function RoomPage() {
       return;
     }
 
+    if (isAmigaLink && !(await ensureLinkKickstart())) return;
+    if (hostStartingRef.current || hostStartedRef.current) return;
     hostStartingRef.current = true;
 
     try {
@@ -6412,6 +6448,14 @@ export default function RoomPage() {
   function chooseLocalRoomGame(game) {
     if (!game?.id) return;
 
+    if (isAmigaLink && game.source === 'public-url') {
+      setLocalGamePickerOpen(false);
+      setStatus(`Loading ${game.title} from your library...`);
+      downloadSourceGame(game.sourceEntry, game.roomSystem)
+        .then((file) => linkLoadDiskRef.current([file]))
+        .catch((error) => setLinkLoadError(error.message));
+      return;
+    }
     sessionStorage.setItem('oldstylegaming:pendingLocalGame', JSON.stringify({
       id: game.id,
       title: game.title,
@@ -6457,9 +6501,128 @@ export default function RoomPage() {
     setStatus(enabled ? 'C64 warp enabled' : 'C64 normal speed');
   }
 
+  async function getAmigaLinkLibrary() {
+    const [games, sources] = await Promise.all([
+      getLocalLibraryGames(),
+      loadSourceCatalogues(username).catch(() => loadCachedSourceCatalogues(username)),
+    ]);
+    return linkLibraryEntries(games, sources);
+  }
+
+  async function ensureLinkKickstart() {
+    if (linkKickstartPromiseRef.current) return linkKickstartPromiseRef.current;
+    const loading = (async () => {
+      try {
+        const stored = await resolveLinkKickstart({
+          loadStored: () => savedSystemMediaRef.current.get(AMIGA_KICKSTART_KEY) || loadStoredKickstart(AMIGA_KICKSTART_KEY),
+          sourceUrl: localStorage.getItem(KICKSTART_URL_KEY), cacheSource: cacheUrlKickstarts,
+          identify: identifyKickstartDownload,
+        });
+        savedSystemMediaRef.current.set(AMIGA_KICKSTART_KEY, stored);
+        if (linkKickstartSentRef.current?.frame !== emulatorFrameLoadCount
+          || linkKickstartSentRef.current?.bytes !== stored.bytes) {
+          forwardInputToEmulator(buildAmigaKickstartPayload('amiga_link', stored.fileName, stored.bytes));
+          linkKickstartSentRef.current = { frame: emulatorFrameLoadCount, bytes: stored.bytes };
+        }
+        setAmigaRequiredModel('A500');
+        setKickstartRomName(`${stored.fileName} (saved)`);
+        setLinkMissingKickstart(false);
+        return stored;
+      } catch (error) {
+        setLinkMissingKickstart(true);
+        setLinkLoadError(error.message);
+        return null;
+      }
+    })();
+    linkKickstartPromiseRef.current = loading;
+    try { return await loading; } finally { linkKickstartPromiseRef.current = null; }
+  }
+
+  // Called through a ref so a metadata event always uses the current room handlers.
+  linkLoadDiskRef.current = async (files) => {
+    const loaded = await handleDiskSelected({ target: { files, dataset: {}, value: '' } });
+    if (loaded && !hostStartedRef.current && !hostStartingRef.current) await startHostSession();
+    return loaded;
+  };
+
+  useEffect(() => {
+    linkSelectionRef.current = null;
+    linkLoadGenerationRef.current += 1;
+    linkPendingFilesRef.current = null;
+    linkKickstartSentRef.current = null;
+    setLinkSelection(null);
+    setLinkLoadError('');
+    setLinkMissingKickstart(false);
+  }, [roomCode, roomSystem]);
+
+  useEffect(() => {
+    if (!isAmigaLink || isHost || !linkSelection || !emulatorFrameLoadCount) return undefined;
+    let cancelled = false;
+    const selection = linkSelection;
+    setLinkLoadError('');
+    setStatus(`Finding ${selection.fileName} in your library...`);
+    (async () => {
+      try {
+        const entries = await getAmigaLinkLibrary();
+        const file = await findLinkLibraryDisk(selection, entries, {
+          readLocal: readLocalLibraryFile, download: downloadSourceGame, extract7z: extractPrepared7zFile,
+        });
+        if (cancelled) return;
+        await linkLoadDiskRef.current([file]);
+      } catch (error) {
+        if (!cancelled) {
+          setLinkLoadError(error.message);
+          setStatus('Link Play needs your game copy');
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAmigaLink, isHost, linkSelection, emulatorFrameLoadCount, linkRetry]);
+
+  async function retryLinkLibrary() {
+    // A browser may require a click to restore permission to a previously saved folder.
+    const matches = localRoomGames.filter((game) => game.handle?.requestPermission
+      && normaliseFilename(game.fileName || '').cleanedTitle.toLowerCase()
+        === normaliseFilename(linkSelectionRef.current?.fileName || '').cleanedTitle.toLowerCase());
+    try {
+      await Promise.all(matches.map((game) => game.handle.requestPermission({ mode: 'read' })));
+    } catch (error) {
+      setLinkLoadError(`Folder access could not be restored: ${error.message}`);
+      return;
+    }
+    setLinkLoadError('');
+    if (linkPendingFilesRef.current) {
+      await linkLoadDiskRef.current(linkPendingFilesRef.current);
+    } else if (!isHost) {
+      setLinkRetry((value) => value + 1);
+    } else {
+      await ensureLinkKickstart();
+    }
+  }
+
   async function handleDiskSelected(event) {
     try {
-      const selectedFiles = Array.from(event.target.files || []);
+      const linkGeneration = isAmigaLink ? ++linkLoadGenerationRef.current : 0;
+      let selectedFiles = Array.from(event.target.files || []);
+      if (isAmigaLink && selectedFiles.length) {
+        const disks = await prepareLinkDisks(selectedFiles[0], extractPrepared7zFile);
+        selectedFiles = [...disks, ...selectedFiles.slice(1)];
+        const selection = await describeLinkDisk(disks[0]);
+        if (linkGeneration !== linkLoadGenerationRef.current) return false;
+        if (!isHost && event.target.dataset.mode !== 'swap' && linkSelectionRef.current && selection.sha256 !== linkSelectionRef.current.sha256) {
+          throw new Error(`Choose the same disk release as the host: ${linkSelectionRef.current.fileName}.`);
+        }
+        if (isHost && event.target.dataset.mode !== 'swap') {
+          linkSelectionRef.current = selection;
+          const channel = serialChannelRef.current;
+          if (channel?.readyState === 'open') channel.send(JSON.stringify(selection));
+        }
+        linkPendingFilesRef.current = selectedFiles;
+        setLinkLoadError('');
+        if (!(await ensureLinkKickstart())) return false;
+        if (linkGeneration !== linkLoadGenerationRef.current) return false;
+        linkPendingFilesRef.current = null;
+      }
       const file = selectedFiles[0];
 
       if (!file) return;
@@ -6741,10 +6904,12 @@ export default function RoomPage() {
       setLoadedDiskName(loadedLabel);
       addLog(`${isSwapDisk ? 'Swapped disk' : 'Loaded file'}: ${loadedLabel}`);
       setStatus(`${isSwapDisk ? 'Disk swapped' : 'File loaded'}: ${loadedLabel}`);
+      if (isAmigaLink && !hostStartedRef.current && !hostStartingRef.current) await startHostSession();
       event.target.value = '';
       return true;
     } catch (err) {
       setError(err.message);
+      if (isAmigaLink) setLinkLoadError(err.message);
       addLog(`File load error: ${err.message}`);
       return false;
     }
@@ -7206,7 +7371,7 @@ export default function RoomPage() {
                 .slice()
                 .sort((left, right) => (left.diskNumber || 1) - (right.diskNumber || 1))
                 .map((media) => media.file);
-              if (releaseFiles.length > 1 && !isPuaeAmiga) {
+              if (releaseFiles.length > 1 && !isPuaeAmiga && !isAmigaLink) {
                 const launchId = `local-amiga:${groupedGame.id}:${release.id}:${Date.now()}`;
                 registerRuntimeRelease(launchId, {
                   gameId: groupedGame.id,
@@ -7331,6 +7496,10 @@ export default function RoomPage() {
 
       if (!file) return;
 
+      if (isAmigaLink) {
+        const roms = await identifyKickstartDownload(new Uint8Array(await file.arrayBuffer()));
+        if (!roms.some((rom) => rom.kickstart.model === 'A500')) throw new Error('Link Play requires A500 Kickstart 1.3.');
+      }
       const isCd32Rom = isPuaeAmiga && amigaRequiredModel === 'CD32';
       const pickedFiles = Array.from(event.target.files || []);
       const allowedExtensions = ['.rom', '.bin', '.kick', '.kickstart', ...(isCd32Rom ? ['.ext', '.zip'] : [])];
@@ -7396,11 +7565,17 @@ export default function RoomPage() {
         ? await loadA500WHDLoadKickstart()
         : [];
       forwardInputToEmulator(buildAmigaKickstartPayload(roomSystem, file.name, bytes, supportKickstarts));
+      if (isAmigaLink) linkKickstartSentRef.current = { frame: emulatorFrameLoadCount, bytes };
 
       setAmigaRomSource(AMIGA_ROM_SOURCE.ORIGINAL);
       setKickstartRomName(file.name);
       addLog(`Loaded Kickstart ROM for this session: ${file.name}`);
       setStatus(`Kickstart loaded: ${file.name}`);
+      if (isAmigaLink) {
+        setLinkMissingKickstart(false);
+        setLinkLoadError('');
+        if (linkPendingFilesRef.current) await linkLoadDiskRef.current(linkPendingFilesRef.current);
+      }
       event.target.value = '';
     } catch (err) {
       setError(err.message);
@@ -7534,7 +7709,7 @@ export default function RoomPage() {
         ? hostStarted ? 'Local Amiga running' : 'Start local Amiga'
         : hostStarted ? 'Host session running' : 'Start host session';
   const startSessionDisabled = hostStarted || (isPuaeAmiga && !loadedDiskName);
-  const mediaDisabled = !hostStarted && !isArcade && !isPuaeAmiga && !isAtariSt;
+  const mediaDisabled = !hostStarted && !isArcade && !isPuaeAmiga && !isAtariSt && !isAmigaLink;
   const micLabel = micEnabled ? (micMuted ? 'Mic muted' : 'Mic on') : 'Mic off';
   const showMicControls = !isSharedCpcParty && !isSoloMode;
   const inputPlayerTag = canSendPlayerInput ? `P${currentPartyPlayerNumber}` : 'Watching';
@@ -8002,7 +8177,19 @@ export default function RoomPage() {
 
   // ---------- screen overlay (start / connect prompts) ----------
   let screenOverlay = null;
-  if (showStartHere) {
+  if (isAmigaLink && linkLoadError) {
+    screenOverlay = (
+      <div className="osg-screen-cta" role="alert">
+        <p>{linkLoadError}</p>
+        <button type="button" onClick={retryLinkLibrary}>Retry library</button>
+        {linkMissingKickstart
+          ? <button type="button" className="secondary" onClick={openKickstartPicker}>Add Kickstart 1.3</button>
+          : <button type="button" className="secondary" onClick={openDiskPicker}>Choose matching game file</button>}
+      </div>
+    );
+  } else if (isAmigaLink && !isHost && !hostStarted) {
+    screenOverlay = <div className="osg-screen-cta"><p>{linkSelection ? `Loading ${linkSelection.fileName} from your library...` : 'Waiting for the host to choose a game...'}</p></div>;
+  } else if (showStartHere) {
     screenOverlay = (
       <StartHereCard
         isPuaeAmiga={isPuaeAmiga}
@@ -8458,10 +8645,11 @@ export default function RoomPage() {
           {(loadedDiskName || isAmigaFamily || isDiscConsole || isAtariSt) ? (
             <div className="session-strip">
               {loadedDiskName ? <span>{loadedDiskName}</span> : null}
-              {isAmigaFamily ? <span>{amigaRomSource === AMIGA_ROM_SOURCE.AROS ? 'ROM: AROS (experimental)' : kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? loadedDiskName ? `ROM: ${amigaKickstartLabel(amigaRequiredModel).rom} required` : 'ROM: chosen after game' : 'ROM: AROS'}</span> : null}
+              {isAmigaFamily ? <span>{amigaRomSource === AMIGA_ROM_SOURCE.AROS ? 'ROM: AROS (experimental)' : kickstartRomName ? `Kickstart: ${kickstartRomName}` : isPuaeAmiga ? loadedDiskName ? `ROM: ${amigaKickstartLabel(amigaRequiredModel).rom} required` : 'ROM: chosen after game' : isAmigaLink ? 'ROM: A500 Kickstart 1.3 required' : 'ROM: AROS'}</span> : null}
               {isMsx ? <span>Powered by <a href="https://webmsx.org" target="_blank" rel="noreferrer">WebMSX</a></span> : null}
               {isDiscConsole ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : isSaturn ? 'BIOS: load saturn_bios.bin locally' : 'BIOS: HLE fallback / load your own locally'}</span> : null}
               {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
+              {isAmigaLink && linkLoadError ? <span role="alert">{linkLoadError} <button type="button" className="secondary" onClick={retryLinkLibrary}>Retry library</button>{linkMissingKickstart ? <button type="button" className="secondary" onClick={() => kickstartInputRef.current?.click()}>Add Kickstart</button> : <button type="button" className="secondary" onClick={() => fileInputRef.current?.click()}>Choose game file</button>}</span> : null}
               {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received{serialActivity.dropped ? ` / ${serialActivity.dropped} lost (link down)` : ''}</span> : null}
               {isAmigaLink ? <button type="button" className="secondary" onClick={() => downloadAmigaSerialLog(window.__amigaLinkDiagnostics?.())}>Serial log</button> : null}
             </div>
