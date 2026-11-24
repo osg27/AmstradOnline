@@ -194,3 +194,13 @@ def test_large_solo_cabinet_cannot_be_opened_after_entitlement_expires(db):
     with pytest.raises(HTTPException) as error:
         update_arcade_mode(room.room_code, ArcadeModeUpdateRequest(multiplayer=True), db, host.id)
     assert error.value.status_code == 403
+
+
+def test_shared_link_rooms_are_available_to_regular_players_without_opening_aga(db):
+    host = add_user(db, "link_host")
+    guest = add_user(db, "link_guest")
+    room = create_room(RoomCreateRequest(system="amiga_link"), db, host.id)
+    assert join_room(RoomJoinRequest(room_code=room.room_code), db, guest.id).system == "amiga_link"
+    with pytest.raises(HTTPException) as error:
+        create_room(RoomCreateRequest(system="amiga_aga"), db, host.id)
+    assert error.value.status_code == 403

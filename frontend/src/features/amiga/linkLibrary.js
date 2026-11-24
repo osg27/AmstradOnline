@@ -4,6 +4,7 @@ import { sha256 } from '../localLibrary/core/hash';
 
 const DISK = /\.(adf|adz|dms)$/i;
 const ARCHIVE = /\.(zip|7z)$/i;
+export const validSharedLinkId = (id) => /^[a-f0-9]{32}$/.test(id || '');
 const basename = (name) => String(name || '').split(/[\\/]/).pop();
 const titleKey = (name) => normaliseFilename(basename(name)).cleanedTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -11,7 +12,8 @@ const titleKey = (name) => normaliseFilename(basename(name)).cleanedTitle.toLowe
 export function validLinkSelection(value) {
   return value?.type === 'amiga-link-game' && typeof value.fileName === 'string'
     && value.fileName.length <= 240 && DISK.test(value.fileName)
-    && /^[a-f0-9]{64}$/.test(value.sha256 || '');
+    && /^[a-f0-9]{64}$/.test(value.sha256 || '')
+    && (value.sharedGameId === undefined || validSharedLinkId(value.sharedGameId));
 }
 
 export async function prepareLinkDisks(file, extract7z) {

@@ -231,3 +231,62 @@ Pass `--available` to the browser smoke test to check that both players with sav
 game/firmware copies start without file prompts. The default run instead verifies
 the missing-game, missing-Kickstart and retry sequence. Frontend unit tests cover
 checksum-safe selection and source resolution independently of the stub.
+
+## Shared Link Games section (2026-11-24)
+
+The main navigation now includes **Link Games** (`/link-games`). This is a shared
+catalogue for all signed-in players, separate from personal WHDLoad libraries.
+An admin can choose **Upload ADF**, enter a title and optional computer-link
+instructions, and publish a standard 880 KB / 901120-byte ADF floppy. Regular
+players can browse, search and host these games; only admins can upload or remove
+entries. Kickstart files, WHDLoad packages and other formats are rejected.
+No game or Kickstart files are included in the repository.
+
+**Host Link Play** opens an `amiga_link` room with a persistent `linkGame` ID in
+the host URL. Both the host and joining guest download the same shared disk from
+the authenticated API, and verify its SHA-256 before loading it. The guest does
+not need that game in their personal library. The existing saved A500 Kickstart /
+configured Kickstart source flow is still used individually by both players.
+Personal-library Link Play remains available too.
+
+Because the shared catalogue is for everyone, `amiga_link` room creation, joins
+and signaling are now available to ordinary signed-in players, subject to the
+existing account verification and room limits. The separate `amiga_aga` preview
+restriction is unchanged. Link Play keeps its testing label; publishing a disk
+does not guarantee that the game's serial timing or handshake is compatible.
+The existing reconnect and frame-timing limitations above still apply.
+
+### Deployment and uploading
+
+Deploy **both the backend and frontend**, using the updated Compose file. Backend
+startup creates the new `link_games` metadata table through the existing
+`Base.metadata.create_all` flow. Compose adds a `link_game_disks` persistent volume
+at `/app/storage/link-games`. Do not remove that volume when recreating containers.
+For deployments outside Compose, set `LINK_GAMES_DIR` to a persistent writable
+directory (the default is `backend/storage/link-games`). Back up that directory
+and the database together. No manual game-file copy into `frontend/public` is
+needed, and no new secret is required.
+
+Once deployed, sign in as an admin, open **Link Games ? Upload ADF**, and publish
+the disks. Nothing has been uploaded to or deployed on the live server by Codex.
+Removing an entry hides its metadata and prevents new downloads; disk blobs are
+retained so duplicate catalogue entries are not broken. Existing running emulator
+copies continue to run, but guests joining a removed entry cannot download it.
+
+### Validation
+
+Backend API tests cover authenticated reads, admin-only upload/removal, invalid
+formats/sizes, shared disk checksums, path sanitization, removal and missing files.
+Frontend tests cover shared-room selection, exact disk download checks, expired
+auth retry and rejection of peer-provided URLs. `run-shared-games.mjs <tokens.json>`
+is a two-browser integration harness: local test user A must be admin, B a regular
+player. It uploads a synthetic ADF through the real UI, checks catalogue visibility
+and mobile width, then verifies both room pages load the same shared disk before
+starting. Like `run-library-autoload.mjs`, it stubs only the emulator and synthetic
+Kickstart hash; it is not a game-execution test. Optional `SHOT_PATH` writes a
+local screenshot and must point into an ignored scratch location.
+
+Final checks for this section: 259 frontend tests, 146 backend tests and 70 backend
+subtests pass. The production frontend build passes with the existing import/chunk
+warnings. The two-browser upload/shared-loading check also passes for an ordinary
+non-tester guest. Uploaded game fixtures and screenshots stayed local and ignored.

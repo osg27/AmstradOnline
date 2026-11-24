@@ -85,6 +85,7 @@ import {
   touchProfileFor,
 } from '../features/room-ui/roomUiConfig';
 import '../features/room-ui/room-ui.css';
+import { downloadSharedLinkGame, validSharedLinkId } from '../features/amiga/sharedLinkGames';
 import { describeLinkDisk, findLinkLibraryDisk, linkLibraryEntries, prepareLinkDisks, resolveLinkKickstart, validLinkSelection } from '../features/amiga/linkLibrary';
 import { downloadSourceGame, loadCachedSourceCatalogues, loadSourceCatalogues } from '../features/gameSources/sourceLibrary';
 import { identifyKickstartDownload } from '../features/amiga/kickstartUrl';
@@ -215,14 +216,14 @@ function getSafeLibraryReturnPath(value) {
 
   try {
     const url = new URL(value, window.location.origin);
-    if (url.origin === window.location.origin && url.pathname === '/library') {
+    if (url.origin === window.location.origin && ['/library', '/link-games'].includes(url.pathname)) {
       return `${url.pathname}${url.search}`;
     }
     if (url.origin === window.location.origin && /^\/tournaments\/[A-Z0-9]+$/i.test(url.pathname)) {
       return url.pathname;
     }
   } catch {
-    if (value === '/library' || value.startsWith('/library?')) {
+    if (value === '/library' || value.startsWith('/library?') || value === '/link-games') {
       return value;
     }
     if (/^\/tournaments\/[A-Z0-9]+$/i.test(value)) return value;
@@ -846,6 +847,7 @@ export default function RoomPage() {
     || isSuperAdmin;
   const localGameId = searchParams.get('localGame');
   const localReleaseId = searchParams.get('localRelease');
+  const sharedLinkGameId = searchParams.get('linkGame');
   const tournamentCode = searchParams.get('tournament')?.toUpperCase() || '';
   const libraryReturnPath = getSafeLibraryReturnPath(searchParams.get('returnTo'));
   const [obsCaptureMode, setObsCaptureMode] = useState(false);
@@ -939,6 +941,7 @@ export default function RoomPage() {
   const serialStatsRef = useRef({ sent: 0, received: 0, dropped: 0, sentPackets: 0, receivedPackets: 0 });
   const serialLogRef = useRef([]);
   const linkSelectionRef = useRef(null);
+  const linkSharedGameRef = useRef(null);
   const linkIsHostRef = useRef(false);
   const [linkSelection, setLinkSelection] = useState(null);
   const [linkMissingKickstart, setLinkMissingKickstart] = useState(false);
@@ -6447,6 +6450,7 @@ export default function RoomPage() {
 
   function chooseLocalRoomGame(game) {
     if (!game?.id) return;
+    linkSharedGameRef.current = null;
 
     if (isAmigaLink && game.source === 'public-url') {
       setLocalGamePickerOpen(false);
@@ -6476,6 +6480,7 @@ export default function RoomPage() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('mode');
     nextParams.delete('localRelease');
+    nextParams.delete('linkGame');
     nextParams.set('localGame', game.id);
     navigate(`/room/${roomCode}?${nextParams.toString()}`, { replace: true });
     setLocalGameReloadToken((value) => value + 1);
@@ -6547,6 +6552,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     linkSelectionRef.current = null;
+    linkSharedGameRef.current = null;
     linkLoadGenerationRef.current += 1;
     linkPendingFilesRef.current = null;
     linkKickstartSentRef.current = null;
@@ -6560,13 +6566,14 @@ export default function RoomPage() {
     let cancelled = false;
     const selection = linkSelection;
     setLinkLoadError('');
-    setStatus(`Finding ${selection.fileName} in your library...`);
+    setStatus(selection.sharedGameId ? `Loading shared game: ${selection.fileName}...` : `Finding ${selection.fileName} in your library...`);
     (async () => {
       try {
-        const entries = await getAmigaLinkLibrary();
-        const file = await findLinkLibraryDisk(selection, entries, {
-          readLocal: readLocalLibraryFile, download: downloadSourceGame, extract7z: extractPrepared7zFile,
-        });
+        const file = selection.sharedGameId
+          ? await downloadSharedLinkGame(selection.sharedGameId, selection.sha256)
+          : await findLinkLibraryDisk(selection, await getAmigaLinkLibrary(), {
+            readLocal: readLocalLibraryFile, download: downloadSourceGame, extract7z: extractPrepared7zFile,
+          });
         if (cancelled) return;
         await linkLoadDiskRef.current([file]);
       } catch (error) {
@@ -6593,6 +6600,12 @@ export default function RoomPage() {
     setLinkLoadError('');
     if (linkPendingFilesRef.current) {
       await linkLoadDiskRef.current(linkPendingFilesRef.current);
+    } else if (isHost && sharedLinkGameId) {
+      try {
+        const file = await downloadSharedLinkGame(sharedLinkGameId);
+        linkSharedGameRef.current = sharedLinkGameId;
+        await linkLoadDiskRef.current([file]);
+      } catch (error) { setLinkLoadError(error.message); }
     } else if (!isHost) {
       setLinkRetry((value) => value + 1);
     } else {
@@ -6602,6 +6615,7 @@ export default function RoomPage() {
 
   async function handleDiskSelected(event) {
     try {
+      if (isAmigaLink && event.target === fileInputRef.current) linkSharedGameRef.current = null;
       const linkGeneration = isAmigaLink ? ++linkLoadGenerationRef.current : 0;
       let selectedFiles = Array.from(event.target.files || []);
       if (isAmigaLink && selectedFiles.length) {
@@ -6613,6 +6627,7 @@ export default function RoomPage() {
           throw new Error(`Choose the same disk release as the host: ${linkSelectionRef.current.fileName}.`);
         }
         if (isHost && event.target.dataset.mode !== 'swap') {
+          if (linkSharedGameRef.current) selection.sharedGameId = linkSharedGameRef.current;
           linkSelectionRef.current = selection;
           const channel = serialChannelRef.current;
           if (channel?.readyState === 'open') channel.send(JSON.stringify(selection));
@@ -6917,7 +6932,7 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (
-      !(localGameId || localReleaseId)
+      !(localGameId || localReleaseId || (isAmigaLink && sharedLinkGameId))
       || !room
       || !isHost
       || !canControlLocalEmulator
@@ -6935,6 +6950,14 @@ export default function RoomPage() {
 
       try {
         setError('');
+        if (isAmigaLink && sharedLinkGameId) {
+          if (!validSharedLinkId(sharedLinkGameId)) throw new Error('Invalid shared Link Game.');
+          const file = await downloadSharedLinkGame(sharedLinkGameId);
+          if (cancelled) return;
+          linkSharedGameRef.current = sharedLinkGameId;
+          await linkLoadDiskRef.current([file]);
+          return;
+        }
         if (localReleaseId) {
           const runtimeRelease = takeRuntimeRelease(localReleaseId);
           if (!runtimeRelease?.files?.length) {
@@ -7479,6 +7502,7 @@ export default function RoomPage() {
         if (cancelled) return;
         setError(err.message);
         addLog(`Local library load error: ${err.message}`);
+        if (isAmigaLink) setLinkLoadError(err.message);
         setStatus('Local library game could not be loaded');
       }
     }
@@ -7488,7 +7512,7 @@ export default function RoomPage() {
     return () => {
       cancelled = true;
     };
-  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isPuaeAmiga, isArcade, isAtariSt, isHost, localGameId, localGameReloadToken, localReleaseId, room, tournamentCode]);
+  }, [canControlLocalEmulator, emulatorFrameLoadCount, isAmigaAga, isPuaeAmiga, isArcade, isAtariSt, isHost, isAmigaLink, sharedLinkGameId, localGameId, localGameReloadToken, localReleaseId, room, tournamentCode]);
 
   async function handleKickstartSelected(event) {
     try {
@@ -8181,14 +8205,14 @@ export default function RoomPage() {
     screenOverlay = (
       <div className="osg-screen-cta" role="alert">
         <p>{linkLoadError}</p>
-        <button type="button" onClick={retryLinkLibrary}>Retry library</button>
+        <button type="button" onClick={retryLinkLibrary}>{sharedLinkGameId || linkSelection?.sharedGameId ? 'Retry game' : 'Retry library'}</button>
         {linkMissingKickstart
           ? <button type="button" className="secondary" onClick={openKickstartPicker}>Add Kickstart 1.3</button>
           : <button type="button" className="secondary" onClick={openDiskPicker}>Choose matching game file</button>}
       </div>
     );
   } else if (isAmigaLink && !isHost && !hostStarted) {
-    screenOverlay = <div className="osg-screen-cta"><p>{linkSelection ? `Loading ${linkSelection.fileName} from your library...` : 'Waiting for the host to choose a game...'}</p></div>;
+    screenOverlay = <div className="osg-screen-cta"><p>{linkSelection ? `Loading ${linkSelection.fileName}${linkSelection.sharedGameId ? ' from Link Games' : ' from your library'}...` : 'Waiting for the host to choose a game...'}</p></div>;
   } else if (showStartHere) {
     screenOverlay = (
       <StartHereCard
@@ -8649,7 +8673,7 @@ export default function RoomPage() {
               {isMsx ? <span>Powered by <a href="https://webmsx.org" target="_blank" rel="noreferrer">WebMSX</a></span> : null}
               {isDiscConsole ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : isSaturn ? 'BIOS: load saturn_bios.bin locally' : 'BIOS: HLE fallback / load your own locally'}</span> : null}
               {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
-              {isAmigaLink && linkLoadError ? <span role="alert">{linkLoadError} <button type="button" className="secondary" onClick={retryLinkLibrary}>Retry library</button>{linkMissingKickstart ? <button type="button" className="secondary" onClick={() => kickstartInputRef.current?.click()}>Add Kickstart</button> : <button type="button" className="secondary" onClick={() => fileInputRef.current?.click()}>Choose game file</button>}</span> : null}
+              {isAmigaLink && linkLoadError ? <span role="alert">{linkLoadError} <button type="button" className="secondary" onClick={retryLinkLibrary}>{sharedLinkGameId || linkSelection?.sharedGameId ? 'Retry game' : 'Retry library'}</button>{linkMissingKickstart ? <button type="button" className="secondary" onClick={() => kickstartInputRef.current?.click()}>Add Kickstart</button> : <button type="button" className="secondary" onClick={() => fileInputRef.current?.click()}>Choose game file</button>}</span> : null}
               {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received{serialActivity.dropped ? ` / ${serialActivity.dropped} lost (link down)` : ''}</span> : null}
               {isAmigaLink ? <button type="button" className="secondary" onClick={() => downloadAmigaSerialLog(window.__amigaLinkDiagnostics?.())}>Serial log</button> : null}
             </div>

@@ -25,6 +25,7 @@ services:
       - ./backend:/app
       - ./library_media:/library_media
       - tournament_roms:/app/storage/tournaments
+      - link_game_disks:/app/storage/link-games
     env_file:
       - .env
     ports:
@@ -49,3 +50,4 @@ services:
 volumes:
   amstrad_postgres_data:
   tournament_roms:
+  link_game_disks:

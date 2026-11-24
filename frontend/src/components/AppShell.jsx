@@ -9,6 +9,7 @@ import './AppShell.css';
 const NAV_ITEMS = [
   { to: '/lobby', label: 'Play', icon: 'bi-play-fill' },
   { to: '/library', label: 'Library', icon: 'bi-grid-fill' },
+  { to: '/link-games', label: 'Link Games', icon: 'bi-link-45deg' },
   { to: '/tournaments', label: 'Compete', icon: 'bi-trophy-fill', badge: 'tournaments' },
   { to: '/messages', label: 'Friends', icon: 'bi-people-fill', badge: 'messages' },
 ];

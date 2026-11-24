@@ -31,7 +31,8 @@ from app.schemas.room import (
 )
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
-TESTING_SYSTEMS = {"amiga_link", "amiga_aga"}
+# Shared Link Games are available to all signed-in players; AGA keeps its preview gate.
+TESTING_SYSTEMS = {"amiga_aga"}
 UNAVAILABLE_SYSTEMS = {"saturn", "saturn_beetle"}
 ADMIN_ONLY_SYSTEMS = {"msx"}
 SUPER_ADMIN_ONLY_SYSTEMS = {"saturn", "saturn_beetle"}

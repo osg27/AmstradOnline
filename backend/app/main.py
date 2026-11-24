@@ -5,6 +5,7 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.amiga_scores import router as amiga_scores_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.feedback import router as feedback_router
+from app.api.routes.link_games import router as link_games_router
 from app.api.routes.library_media import router as library_media_router
 from app.api.routes.game_sources import router as game_sources_router
 from app.api.routes.mame import router as mame_router
@@ -44,6 +45,7 @@ app.include_router(amiga_scores_router)
 app.include_router(rooms_router)
 app.include_router(feedback_router)
 app.include_router(library_media_router)
+app.include_router(link_games_router)
 app.include_router(game_sources_router)
 # Production proxies /auth/ to FastAPI; /library/ also serves the React page.
 app.include_router(game_sources_router, prefix="/auth")

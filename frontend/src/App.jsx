@@ -10,6 +10,7 @@ import AdminPage from './pages/AdminPage';
 import FeedbackPage from './pages/FeedbackPage';
 import MessagesPage from './pages/MessagesPage';
 import LocalLibraryPage from './pages/LocalLibraryPage';
+import LinkGamesPage from './pages/LinkGamesPage';
 import MyLocalGamesPage from './pages/MyLocalGamesPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
@@ -80,6 +81,7 @@ export default function App() {
           </PrivateRoute>
         )}
       />
+      <Route path="/link-games" element={<PrivateRoute><LinkGamesPage /></PrivateRoute>} />
       <Route
         path="/my-local-games"
         element={(

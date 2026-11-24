@@ -1,0 +1,21 @@
+.osg-link-games { max-width: 1120px; margin: 0 auto; padding: 24px 0 48px; }
+.osg-link-games-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.osg-link-games h1 { margin: 0; }
+.osg-link-games p { color: var(--osg-ink-2); line-height: 1.6; }
+.osg-link-games-note { font-size: 13px; }
+.osg-link-search, .osg-link-upload label { display: grid; gap: 8px; }
+.osg-link-search { max-width: 440px; margin: 24px 0; }
+.osg-link-game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+.osg-link-game-card, .osg-link-upload, .osg-link-empty { border: 1px solid var(--osg-line, #343746); background: var(--osg-deck, #191b26); border-radius: 16px; padding: 24px; }
+.osg-link-game-card { display: flex; flex-direction: column; gap: 12px; }
+.osg-link-game-card h2, .osg-link-game-card p { margin: 0; overflow-wrap: anywhere; }
+.osg-link-game-card > button:first-of-type { margin-top: auto; }
+.osg-link-disk { font-size: 36px; color: #ffcf4d; }
+.osg-link-format { color: #ffcf4d; font-size: 11px; font-weight: 700; letter-spacing: .1em; }
+.osg-link-file { font-size: 12px; }
+.osg-link-upload { display: grid; gap: 16px; margin: 24px 0; max-width: 650px; }
+.osg-link-upload h2 { margin: 0; }
+.osg-link-upload input, .osg-link-upload textarea, .osg-link-search input { width: 100%; box-sizing: border-box; }
+.osg-link-upload textarea { min-height: 80px; }
+.osg-link-upload small { color: var(--osg-ink-2); }
+@media (max-width: 560px) { .osg-link-games-head { align-items: flex-start; flex-direction: column; } }
