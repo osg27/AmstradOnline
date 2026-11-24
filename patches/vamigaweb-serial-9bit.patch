@@ -1,0 +1,89 @@
+# vAmigaWeb null-modem: carry full 10-bit SERDAT words (9-bit/LONG serial games).
+# Base: vAmigaWeb c3c50d9. Apply with: git -C vAmigaWeb apply --ignore-whitespace ../patches/vamigaweb-serial-9bit.patch
+# Also add _wasm_write_word_to_ser after _wasm_write_byte_to_ser in BOTH -sEXPORTED_FUNCTIONS lists in CMakeLists.txt (not included here because that file carries unrelated local flag edits).
+diff --git a/Core/Misc/RemoteServers/SerServer.cpp b/Core/Misc/RemoteServers/SerServer.cpp
+index b397299..9b2b8ff 100644
+--- a/Core/Misc/RemoteServers/SerServer.cpp
++++ b/Core/Misc/RemoteServers/SerServer.cpp
+@@ -78,10 +78,16 @@ SerServer::doProcess(const string &packet)
+ 
+ void
+ SerServer::processIncomingByte(u8 byte)
++{
++    processIncomingWord(u16(byte));
++}
++
++void
++SerServer::processIncomingWord(u16 word)
+ {
+     if (!buffer.isFull()) {
+ 
+-        buffer.write(byte);
++        buffer.write(u16(word & 0x3FF));
+         
+         // When enough bytes have been received, leave buffering mode
+         if (buffer.count() >= 8) buffering = false;
+diff --git a/Core/Misc/RemoteServers/SerServer.h b/Core/Misc/RemoteServers/SerServer.h
+index 9cd98b0..64cbc76 100644
+--- a/Core/Misc/RemoteServers/SerServer.h
++++ b/Core/Misc/RemoteServers/SerServer.h
+@@ -16,8 +16,10 @@ namespace vamiga {
+ 
+ class SerServer final : public SocketServer {
+ 
+-    // A ringbuffer for buffering incoming bytes
+-    util::SortedRingBuffer <u8, 8096> buffer;
++    // A ringbuffer for buffering incoming symbols. Symbols are stored as
++    // full SERDAT words (data bits plus stop bits) so 9-bit (LONG) frames
++    // survive the null-modem cable. Plain bytes are stored unchanged.
++    util::SortedRingBuffer <u16, 8096> buffer;
+     
+     /* Indicates if we are currenty running in buffering mode. In this mode,
+      * incoming bytes are collected in the ring buffer withous passing them
+@@ -81,6 +83,7 @@ public:
+     void didDisconnect() override;
+ 
+     void processIncomingByte(u8 byte);
++    void processIncomingWord(u16 word);
+ 
+     
+     //
+diff --git a/Core/Ports/SerialPort.cpp b/Core/Ports/SerialPort.cpp
+index e7a9b78..18383e8 100644
+--- a/Core/Ports/SerialPort.cpp
++++ b/Core/Ports/SerialPort.cpp
+@@ -288,8 +288,9 @@ SerialPort::recordOutgoingByte(int byte)
+ 
+         trace(SER_DEBUG, "Outgoing: %02X ('%c')\n", byte, isprint(byte) ? char(byte) : '?');
+ 
+-        // Record the incoming byte
+-        outgoing += char(byte);
++        // Record the outgoing symbol as the full SERDAT word (up to 9 data
++        // bits plus stop bits) so a null-modem peer can reproduce 9-bit frames
++        outgoing += char16_t(byte & 0x3FF);
+ 
+         // Inform the GUI if the record buffer had been empty
+         if (outgoing.length() == 1) msgQueue.put(Msg::SER_OUT);
+diff --git a/main.cpp b/main.cpp
+index b9de226..cf172b2 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -2522,6 +2522,18 @@ extern "C" void wasm_write_byte_to_ser(u8 byte_to_send)
+     wrapper->emu->remoteManager.remoteManager->serServer.processIncomingByte(byte_to_send);
+ }
+ 
++// Feeds one complete SERDAT word (data bits plus stop bits, as produced by
++// the sending Amiga's MSG_SER_OUT) into the null-modem input. Unlike
++// wasm_write_byte_to_ser this preserves bit 8, needed by 9-bit (LONG) games.
++extern "C" void wasm_write_word_to_ser(u16 word_to_send)
++{
++    if(wrapper->emu->agnus.agnus->id[SLOT_SER] != SER_RECEIVE)
++    {
++      wrapper->emu->remoteManager.remoteManager->serServer.didConnect();
++    }
++    wrapper->emu->remoteManager.remoteManager->serServer.processIncomingWord(word_to_send);
++}
++
+ extern "C" double wasm_activity(u8 id, u8 read_or_write)
+ {
+     double value=0.0;

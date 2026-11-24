@@ -1,7 +1,7 @@
 const playerRoot = document.getElementById("amiga-player");
 const placeholderCanvas = document.getElementById("placeholder-canvas");
 const placeholderContext = placeholderCanvas.getContext("2d");
-const runtimeVersion = "2026-06-07-serial-3";
+const runtimeVersion = "2026-11-23-serial-word-1";
 let runtimeReady = false;
 let emulatorStarted = false;
 let startRequested = false;
@@ -136,6 +136,126 @@ function getAmigaAudioStream() {
 
 window.getAmigaAudioStream = getAmigaAudioStream;
 
+// ---------------------------------------------------------------------------
+// Serial (null-modem) bridge for Amiga Link Play.
+//
+// Symbols are full SERDAT words (data bits plus stop bits, up to 10 bits), not
+// bytes: games such as Stunt Car Racer run the UART in 9-bit (LONG) mode and
+// carry a parity bit in bit 8. Our vAmiga build exports wasm_write_word_to_ser
+// to accept them; older runtimes fall back to vAmigaWeb's 8-bit "ser:" API.
+//
+// Stages counted here, per side:
+//   uartTx    words the emulated Amiga wrote to SERDAT (vAmiga MSG_SER_OUT)
+//   toRoom    words posted up to the room page (one message per emulated burst)
+//   fromRoom  words the room page handed down from the remote Amiga
+//   emuIn     words accepted by vAmiga's serial input
+// The room page adds its own WebRTC send/receive counters on top.
+// ---------------------------------------------------------------------------
+const SERIAL_LOG_LIMIT = 2000;
+const SERIAL_STREAM_LIMIT = 65536;
+const serialDiagnostics = {
+  counters: { uartTx: 0, toRoom: 0, fromRoom: 0, emuIn: 0 },
+  hooked: false,
+  inputPath: "none",
+  log: [],
+  // Complete symbol streams (first 64K per stage) for end-to-end comparison.
+  streams: { uartTx: [], fromRoom: [], emuIn: [] },
+};
+let serialOutQueue = [];
+let serialOutFlushScheduled = false;
+let serialHookTimer = 0;
+
+function hexWords(words) {
+  return Array.from(words, (value) => value.toString(16).padStart(2, "0")).join(" ");
+}
+
+function recordSerial(stage, words) {
+  serialDiagnostics.counters[stage] = (serialDiagnostics.counters[stage] || 0) + words.length;
+  const stream = serialDiagnostics.streams[stage];
+  if (stream && stream.length < SERIAL_STREAM_LIMIT) {
+    for (const value of words) stream.push(value);
+  }
+  serialDiagnostics.log.push({ t: Math.round(performance.now()), stage, n: words.length, hex: hexWords(words) });
+  if (serialDiagnostics.log.length > SERIAL_LOG_LIMIT) {
+    serialDiagnostics.log.splice(0, serialDiagnostics.log.length - SERIAL_LOG_LIMIT);
+  }
+}
+
+window.getAmigaSerialDiagnostics = () => ({
+  counters: { ...serialDiagnostics.counters },
+  hooked: serialDiagnostics.hooked,
+  inputPath: serialDiagnostics.inputPath,
+  log: serialDiagnostics.log.slice(),
+  streams: Object.fromEntries(Object.entries(serialDiagnostics.streams).map(([stage, words]) => [stage, words.slice()])),
+});
+
+function flushSerialOut() {
+  serialOutFlushScheduled = false;
+  if (!serialOutQueue.length) return;
+  const words = serialOutQueue;
+  serialOutQueue = [];
+  recordSerial("uartTx", words);
+  recordSerial("toRoom", words);
+  window.parent.postMessage({ type: "amiga_serial_out", words }, window.location.origin);
+}
+
+function queueSerialOut(value) {
+  serialOutQueue.push(Number(value) & 0x3ff);
+  // vAmiga emits every symbol produced during one computeFrame() synchronously,
+  // so a microtask flush groups one emulated frame's output into one message
+  // without holding symbols back across frames.
+  if (!serialOutFlushScheduled) {
+    serialOutFlushScheduled = true;
+    queueMicrotask(flushSerialOut);
+  }
+}
+
+function installSerialHooks() {
+  const frameWindow = getVAmigaFrame()?.contentWindow;
+  if (!frameWindow || typeof frameWindow.set_serial_port_out_handler !== "function") return false;
+  if (frameWindow.__osgSerialHooked) return true;
+
+  // Replace vAmiga's per-byte postMessage("*") handler with a batching one.
+  frameWindow.set_serial_port_out_handler((data) => queueSerialOut(data));
+
+  frameWindow.__osgSerialHooked = true;
+  serialDiagnostics.hooked = true;
+  return true;
+}
+
+function ensureSerialHooks() {
+  if (serialHookTimer) return;
+  serialHookTimer = window.setInterval(() => {
+    const frameWindow = getVAmigaFrame()?.contentWindow;
+    if (frameWindow && !frameWindow.__osgSerialHooked) installSerialHooks();
+  }, 250);
+}
+
+function writeSerialToEmulator(words) {
+  const normalized = Array.from(words || [], (value) => Number(value) & 0x3ff);
+  if (!normalized.length) return;
+  recordSerial("fromRoom", normalized);
+
+  const frameWindow = getVAmigaFrame()?.contentWindow;
+  const writeWord = frameWindow?.Module?._wasm_write_word_to_ser;
+  if (typeof writeWord === "function") {
+    serialDiagnostics.inputPath = "word";
+    normalized.forEach((word) => writeWord(word));
+    recordSerial("emuIn", normalized);
+    return;
+  }
+  if (typeof frameWindow?.wasm_write_bytes_to_ser !== "function") {
+    // Emulator not initialised yet: like a cable plugged into a powered-off Amiga.
+    serialDiagnostics.inputPath = "not-ready";
+    return;
+  }
+  // Older runtime: vAmigaWeb's documented message API, 8 data bits only.
+  serialDiagnostics.inputPath = "bytes";
+  const bytes = Uint8Array.from(normalized, (word) => word & 0xff);
+  postToEmulator({ cmd: "ser:", bytes });
+  recordSerial("emuIn", bytes);
+}
+
 function insertPendingFileIntoDf0(loadId) {
   window.setTimeout(() => {
     if (loadId !== pendingFileLoadId) return;
@@ -212,10 +332,13 @@ function startEmulator() {
 
   window.vAmigaWeb_player.load(
     document.getElementById("amiga-preview"),
-    `?v=${encodeURIComponent(runtimeVersion)}`,
+    // Name the file: a bare "./?v=" directory URL falls through to the SPA
+    // under the Vite dev server instead of loading vAmigaWeb's index.html.
+    `index.html?v=${encodeURIComponent(runtimeVersion)}`,
     encodeURIComponent(JSON.stringify(config)),
   );
 
+  ensureSerialHooks();
   window.setTimeout(sendKickstartToEmulator, 800);
   window.setTimeout(sendPendingFileToEmulator, 1000);
   window.setInterval(connectNestedAmigaAudio, 1000);
@@ -506,10 +629,8 @@ window.addEventListener("message", (event) => {
   if (!data || typeof data !== "object") return;
 
   if (data.msg === "serial_port_out") {
-    window.parent.postMessage({
-      type: "amiga_serial_out",
-      value: Number(data.value) & 255,
-    }, window.location.origin);
+    // Only reached before our batching handler is installed in vAmiga.
+    if (!serialDiagnostics.hooked) queueSerialOut(data.value);
     return;
   }
 
@@ -529,7 +650,7 @@ window.addEventListener("message", (event) => {
   }
 
   if (data.type === "amiga_serial_in") {
-    postToEmulator({ byte: Number(data.value) & 255 });
+    writeSerialToEmulator(data.words || data.bytes || [data.value]);
     return;
   }
 

@@ -85,6 +85,7 @@ import {
   touchProfileFor,
 } from '../features/room-ui/roomUiConfig';
 import '../features/room-ui/room-ui.css';
+import { decodeAmigaSerialPacket, encodeAmigaSerialPacket } from '../features/amiga/amigaSerialPacket';
 
 const KICKSTART_DB_NAME = 'oldstylegaming-kickstarts';
 const KICKSTART_STORE_NAME = 'roms';
@@ -746,6 +747,28 @@ function clearAtari8SessionStorage() {
   }
 }
 
+const AMIGA_SERIAL_LOG_LIMIT = 2000;
+function recordAmigaSerialLog(log, stage, bytes) {
+  log.push({
+    t: Math.round(performance.now()),
+    stage,
+    n: bytes.length,
+    hex: Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join(' '),
+  });
+  if (log.length > AMIGA_SERIAL_LOG_LIMIT) log.splice(0, log.length - AMIGA_SERIAL_LOG_LIMIT);
+}
+
+function downloadAmigaSerialLog(diagnostics) {
+  if (!diagnostics) return;
+  const blob = new Blob([JSON.stringify({ capturedAt: new Date().toISOString(), ...diagnostics }, null, 1)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `amiga-link-serial-${Date.now()}.json`;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function buildAmigaKickstartPayload(system, fileName, bytes, supportKickstarts = []) {
   if (system !== 'amiga_link') {
     return {
@@ -907,7 +930,11 @@ export default function RoomPage() {
   const [amigaScoreGame, setAmigaScoreGame] = useState(null);
   const [remotePlaybackBlocked, setRemotePlaybackBlocked] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
-  const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0 });
+  const [serialActivity, setSerialActivity] = useState({ sent: 0, received: 0, dropped: 0 });
+  // Amiga Link serial counters live in a ref and are copied to state on a timer,
+  // so serial traffic never re-renders the room per byte or per packet.
+  const serialStatsRef = useRef({ sent: 0, received: 0, dropped: 0, sentPackets: 0, receivedPackets: 0 });
+  const serialLogRef = useRef([]);
 
   useEffect(() => {
     if (!tournamentCode) {
@@ -1141,7 +1168,7 @@ export default function RoomPage() {
   const emulatorSrc = isPuaeAmiga
     ? `/amiga-aga/launcher.html?model=${isAmigaAga ? 'A1200' : 'A500'}&v=2026-11-10-cd32-3`
     : isAmigaLink
-    ? '/amiga/launcher.html?v=2026-07-07-1'
+    ? '/amiga/launcher.html?v=2026-11-23-serial-2'
     : isSegaConsole ? `/megadrive/launcher.html?system=${isMasterSystem ? 'mastersystem' : 'megadrive'}&v=2026-10-30-ra-4` : isNes ? '/nes/launcher.html?v=2026-10-31-ra-1' : isSnes ? '/snes/launcher.html?v=2026-10-31-ra-1' : isPcEngine ? '/pcengine/launcher.html?v=2026-08-04-1' : isX68000 ? '/x68000/launcher.html?v=2026-10-29-webx68k-2' : isPlayStation ? '/playstation/launcher.html?v=2026-07-07-1' : isBeetleSaturn ? '/webretro-saturn/index.html?core=yabause&nobundle&noautorefocus&v=2026-07-29-2' : isSaturn ? '/saturn/launcher.html?v=2026-07-27-3' : isC64 ? '/c64/launcher.html?v=2026-07-31-5' : isMsx ? '/msx/launcher.html?v=2026-09-25-webmsx-1' : isAtari8 ? atari8EmulatorSrc : isAtariSt ? '/atarist/launcher.html?v=2026-07-07-1' : isArcade ? '/arcade/launcher.html?v=2026-11-22-1' : isSpectrum ? '/spectrum/index.html?v=2026-08-03-1' : isCpcSystem ? '/emulator-cpcbox/index.html?v=2026-11-06-pad-2' : '/emulator/index.html?v=2026-06-01-1';
   const emulatorTitle = `${systemLabel} Emulator`;
   const acceptedMedia = isPuaeAmiga
@@ -2226,24 +2253,24 @@ export default function RoomPage() {
       addLog('Amiga serial link closed');
       setStatus('Amiga serial link closed');
     };
+    const deliver = (packet) => {
+      const words = decodeAmigaSerialPacket(packet);
+      if (!words.length) return;
+      const stats = serialStatsRef.current;
+      stats.received += words.length;
+      stats.receivedPackets += 1;
+      recordAmigaSerialLog(serialLogRef.current, 'rtcRx', words);
+      // One message per packet; the launcher hands the whole batch to vAmiga.
+      forwardInputToEmulator({ type: 'amiga_serial_in', words });
+    };
     channel.onmessage = (event) => {
-      const bytes = event.data instanceof ArrayBuffer
-        ? new Uint8Array(event.data)
-        : event.data instanceof Blob
-          ? null
-          : new Uint8Array([Number(event.data) & 255]);
-
-      if (bytes) {
-        setSerialActivity((activity) => ({ ...activity, received: activity.received + bytes.length }));
-        bytes.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
-        return;
+      if (event.data instanceof ArrayBuffer) {
+        deliver(new Uint8Array(event.data));
+      } else if (event.data instanceof Blob) {
+        event.data.arrayBuffer().then((buffer) => deliver(new Uint8Array(buffer)));
+      } else {
+        deliver(new Uint8Array([Number(event.data) & 255]));
       }
-
-      event.data.arrayBuffer().then((buffer) => {
-        const bytesFromBlob = new Uint8Array(buffer);
-        setSerialActivity((activity) => ({ ...activity, received: activity.received + bytesFromBlob.length }));
-        bytesFromBlob.forEach((value) => forwardInputToEmulator({ type: 'amiga_serial_in', value }));
-      });
     };
   }, [addLog, forwardInputToEmulator]);
 
@@ -2292,15 +2319,42 @@ export default function RoomPage() {
       if (event.source !== emulatorFrameRef.current?.contentWindow) return;
       if (event.data?.type !== 'amiga_serial_out') return;
 
+      const words = Array.from(event.data.words || event.data.bytes || [event.data.value], (value) => Number(value) & 0x3ff);
+      if (!words.length) return;
+      const stats = serialStatsRef.current;
       const channel = serialChannelRef.current;
       if (channel?.readyState === 'open') {
-        channel.send(new Uint8Array([Number(event.data.value) & 255]));
-        setSerialActivity((activity) => ({ ...activity, sent: activity.sent + 1 }));
+        channel.send(encodeAmigaSerialPacket(words));
+        stats.sent += words.length;
+        stats.sentPackets += 1;
+        recordAmigaSerialLog(serialLogRef.current, 'rtcTx', words);
+      } else {
+        // No cable yet: like an unplugged null-modem cable, the symbols are lost.
+        stats.dropped += words.length;
+        recordAmigaSerialLog(serialLogRef.current, 'dropped', words);
       }
     }
 
     window.addEventListener('message', handleAmigaSerialOutput);
-    return () => window.removeEventListener('message', handleAmigaSerialOutput);
+    const statsTimer = window.setInterval(() => {
+      const { sent, received, dropped } = serialStatsRef.current;
+      setSerialActivity((activity) => (
+        activity.sent === sent && activity.received === received && activity.dropped === dropped
+          ? activity
+          : { sent, received, dropped }
+      ));
+    }, 500);
+    window.__amigaLinkDiagnostics = () => ({
+      channel: serialChannelRef.current?.readyState || 'none',
+      room: { ...serialStatsRef.current },
+      roomLog: serialLogRef.current.slice(),
+      launcher: emulatorFrameRef.current?.contentWindow?.getAmigaSerialDiagnostics?.() || null,
+    });
+    return () => {
+      window.removeEventListener('message', handleAmigaSerialOutput);
+      window.clearInterval(statsTimer);
+      delete window.__amigaLinkDiagnostics;
+    };
   }, [isAmigaLink]);
 
   useEffect(() => {
@@ -8408,7 +8462,8 @@ export default function RoomPage() {
               {isMsx ? <span>Powered by <a href="https://webmsx.org" target="_blank" rel="noreferrer">WebMSX</a></span> : null}
               {isDiscConsole ? <span>{playstationBiosName ? `BIOS: ${playstationBiosName}` : isSaturn ? 'BIOS: load saturn_bios.bin locally' : 'BIOS: HLE fallback / load your own locally'}</span> : null}
               {isAtariSt ? <span>{atariTosName ? `TOS: ${atariTosName}` : 'TOS: EmuTOS 1.4 (built in)'}</span> : null}
-              {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received</span> : null}
+              {isAmigaLink ? <span>Serial: {serialActivity.sent} sent / {serialActivity.received} received{serialActivity.dropped ? ` / ${serialActivity.dropped} lost (link down)` : ''}</span> : null}
+              {isAmigaLink ? <button type="button" className="secondary" onClick={() => downloadAmigaSerialLog(window.__amigaLinkDiagnostics?.())}>Serial log</button> : null}
             </div>
           ) : null}
           {canControlLocalEmulator ? (

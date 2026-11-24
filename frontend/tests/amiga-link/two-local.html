@@ -1,0 +1,42 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Amiga Link two-local test</title>
+<style>body{margin:0;background:#111;color:#ddd;font:12px monospace}iframe{width:640px;height:512px;border:0;display:inline-block}#s{padding:4px}</style>
+</head><body>
+<div id="s">loading</div>
+<iframe id="A" src="/amiga/launcher.html?v=linktest"></iframe><iframe id="B" src="/amiga/launcher.html?v=linktest"></iframe>
+<script>
+// Cross-wires two real launcher instances (same code path the room page uses)
+// with an optional artificial one-way latency: ?latency=ms&game=pingpong|file
+const params = new URLSearchParams(location.search);
+const latency = Number(params.get('latency') || 0);
+const game = params.get('game') || 'pingpong';
+const frames = { A: document.getElementById('A'), B: document.getElementById('B') };
+const other = { A: 'B', B: 'A' };
+const wire = [];
+window.linkTest = {
+  wire,
+  diag: () => ({ A: frames.A.contentWindow.getAmigaSerialDiagnostics?.(), B: frames.B.contentWindow.getAmigaSerialDiagnostics?.() }),
+  send: (side, msg) => frames[side].contentWindow.postMessage(msg, location.origin),
+};
+addEventListener('message', (event) => {
+  const side = event.source === frames.A.contentWindow ? 'A' : event.source === frames.B.contentWindow ? 'B' : null;
+  if (!side || event.data?.type !== 'amiga_serial_out') return;
+  const words = Array.from(event.data.words || event.data.bytes || [event.data.value]);
+  wire.push({ t: Math.round(performance.now()), from: side, n: words.length });
+  const deliver = () => frames[other[side]].contentWindow.postMessage({ type: 'amiga_serial_in', words }, location.origin);
+  latency ? setTimeout(deliver, latency) : deliver();
+});
+async function boot() {
+  const kick = await fetch('/__linktest/kick.rom').then((r) => r.ok ? r.arrayBuffer() : null).catch(() => null);
+  const disk = await fetch(game === 'pingpong' ? '/__linktest/serial-pingpong.adf' : '/__linktest/game.adf').then((r) => r.arrayBuffer());
+  for (const side of ['A', 'B']) {
+    if (kick) linkTest.send(side, { type: 'amiga_kickstart', bytes: new Uint8Array(kick) });
+    linkTest.send(side, { type: 'amiga_start' });
+  }
+  setTimeout(() => {
+    for (const side of ['A', 'B']) linkTest.send(side, { type: 'amiga_autoload', fileName: game === 'pingpong' ? 'serial-pingpong.adf' : 'game.adf', bytes: new Uint8Array(disk) });
+    document.getElementById('s').textContent = `started: kickstart=${kick ? 'local' : 'AROS'} game=${game} latency=${latency}ms`;
+  }, 2500);
+}
+Promise.all([frames.A, frames.B].map((f) => new Promise((r) => f.addEventListener('load', r, { once: true })))).then(() => setTimeout(boot, 1500));
+</script></body></html>
