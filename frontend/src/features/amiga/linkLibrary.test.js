@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { gzipSync, zipSync } from 'fflate';
-import { describeLinkDisk, findLinkLibraryDisk, linkLibraryEntries, prepareLinkDisks, resolveLinkKickstart, validLinkSelection } from './linkLibrary';
+import { describeLinkDisk, findLinkLibraryDisk, linkLibraryEntries, prepareLinkDisks, resolveLinkKickstart, validLinkSelection, sameLinkSelection, preserveSharedLinkSource } from './linkLibrary';
 
 const disk = (name = 'Stunt Car Racer.adf', data = [1, 2, 3]) => new File([new Uint8Array(data)], name);
 const entry = (file, extra = {}) => ({ system: 'amiga', fileName: file.name, title: 'Stunt Car Racer', ...extra });
@@ -91,5 +91,22 @@ describe('Link Play library boot', () => {
     await expect(resolveLinkKickstart({ loadStored: async () => null })).rejects.toThrow('Kickstart 1.3 is missing');
     await expect(resolveLinkKickstart({ loadStored: async () => ({ bytes: new Uint8Array([1]) }),
       identify: async () => [{ kickstart: { model: 'A1200' } }] })).rejects.toThrow('requires A500');
+  });
+});
+
+
+describe('shared room metadata delivery', () => {
+  it('upgrades a byte-identical selection when its shared source becomes known', () => {
+    const local = { type: 'amiga-link-game', fileName: 'game.adf', sha256: 'a'.repeat(64) };
+    const shared = { ...local, sharedGameId: 'b'.repeat(32) };
+    expect(sameLinkSelection(local, shared)).toBe(false);
+    expect(sameLinkSelection(shared, { ...shared })).toBe(true);
+    expect(preserveSharedLinkSource(local, shared)).toEqual(shared);
+  });
+
+  it('does not relabel a different host-selected disk as the room?s shared ADF', () => {
+    const shared = { sha256: 'a'.repeat(64), sharedGameId: 'b'.repeat(32) };
+    const changed = { sha256: 'c'.repeat(64) };
+    expect(preserveSharedLinkSource(changed, shared)).toBe(changed);
   });
 });

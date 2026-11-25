@@ -8,6 +8,7 @@ const tokens = JSON.parse(readFileSync(process.argv[2]));
 const app = process.env.APP_URL || 'http://127.0.0.1:4173';
 const api = process.env.API_URL || 'http://127.0.0.1:8000';
 const peers = [];
+const noHandshake = process.argv.includes('--no-serial-handshake');
 const stub = `<!doctype html><canvas width="320" height="256"></canvas><script>window.bootMessages=[];addEventListener('message',e=>{if(e.data&&typeof e.data==='object')bootMessages.push({type:e.data.type,fileName:e.data.fileName,size:e.data.bytes?.length})});</script>`;
 const onEvent = (event, call) => {
   if (event.method === 'Fetch.requestPaused') call('Fetch.fulfillRequest', { requestId: event.params.requestId, responseCode: 200,
@@ -24,6 +25,9 @@ async function setup(label, admin) {
   const peer = await launchBrowser(label, { onEvent }); peers.push(peer);
   await peer.call('Fetch.enable', { patterns: [{ urlPattern: app + '/amiga/launcher.html*' }] });
   await peer.navigate(app + '/login');
+  if (!admin && noHandshake) {
+    await peer.evaluate(`(()=>{const Original=window.RTCPeerConnection;window.RTCPeerConnection=class extends Original {setRemoteDescription(){return new Promise(()=>{})}};return true})()`);
+  }
   await peer.evaluate(`(async()=>{
     localStorage.setItem('token', ${JSON.stringify(tokens[label])});
     localStorage.setItem('username', ${JSON.stringify(label)});
@@ -60,15 +64,35 @@ try {
   const frame = `document.querySelector('iframe[src*="/amiga/launcher.html"]')`;
   await wait(host, `${frame}?.contentWindow.bootMessages?.some(m=>m.type==='amiga_autoload')`, 'host shared game auto boot');
   const code = await host.evaluate(`location.pathname.split('/').pop()`);
+  const selectedId = await host.evaluate(`new URLSearchParams(location.search).get('linkGame')`);
+  const roomGameId = await guest.evaluate(`fetch('${api}/rooms/${code}',{headers:{Authorization:'Bearer '+localStorage.getItem('token')}}).then(r=>r.json()).then(r=>r.shared_link_game_id)`);
+  assert.equal(roomGameId, selectedId, 'room API must identify the shared disk without the host URL');
   await guest.evaluate(`(async()=>{const r=await fetch('${api}/rooms/join',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+localStorage.getItem('token')},body:JSON.stringify({room_code:${JSON.stringify(code)}})});if(!r.ok)throw new Error('join '+r.status);history.pushState({},'','/room/${code}');dispatchEvent(new PopStateEvent('popstate'));return true})()`);
   await wait(guest, `${frame}?.contentWindow.bootMessages?.some(m=>m.type==='amiga_autoload')`, 'guest shared game auto boot without local library');
+  if (!noHandshake) await wait(guest, `window.__amigaLinkDiagnostics?.().channel === 'open'`, 'serial channel connected after shared game boot');
+  assert.equal(await guest.evaluate(`document.body.innerText.includes('Choose matching game file')`), false);
+  if (noHandshake) assert.notEqual(await guest.evaluate(`window.__amigaLinkDiagnostics?.().channel`), 'open');
   for (const peer of [host, guest]) {
     const messages = await peer.evaluate(`${frame}.contentWindow.bootMessages`);
     assert.equal(messages.filter(m=>m.type==='amiga_autoload').length, 1);
     assert.equal(messages.find(m=>m.type==='amiga_autoload').size, 901120);
     assert(messages.findIndex(m=>m.type==='amiga_kickstart') < messages.findIndex(m=>m.type==='amiga_autoload'));
   }
+  if (noHandshake) {
+    // Reload loses all runtime refs and has no linkGame query string. Only the
+    // room API and this browser's saved synthetic Kickstart remain available.
+    await guest.call('Page.addScriptToEvaluateOnNewDocument', { source: `
+      const digest=crypto.subtle.digest.bind(crypto.subtle);
+      crypto.subtle.digest=(algorithm,data)=>algorithm==='SHA-1'&&data.byteLength===262144
+        ?Promise.resolve(Uint8Array.from('891e9a547772fe0c6c19b610baf8bc4ea7fcb785'.match(/../g),x=>parseInt(x,16)).buffer):digest(algorithm,data);
+      const Original=window.RTCPeerConnection;
+      window.RTCPeerConnection=class extends Original {setRemoteDescription(){return new Promise(()=>{})}};
+    ` });
+    await guest.navigate(`${app}/room/${code}`);
+    await wait(guest, `${frame}?.contentWindow.bootMessages?.some(m=>m.type==='amiga_autoload')`, 'guest reload without host metadata');
+    assert.equal(await guest.evaluate(`document.body.innerText.includes('Choose matching game file')`), false);
+  }
   await host.evaluate(`document.querySelector('.osg-back').click();true`);
   await wait(host, `location.pathname === '/link-games'`, 'return to shared catalogue');
-  console.log('PASS: admin publishes ADF through UI, shared catalogue visible to guest, regular upload denied, mobile layout fits, both players automatically load shared disk without local games; stub emulator only.');
+  console.log('PASS: shared ADF loads for both players from room metadata; no local game/file prompt'+(noHandshake?' even with serial handshake blocked':'')+'; upload permissions, mobile layout and return navigation pass; stub emulator only.');
 } finally { peers.forEach(peer=>peer.close()); }

@@ -11,6 +11,7 @@ class RoomCreateRequest(BaseModel):
     arcade_multiplayer: bool = False
     is_private: bool = False
     password: str | None = Field(default=None, min_length=4, max_length=100)
+    shared_link_game_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
 
     @field_validator("system")
     @classmethod
@@ -43,6 +44,7 @@ class RoomUpdateRequest(BaseModel):
 
 
 class RoomCreateResponse(BaseModel):
+    shared_link_game_id: str | None = None
     room_code: str
     status: str
     system: str
@@ -68,6 +70,7 @@ class RoomHeartbeatRequest(BaseModel):
 
 
 class RoomResponse(BaseModel):
+    shared_link_game_id: str | None = None
     room_code: str
     status: str
     owner_user_id: int

@@ -16,6 +16,16 @@ export function validLinkSelection(value) {
     && (value.sharedGameId === undefined || validSharedLinkId(value.sharedGameId));
 }
 
+export function sameLinkSelection(left, right) {
+  return Boolean(left && right && left.sha256 === right.sha256 && left.sharedGameId === right.sharedGameId);
+}
+
+export function preserveSharedLinkSource(selection, knownSelection) {
+  return !selection.sharedGameId && knownSelection?.sharedGameId && selection.sha256 === knownSelection.sha256
+    ? { ...selection, sharedGameId: knownSelection.sharedGameId }
+    : selection;
+}
+
 export async function prepareLinkDisks(file, extract7z) {
   let entries = [[file.name, new Uint8Array(await file.arrayBuffer())]];
   if (/\.zip$/i.test(file.name)) {

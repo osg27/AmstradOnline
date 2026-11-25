@@ -10,6 +10,9 @@ def ensure_runtime_columns(engine):
     table_names = set(inspector.get_table_names())
 
     with engine.begin() as connection:
+        # Keep later schema inspections on this transaction. A second inspection
+        # connection can roll back SQLite DDL on its shared in-memory connection.
+        inspector = inspect(connection)
         dialect = connection.dialect.name
         timestamp_type = "TIMESTAMP WITH TIME ZONE" if dialect == "postgresql" else "DATETIME"
         false_default = "FALSE" if dialect == "postgresql" else "0"
@@ -93,6 +96,9 @@ def ensure_runtime_columns(engine):
 
         if "current_game" not in room_columns:
             connection.execute(text("ALTER TABLE rooms ADD COLUMN current_game VARCHAR(512)"))
+
+        if "shared_link_game_id" not in room_columns:
+            connection.execute(text("ALTER TABLE rooms ADD COLUMN shared_link_game_id VARCHAR(32)"))
 
         if "is_private" not in room_columns:
             connection.execute(text(f"ALTER TABLE rooms ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT {false_default}"))

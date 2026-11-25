@@ -290,3 +290,38 @@ Final checks for this section: 259 frontend tests, 146 backend tests and 70 back
 subtests pass. The production frontend build passes with the existing import/chunk
 warnings. The two-browser upload/shared-loading check also passes for an ordinary
 non-tester guest. Uploaded game fixtures and screenshots stayed local and ignored.
+
+## Guest shared-game startup fix (2026-11-25)
+
+Shared room creation now stores `shared_link_game_id` on the room, validated against
+the published Link Games catalogue. Creation, join and room-read responses return
+it. A guest joining with just the room code loads the shared selection from the
+room API, so the ADF can download before WebRTC connects. It no longer depends on
+the host's `?linkGame=` URL or a one-off serial-channel metadata message.
+
+Repeated serial metadata for the same shared disk is deduplicated without losing
+its shared source. Shared-room download failures offer Retry game; they never ask
+the guest to choose/upload a personal game file. Missing Kickstart still has its
+own prompt. Personal-library Link Play and normal Amiga/AGA PUAE routing remain
+unchanged.
+
+Deploy both backend and frontend, then create a new linked room from the existing
+Link Games entry. Backend startup adds the nullable room column automatically;
+old rooms keep their data but have no persisted shared selection. Existing ADF
+uploads and the persistent disk volume are unchanged: no re-upload is needed.
+Schema inspections inside the runtime migration now use the active transaction,
+preventing a second SQLite inspection connection from rolling back the added
+column. The upgrade is tested twice against an existing room schema.
+
+`run-shared-games.mjs <tokens.json> --no-serial-handshake` deliberately blocks the
+guest's WebRTC handshake. It verifies automatic ADF loading with no local game or
+host game query parameter, and repeats the check after a guest page reload.
+The ordinary run still checks the live serial channel opens without booting the
+game twice. Both use a stub emulator and synthetic files; they test room startup,
+not real game execution. Existing serial-room reconnection limitations remain.
+
+Validation for the guest fix: 262 frontend tests, 149 backend tests and 70 backend
+subtests pass; the frontend production build passes with existing warnings. Both
+the normal two-browser shared-room check and the blocked-handshake/reload variant
+pass. The migration regression initially caught the SQLite inspection rollback;
+that issue is fixed and the existing-schema upgrade now passes on repeated runs.

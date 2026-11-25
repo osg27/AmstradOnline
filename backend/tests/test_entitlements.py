@@ -204,3 +204,55 @@ def test_shared_link_rooms_are_available_to_regular_players_without_opening_aga(
     with pytest.raises(HTTPException) as error:
         create_room(RoomCreateRequest(system="amiga_aga"), db, host.id)
     assert error.value.status_code == 403
+
+
+def test_shared_link_selection_survives_join_and_room_reload(db):
+    from app.models.link_game import LinkGame
+    host = add_user(db, "shared_link_host")
+    guest = add_user(db, "shared_link_guest")
+    game = LinkGame(id="a" * 32, title="Stunt Car Racer", file_name="Stunt Car Racer.adf", sha256="b" * 64, size=901120)
+    db.add(game)
+    db.commit()
+    room = create_room(RoomCreateRequest(system="amiga_link", shared_link_game_id=game.id), db, host.id)
+    assert room.shared_link_game_id == game.id
+    db.expire_all()
+    joined = join_room(RoomJoinRequest(room_code=room.room_code), db, guest.id)
+    assert joined.shared_link_game_id == game.id
+    assert get_room(room.room_code, db, guest.id).shared_link_game_id == game.id
+    assert get_room(room.room_code, db, host.id).shared_link_game_id == game.id
+    # Selecting another system must not leak the shared ADF into a normal room.
+    switched = update_room(room.room_code, RoomUpdateRequest(system="amiga"), db, host.id)
+    assert switched.shared_link_game_id is None
+
+
+def test_room_selection_rejects_missing_unpublished_or_wrong_system_games(db):
+    from app.models.link_game import LinkGame
+    host = add_user(db, "invalid_link_host")
+    for system, game_id, status in [("amiga_link", "a" * 32, 404), ("amiga", "a" * 32, 422)]:
+        with pytest.raises(HTTPException) as error:
+            create_room(RoomCreateRequest(system=system, shared_link_game_id=game_id), db, host.id)
+        assert error.value.status_code == status
+    db.add(LinkGame(id="a" * 32, title="Removed", file_name="removed.adf", sha256="b" * 64, size=901120, published=False))
+    db.commit()
+    with pytest.raises(HTTPException) as error:
+        create_room(RoomCreateRequest(system="amiga_link", shared_link_game_id="a" * 32), db, host.id)
+    assert error.value.status_code == 404
+
+
+def test_existing_rooms_migrate_without_losing_data(db):
+    from sqlalchemy import inspect, text
+    from app.core.migrations import ensure_runtime_columns
+    host = add_user(db, "migration_link_host")
+    room = create_room(RoomCreateRequest(system="cpc"), db, host.id)
+    code = room.room_code
+    db.rollback()
+    engine = db.get_bind()
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE rooms DROP COLUMN shared_link_game_id"))
+    ensure_runtime_columns(engine)
+    ensure_runtime_columns(engine)
+    assert "shared_link_game_id" in {column["name"] for column in inspect(engine).get_columns("rooms")}
+    db.expire_all()
+    restored = get_room(code, db, host.id)
+    assert restored.system == "cpc"
+    assert restored.shared_link_game_id is None

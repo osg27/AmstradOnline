@@ -18,6 +18,7 @@ from app.core.solo_room_abuse import (
     require_open_solo_room, require_solo_activity_allowed, require_solo_creation_allowed,
 )
 from app.models.room import Room, RoomActivity, RoomAccess
+from app.models.link_game import LinkGame
 from app.models.friendship import RoomInvite
 from app.models.user import User
 from app.schemas.room import (
@@ -96,6 +97,7 @@ def require_system_access(db: Session, user_id: int, system: str, *, creating: b
 def serialize_room(room: Room) -> RoomResponse:
     return RoomResponse(
         room_code=room.room_code,
+        shared_link_game_id=getattr(room, "shared_link_game_id", None),
         status=room.status,
         owner_user_id=room.owner_user_id,
         system=room.system or "cpc",
@@ -115,6 +117,12 @@ def create_room(
 ):
     system = payload.system if payload else "cpc"
     require_system_access(db, user_id, system, creating=True)
+    shared_game_id = payload.shared_link_game_id if payload else None
+    if shared_game_id:
+        if system != "amiga_link":
+            raise HTTPException(422, detail="Shared Link Games require an Amiga Link room")
+        if not db.query(LinkGame).filter(LinkGame.id == shared_game_id, LinkGame.published.is_(True)).first():
+            raise HTTPException(404, detail="This shared Link Game is no longer available")
     user = db.query(User).filter(User.id == user_id).with_for_update().first()
     hosting_mode = payload.hosting_mode if payload else "multiplayer"
     if hosting_mode != "solo":
@@ -143,6 +151,7 @@ def create_room(
         owner_user_id=user_id,
         status="waiting",
         system=system,
+        shared_link_game_id=shared_game_id,
         hosting_mode=hosting_mode,
         hosting_started_at=datetime.now(timezone.utc) if hosting_mode == "multiplayer" else None,
         party_max_players=requested_limit,
@@ -156,6 +165,7 @@ def create_room(
 
     return RoomCreateResponse(
         room_code=room.room_code,
+        shared_link_game_id=getattr(room, "shared_link_game_id", None),
         status=room.status,
         system=room.system,
         hosting_mode=room.hosting_mode,
@@ -218,6 +228,7 @@ def update_room(
     if room.hosting_mode == "solo" and (payload.system in {"cpc_party", "amiga_link"} or payload.arcade_multiplayer):
         raise HTTPException(status_code=400, detail="Open a multiplayer room before enabling multiplayer")
     room.system = payload.system
+    room.shared_link_game_id = None
     next_limit = normalize_party_max_players(payload.system, payload.party_max_players)
     user = db.query(User).filter(User.id == user_id).first()
     free_limit = FREE_ARCADE_SESSION_LIMIT if payload.system == "arcade" else FREE_PARTY_PLAYER_LIMIT

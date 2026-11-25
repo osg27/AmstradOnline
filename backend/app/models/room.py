@@ -17,6 +17,7 @@ class Room(Base):
     party_max_players = Column(Integer, nullable=False, default=2, server_default="2")
     arcade_multiplayer = Column(Boolean, nullable=False, default=False, server_default="false")
     current_game = Column(String(512), nullable=True)
+    shared_link_game_id = Column(String(32), nullable=True)
     is_private = Column(Boolean, nullable=False, default=False, server_default="false")
     password_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

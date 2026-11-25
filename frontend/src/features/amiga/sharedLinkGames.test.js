@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sha256 } from '../localLibrary/core/hash';
 import { apiFetch, renewSession } from '../../api/client';
-import { downloadSharedLinkGame, startSharedLinkRoom } from './sharedLinkGames';
+import { downloadSharedLinkGame, getSharedLinkSelection, startSharedLinkRoom } from './sharedLinkGames';
 import { validLinkSelection } from './linkLibrary';
 
 vi.mock('../../api/client', () => ({ API_BASE_URL: 'https://api.example', apiFetch: vi.fn(), renewSession: vi.fn() }));
@@ -50,10 +50,16 @@ describe('shared Link Games', () => {
     vi.mocked(apiFetch).mockResolvedValue({ room_code: 'TEST42' });
     const navigate = vi.fn();
     await startSharedLinkRoom(id, navigate);
-    expect(JSON.parse(apiFetch.mock.calls[0][1].body)).toEqual({ system: 'amiga_link', hosting_mode: 'multiplayer', party_max_players: 2 });
+    expect(JSON.parse(apiFetch.mock.calls[0][1].body)).toEqual({ system: 'amiga_link', hosting_mode: 'multiplayer', party_max_players: 2, shared_link_game_id: id });
     const url = new URL(navigate.mock.calls[0][0], 'https://osg.example');
     expect(url.searchParams.get('linkGame')).toBe(id);
     expect(url.searchParams.get('returnTo')).toBe('/link-games');
+  });
+
+  it('resolves the room selection from the server without a serial message or local library', async () => {
+    const { game } = await fixture();
+    expect(await getSharedLinkSelection(id)).toEqual({ type: 'amiga-link-game', fileName: game.file_name, sha256: game.sha256, sharedGameId: id });
+    expect(apiFetch).toHaveBeenCalledWith(`/auth/link-games/${id}`);
   });
 
   it('never treats peer metadata as a download URL', async () => {

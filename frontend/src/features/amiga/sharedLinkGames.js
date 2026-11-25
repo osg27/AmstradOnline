@@ -1,7 +1,15 @@
 import { API_BASE_URL, apiFetch, renewSession } from '../../api/client';
 import { sha256 } from '../localLibrary/core/hash';
-import { validSharedLinkId } from './linkLibrary';
+import { validSharedLinkId, validLinkSelection } from './linkLibrary';
 export { validSharedLinkId };
+
+export async function getSharedLinkSelection(id) {
+  if (!validSharedLinkId(id)) throw new Error('Invalid shared Link Game.');
+  const game = await apiFetch(`/auth/link-games/${id}`);
+  const selection = { type: 'amiga-link-game', fileName: game.file_name, sha256: game.sha256, sharedGameId: id };
+  if (!validLinkSelection(selection)) throw new Error('The shared game metadata is invalid. Please retry.');
+  return selection;
+}
 
 export async function downloadSharedLinkGame(id, expectedHash = '') {
   if (!validSharedLinkId(id)) throw new Error('Invalid shared Link Game.');
@@ -29,7 +37,7 @@ export async function downloadSharedLinkGame(id, expectedHash = '') {
 export async function startSharedLinkRoom(id, navigate) {
   if (!validSharedLinkId(id)) throw new Error('Invalid shared Link Game.');
   const room = await apiFetch('/rooms/create', {
-    method: 'POST', body: JSON.stringify({ system: 'amiga_link', hosting_mode: 'multiplayer', party_max_players: 2 }),
+    method: 'POST', body: JSON.stringify({ system: 'amiga_link', hosting_mode: 'multiplayer', party_max_players: 2, shared_link_game_id: id }),
   });
   navigate(`/room/${room.room_code}?${new URLSearchParams({ linkGame: id, returnTo: '/link-games' })}`);
 }
