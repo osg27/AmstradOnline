@@ -44,8 +44,7 @@ import {
   migrateLegacyVipLibraryGames,
   readLocalLibraryFile,
   registerRuntimeLocalFile,
-  saveLocalLibraryFolders,
-  deleteLocalLibraryGamesForFolder,
+  updateLocalLibraryFolder,
   patchLocalLibraryGames,
   saveLocalLibraryGames,
   saveLocalLibrarySetting,
@@ -3245,22 +3244,20 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
         samples: sampleHandles,
       };
 
-      const [storedFolders, storedGames] = await Promise.all([
-        getLocalLibraryFolders(),
-        getLocalLibraryGames(),
-      ]);
+      const storedFolders = folders;
+      const storedGames = games;
       const mergedFolders = [
         ...storedFolders.filter((existingFolder) => existingFolder.id !== folderId),
         folder,
       ].sort((left, right) => (left.systemLabel || left.name).localeCompare(right.systemLabel || right.name));
-      const nextGamesWithArtwork = await restoreCachedBoxArt(nextGames);
+      // Linking local files must not wait for the artwork server to respond.
+      const nextGamesWithArtwork = nextGames;
       const mergedGames = [
         ...storedGames.filter((game) => game.folderId !== folderId),
         ...nextGamesWithArtwork,
       ];
 
-      await saveLocalLibraryFolders(mergedFolders);
-      await saveLocalLibraryGames(mergedGames);
+      await updateLocalLibraryFolder(folderId, folder, nextGamesWithArtwork);
       if (!selectedSystems.includes(targetSystem.id)) {
         const nextSelectedSystems = [...selectedSystems, targetSystem.id];
         setSelectedSystems(nextSelectedSystems);
@@ -3268,6 +3265,13 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
       }
       setFolders(mergedFolders);
       setGames(mergedGames);
+      void restoreCachedBoxArt(nextGames).then(async (enriched) => {
+        const patches = new Map(enriched.filter((game) => game.boxArtUrl).map((game) => [game.id, {
+          boxArtUrl: game.boxArtUrl, boxArtSource: game.boxArtSource, boxArtCached: game.boxArtCached,
+        }]));
+        await patchLocalLibraryGames(patches);
+        setGames((current) => applyGameMediaPatches(current, patches));
+      }).catch(() => { /* Artwork can be retried without blocking the local folder. */ });
       setScanProgress(null);
       setStatus(`Found ${nextGames.length} ${targetSystem.label} file${nextGames.length === 1 ? '' : 's'} in ${folderName}${sampleHandles.length ? `, plus ${sampleHandles.length} MAME sample zip${sampleHandles.length === 1 ? '' : 's'}` : ''}${skippedSupport ? `, skipped ${skippedSupport} support file${skippedSupport === 1 ? '' : 's'}` : ''}${skippedUnsupported ? `, hid ${skippedUnsupported} IPF-only release${skippedUnsupported === 1 ? '' : 's'}` : ''}.${navigator.brave ? ' Brave will ask for this folder again after the browser is restarted.' : ''}`);
     } catch (err) {
@@ -3308,11 +3312,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
     // screen-first update left the folder linked after a refresh.
     setStatus(`Removing ${folder.name}...`);
     try {
-      await Promise.all([
-        saveLocalLibraryFolders(next.folders),
-        deleteLocalLibraryGamesForFolder(folderId),
-        saveLocalLibrarySetting('favourites', next.favourites),
-      ]);
+      await updateLocalLibraryFolder(folderId, null, [], next.favourites);
     } catch (err) {
       setStatus(`Could not remove ${folder.name}: ${err.message}`);
       return;
@@ -3937,6 +3937,7 @@ export default function LocalLibraryPage({ embedded = false, onboarding = false,
 
   const sourceManager = sourceSystem ? createPortal(<ConnectedSourcesPanel
     key={sourceSystem.id} system={sourceSystem} sources={sources} sourcesReady={sourcesReady}
+    folderStatus={status}
     folders={folders.filter((folder) => folder.system === sourceSystem.id)}
     onSave={persistSources} onAddFolder={() => pickSystemFolder(sourceSystem.id)}
     onRescanFolder={rescanLibraryFolder} onUnlinkFolder={clearLibraryFolder}

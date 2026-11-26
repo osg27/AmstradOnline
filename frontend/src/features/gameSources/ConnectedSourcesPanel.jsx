@@ -5,7 +5,7 @@ import { KICKSTART_URL_KEY, saveKickstartSource } from '../amiga/kickstartUrl';
 import { sourceManagerState } from './sourceManagerState';
 import './connectedSources.css';
 
-export default function ConnectedSourcesPanel({ system, sources, sourcesReady = true, folders, onSave, onAddFolder, onRescanFolder, onUnlinkFolder, onClose }) {
+export default function ConnectedSourcesPanel({ system, sources, sourcesReady = true, folders, folderStatus = '', onSave, onAddFolder, onRescanFolder, onUnlinkFolder, onClose }) {
   const [url, setUrl] = useState('');
   const [kickstartUrl, setKickstartUrl] = useState(() => localStorage.getItem(KICKSTART_URL_KEY) || '');
   const [busy, setBusy] = useState(false);
@@ -59,6 +59,7 @@ export default function ConnectedSourcesPanel({ system, sources, sourcesReady = 
       <div className="library-version-dialog-head"><h2 id="platform-sources-title">{system.label} sources</h2><button type="button" disabled={busy} onClick={onClose}>Done</button></div>
       <p>Link folders on your PC or a public source URL. Their games appear together on this system’s shelf and stay linked until you unlink them.</p>
       <button type="button" disabled={!gate.folderActionsEnabled} onClick={() => change(onAddFolder)}>Add folder on your PC</button>
+      {folderStatus ? <p role="status">{folderStatus}</p> : null}
       {gate.notice ? <p role="note">{gate.notice}</p> : null}
       {SOURCE_SYSTEMS.has(roomSystem) ? <form className="source-form" onSubmit={link}>
         <label>{isAmiga ? 'Games URL' : 'Source URL'}<input type="url" required maxLength={4096} value={url} disabled={!gate.urlActionsEnabled} placeholder="https://…" onChange={(event) => setUrl(event.target.value)} /></label>

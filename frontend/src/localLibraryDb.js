@@ -1,5 +1,5 @@
 const DB_NAME = 'oldstylegaming-local-library';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const FOLDERS_STORE = 'folders';
 const GAMES_STORE = 'games';
 const SETTINGS_STORE = 'settings';
@@ -44,9 +44,16 @@ function openLibraryDb() {
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
       }
+      const games = request.transaction.objectStore(GAMES_STORE);
+      if (!games.indexNames.contains('folderId')) {
+        games.createIndex('folderId', 'folderId', { unique: false });
+      }
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error);
     // Another tab holding an older connection would otherwise leave this pending forever.
     request.onblocked = () => reject(new Error('The game library is open in another tab. Close other Old Style Gaming tabs and reload.'));
@@ -157,17 +164,52 @@ export async function migrateLegacyVipLibraryGames(games) {
   return true;
 }
 
+// Commit a folder and its rows together, without cloning unrelated file handles.
+export async function updateLocalLibraryFolder(folderId, folder, games = [], favourites) {
+  const db = await openLibraryDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([FOLDERS_STORE, GAMES_STORE, SETTINGS_STORE], 'readwrite');
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onabort = transaction.onerror = () => {
+      db.close();
+      reject(transaction.error || new Error('The folder update could not be saved.'));
+    };
+    try {
+      const folders = transaction.objectStore(FOLDERS_STORE);
+      const store = transaction.objectStore(GAMES_STORE);
+      if (folder) folders.put(folder);
+      else folders.delete(folderId);
+      if (favourites !== undefined) transaction.objectStore(SETTINGS_STORE).put({ key: 'favourites', value: favourites });
+      const request = store.index('folderId').openKeyCursor(IDBKeyRange.only(folderId));
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          store.delete(cursor.primaryKey);
+          cursor.continue();
+        } else {
+          try { games.forEach((game) => store.put(game)); }
+          catch { transaction.abort(); }
+        }
+      };
+    } catch (error) {
+      transaction.abort();
+      reject(error);
+    }
+  });
+}
+
 // Removes one folder's game rows. Unlinking used to clear and re-store every game
 // in the library, which is slow for large folders.
 export async function deleteLocalLibraryGamesForFolder(folderId) {
   const db = await openLibraryDb();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(GAMES_STORE, 'readwrite');
-    const request = transaction.objectStore(GAMES_STORE).openCursor();
+    const store = transaction.objectStore(GAMES_STORE);
+    const request = store.index('folderId').openKeyCursor(IDBKeyRange.only(folderId));
     request.onsuccess = () => {
       const cursor = request.result;
       if (!cursor) return;
-      if (cursor.value?.folderId === folderId) cursor.delete();
+      store.delete(cursor.primaryKey);
       cursor.continue();
     };
     transaction.oncomplete = () => {
